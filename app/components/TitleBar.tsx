@@ -1,0 +1,723 @@
+import { useMasterClock, LOOP_BAR_OPTIONS, PPQ, type QuantizeValue, type LoopModuleId } from '@/app/context/MasterClockContext';
+import type { ScreenId } from '@/app/components/NavigationSidebar';
+
+import { Play, Square, Pause, Circle, Repeat, SkipBack, Save, Plus, Trash2, Settings } from 'lucide-react';
+
+const DMB_STUDIO_PRECOUNT_CANCEL = 'dmb-studio-precount-cancel';
+
+import { useState, useEffect, useRef, useMemo } from 'react';
+
+import MasterVU from './MasterVU';
+
+import { saveService } from '@/app/lib/saveService';
+import { getStudioProjectJsonForCloudSave } from '@/app/lib/studioProjectBridge';
+
+
+const QUANTIZE_OPTIONS: QuantizeValue[] = ['1/4', '1/8', '1/16', '1/32', '1/16T'];
+
+
+export default function TitleBar({
+  onOpenSettings,
+  activeScreen,
+}: {
+  onOpenSettings?: () => void;
+  activeScreen?: ScreenId;
+}) {
+  const [saveMessage, setSaveMessage] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
+  const menuRef = useRef<HTMLDivElement>(null);
+  const saveAsRef = useRef<HTMLDivElement>(null);
+  const {
+    transport,
+    play, pause, stop, record, seekToTick,
+    syncDrums, setSyncDrums, syncPiano, setSyncPiano,
+    syncArr, setSyncArr, syncMix, setSyncMix,
+    metronomeEnabled, setMetronomeEnabled,
+    midiClockEnabled, setMidiClockEnabled,
+    countInEnabled, setCountInEnabled,
+    countInBeats, setCountInBeats,
+    countDownTicks,
+    patternMode, setPatternMode,
+    loopEnabled,
+    setLoopEnabled,
+    setLoopRange,
+    clearLoop,
+    loopSection,
+    loopStartBar,
+    loopEndBar,
+    activeLoopModule,
+    quantize, setQuantize,
+    channelLevels, channelVolumes,
+  } = useMasterClock();
+
+  const isPlaying   = transport === 'playing';
+  const isRecording = transport === 'recording';
+  const isCounting  = transport === 'counting';
+  const isPaused    = transport === 'paused';
+  const isRunning   = isPlaying || isRecording;
+  /** Play button shows Pause whenever transport is moving (incl. record / count-in). */
+  const transportNeedsPause = isPlaying || isRecording || isCounting;
+  const allSynced   = syncDrums && syncPiano && syncArr && syncMix;
+
+  const masterLevel = Math.min(1, Object.entries(channelLevels).reduce((sum, [id, lvl]) => {
+    const vol = (channelVolumes[Number(id)] ?? 80) / 100;
+    return sum + lvl * vol * 0.08;
+  }, 0));
+  const LOOP_MODULE_LABELS: Record<LoopModuleId, string> = {
+    'creation-station': 'CREATION STATION',
+    'piano-roll': 'PIANO ROLL',
+    'studio-editor': 'STUDIO EDITOR',
+    'master-arranger': 'MASTER ARRANGER',
+  };
+  const loopDisabledScreens: ScreenId[] = [
+    'vocal-lab',
+    'ai-song',
+    'ai-pattern',
+    'melody-transcription',
+    'my-projects',
+    'export',
+  ];
+  const loopDisabledForScreen = !!activeScreen && loopDisabledScreens.includes(activeScreen);
+  const topLoopDisabled = loopDisabledForScreen;
+
+  const selectedLoopLength = loopEndBar - loopStartBar + 1;
+  const loopLengthSelectOptions = useMemo(() => {
+    const set = new Set<number>([...LOOP_BAR_OPTIONS, selectedLoopLength]);
+    return [...set].sort((a, b) => a - b);
+  }, [selectedLoopLength]);
+
+  const handleSaveAll = () => {
+    setShowSaveAsDialog(true);
+    setSaveAsName('');
+  };
+
+  const handleSaveAsConfirm = async () => {
+  const name = saveAsName.trim() || `Project ${new Date().toLocaleString()}`
+
+  try {
+    const studioJson = await getStudioProjectJsonForCloudSave()
+    await saveService.saveProject(name, studioJson ?? undefined)
+    setSaveAsName('')
+    setShowSaveAsDialog(false)
+    setSaveMessage(`✓ Saved as: ${name}`)
+    window.dispatchEvent(new Event('projectsChanged'))
+    setTimeout(() => setSaveMessage(''), 3000)
+  } catch (error) {
+    console.error(error)
+    setSaveMessage('✗ Save failed')
+    setTimeout(() => setSaveMessage(''), 3000)
+  }
+}
+
+ const handleNewProject = async () => {
+  const name = projectName.trim() || `Project ${new Date().toLocaleString()}`
+
+  localStorage.removeItem('vocalLabState')
+  localStorage.removeItem('patternState')
+  localStorage.removeItem('trackState')
+  localStorage.removeItem('navItemOrder')
+
+  try {
+    const studioJson = await getStudioProjectJsonForCloudSave()
+    await saveService.saveProject(name, studioJson ?? undefined)
+    setProjectName('')
+    setShowNewProjectDialog(false)
+    setSaveMessage(`✓ New project: ${name}`)
+    setTimeout(() => setSaveMessage(''), 2000)
+    window.location.reload()
+  } catch (error) {
+    console.error(error)
+    setSaveMessage('✗ Save failed')
+    setTimeout(() => setSaveMessage(''), 3000)
+  }
+}
+
+  const handleDeleteProject = () => {
+    if (confirm('Delete current project? This cannot be undone.')) {
+      localStorage.removeItem('vocalLabState');
+      localStorage.removeItem('patternState');
+      localStorage.removeItem('trackState');
+      localStorage.removeItem('activeScreen');
+      setSaveMessage('✓ Project deleted');
+      setTimeout(() => setSaveMessage(''), 2000);
+      window.location.reload();
+    }
+  };
+
+  // Close menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowNewProjectDialog(false);
+      }
+      if (saveAsRef.current && !saveAsRef.current.contains(event.target as Node)) {
+        setShowSaveAsDialog(false);
+      }
+    }
+    if (showNewProjectDialog || showSaveAsDialog) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showNewProjectDialog, showSaveAsDialog]);
+
+  // Listen for Ctrl+S
+  useEffect(() => {
+    const handleSaveEvent = () => handleSaveAll();
+    window.addEventListener('saveProject', handleSaveEvent);
+    return () => window.removeEventListener('saveProject', handleSaveEvent);
+  }, []);
+
+  return (
+    <div
+      className="flex items-center gap-2 px-3 py-1 select-none shrink-0 overflow-x-auto"
+      style={{ background: '#0a0a0a', borderBottom: '2px solid #1a1a1a', height: 72, minHeight: 72 }}
+    >
+      {/* Logo */}
+      <div className="flex items-center mr-1 shrink-0 -ml-3">
+        <div
+          className="shrink-0"
+          style={{
+            height: 40,
+            width: 154,
+            borderRadius: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '0 7px',
+            border: '1px solid #00E5FF44',
+            background: 'linear-gradient(180deg, #0b1018 0%, #090d14 100%)',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, alignItems: 'center', textAlign: 'center' }}>
+            <span
+              className="font-bold tracking-wide whitespace-nowrap"
+              style={{
+                fontSize: 17,
+                letterSpacing: 0.4,
+                color: '#63e6ff',
+                textShadow: '0 0 8px rgba(99,230,255,0.35)',
+              }}
+            >
+              Da Music Box
+            </span>
+            <span
+              className="font-bold tracking-wide whitespace-nowrap"
+              style={{
+                fontSize: 12,
+                color: '#9defff',
+                marginTop: 1,
+                textShadow: '0 0 6px rgba(99,230,255,0.25)',
+              }}
+            >
+              <span style={{ fontSize: 13 }}>Gen</span>/DAW-
+              <span
+                style={{
+                  fontFamily: 'Orbitron, "Audiowide", "Exo 2", "Rajdhani", sans-serif',
+                  fontWeight: 800,
+                  letterSpacing: 0.6,
+                  fontStyle: 'italic',
+                  color: '#00F5FF',
+                  WebkitTextStroke: '0',
+                  textShadow: 'none',
+                }}
+              >
+                Hybrid
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="w-px h-8 shrink-0 self-center mt-px ml-2" style={{ background: '#2a2a2a' }} />
+
+      {/* ── Transport ── */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={() => seekToTick(0)} title="Return to start"
+          className="w-8 h-8 rounded flex items-center justify-center transition-all active:scale-90 active:opacity-70"
+          style={{ background: '#1a1a1a', color: '#aaa' }}>
+          <SkipBack size={14} />
+        </button>
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent(DMB_STUDIO_PRECOUNT_CANCEL));
+            stop();
+          }}
+          className="w-8 h-8 rounded flex items-center justify-center transition-all active:scale-90 active:opacity-70"
+          style={{ background: isRunning ? '#2a1a1a' : '#1a1a1a', color: !isRunning ? '#fff' : '#666' }}>
+          <Square size={14} />
+        </button>
+        <button
+          onClick={() => {
+            if (transportNeedsPause) pause();
+            else {
+              window.dispatchEvent(new CustomEvent(DMB_STUDIO_PRECOUNT_CANCEL));
+              play();
+            }
+          }}
+          title={
+            isRecording
+              ? 'Pause — recording'
+              : isCounting
+                ? 'Pause — count-in'
+                : isPlaying
+                  ? 'Pause — playing'
+                  : isPaused
+                    ? 'Resume'
+                    : 'Play'
+          }
+          className="w-9 h-9 rounded-lg flex items-center justify-center transition-all active:scale-90 active:opacity-70"
+          style={(() => {
+            if (isRecording) {
+              return {
+                background: '#ef444455',
+                color: '#fecaca',
+                border: '1px solid #f87171',
+                boxShadow: '0 0 12px rgba(248,113,113,0.4)',
+              };
+            }
+            if (isCounting) {
+              return {
+                background: '#f59e0b33',
+                color: '#fef3c7',
+                border: '1px solid #fbbf24',
+                boxShadow: '0 0 10px rgba(251,191,36,0.35)',
+              };
+            }
+            if (isPlaying) {
+              return {
+                background: '#D500F9',
+                color: '#000',
+                border: '1px solid #D500F9',
+              };
+            }
+            if (isPaused) {
+              return {
+                background: '#ff9800',
+                color: '#000',
+                border: '1px solid #ff9800',
+              };
+            }
+            return {
+              background: '#00E5FF22',
+              color: '#00E5FF',
+              border: '1px solid #00E5FF44',
+            };
+          })()}
+        >
+          {transportNeedsPause ? <Pause size={16} /> : <Play size={16} />}
+        </button>
+        <button
+          onClick={() => {
+            if (isRecording) {
+              stop();
+              return;
+            }
+            if (activeScreen === 'studio-editor') {
+              const w = window as unknown as {
+                __daMusicStudioTryRecord?: () => Promise<void>;
+              };
+              if (typeof w.__daMusicStudioTryRecord === 'function') {
+                void w.__daMusicStudioTryRecord();
+                return;
+              }
+            }
+            record({ countIn: countInEnabled, countInBeats });
+          }}
+          className="w-8 h-8 rounded flex items-center justify-center transition-all active:scale-90 active:opacity-70"
+          style={{ background: isRecording ? '#ff000044' : '#1a1a1a', color: isRecording ? '#ff4444' : '#555', border: `1px solid ${isRecording ? '#ff444466' : 'transparent'}` }}>
+          <Circle size={14} fill={isRecording ? '#ff4444' : 'transparent'} />
+        </button>
+      </div>
+
+      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+
+      {onOpenSettings && (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="Settings — Audio I/O (Ctrl+,)"
+          className="w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90"
+          style={{ background: '#1a1a1a', color: '#888', border: '1px solid #333' }}
+        >
+          <Settings size={15} />
+        </button>
+      )}
+
+      <MasterVU masterLevel={masterLevel} />
+
+      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+
+      {/* ── Loop ── */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => {
+            if (loopEnabled) clearLoop();
+            else setLoopEnabled(true);
+          }}
+          disabled={topLoopDisabled}
+          className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 disabled:opacity-45 disabled:cursor-not-allowed"
+          style={{
+            background: topLoopDisabled ? '#0d0d0d' : loopEnabled ? '#00E5FF22' : '#111',
+            color: topLoopDisabled ? '#444' : loopEnabled ? '#00E5FF' : '#555',
+            border: `1px solid ${topLoopDisabled ? '#262626' : loopEnabled ? '#00E5FF44' : '#333'}`,
+          }}
+          title={loopDisabledForScreen ? 'Loop controls are disabled for this module' : undefined}
+        >
+          <Repeat size={11} /> LOOP
+        </button>
+        <select
+          value={selectedLoopLength}
+          onChange={e => {
+            const n = Number(e.target.value);
+            setLoopRange(loopStartBar, loopStartBar + n - 1, loopSection ?? undefined);
+          }}
+          disabled={topLoopDisabled}
+          className="h-7 px-1.5 rounded text-xs font-bold outline-none transition-all active:scale-90 active:opacity-70 disabled:opacity-45 disabled:cursor-not-allowed"
+          style={{
+            background: topLoopDisabled ? '#0d0d0d' : '#111',
+            color: topLoopDisabled ? '#444' : loopEnabled ? '#00E5FF' : '#555',
+            border: `1px solid ${topLoopDisabled ? '#262626' : loopEnabled ? '#00E5FF44' : '#333'}`,
+          }}
+          title={loopDisabledForScreen ? 'Loop controls are disabled for this module' : undefined}
+        >
+          {loopLengthSelectOptions.map(b => (
+            <option key={b} value={b}>{b} bars</option>
+          ))}
+        </select>
+        {loopSection != null && loopSection !== '' && (
+          <span
+            className="px-1.5 h-7 rounded text-xs font-bold flex items-center"
+            style={{ background: '#111', color: '#00E5FF', border: '1px solid #00E5FF44' }}
+            title="Loop section label"
+          >
+            {loopSection}
+          </span>
+        )}
+        <span
+          className="px-1.5 h-7 rounded text-xs font-bold flex items-center"
+          style={{ background: '#111', color: '#888', border: '1px solid #2a2a2a' }}
+          title="Module currently using top loop controls"
+        >
+          {LOOP_MODULE_LABELS[activeLoopModule]}
+        </span>
+      </div>
+
+      {/* ── Quantize ── */}
+      <div className="flex items-center gap-1 shrink-0">
+        <span className="text-xs font-bold" style={{ color: '#555' }}>Q</span>
+        <select value={quantize} onChange={e => setQuantize(e.target.value as QuantizeValue)}
+          className="h-7 px-1.5 rounded text-xs font-bold outline-none transition-all active:scale-90 active:opacity-70"
+          style={{ background: '#111', color: '#D500F9', border: '1px solid #D500F944' }}>
+          {QUANTIZE_OPTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+        </select>
+      </div>
+
+      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+
+      <button onClick={() => setMetronomeEnabled(!metronomeEnabled)}
+        className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
+        style={{ background: metronomeEnabled ? '#D500F9' : '#1a1a1a', color: metronomeEnabled ? '#000' : '#888', border: `1px solid ${metronomeEnabled ? '#D500F9' : '#2a2a2a'}` }}>
+        MET
+      </button>
+
+      <button onClick={() => setMidiClockEnabled(!midiClockEnabled)} title="Send MIDI clock to hardware"
+        className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
+        style={{ background: midiClockEnabled ? '#00E5FF' : '#1a1a1a', color: midiClockEnabled ? '#000' : '#888', border: `1px solid ${midiClockEnabled ? '#00E5FF' : '#2a2a2a'}` }}>
+        MIDI
+      </button>
+
+      <div style={{ position: 'relative' }} ref={saveAsRef}>
+        <button onClick={handleSaveAll} title="Save project with name (Ctrl+S)"
+          className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70 flex items-center gap-1.5"
+          style={{ background: '#1a2a1a', color: '#00ff88', border: '1px solid #00ff8844' }}>
+          <Save size={14} />
+          SAVE
+        </button>
+
+        {showSaveAsDialog && (
+          <div style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: '#0f0f0f',
+            border: '2px solid #00ff88',
+            borderRadius: 12,
+            padding: 24,
+            zIndex: 10000,
+            minWidth: 320,
+            maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0, 255, 136, 0.3), 0 0 40px rgba(0, 255, 136, 0.1)'
+          }}>
+            <h3 style={{ color: '#00ff88', fontSize: 14, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
+              SAVE PROJECT
+            </h3>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 'bold', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+                Project Name
+              </label>
+              <input
+                type="text"
+                value={saveAsName}
+                onChange={(e) => setSaveAsName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSaveAsConfirm()}
+                placeholder="Enter project name..."
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: '#1a1a1a',
+                  border: '1px solid #333',
+                  borderRadius: 6,
+                  color: '#00ff88',
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  transition: 'all 0.2s'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#00ff88';
+                  e.currentTarget.style.boxShadow = '0 0 8px rgba(0, 255, 136, 0.3)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '#333';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <button
+                onClick={handleSaveAsConfirm}
+                style={{
+                  padding: '10px 16px',
+                  background: '#00ff88',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.opacity = '0.9';
+                  e.currentTarget.style.transform = 'scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.opacity = '1';
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setShowSaveAsDialog(false)}
+                style={{
+                  padding: '10px 16px',
+                  background: '#1a1a1a',
+                  color: '#888',
+                  border: '1px solid #444',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = '#00ff88';
+                  e.currentTarget.style.color = '#00ff88';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = '#444';
+                  e.currentTarget.style.color = '#888';
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {showSaveAsDialog && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 9999,
+            backdropFilter: 'blur(2px)'
+          }} onClick={() => setShowSaveAsDialog(false)} />
+        )}
+      </div>
+
+      {saveMessage && (
+        <span className="text-xs font-bold shrink-0 animate-pulse" style={{ color: '#00ff88' }}>
+          {saveMessage}
+        </span>
+      )}
+
+      {/* Pre-Count — metronome clicks before Record (MasterClock record path) */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        <select
+          value={countInBeats}
+          onChange={(e) => setCountInBeats(Number(e.target.value))}
+          title="Number of metronome clicks (quarter notes) before Record starts"
+          className="h-7 rounded text-[10px] font-bold shrink-0 cursor-pointer"
+          style={{
+            background: '#141414',
+            color: countInEnabled ? '#ff9800' : '#666',
+            border: '1px solid #333',
+            padding: '0 2px',
+            maxWidth: 52,
+          }}
+        >
+          <option value={1}>1 beat</option>
+          <option value={2}>2 beats</option>
+          <option value={3}>3 beats</option>
+          <option value={4}>4 beats</option>
+          <option value={8}>8 beats</option>
+        </select>
+        <button onClick={() => setCountInEnabled(!countInEnabled)} title={`Precount on/off (default ON): ${countInBeats} beat(s) before Record — same click as MET.`}
+          className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
+          style={{ background: countInEnabled ? (transport === 'counting' ? '#ff6b6b' : '#ff9800') : '#1a1a1a', color: countInEnabled ? '#000' : '#888', border: `1px solid ${countInEnabled ? '#ff9800' : '#2a2a2a'}`, boxShadow: transport === 'counting' ? '0 0 12px #ff6b6b' : 'none' }}>
+          {transport === 'counting' && countDownTicks > 0 ? Math.max(1, Math.ceil(countDownTicks / PPQ)) : 'PRE'}
+        </button>
+        
+        {/* Visual beat indicators during pre-count */}
+        {transport === 'counting' && countInEnabled && (
+          <div className="flex gap-1 items-center">
+            {Array.from({ length: Math.min(8, countInBeats) }, (_, i) => i + 1).map((beatNum) => {
+              const remainingBeats = Math.max(0, Math.ceil(countDownTicks / PPQ));
+              const completed = Math.max(0, countInBeats - remainingBeats);
+              const isActive = beatNum <= completed;
+              return (
+                <div key={beatNum}
+                  style={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: 4,
+                    background: isActive ? '#ff9800' : '#1a1a1a',
+                    border: `2px solid ${isActive ? '#ff9800' : '#333'}`,
+                    boxShadow: isActive ? '0 0 6px #ff9800' : 'none',
+                    transition: 'all 0.15s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '9px',
+                    fontWeight: 'bold',
+                    color: isActive ? '#000' : '#444'
+                  }}>
+                  {beatNum}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <button onClick={() => setPatternMode(!patternMode)}
+        className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
+        style={{ background: '#1a1a1a', color: patternMode ? '#D500F9' : '#00E5FF', border: `1px solid ${patternMode ? '#D500F9' : '#00E5FF'}` }}>
+        {patternMode ? 'PAT' : 'SONG'}
+      </button>
+
+      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+
+      {/* ── Module sync ── */}
+      <div className="flex items-center gap-1 shrink-0">
+        {([
+          { label: 'DRUMS', val: syncDrums, set: setSyncDrums },
+          { label: 'PIANO', val: syncPiano, set: setSyncPiano },
+          { label: 'ARR',   val: syncArr,   set: setSyncArr   },
+          { label: 'MIX',   val: syncMix,   set: setSyncMix   },
+        ] as const).map(({ label, val, set }) => (
+          <button key={label} onClick={() => set(!val)} className="px-2 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70"
+            style={{ background: val ? '#1a1a2a' : '#111', color: val ? '#00E5FF' : '#444', border: `1px solid ${val ? '#00E5FF44' : '#222'}` }}>
+            {label}
+          </button>
+        ))}
+        {allSynced && <span className="text-xs font-bold ml-1 shrink-0" style={{ color: '#00E5FF' }}>⬡ SYNC</span>}
+      </div>
+
+      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+
+      {/* ── Project Management ── */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button onClick={handleSaveAll} title="Save all work (Ctrl+S)"
+          className="px-2 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1"
+          style={{ background: '#1a2a1a', color: '#00ff88', border: '1px solid #00ff8844' }}>
+          <Save size={12} />
+          SAVE
+        </button>
+        <button onClick={() => setShowNewProjectDialog(true)} title="Create new project"
+          className="px-2 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1"
+          style={{ background: '#1a1a2a', color: '#00E5FF', border: '1px solid #00E5FF44' }}>
+          <Plus size={12} />
+          NEW
+        </button>
+        <button onClick={handleDeleteProject} title="Delete current project"
+          className="px-1.5 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-0.5 whitespace-nowrap"
+          style={{ background: '#2a1a1a', color: '#ff4444', border: '1px solid #ff444444' }}>
+          <Trash2 size={11} />
+          DEL
+        </button>
+      </div>
+
+      {saveMessage && (
+        <span className="text-xs font-bold shrink-0 ml-2" style={{ color: '#00ff88' }}>
+          {saveMessage}
+        </span>
+      )}
+
+      {/* New Project Dialog */}
+      {showNewProjectDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }} ref={menuRef}>
+          <div className="p-6 rounded-xl" style={{ background: '#0a0a0a', border: '1px solid #2a2a2a', minWidth: 300 }}>
+            <h2 className="text-sm font-bold mb-3" style={{ color: '#fff' }}>New Project</h2>
+            <input
+              type="text"
+              placeholder="Project name (optional)"
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleNewProject()}
+              autoFocus
+              className="w-full px-3 py-2 rounded text-xs mb-4 outline-none"
+              style={{ background: '#1a1a1a', color: '#fff', border: '1px solid #2a2a2a' }}
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowNewProjectDialog(false)}
+                className="flex-1 px-3 py-2 rounded text-xs font-bold"
+                style={{ background: '#1a1a1a', color: '#888' }}>
+                Cancel
+              </button>
+              <button onClick={handleNewProject}
+                className="flex-1 px-3 py-2 rounded text-xs font-bold"
+                style={{ background: '#00ff88', color: '#000' }}>
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Status dot ── */}
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        <div className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a',
+            boxShadow: isPlaying ? '0 0 6px #00ff88' : isRecording ? '0 0 6px #ff4444' : 'none' }} />
+        <span className="font-mono" style={{ color: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a', fontSize: 9 }}>
+          {isRecording ? 'REC' : isPlaying ? 'PLAY' : 'STOP'}
+        </span>
+      </div>
+    </div>
+  );
+}

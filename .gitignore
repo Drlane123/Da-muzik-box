@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build / cache
+dist/
+.vite/
+*.local
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test / coverage
+coverage/

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Worker timing jitter probe (25ms)</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 1rem; max-width: 52rem; line-height: 1.45; }
+    pre { background: #111; color: #9f9; padding: 1rem; overflow: auto; font-size: 12px; max-height: 50vh; }
+    .note { color: #444; font-size: 14px; }
+    code { background: #eee; padding: 0 4px; }
+  </style>
+</head>
+<body>
+  <h1>Worker 25ms jitter test</h1>
+  <p class="note">
+    Serve the app (e.g. <code>npm run dev</code>) and open
+    <code>http://localhost:&lt;port&gt;/dev-worker-jitter-test.html</code> in a <strong>second tab</strong>,
+    or paste <code>public/dev-worker-jitter-console-snippet.js</code> into DevTools on your <strong>app</strong> tab.
+    While this runs, stress the UI: fast scroll, heavy panels, tab switches, background the tab.
+  </p>
+  <p>
+    <label><input type="checkbox" id="verbose" /> Log every TICK (very noisy)</label>
+    <button type="button" id="stop">Stop worker</button>
+  </p>
+  <pre id="out"></pre>
+  <script>
+    (function () {
+      const out = document.getElementById('out');
+      const verboseEl = document.getElementById('verbose');
+      let tickCount = 0;
+      let skipCount = 0;
+      let stopped = false;
+
+      function logLine(msg) {
+        out.textContent += msg + '\n';
+        out.scrollTop = out.scrollHeight;
+      }
+
+      const workerBlob = new Blob([`
+        let last = performance.now();
+        setInterval(() => {
+          const now = performance.now();
+          const delta = now - last;
+          last = now;
+          if (delta > 35) {
+            postMessage({ type: 'SKIP', delta });
+          } else {
+            postMessage({ type: 'TICK', delta });
+          }
+        }, 25);
+      `], { type: 'application/javascript' });
+
+      const blobUrl = URL.createObjectURL(workerBlob);
+      const testWorker = new Worker(blobUrl);
+
+      testWorker.onmessage = function (e) {
+        if (stopped) return;
+        if (e.data.type === 'SKIP') {
+          skipCount += 1;
+          const msg = 'SKIP ' + e.data.delta.toFixed(2) + 'ms (expected ~25ms; >35 treated as drift)';
+          console.warn(msg);
+          logLine(msg);
+        } else {
+          tickCount += 1;
+          if (verboseEl.checked) {
+            const msg = 'TICK ' + e.data.delta.toFixed(2) + 'ms';
+            console.log(msg);
+            logLine(msg);
+          }
+        }
+      };
+
+      const summaryId = setInterval(function () {
+        const line =
+          '[summary 5s] ticks=' + tickCount + ' skips=' + skipCount +
+          (skipCount ? ' — worker saw long intervals (check throttling / tab background)' : '');
+        logLine(line);
+        tickCount = 0;
+        skipCount = 0;
+      }, 5000);
+
+      document.getElementById('stop').onclick = function () {
+        stopped = true;
+        clearInterval(summaryId);
+        testWorker.terminate();
+        URL.revokeObjectURL(blobUrl);
+        logLine('Stopped.');
+      };
+
+      logLine('Worker started. Default: SKIP lines only + 5s summary (enable verbose for every tick).');
+    })();
+  </script>
+</body>
+</html>

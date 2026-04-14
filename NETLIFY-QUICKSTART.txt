@@ -1,0 +1,42 @@
+Da Music Box — what you need for GitHub + Netlify
+==================================================
+
+IN THIS ZIP (after you unzip)
+-----------------------------
+- Da-Music-Box-v4/  = full source code (open this folder in Cursor)
+- netlify.toml      = Netlify reads this automatically (build + SPA routing)
+- package.json + package-lock.json = run npm install to get dependencies
+
+NOT IN THE ZIP (on purpose)
+---------------------------
+- node_modules/  — too large; recreated with:  npm install
+- dist/          — built output; recreated with:  npm run build
+
+STEPS ON YOUR PC
+----------------
+1. Unzip. Go inside folder:  Da-Music-Box-v4
+2. Terminal:  npm install
+3. Terminal:  npm run build     (optional check before deploy)
+4. Terminal:  npm run dev        (optional — test at http://localhost:5173)
+
+GITHUB
+------
+- Create a new repository on github.com
+- Upload this folder’s contents as the repo root (must include package.json at top level)
+- Or use GitHub Desktop: add the Da-Music-Box-v4 folder
+
+NETLIFY
+-------
+- app.netlify.com → Add new site → Import from Git → pick your repo
+- Build settings are in netlify.toml (usually no changes needed)
+- Optional: Site settings → Environment variables:
+    VITE_SUPABASE_URL
+    VITE_SUPABASE_ANON_KEY
+  (see .env.example — only needed if you use your own Supabase project)
+
+MANUAL NETLIFY (no GitHub)
+--------------------------
+- Run: npm run build
+- Drag the "dist" folder into Netlify “Deploy manually”
+
+Questions: compare with .env.example and README.md in the project.
