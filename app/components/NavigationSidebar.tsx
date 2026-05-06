@@ -31,6 +31,7 @@ export type ScreenId =
   | 'melody-transcription'
   | 'creation-station'
   | 'studio-editor'
+  | 'studio-editor-2'
   | 'my-projects'
   | 'master-arranger'
   | 'piano-roll'
@@ -52,6 +53,12 @@ const DEFAULT_ITEMS: NavItem[] = [
   { id: 'melody-transcription', label: 'Melody-to-MIDI', icon: <Mic2 size={15} />, badge: 'NEW' },
   { id: 'creation-station',label: 'Creation Station',   icon: <Layers size={15} /> },
   { id: 'studio-editor',   label: 'Studio Editor',      icon: <Radio size={15} /> },
+  {
+    id: 'studio-editor-2',
+    label: 'Studio Editor 2',
+    icon: <Radio size={15} />,
+    badge: 'β',
+  },
   { id: 'my-projects',     label: 'My Projects',        icon: <FolderOpen size={15} /> },
   { id: 'master-arranger', label: 'Master Arranger',    icon: <AlignLeft size={15} /> },
   { id: 'piano-roll',      label: 'Piano Roll',         icon: <Piano size={15} /> },
@@ -143,7 +150,11 @@ export default function NavigationSidebar({ activeScreen, onScreenChange }: Navi
           const reordered = savedIds
             .map(id => itemMap.get(id))
             .filter((item): item is NavItem => item !== undefined);
-          return reordered.length > 0 ? reordered : DEFAULT_ITEMS;
+          /** Saved order predates new modules — append any `DEFAULT_ITEMS` not in the file (e.g. Studio Editor 2). */
+          const seen = new Set(reordered.map((i) => i.id));
+          const missingFromSave = DEFAULT_ITEMS.filter((i) => !seen.has(i.id));
+          const merged = [...reordered, ...missingFromSave];
+          return merged.length > 0 ? merged : DEFAULT_ITEMS;
         } catch {
           return DEFAULT_ITEMS;
         }

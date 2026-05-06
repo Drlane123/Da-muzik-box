@@ -2,7 +2,7 @@
  * WaveformEditor — clip overview + loop tools (no canvas waveform).
  * - H+V zoom, razor cuts, ruler loop selection, playhead sync to master clock
  */
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import { useMasterClock } from '@/app/context/MasterClockContext';
 
@@ -37,11 +37,14 @@ export default function WaveformEditor({
   const {
     positionTicks,
     ppq,
-    quartersPerBar,
+    ticksPerBar,
+    transport,
     loopEnabled, loopStartBar, loopBars,
     loopSection,
     setLoopRange,
     quantize,
+    subscribeTransportBeatUi,
+    getTransportBeatUiSnapshot,
   } = useMasterClock();
 
   const [hZoom, setHZoom] = useState(1);
@@ -60,10 +63,20 @@ export default function WaveformEditor({
   const barW = colW * hZoom;
   const timelineW = barW * totalBars;
   const trackH = Math.round(72 * Math.min(vZoom, 4));
-  /** Quarters per bar from time sig — same scale as Studio / MasterClock ticks. */
-  const qpb = Math.max(1, Math.round(quartersPerBar));
-  const absBeat = Math.max(0, positionTicks / ppq);
-  /** Continuous0-based bar phase for playhead X (not integer `currentBar`, which jumped bar-to-bar). */
+  /** Exact quarters/bar — must match Studio (`ticksPerBar / ppq`), not `round(quartersPerBar)`. */
+  const qpb = Math.max(1e-9, ticksPerBar / ppq);
+  const transportFrameSeq = useSyncExternalStore(
+    subscribeTransportBeatUi,
+    () => getTransportBeatUiSnapshot().frameSeq,
+    () => 0,
+  );
+  const absBeat = useMemo(() => {
+    if (transport === 'playing' || transport === 'recording') {
+      return Math.max(0, getTransportBeatUiSnapshot().studioTimelineBeatFloat);
+    }
+    return Math.max(0, positionTicks / ppq);
+  }, [transport, positionTicks, ppq, transportFrameSeq]);
+  /** Continuous 0-based bar phase for playhead X — same `studioTimelineBeatFloat` as Studio (metronome + click-latency). */
   const playheadLeftPx = (absBeat / qpb) * barW;
 
   // Snap fraction to quantize grid

@@ -108,7 +108,15 @@ function buildInitialAiPatternTracksState(): TrackState[] {
   });
 }
 
-export default function AiPatternScreen({ onExport, onBack }: { onExport: (dest: string) => void, onBack?: () => void }) {
+export default function AiPatternScreen({
+  onExport,
+  onBack,
+  isScreenActive = true,
+}: {
+  onExport: (dest: string) => void;
+  onBack?: () => void;
+  isScreenActive?: boolean;
+}) {
   const {
     bpm,
     triggerChannel,
@@ -208,7 +216,7 @@ export default function AiPatternScreen({ onExport, onBack }: { onExport: (dest:
 
   /** Preserve next scheduled quarter time when BPM changes (ladder math only). */
   useEffect(() => {
-    if (!patternPlaying) return;
+    if (!isScreenActive || !patternPlaying) return;
     const oldBpm = Math.max(1, aiTempoForRealignRef.current);
     const newBpm = Math.max(1, patternTempo);
     if (oldBpm === newBpm) return;
@@ -224,7 +232,7 @@ export default function AiPatternScreen({ onExport, onBack }: { onExport: (dest:
    * Advancing index only inside the schedule loop guarantees each quarter triggers at most once.
    */
   useEffect(() => {
-    if (!patternPlaying) return;
+    if (!isScreenActive || !patternPlaying) return;
     const totalSteps = Math.max(1, loopLength * 4);
     const runId = ++localClockRunIdRef.current;
 
@@ -287,11 +295,23 @@ export default function AiPatternScreen({ onExport, onBack }: { onExport: (dest:
       pulseWorker.postMessage({ cmd: 'stop' });
       pulseWorker.terminate();
     };
-  }, [patternPlaying, loopLength, currentTrackIdx, triggerChannel, getOrCreateAudioContext]);
+  }, [
+    isScreenActive,
+    patternPlaying,
+    loopLength,
+    currentTrackIdx,
+    triggerChannel,
+    getOrCreateAudioContext,
+  ]);
 
   const stopPattern = useCallback(() => {
     stopPatternStateOnly();
   }, [stopPatternStateOnly]);
+
+  useEffect(() => {
+    if (isScreenActive) return;
+    stopPatternStateOnly();
+  }, [isScreenActive, stopPatternStateOnly]);
 
   async function generatePattern() {
     const session = ++generateSessionRef.current;
@@ -457,7 +477,7 @@ export default function AiPatternScreen({ onExport, onBack }: { onExport: (dest:
 
   /** Prevent dual clocks on shared CH18+ lanes while AI local playback is active. */
   useEffect(() => {
-    if (!patternPlaying) return;
+    if (!isScreenActive || !patternPlaying) return;
     if (transport === 'playing' || transport === 'recording') {
       void stop();
     }

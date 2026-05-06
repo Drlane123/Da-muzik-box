@@ -21,19 +21,33 @@ export function snapClipStartBeat0(
   snapType: SnapGridType,
   beatsPerBar: number,
 ): number {
-  if (snapType === 'off') return startBeat0;
+  return snapClipStartTick0(startBeat0 * 960, snapType, beatsPerBar, 960) / 960;
+}
+
+/**
+ * Snap clip start in PPQ ticks so visual placement and stored `startTick`
+ * use the same grid as recording and future MIDI note data.
+ */
+export function snapClipStartTick0(
+  startTick0: number,
+  snapType: SnapGridType,
+  beatsPerBar: number,
+  ppq: number,
+): number {
+  if (snapType === 'off') return Math.round(startTick0);
   if (snapType === 'bar') {
-    return Math.round(startBeat0 / beatsPerBar) * beatsPerBar;
+    const barTicks = Math.max(1, Math.round(beatsPerBar * ppq));
+    return Math.round(startTick0 / barTicks) * barTicks;
   }
-  const step: Record<'1/2' | '1/4' | '1/8' | '1/16' | '1/32', number> = {
-    '1/2': 2,
-    '1/4': 1,
-    '1/8': 0.5,
-    '1/16': 0.25,
-    '1/32': 0.125,
+  const stepTicks: Record<'1/2' | '1/4' | '1/8' | '1/16' | '1/32', number> = {
+    '1/2': ppq * 2,
+    '1/4': ppq,
+    '1/8': ppq / 2,
+    '1/16': ppq / 4,
+    '1/32': ppq / 8,
   };
-  const s = step[snapType];
-  return Math.round(startBeat0 / s) * s;
+  const step = Math.max(1, Math.round(stepTicks[snapType]));
+  return Math.round(startTick0 / step) * step;
 }
 
 /**

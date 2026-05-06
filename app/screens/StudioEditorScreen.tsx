@@ -1,4 +1,4 @@
-import {
+﻿import {
   useState,
   useRef,
   useEffect,
@@ -6,6 +6,8 @@ import {
   useCallback,
   useMemo,
   memo,
+  useSyncExternalStore,
+  type MutableRefObject,
 } from 'react';
 
 import { Radio, Plus, VolumeX, Lock, Trash2, Copy, Send, ZoomIn, ZoomOut, Scissors, MousePointer, ChevronUp, ChevronDown, Mic, Play, Pause, Square, Clock, SkipBack, SkipForward } from 'lucide-react';
@@ -14,9 +16,9 @@ import {
   useMasterClock,
   BEATS_PER_BAR,
   PPQ,
+  type StudioTransportSyncSnapshot,
   type TransportState,
 } from '@/app/context/MasterClockContext';
-
 import { useView } from '@/app/context/ViewContext';
 import { useSettings } from '@/app/context/SettingsContext';
 
@@ -36,6 +38,7 @@ import {
   applySessionModuleClips,
   type StudioTrackLike,
 } from '@/app/lib/sessionClipContent';
+import { type TimeSignature } from '@/app/context/daw-types';
 import { registerStudioProjectCloudExporter } from '@/app/lib/studioProjectBridge';
 import {
   createStudioTimelineMap,
@@ -57,7 +60,24 @@ import { MusicEnhancer } from '@/app/screens/components/MusicEnhancer';
 // DAW Editing Features
 import { useClipboardEditor } from '@/app/screens/hooks/useClipboardEditor';
 import { useDAWKeyboardShortcuts } from '@/app/screens/hooks/useDAWKeyboardShortcuts';
-import { snapClipStartBeat0, SnapGridType, getClipsInSelection, SelectionBox } from '@/app/screens/utils/dawUtils';
+import { useStudioMusicalClock } from '@/app/screens/hooks/useStudioMusicalClock';
+import { STUDIO_TIMING_MODE_STORAGE_KEY } from '@/app/lib/studioDawClockDisplay';
+import {
+  subscribeStudioPlayheadFrame,
+  readStudioTransportSnapshotForUi,
+  displayAudioNowForStudio,
+} from '@/app/lib/studioPlayheadSharedFrame';
+import {
+  createStudioTransportClock,
+  studioCanonicalBeatFromSnapshot,
+  studioGridBeatFloatFromSnapshot,
+} from '@/app/lib/studio/studioTransportHub';
+import {
+  createRulerQuarterGate,
+  resetRulerQuarterGate,
+  shouldPublishRulerQuarter,
+} from '@/app/lib/studio/studioGridLockedPlayhead';
+import { snapClipStartTick0, SnapGridType, getClipsInSelection, SelectionBox } from '@/app/screens/utils/dawUtils';
 import { DAWEditorToolbar } from '@/app/screens/components/DAWEditorToolbar';
 import { TimelineContextMenu } from '@/app/screens/components/TimelineContextMenu';
 
@@ -72,18 +92,18 @@ interface Clip {
   bar: number;
   len: number;
   label: string;
-  /** Present for imported/recorded audio — used for timeline playback. */
+  /** Present for imported/recorded audio ΓÇö used for timeline playback. */
   audioBuffer?: AudioBuffer;
   /**
    * Exact timeline start in session ticks (PPQ). When set, playback + clip X use this instead of
-   * `(bar-1)*ticksPerBar` so takes align with the real record-arm downbeat (rounding `bar` alone was up to ~½ bar late).
+   * `(bar-1)*ticksPerBar` so takes align with the real record-arm downbeat (rounding `bar` alone was up to ~┬╜ bar late).
    */
   startTick?: number;
 }
 
 /**
  * Transport is in **beats** (quarters). Pixels are only a view of time:
- * Beat→pixel scale: `createStudioTimelineMap` (`colW` = one bar width).
+ * BeatΓåÆpixel scale: `createStudioTimelineMap` (`colW` = one bar width).
  */
 function clipStartBeat0(clip: Clip, quartersPerBar: number = BEATS_PER_BAR): number {
   if (typeof clip.startTick === 'number' && Number.isFinite(clip.startTick)) {
@@ -105,7 +125,7 @@ function clipLengthBeats(clip: Clip, quartersPerBar: number = BEATS_PER_BAR): nu
 interface Track {
   id: number; name: string; type: TrackType; color: string;
   muted: boolean; solo: boolean; locked: boolean; volume: number; clips: Clip[];
-  /** Shared session channel slot (1–17 Creation, 18+ AI Pattern contiguous, Arranger after last AI slot, Studio user ≥ min floor). */
+  /** Shared session channel slot (1ΓÇô17 Creation, 18+ AI Pattern contiguous, Arranger after last AI slot, Studio user ΓëÑ min floor). */
   audioTrack?: number;
   /** Mixer display/monitor mode. Stereo = split L/R meter, Mono = single meter. */
   stereoMode?: 'stereo' | 'mono';
@@ -115,6 +135,20 @@ interface Track {
 const TYPE_COLORS: Record<TrackType, string> = {
   MIDI: '#00E5FF', Audio: '#00ff88', Drum: '#D500F9', Bus: '#ffcc00', Vocal: '#ff6b35',
 };
+
+/** Timeline playhead / scrub line — cyan so it’s distinct from MET (magenta) in the title bar. */
+const STUDIO_PLAYHEAD_LINE = {
+  gradient:
+    'linear-gradient(180deg, #22d3ee 0%, #06b6d4 55%, #22d3ee 100%)',
+  shadow: '0 0 12px rgba(34,211,238,0.9), 0 0 2px #fff',
+  shadowClip: '0 0 8px rgba(34,211,238,0.85)',
+  rulerFill: 'rgba(34,211,238,0.12)',
+  rulerStroke: 'rgba(34,211,238,0.42)',
+  barText: '#22d3ee',
+  barBg: 'rgba(34,211,238,0.07)',
+  measText: '#22d3ee',
+  measBg: 'rgba(34,211,238,0.14)',
+} as const;
 type EffectType =
   | 'eq'
   | 'compressor'
@@ -131,6 +165,39 @@ type EffectSlot = {
   wet: number;
   params: Record<string, number>;
 };
+
+/**
+ * Bar / beat-in-bar matching {@link StudioTimelineMap.gridFromContentX} and ruler columns (`bi * qpb + mi`).
+ * Uses absolute quarter index, not {@link tickToBarBeatFromFloatTick} (which can diverge from the pixel grid).
+ */
+function studioRulerBarBeatFromAbsoluteQuarter(
+  absoluteQuarterFloat: number,
+  beatsPerBar: number,
+  totalBars?: number,
+): { bar: number; beatInBar: number } {
+  const bpb = Math.max(1, Math.round(beatsPerBar));
+  const abs = Math.max(0, absoluteQuarterFloat);
+  const beatIndex0 = Math.floor(abs + 1e-9);
+  const barIndex0 = Math.floor(beatIndex0 / bpb + 1e-9);
+  let bar = barIndex0 + 1;
+  if (typeof totalBars === 'number' && totalBars >= 1) {
+    bar = Math.max(1, Math.min(totalBars, bar));
+  }
+  const beatInBar0 = beatIndex0 - barIndex0 * bpb;
+  const beatInBar = Math.floor(beatInBar0 + 1e-9) + 1;
+  return { bar, beatInBar };
+}
+
+/** Bar/beat for cyan line + ruler — same quarter grid as {@link createStudioTimelineMap} (`beatsPerBar` = qpb). */
+function studioTransportToBarBeatFromSnap(
+  snap: StudioTransportSyncSnapshot,
+  beatsPerBar: number,
+  totalBars?: number,
+): { bar: number; beatInBar: number } {
+  const qtr = studioGridBeatFloatFromSnapshot(snap);
+  return studioRulerBarBeatFromAbsoluteQuarter(qtr, beatsPerBar, totalBars);
+}
+
 const EFFECT_TYPES: EffectType[] = ['eq', 'compressor', 'reverb', 'delay', 'chorus', 'flanger', 'distortion', 'filter'];
 
 
@@ -143,7 +210,7 @@ function mkClip(bar: number, len: number, label: string, audioBuffer?: AudioBuff
 }
 
 /**
- * Timeline clip.len is in bars. At tempo BPM, one bar = (60/BPM)*beatsPerBar seconds (4/4 → 4 beats/bar).
+ * Timeline clip.len is in bars. At tempo BPM, one bar = (60/BPM)*beatsPerBar seconds (4/4 ΓåÆ 4 beats/bar).
  * bars = duration_sec * (BPM/60) / beats_per_bar
  */
 function clipBarLengthFromAudioDuration(
@@ -184,7 +251,7 @@ function pickMediaRecorderMimeType(): string {
 }
 
 
-/** Session re-merge runs async — preserve mic/import clips already committed on the timeline. */
+/** Session re-merge runs async ΓÇö preserve mic/import clips already committed on the timeline. */
 function isModuleSessionClipLabel(label: string): boolean {
   return (
     label.startsWith('[AI]') ||
@@ -255,7 +322,7 @@ function duplicateClipImmediatelyAfter(
   });
 }
 
-/** Rows per session `audioTrack` — used to flag duplicate CH in the UI. */
+/** Rows per session `audioTrack` ΓÇö used to flag duplicate CH in the UI. */
 function countAudioTrackDuplicates(trs: { audioTrack?: number }[]): Map<number, number> {
   const m = new Map<number, number>();
   for (const t of trs) {
@@ -281,8 +348,8 @@ function buildDisplayChannelMap(trs: { audioTrack?: number }[]): Map<number, num
 }
 
 /**
- * Visible session channel — always from `audioTrack`, never timeline row `id`.
- * ⚠ when two rows share the same `audioTrack` (should not happen after manifest merge).
+ * Visible session channel ΓÇö always from `audioTrack`, never timeline row `id`.
+ * ΓÜá when two rows share the same `audioTrack` (should not happen after manifest merge).
  */
 function sessionChDisplayLabel(
   t: { audioTrack?: number },
@@ -290,9 +357,9 @@ function sessionChDisplayLabel(
   displayChMap?: Map<number, number>,
 ): string {
   const at = t.audioTrack;
-  if (at == null || !Number.isFinite(at)) return 'CH —';
+  if (at == null || !Number.isFinite(at)) return 'CH ΓÇö';
   const display = displayChMap?.get(at) ?? at;
-  return (dupByCh.get(at) ?? 0) > 1 ? `CH${display} ⚠` : `CH${display}`;
+  return (dupByCh.get(at) ?? 0) > 1 ? `CH${display} ΓÜá` : `CH${display}`;
 }
 
 /** MasterClock channel for fader/meter: session slot when set, else internal row id (not shown as CH). */
@@ -302,6 +369,15 @@ function mixerRoutingChannel(t: { id: number; audioTrack?: number }): number {
 
 function getTrackStereoMode(t: { stereoMode?: 'stereo' | 'mono' }): 'stereo' | 'mono' {
   return t.stereoMode === 'mono' ? 'mono' : 'stereo';
+}
+
+/** DOM x position: use a custom property so React can keep a stable `transform` in JSX. */
+const STUDIO_PLAYHEAD_X_VAR = '--da-studio-ph-x';
+const STUDIO_RULER_HL_X_VAR = '--da-ruler-hl-x';
+
+/** Same instant as {@link readStudioTransportSnapshotForUi} / clip grid reads — one Studio display clock. */
+function studioAudioNowForPaint(ctx: AudioContext | null | undefined): number | null {
+  return displayAudioNowForStudio(ctx);
 }
 
 function studioPlayheadApplyLeft(
@@ -314,93 +390,81 @@ function studioPlayheadApplyLeft(
   let gx = map.absoluteBeatToX(beatForPixel);
   if (!allowNeg) gx = Math.max(0, gx);
   gx = Math.min(gx, map.totalWidthPx - 1e-6);
-  // Sub-pixel translate — integer rounding caused visible stepping / “skipping” at some zoom levels.
-  if (Number.isFinite(gx)) el.style.transform = `translateX(${gx}px)`;
+  if (!Number.isFinite(gx)) return;
+  /** Subpixel `translate3d` — rounding to int px caused staircase motion that read as “skipping” beats. */
+  const x = Math.max(0, Math.min(gx, map.totalWidthPx - 1e-6));
+  el.style.setProperty(STUDIO_PLAYHEAD_X_VAR, `${x}px`);
+}
+
+/** Ruler measure-column highlight — same beat as cyan line; called from the transport pump only (no second rAF). */
+function studioRulerPlayheadApplyHighlight(
+  el: HTMLDivElement,
+  map: StudioTimelineMap,
+  beatFloat: number,
+  allowNeg: boolean,
+) {
+  if (!Number.isFinite(beatFloat)) return;
+  const measureW = map.beatColumnWidthPx;
+  const b = Math.max(0, beatFloat);
+  const beatIdx0 = Math.floor(b + 1e-9);
+  let hx = map.absoluteBeatToX(beatIdx0);
+  if (!allowNeg) hx = Math.max(0, hx);
+  hx = Math.min(hx, Math.max(0, map.totalWidthPx - measureW));
+  if (!Number.isFinite(hx)) return;
+  el.style.setProperty(STUDIO_RULER_HL_X_VAR, `${hx}px`);
+  el.style.width = `${measureW}px`;
 }
 
 /**
- * DOM-only Studio playhead updated via rAF from transport refs.
- * Keeps motion smooth even when Studio React tree re-renders slowly.
+ * Cyan timeline playhead is painted imperatively from {@link StudioEditorScreen} (not a memo child)
+ * so every frame uses the latest `getStudioTransportSyncSnapshotAtAudioNow` and stable rAF (no stale refs / effect churn).
  */
-const StudioTransportPlayhead = memo(function StudioTransportPlayhead({
-  isActive,
-  motionActive,
-  timelineMap,
-  beatForPixel,
-  liveBeatForPixel,
-  allowNeg,
-}: {
+
+/**
+ * Ruler bar + beat highlights without React state ΓÇö avoids full-tree re-renders every quarter that
+ * dropped frames and made the ΓÇ£otherΓÇ¥ highlight skip vs the line.
+ */
+type StudioRulerPlayheadHighlightsProps = {
   isActive: boolean;
-  /** When false, no rAF — line follows `beatForPixel` via layout only (paused scrub). */
-  motionActive: boolean;
   timelineMap: StudioTimelineMap;
   beatForPixel: number;
   liveBeatForPixel?: () => number | null;
   allowNeg: boolean;
-}) {
-  const lineRef = useRef<HTMLDivElement | null>(null);
-  const timelineMapRef = useRef(timelineMap);
-  timelineMapRef.current = timelineMap;
-  const beatForPixelRef = useRef(beatForPixel);
-  beatForPixelRef.current = beatForPixel;
-  const allowNegRef = useRef(allowNeg);
-  allowNegRef.current = allowNeg;
+  rulerBarH: number;
+  rulerMeasH: number;
+  getTransportBeatFloat?: () => number;
+  /** Parent assigns the beat-column node so {@link StudioEditorScreen} transport pump can paint highlights in sync with the cyan line. */
+  beatColumnExposeRef?: MutableRefObject<HTMLDivElement | null>;
+  /** True while master transport runs (non–local-precount): parent pump owns column paint — avoids a second rAF vs MET/grid. */
+  suppressInternalHighlightRaf?: boolean;
+};
 
-  useLayoutEffect(() => {
-    const el = lineRef.current;
-    if (!el) return;
-    const live = liveBeatForPixel?.();
-    const beat =
-      typeof live === 'number' && Number.isFinite(live) ? live : beatForPixel;
-    studioPlayheadApplyLeft(el, timelineMap, beat, allowNeg);
-  }, [timelineMap, beatForPixel, allowNeg, liveBeatForPixel]);
+function studioRulerPlayheadHighlightsPropsEqual(
+  prev: StudioRulerPlayheadHighlightsProps,
+  next: StudioRulerPlayheadHighlightsProps,
+): boolean {
+  if (prev.isActive !== next.isActive) return false;
+  if (prev.allowNeg !== next.allowNeg) return false;
+  if (prev.liveBeatForPixel !== next.liveBeatForPixel) return false;
+  if (prev.timelineMap !== next.timelineMap) return false;
+  if (prev.rulerBarH !== next.rulerBarH) return false;
+  if (prev.rulerMeasH !== next.rulerMeasH) return false;
+  if (prev.getTransportBeatFloat !== next.getTransportBeatFloat) return false;
+  if (prev.beatColumnExposeRef !== next.beatColumnExposeRef) return false;
+  if (prev.suppressInternalHighlightRaf !== next.suppressInternalHighlightRaf)
+    return false;
+  if (
+    next.isActive &&
+    !next.liveBeatForPixel &&
+    next.getTransportBeatFloat
+  ) {
+    /* rAF paints; ignore scrub prop updates when audio drives motion. */
+  } else if (prev.beatForPixel !== next.beatForPixel) {
+    return false;
+  }
+  return true;
+}
 
-  useEffect(() => {
-    if (!isActive || !motionActive) return;
-    let raf = 0;
-    const step = () => {
-      const el = lineRef.current;
-      if (el) {
-        const live = liveBeatForPixel?.();
-        const beat =
-          typeof live === 'number' && Number.isFinite(live)
-            ? live
-            : beatForPixelRef.current;
-        studioPlayheadApplyLeft(
-          el,
-          timelineMapRef.current,
-          beat,
-          allowNegRef.current,
-        );
-      }
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [isActive, motionActive, liveBeatForPixel]);
-
-  return (
-    <div
-      ref={lineRef}
-      className="absolute pointer-events-none top-0 bottom-0"
-      title="Playhead"
-      style={{
-        transform: 'translateX(0px)',
-        width: 1,
-        zIndex: 25,
-        opacity: isActive ? 1 : 0,
-        background:
-          'linear-gradient(180deg, #D500F9 0%, #E040FB 55%, #D500F9 100%)',
-        boxShadow: '0 0 12px rgba(213,0,249,0.85), 0 0 2px #fff',
-      }}
-    />
-  );
-});
-
-/**
- * Ruler bar + beat highlights without React state — avoids full-tree re-renders every quarter that
- * dropped frames and made the “other” highlight skip vs the line.
- */
 const StudioRulerPlayheadHighlights = memo(function StudioRulerPlayheadHighlights({
   isActive,
   timelineMap,
@@ -409,16 +473,12 @@ const StudioRulerPlayheadHighlights = memo(function StudioRulerPlayheadHighlight
   allowNeg,
   rulerBarH,
   rulerMeasH,
-}: {
-  isActive: boolean;
-  timelineMap: StudioTimelineMap;
-  beatForPixel: number;
-  liveBeatForPixel?: () => number | null;
-  allowNeg: boolean;
-  rulerBarH: number;
-  rulerMeasH: number;
-}) {
-  /** One column over bar + beat rows — advances each quarter (measure slot), not whole-bar width. */
+  getTransportBeatFloat,
+  beatColumnExposeRef,
+  suppressInternalHighlightRaf,
+}: StudioRulerPlayheadHighlightsProps) {
+  const { getStudioTransportSyncSnapshotAtAudioNow, audioCtxRef } = useMasterClock();
+  /** One column over bar + beat rows ΓÇö advances each quarter (measure slot), not whole-bar width. */
   const beatColumnRef = useRef<HTMLDivElement | null>(null);
   const timelineMapRef = useRef(timelineMap);
   timelineMapRef.current = timelineMap;
@@ -428,34 +488,61 @@ const StudioRulerPlayheadHighlights = memo(function StudioRulerPlayheadHighlight
   allowNegRef.current = allowNeg;
   const liveRef = useRef(liveBeatForPixel);
   liveRef.current = liveBeatForPixel;
+  const getTransportBeatFloatRef = useRef(getTransportBeatFloat);
+  getTransportBeatFloatRef.current = getTransportBeatFloat;
+  const getSnapAtRef = useRef(getStudioTransportSyncSnapshotAtAudioNow);
+  getSnapAtRef.current = getStudioTransportSyncSnapshotAtAudioNow;
 
   const applyShades = useCallback((beat: number) => {
     const map = timelineMapRef.current;
-    const bi = Math.max(0, Math.floor(beat + 1e-9));
     const measureW = map.beatColumnWidthPx;
     const el = beatColumnRef.current;
     if (el) {
-      let hx = map.absoluteBeatToX(bi);
+      const b = Math.max(0, beat);
+      /* Snap column to the same integer-beat left edges as ruler cells (`bi * qpb + mi`). */
+      const beatIdx0 = Math.floor(b + 1e-9);
+      let hx = map.absoluteBeatToX(beatIdx0);
       if (!allowNegRef.current) hx = Math.max(0, hx);
       hx = Math.min(hx, Math.max(0, map.totalWidthPx - measureW));
-      el.style.transform = `translateX(${hx}px)`;
+      el.style.setProperty(STUDIO_RULER_HL_X_VAR, `${hx}px`);
       el.style.width = `${measureW}px`;
     }
   }, []);
 
   useLayoutEffect(() => {
     if (!isActive) return;
-    const live = liveRef.current?.();
+    if (liveBeatForPixel) return;
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state !== 'closed') return;
+    const getBeat = getTransportBeatFloatRef.current;
+    if (!getBeat) return;
+    const b = getBeat();
+    if (Number.isFinite(b)) applyShades(b);
+  }, [isActive, liveBeatForPixel, applyShades, timelineMap, audioCtxRef]);
+
+  useLayoutEffect(() => {
+    if (!isActive) return;
+    if (suppressInternalHighlightRaf) return;
+    if (!liveBeatForPixel && getTransportBeatFloatRef.current) return;
+    const live = liveBeatForPixel?.();
     const beat =
       typeof live === 'number' && Number.isFinite(live) ? live : beatForPixel;
     applyShades(beat);
-  }, [isActive, beatForPixel, timelineMap, applyShades]);
+  }, [
+    isActive,
+    beatForPixel,
+    liveBeatForPixel,
+    applyShades,
+    suppressInternalHighlightRaf,
+  ]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !liveBeatForPixel || suppressInternalHighlightRaf) return;
     let raf = 0;
     const step = () => {
-      const live = liveRef.current?.();
+      const liveFn = liveRef.current;
+      if (!liveFn) return;
+      const live = liveFn();
       const beat =
         typeof live === 'number' && Number.isFinite(live)
           ? live
@@ -465,7 +552,31 @@ const StudioRulerPlayheadHighlights = memo(function StudioRulerPlayheadHighlight
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [isActive, applyShades]);
+  }, [isActive, applyShades, liveBeatForPixel, suppressInternalHighlightRaf]);
+
+  useEffect(() => {
+    if (!isActive || liveBeatForPixel) return;
+    let raf = 0;
+    const step = () => {
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state !== 'closed') {
+        const audioNow = studioAudioNowForPaint(ctx) ?? ctx.currentTime;
+        const beat = studioGridBeatFloatFromSnapshot(
+          getSnapAtRef.current(audioNow),
+        );
+        if (Number.isFinite(beat)) applyShades(beat);
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [
+    isActive,
+    liveBeatForPixel,
+    applyShades,
+    audioCtxRef,
+    getStudioTransportSyncSnapshotAtAudioNow,
+  ]);
 
   const rulerH = rulerBarH + rulerMeasH;
   return (
@@ -480,15 +591,738 @@ const StudioRulerPlayheadHighlights = memo(function StudioRulerPlayheadHighlight
       aria-hidden
     >
       <div
-        ref={beatColumnRef}
+        ref={(node) => {
+          beatColumnRef.current = node;
+          if (beatColumnExposeRef) beatColumnExposeRef.current = node;
+        }}
         className="absolute left-0 top-0"
         style={{
           height: rulerH,
-          background: 'rgba(213,0,249,0.12)',
+          background: STUDIO_PLAYHEAD_LINE.rulerFill,
           boxSizing: 'border-box',
-          willChange: 'transform',
-          borderLeft: '1px solid rgba(213,0,249,0.35)',
-          borderRight: '1px solid rgba(213,0,249,0.35)',
+          borderLeft: `1px solid ${STUDIO_PLAYHEAD_LINE.rulerStroke}`,
+          borderRight: `1px solid ${STUDIO_PLAYHEAD_LINE.rulerStroke}`,
+          transform: `translateX(var(${STUDIO_RULER_HL_X_VAR}, 0px))`,
+        }}
+      />
+    </div>
+  );
+}, studioRulerPlayheadHighlightsPropsEqual);
+
+const StudioLockBeatReadout = memo(function StudioLockBeatReadout({
+  isActive,
+  beatsPerBar,
+  totalBars,
+  getBeatFloat,
+  clockRunning,
+}: {
+  isActive: boolean;
+  /** Quarters per bar — same as timeline ruler / {@link createStudioTimelineMap}. */
+  beatsPerBar: number;
+  totalBars?: number;
+  getBeatFloat: () => number;
+  /** Same windows as the cyan playhead — rAF + AudioContext so bar.beat matches transport each frame. */
+  clockRunning: boolean;
+}) {
+  const {
+    getStudioTransportSyncSnapshotAtAudioNow,
+    getStudioTransportSyncSnapshot,
+    audioCtxRef,
+  } = useMasterClock();
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+    const el = textRef.current;
+    if (!el) return;
+
+    const paintFromSnap = (snap: StudioTransportSyncSnapshot) => {
+      const tbb = studioTransportToBarBeatFromSnap(snap, beatsPerBar, totalBars);
+      el.textContent = `${tbb.bar}.${tbb.beatInBar}`;
+    };
+
+    if (clockRunning) {
+      const paint = (t: number | null) => {
+        if (t == null) return;
+        paintFromSnap(getStudioTransportSyncSnapshotAtAudioNow(t));
+      };
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state !== 'closed') {
+        const audioNow = studioAudioNowForPaint(ctx) ?? ctx.currentTime;
+        paintFromSnap(getStudioTransportSyncSnapshotAtAudioNow(audioNow));
+      }
+      return subscribeStudioPlayheadFrame(paint);
+    }
+
+    let raf = 0;
+    const step = () => {
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state !== 'closed') {
+        const snap = readStudioTransportSnapshotForUi(
+          getStudioTransportSyncSnapshotAtAudioNow,
+          getStudioTransportSyncSnapshot,
+          ctx,
+        );
+        paintFromSnap(snap);
+      } else {
+        const beat = Math.max(0, getBeatFloat());
+        const tbb = studioRulerBarBeatFromAbsoluteQuarter(
+          beat,
+          beatsPerBar,
+          totalBars,
+        );
+        el.textContent = `${tbb.bar}.${tbb.beatInBar}`;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [
+    isActive,
+    clockRunning,
+    beatsPerBar,
+    totalBars,
+    getBeatFloat,
+    getStudioTransportSyncSnapshot,
+    getStudioTransportSyncSnapshotAtAudioNow,
+    audioCtxRef,
+  ]);
+  return (
+    <span
+      ref={textRef}
+      style={{
+        fontFamily: 'monospace',
+        fontSize: 10,
+        fontWeight: 800,
+        color: '#fbbf24',
+        border: '1px solid #333',
+        borderRadius: 4,
+        background: '#090909',
+        padding: '2px 6px',
+        minWidth: 44,
+        textAlign: 'center',
+      }}
+      title="Bar.beat — Studio timeline quarter grid (same columns as ruler), sampled each display frame from AudioContext."
+    >
+      1.1
+    </span>
+  );
+});
+
+const StudioDawLockStatusReadout = memo(function StudioDawLockStatusReadout({
+  isActive,
+  clockRunning,
+  beatsPerBar,
+  totalBars,
+  timeSigs,
+}: {
+  isActive: boolean;
+  clockRunning: boolean;
+  beatsPerBar: number;
+  totalBars?: number;
+  timeSigs: TimeSignature[];
+}) {
+  const { getStudioTransportSyncSnapshotAtAudioNow, audioCtxRef } = useMasterClock();
+  const [ui, setUi] = useState(() => ({
+    beatInBar: 1,
+    numer: 4,
+    locked: true,
+    ooo: 0,
+    skip: 0,
+  }));
+
+  const lastQuarterRef = useRef(-1);
+  const auditRef = useRef({ ooo: 0, skip: 0 });
+  const wasClockRef = useRef(false);
+  const warnedRef = useRef(false);
+
+  useEffect(() => {
+    warnedRef.current = false;
+    if (!isActive) {
+      wasClockRef.current = false;
+      lastQuarterRef.current = -1;
+      auditRef.current = { ooo: 0, skip: 0 };
+      setUi((p) => ({ ...p, locked: true, ooo: 0, skip: 0 }));
+      return;
+    }
+    if (!clockRunning) {
+      wasClockRef.current = false;
+      lastQuarterRef.current = -1;
+      auditRef.current = { ooo: 0, skip: 0 };
+      const numer = Math.max(1, Math.min(12, timeSigs[0]?.numerator ?? 4));
+      setUi({
+        beatInBar: 1,
+        numer,
+        locked: true,
+        ooo: 0,
+        skip: 0,
+      });
+      return;
+    }
+
+    if (!wasClockRef.current) {
+      lastQuarterRef.current = -1;
+      auditRef.current = { ooo: 0, skip: 0 };
+    }
+    wasClockRef.current = true;
+
+    const numer0 = Math.max(1, Math.min(12, timeSigs[0]?.numerator ?? 4));
+
+    const tickFromSnap = (snap: StudioTransportSyncSnapshot) => {
+      const beat = studioGridBeatFloatFromSnapshot(snap);
+      const quarter = Math.floor(Math.max(0, beat) + 1e-9);
+      const prev = lastQuarterRef.current;
+      if (prev >= 0) {
+        if (quarter < prev) {
+          auditRef.current.ooo += 1;
+        } else if (quarter > prev + 1) {
+          auditRef.current.skip += quarter - prev - 1;
+        }
+      }
+      lastQuarterRef.current = quarter;
+
+      const tbb = studioRulerBarBeatFromAbsoluteQuarter(beat, beatsPerBar, totalBars);
+      const ooo = auditRef.current.ooo;
+      const skip = auditRef.current.skip;
+      const locked = ooo === 0 && skip === 0;
+
+      if (!locked && !warnedRef.current) {
+        warnedRef.current = true;
+        console.warn(
+          '[Studio DAW Lock] quarter-order violation',
+          JSON.stringify({ outOfOrderCount: ooo, skippedQuarterCount: skip }),
+        );
+      }
+      if (locked) warnedRef.current = false;
+
+      setUi((prevUi) => {
+        const next = {
+          beatInBar: tbb.beatInBar,
+          numer: numer0,
+          locked,
+          ooo,
+          skip,
+        };
+        if (
+          prevUi.beatInBar === next.beatInBar &&
+          prevUi.numer === next.numer &&
+          prevUi.locked === next.locked &&
+          prevUi.ooo === next.ooo &&
+          prevUi.skip === next.skip
+        ) {
+          return prevUi;
+        }
+        return next;
+      });
+    };
+
+    const step = (t: number | null) => {
+      if (t == null) return;
+      tickFromSnap(getStudioTransportSyncSnapshotAtAudioNow(t));
+    };
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state !== 'closed') {
+      const audioNow = studioAudioNowForPaint(ctx) ?? ctx.currentTime;
+      tickFromSnap(getStudioTransportSyncSnapshotAtAudioNow(audioNow));
+    }
+    return subscribeStudioPlayheadFrame(step);
+  }, [
+    isActive,
+    clockRunning,
+    beatsPerBar,
+    totalBars,
+    timeSigs,
+    getStudioTransportSyncSnapshotAtAudioNow,
+    audioCtxRef,
+  ]);
+
+  const numer = Math.max(1, Math.min(12, timeSigs[0]?.numerator ?? 4));
+  const displayNumer = isActive && clockRunning ? ui.numer : numer;
+
+  if (!isActive) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          fontFamily: 'monospace',
+          fontSize: 9,
+          fontWeight: 700,
+          color: '#6b7280',
+          border: '1px solid #222',
+          borderRadius: 4,
+          background: '#050505',
+          padding: '2px 6px',
+          minWidth: 160,
+        }}
+        title="DAW quarter lock (idle)"
+      >
+        <span>LOCK —</span>
+      </div>
+    );
+  }
+
+  if (!clockRunning) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          fontFamily: 'monospace',
+          fontSize: 9,
+          fontWeight: 700,
+          color: '#6b7280',
+          border: '1px solid #222',
+          borderRadius: 4,
+          background: '#050505',
+          padding: '2px 6px',
+          minWidth: 160,
+        }}
+        title="Transport stopped — beat ladder shows meter length; play to lock quarters in order."
+      >
+        <span style={{ color: '#71717a' }}>LOCK ready</span>
+        {Array.from({ length: displayNumer }, (_, i) => (
+          <span
+            key={i}
+            style={{
+              color: '#3f3f46',
+              minWidth: 9,
+              textAlign: 'center',
+            }}
+          >
+            {i + 1}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        fontFamily: 'monospace',
+        fontSize: 9,
+        fontWeight: 700,
+        border: '1px solid #222',
+        borderRadius: 4,
+        background: '#050505',
+        padding: '2px 6px',
+        minWidth: 168,
+        flexShrink: 0,
+      }}
+      title="Quarters audited on the same audio clock as the playhead. Amber = current beat in bar; green LOCK OK = strict +1 quarter order."
+    >
+      <span style={{ color: ui.locked ? '#86efac' : '#f87171' }}>
+        {ui.locked ? 'LOCK OK' : 'LOCK WARN'}
+      </span>
+      {Array.from({ length: ui.numer }, (_, i) => {
+        const n = i + 1;
+        const on = n === ui.beatInBar;
+        return (
+          <span
+            key={n}
+            style={{
+              color: on ? '#fbbf24' : '#52525b',
+              fontWeight: 800,
+              minWidth: 10,
+              textAlign: 'center',
+              textShadow: on ? '0 0 8px rgba(251,191,36,0.45)' : 'none',
+            }}
+          >
+            {n}
+          </span>
+        );
+      })}
+      {!ui.locked ? (
+        <span style={{ color: '#f87171', fontSize: 8, marginLeft: 2 }}>
+          Δ{ui.ooo}/{ui.skip}
+        </span>
+      ) : null}
+    </div>
+  );
+});
+
+const StudioRenderCadenceReadout = memo(function StudioRenderCadenceReadout({
+  isActive,
+}: {
+  isActive: boolean;
+}) {
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    if (!isActive) {
+      el.textContent = 'UI idle';
+      el.style.color = '#6b7280';
+      return;
+    }
+    let raf = 0;
+    let lastNow = performance.now();
+    let windowStart = lastNow;
+    let sampleCount = 0;
+    let sumGapMs = 0;
+    let maxGapMs = 0;
+    let longGapCount = 0;
+    const publish = () => {
+      const avgGapMs = sampleCount > 0 ? sumGapMs / sampleCount : 0;
+      const fps = avgGapMs > 0 ? 1000 / avgGapMs : 0;
+      el.textContent = `UI ${fps.toFixed(0)}fps avg ${avgGapMs.toFixed(1)} max ${maxGapMs.toFixed(1)} long ${longGapCount}`;
+      el.style.color = maxGapMs > 120 ? '#f87171' : maxGapMs > 48 ? '#fbbf24' : '#86efac';
+      sampleCount = 0;
+      sumGapMs = 0;
+      maxGapMs = 0;
+      longGapCount = 0;
+    };
+    const step = (nowMs: number) => {
+      const gapMs = Math.max(0, nowMs - lastNow);
+      lastNow = nowMs;
+      if (gapMs > 0 && gapMs < 5000) {
+        sampleCount += 1;
+        sumGapMs += gapMs;
+        if (gapMs > maxGapMs) maxGapMs = gapMs;
+        if (gapMs > 34) longGapCount += 1;
+      }
+      if (nowMs - windowStart >= 500) {
+        publish();
+        windowStart = nowMs;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [isActive]);
+  return (
+    <span
+      ref={textRef}
+      style={{
+        fontFamily: 'monospace',
+        fontSize: 9,
+        fontWeight: 700,
+        color: '#6b7280',
+        border: '1px solid #222',
+        borderRadius: 4,
+        background: '#050505',
+        padding: '2px 6px',
+        minWidth: 168,
+        textAlign: 'left',
+      }}
+      title="Render cadence monitor for playhead smoothness: fps, avg frame gap ms, max frame gap ms, and long frame count (>34ms)"
+    >
+      UI idle
+    </span>
+  );
+});
+
+/**
+ * Playhead / transport sync strip + beat lamps (1..N per time sig). Same grid as MET when clicks are on;
+ * this UI follows **playhead** phase, not a separate “metronome graphic.”
+ */
+const StudioLiveSyncHud = memo(function StudioLiveSyncHud({
+  isActive,
+  clockRunning,
+  metronomeEnabled,
+  beatsPerBar,
+  getStudioTransportSyncSnapshot,
+  pixelsPerBeat,
+}: {
+  isActive: boolean;
+  /** Same as moving playhead — rAF + `AudioContext.currentTime`; when false, paint once from fallback snapshot. */
+  clockRunning: boolean;
+  metronomeEnabled: boolean;
+  beatsPerBar: number;
+  getStudioTransportSyncSnapshot: () => StudioTransportSyncSnapshot;
+  pixelsPerBeat: number;
+}) {
+  const { getStudioTransportSyncSnapshotAtAudioNow, audioCtxRef } = useMasterClock();
+  const getSnapAtRef = useRef(getStudioTransportSyncSnapshotAtAudioNow);
+  getSnapAtRef.current = getStudioTransportSyncSnapshotAtAudioNow;
+  const getSnapFallbackRef = useRef(getStudioTransportSyncSnapshot);
+  getSnapFallbackRef.current = getStudioTransportSyncSnapshot;
+  const syncLineRef = useRef<HTMLSpanElement | null>(null);
+  const beatSlotRefs = useRef<(HTMLSpanElement | null)[]>(
+    Array.from({ length: 12 }, () => null),
+  );
+  const numerator = Math.max(1, Math.min(12, Math.round(beatsPerBar)));
+  useEffect(() => {
+    if (!isActive) {
+      const line = syncLineRef.current;
+      if (line) {
+        line.textContent = 'PLAYHEAD sync (idle)';
+        line.style.color = '#6b7280';
+      }
+      for (let i = 0; i < 12; i++) {
+        const el = beatSlotRefs.current[i];
+        if (el) {
+          el.style.color = '#444';
+          el.style.textShadow = 'none';
+        }
+      }
+      return;
+    }
+    const paint = (snap: StudioTransportSyncSnapshot) => {
+      const beatMono = studioGridBeatFloatFromSnapshot(snap);
+      const beat = studioCanonicalBeatFromSnapshot(snap);
+      const nearestBeat = Math.round(beatMono);
+      const gridDeltaPx = (beatMono - nearestBeat) * pixelsPerBeat;
+      const metroAheadBeats =
+        (snap.metronomeNextQuarterTick - snap.tickFloat) / PPQ;
+      const expectedNextQuarter =
+        Math.ceil(Math.max(0, beat) - 1e-9) * PPQ;
+      const phaseErrorBeats =
+        (snap.metronomeNextQuarterTick - expectedNextQuarter) / PPQ;
+      const tbb = studioRulerBarBeatFromAbsoluteQuarter(beatMono, beatsPerBar);
+      const nBeats = Math.max(1, Math.min(12, Math.round(beatsPerBar)));
+      const phaseOk =
+        !snap.running || Math.abs(phaseErrorBeats) <= 0.05;
+      const metLabel = !metronomeEnabled
+        ? 'MET OFF'
+        : phaseOk
+          ? 'MET ON | LOCK'
+          : 'MET ON';
+      const line = syncLineRef.current;
+      if (line) {
+        line.textContent = [
+          `PH ${tbb.bar}.${tbb.beatInBar}`,
+          `b${beatMono.toFixed(3)}`,
+          `PErr ${phaseErrorBeats.toFixed(3)}`,
+          `MET+ ${metroAheadBeats.toFixed(1)}`,
+          `QΔ ${(snap.nextQuarterTick - snap.tickFloat).toFixed(0)}`,
+          `Δpx ${gridDeltaPx.toFixed(1)}`,
+          metLabel,
+        ].join(' ');
+        line.style.color =
+          Math.abs(phaseErrorBeats) > 0.05 ? '#f87171' : '#86efac';
+      }
+      for (let i = 0; i < nBeats; i++) {
+        const el = beatSlotRefs.current[i];
+        if (el) {
+          const active = tbb.beatInBar === i + 1;
+          el.style.color = active ? '#fbbf24' : '#666';
+          el.style.textShadow = active
+            ? '0 0 6px rgba(251,191,36,0.7)'
+            : 'none';
+        }
+      }
+    };
+    if (clockRunning) {
+      const step = (t: number | null) => {
+        if (t == null) return;
+        paint(getSnapAtRef.current(t));
+      };
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state !== 'closed') {
+        const audioNow = studioAudioNowForPaint(ctx) ?? ctx.currentTime;
+        paint(getSnapAtRef.current(audioNow));
+      }
+      return subscribeStudioPlayheadFrame(step);
+    }
+    paint(getSnapFallbackRef.current());
+  }, [
+    isActive,
+    clockRunning,
+    metronomeEnabled,
+    beatsPerBar,
+    getStudioTransportSyncSnapshot,
+    pixelsPerBeat,
+    audioCtxRef,
+  ]);
+  return (
+    <>
+      <span
+        ref={syncLineRef}
+        style={{
+          fontFamily: 'monospace',
+          fontSize: 9,
+          background: '#050505',
+          border: '1px solid #222',
+          borderRadius: 4,
+          padding: '2px 6px',
+          flexShrink: 0,
+          color: '#6b7280',
+        }}
+        title="Playhead / transport on the bar·beat grid (not the MET button). Digits = playhead phase; MET ON = audible clicks enabled + phase OK when LOCK."
+      >
+        PH …
+      </span>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+          padding: '1px 4px',
+          borderRadius: 4,
+          border: '1px solid #222',
+          background: '#050505',
+          flexShrink: 0,
+        }}
+        title="Playhead beat in bar (1…N) — which quarter the transport is on; order matches MET clicks when MET is on"
+      >
+        {Array.from({ length: numerator }, (_, i) => i + 1).map((n) => (
+          <span
+            key={n}
+            ref={(el) => {
+              beatSlotRefs.current[n - 1] = el;
+            }}
+            style={{
+              minWidth: 10,
+              textAlign: 'center',
+              fontFamily: 'monospace',
+              fontSize: 9,
+              fontWeight: 700,
+              color: '#666',
+            }}
+          >
+            {n}
+          </span>
+        ))}
+      </div>
+    </>
+  );
+});
+
+/**
+ * Pulses on each transport-grid quarter (same {@link getStudioTransportSyncSnapshotAtAudioNow} phase as the cyan playhead).
+ * Magenta lamp = MET visual; title-bar MET = audio on/off.
+ */
+const StudioVisualMetronomeLamp = memo(function StudioVisualMetronomeLamp({
+  isActive,
+  metronomeEnabled,
+  clockRunning,
+  beatsPerBar,
+}: {
+  isActive: boolean;
+  metronomeEnabled: boolean;
+  /** Same windows as the moving playhead (transport + precount + audio running). */
+  clockRunning: boolean;
+  beatsPerBar: number;
+}) {
+  const { audioCtxRef, getStudioTransportSyncSnapshotAtAudioNow } = useMasterClock();
+  const lampRef = useRef<HTMLDivElement | null>(null);
+  const lastQuarterRef = useRef(-1);
+  const decayTRef = useRef(0);
+  const getSnapAtRef = useRef(getStudioTransportSyncSnapshotAtAudioNow);
+  getSnapAtRef.current = getStudioTransportSyncSnapshotAtAudioNow;
+  const beatsPerBarRef = useRef(beatsPerBar);
+  beatsPerBarRef.current = beatsPerBar;
+
+  useEffect(() => {
+    const clearDecay = () => {
+      if (decayTRef.current) {
+        window.clearTimeout(decayTRef.current);
+        decayTRef.current = 0;
+      }
+    };
+
+    if (!isActive || !metronomeEnabled || !clockRunning) {
+      clearDecay();
+      lastQuarterRef.current = -1;
+      const el = lampRef.current;
+      if (el) {
+        el.style.transition = '';
+        el.style.opacity = metronomeEnabled ? '0.4' : '0.22';
+        el.style.transform = 'scale(1)';
+        el.style.boxShadow = 'none';
+      }
+      return;
+    }
+
+    lastQuarterRef.current = -1;
+    const runAt = (audioNow: number) => {
+      const snap = getSnapAtRef.current(audioNow);
+      const b = studioGridBeatFloatFromSnapshot(snap);
+      const q = Math.floor(b + 1e-9);
+      if (lastQuarterRef.current < 0) {
+        lastQuarterRef.current = q;
+      } else if (q !== lastQuarterRef.current) {
+        lastQuarterRef.current = q;
+        const tbb = studioRulerBarBeatFromAbsoluteQuarter(
+          b,
+          beatsPerBarRef.current,
+        );
+        const isDown = tbb.beatInBar === 1;
+        const el = lampRef.current;
+        if (el) {
+          clearDecay();
+          el.style.transition =
+            'transform 0.05s ease-out, opacity 0.07s ease-out, box-shadow 0.09s ease-out';
+          el.style.opacity = '1';
+          el.style.transform = isDown ? 'scale(1.24)' : 'scale(1.1)';
+          el.style.boxShadow = isDown
+            ? '0 0 20px rgba(213,0,249,0.95), inset 0 0 10px rgba(255,255,255,0.4)'
+            : '0 0 14px rgba(167,139,250,0.92)';
+          decayTRef.current = window.setTimeout(() => {
+            const lamp = lampRef.current;
+            if (!lamp) return;
+            lamp.style.opacity = '0.62';
+            lamp.style.transform = 'scale(1)';
+            lamp.style.boxShadow = 'none';
+          }, 95);
+        }
+      }
+    };
+    const step = (t: number | null) => {
+      if (t == null) return;
+      runAt(t);
+    };
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state !== 'closed') {
+      runAt(studioAudioNowForPaint(ctx) ?? ctx.currentTime);
+    }
+    const unsub = subscribeStudioPlayheadFrame(step);
+    return () => {
+      clearDecay();
+      unsub();
+    };
+  }, [
+    isActive,
+    metronomeEnabled,
+    clockRunning,
+    beatsPerBar,
+    audioCtxRef,
+    getStudioTransportSyncSnapshotAtAudioNow,
+  ]);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        flexShrink: 0,
+        padding: '1px 5px',
+        borderRadius: 4,
+        border: '1px solid #2a2a2a',
+        background: '#0a0a0a',
+      }}
+      title="Visual metronome: flashes each grid quarter (same clock as playhead + MET schedule). Stronger pulse = downbeat."
+    >
+      <span
+        style={{
+          fontSize: 8,
+          fontWeight: 800,
+          color: '#a78bfa',
+          letterSpacing: 0.4,
+          userSelect: 'none',
+        }}
+      >
+        MET
+      </span>
+      <div
+        ref={lampRef}
+        style={{
+          width: 13,
+          height: 13,
+          borderRadius: 999,
+          border: '2px solid #D500F9',
+          background: metronomeEnabled ? '#1f0f2e' : '#141414',
+          opacity: metronomeEnabled ? 0.45 : 0.2,
+          boxSizing: 'border-box',
         }}
       />
     </div>
@@ -503,7 +1337,7 @@ type StudioEditorScreenProps = {
   /** Full Studio JSON from Supabase (serializeStudioProject shape); applied once then cleared by parent. */
   pendingCloudStudioJson?: string | null;
   onPendingCloudStudioConsumed?: () => void;
-  /** False when another nav tab is visible — disables global DAW key handlers. */
+  /** False when another nav tab is visible ΓÇö disables global DAW key handlers. */
   isStudioScreenActive?: boolean;
 };
 
@@ -522,11 +1356,13 @@ export default function StudioEditorScreen({
     audioCtxRef,
     getOrCreateAudioContext,
     getTickIntAtAudioNow,
-    getGlobalBeatsUnwrappedAtAudioNow,
     snapTick,
     transport,
-    transportUnwrappedQuarterIndex,
     getTransportBeatUiSnapshot,
+    subscribeTransportBeatUi,
+    getStudioTransportSyncSnapshot,
+    getStudioTransportSyncSnapshotAtAudioNow,
+    getIsAudioTransportRunning,
     tickCounterRef,
     bpm,
     channelLevels,
@@ -537,8 +1373,9 @@ export default function StudioEditorScreen({
     stop,
     record,
     getTransportAudioBpm,
-    playMetronomeClickAt,
     tickToBarBeat,
+    metronomeEnabled,
+    setMetronomeEnabled,
     wrapGlobalTickToDisplayTick,
     seekToTick,
     setBpm,
@@ -550,17 +1387,43 @@ export default function StudioEditorScreen({
     loopBars,
     ticksPerBar,
     quartersPerBar,
+    timeSigs,
   } = useMasterClock();
 
-  /** Beat columns per bar — must match MasterClock time signature (not hardcoded 4). */
+  /**
+   * Single Studio “engine clock” (musio `DAWCore`-style façade): all idle reads and timeline audio
+   * use this — no second ad-hoc paths that drift from MET / `tickFloat`.
+   */
+  const studioTransportClock = useMemo(
+    () =>
+      createStudioTransportClock({
+        getAtAudioNow: getStudioTransportSyncSnapshotAtAudioNow,
+        getIdle: getStudioTransportSyncSnapshot,
+        getAudioCtx: () => audioCtxRef.current,
+      }),
+    [
+      getStudioTransportSyncSnapshotAtAudioNow,
+      getStudioTransportSyncSnapshot,
+    ],
+  );
+
+  /** Always derive from `AudioContext.currentTime` when live; else idle snapshot (paused/stopped). */
+  const getUnifiedStudioSyncSnapshot = useCallback((): StudioTransportSyncSnapshot => {
+    return studioTransportClock.frameNow();
+  }, [studioTransportClock]);
+
+  /** Beat columns per bar ΓÇö must match MasterClock time signature (not hardcoded 4). */
   const qpb = Math.max(1, Math.round(quartersPerBar));
 
   const wrapGlobalTickToDisplayTickRef = useRef(wrapGlobalTickToDisplayTick);
   wrapGlobalTickToDisplayTickRef.current = wrapGlobalTickToDisplayTick;
   const getTickIntAtAudioNowRef = useRef(getTickIntAtAudioNow);
   getTickIntAtAudioNowRef.current = getTickIntAtAudioNow;
+  /** Latest session tick for transport readers (recording, clip rAF) without re-subscribing effects. */
+  const positionTicksRef = useRef(positionTicks);
+  positionTicksRef.current = positionTicks;
   /**
-   * Timeline length (bars) — matches session song length so grid width ↔ measure count stay aligned.
+   * Timeline length (bars) ΓÇö matches session song length so grid width Γåö measure count stay aligned.
    * Capped for perf; minimum 64 bars of headroom for typical sessions.
    */
   const BARS = Math.max(64, Math.min(512, songTotalBars));
@@ -595,11 +1458,11 @@ export default function StudioEditorScreen({
   const bpmRef = useRef(bpm ?? 120);
   bpmRef.current = bpm ?? 120;
 
-  /** Built from `readCombinedSessionTrackManifest` after hydrate / sync — not a fixed Creation-style row count. */
+  /** Built from `readCombinedSessionTrackManifest` after hydrate / sync ΓÇö not a fixed Creation-style row count. */
   const [tracks, setTracks] = useState<Track[]>([]);
   const [tool, setTool] = useState<'pointer' | 'razor'>('pointer');
   /**
-   * MediaRecorder finalizes onto this row — driven only by explicit record arm (not waveform editor selection).
+   * MediaRecorder finalizes onto this row ΓÇö driven only by explicit record arm (not waveform editor selection).
    * Resolve by `audioTrack` after manifest rebuild when possible.
    */
   const recordTargetTrackRef = useRef<{ id: number; name: string; audioTrack?: number } | null>(null);
@@ -607,11 +1470,28 @@ export default function StudioEditorScreen({
   const [recordArmedTrackId, setRecordArmedTrackId] = useState<number | null>(null);
   const recordArmedTrackRef = useRef<number | null>(null);
   const recordArmedSessionSlotRef = useRef<number | null>(null);
-  /** Shown when Record fails preflight or mic permission — replaces console-only failures. */
+  /** Shown when Record fails preflight or mic permission ΓÇö replaces console-only failures. */
   const [recordPathHint, setRecordPathHint] = useState<string | null>(null);
-  /** Local precount: N×4/4 bars of clicks on the shared AudioContext, then `record({ countIn: false })` (no MasterClock `counting` transport). */
-  const [studioPrecountEnabled, setStudioPrecountEnabled] = useState(true);
+  /** Local precount: N├ù4/4 bars of clicks on the shared AudioContext, then `record({ countIn: false })` (no MasterClock `counting` transport). */
+  const [studioPrecountEnabled, setStudioPrecountEnabled] = useState(false);
   const [studioPrecountBars, setStudioPrecountBars] = useState(1);
+  const [studioTimingMode, setStudioTimingMode] = useState<'beats' | 'time'>(() => {
+    if (typeof window === 'undefined') return 'beats';
+    try {
+      return localStorage.getItem(STUDIO_TIMING_MODE_STORAGE_KEY) === 'time'
+        ? 'time'
+        : 'beats';
+    } catch {
+      return 'beats';
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(STUDIO_TIMING_MODE_STORAGE_KEY, studioTimingMode);
+    } catch {
+      /* ignore */
+    }
+  }, [studioTimingMode]);
   const [isStudioPrecounting, setIsStudioPrecounting] = useState(false);
   const [studioPrecountBeat, setStudioPrecountBeat] = useState<number | null>(null);
   const studioPrecountCancelRef = useRef(false);
@@ -620,33 +1500,18 @@ export default function StudioEditorScreen({
   useEffect(() => {
     isStudioPrecountingRef.current = isStudioPrecounting;
   }, [isStudioPrecounting]);
-  /** Ref for precount beat — playhead rAF must not read stale React state. */
+  /** Ref for precount beat ΓÇö playhead rAF must not read stale React state. */
   const studioPrecountBeatRef = useRef<number | null>(null);
   useLayoutEffect(() => {
     studioPrecountBeatRef.current = studioPrecountBeat;
   }, [studioPrecountBeat]);
   const transportRefForPlayhead = useRef(transport);
-  useLayoutEffect(() => {
-    transportRefForPlayhead.current = transport;
-  }, [transport]);
+  transportRefForPlayhead.current = transport;
   /** Filled during local precount so the playhead tracks clicks before transport runs. */
   const studioPrecountTimelineRef = useRef<{
     playheadTick: number;
     totalBeats: number;
   } | null>(null);
-
-  /**
-   * Beat on Studio grid — linear (unwrapped) quarters from `positionTicks`. `transportBeatFloat` is loop-wrapped
-   * and makes clip playheads jump bar-to-bar vs the main timeline.
-   */
-  const transportBeatFloatForClips = useMemo(() => {
-    if (isStudioPrecounting && studioPrecountTimelineRef.current) {
-      const b = studioPrecountBeat ?? 1;
-      const { playheadTick, totalBeats } = studioPrecountTimelineRef.current;
-      return playheadTick / PPQ - (totalBeats - (b - 1));
-    }
-    return Math.max(0, positionTicks / PPQ);
-  }, [isStudioPrecounting, studioPrecountBeat, positionTicks]);
 
   /** Timeline overlay: armed row + start beat while transport is recording. */
   const [liveRecordLane, setLiveRecordLane] = useState<{
@@ -710,7 +1575,8 @@ export default function StudioEditorScreen({
   }, [tracks]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [mixerOpen, setMixerOpen] = useState(true);
-  /** Mixer panel height — bottom DAW strip; timeline uses remaining space above. */
+  const [performancePlaybackMode, setPerformancePlaybackMode] = useState(true);
+  /** Mixer panel height ΓÇö bottom DAW strip; timeline uses remaining space above. */
   const [mixerHeight] = useState(340);
 
   const mixerScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -747,6 +1613,7 @@ export default function StudioEditorScreen({
   const [masterMeterDisplay, setMasterMeterDisplay] = useState({ rms: 0, peak: 0 });
   const masterMeterBufRef = useRef<Float32Array | null>(null);
   const masterPeakHoldRef = useRef(0);
+  const masterMeterLastUiPushMsRef = useRef(0);
   const [trackPans, setTrackPans] = useState<Record<number, number>>(Object.fromEntries(tracks.map(t => [t.id, 0])));
   const [trackEffects, setTrackEffects] = useState<Record<number, EffectSlot[]>>({});
   const [masterSolo, setMasterSolo] = useState(false);
@@ -826,7 +1693,7 @@ export default function StudioEditorScreen({
   const zoom = Math.max(0.2, Math.min(4, globalZoom));
   /** One bar width in px (= `quartersPerBar` quarter-notes from time sig). */
   const colW = Math.round(60 * zoom);
-  /** Single scale: pixels ↔ transport beats (must match MasterClock `transportBeatFloat` + `ticksPerBar`). */
+  /** Single scale: pixels Γåö Studio grid beats (`useStudioMusicalClock` + `ticksPerBar`). */
   const timelineMap = useMemo(
     () =>
       createStudioTimelineMap({
@@ -852,84 +1719,307 @@ export default function StudioEditorScreen({
   const studioLoopRegionOk = loopEnabled && studioVisLoopEnd >= studioVisLoopStart;
   const studioLoopBraceLeftPx = (studioVisLoopStart - 1) * colW;
   const studioLoopBraceWidthPx = (studioVisLoopEnd - studioVisLoopStart + 1) * colW;
-  /** Beat labels overlap when zoomed out — clip cells and hide glyph if too narrow. */
+  /** Beat labels overlap when zoomed out ΓÇö clip cells and hide glyph if too narrow. */
   const showBeatRulerLabels = measureW >= 10;
   const beatRulerFontPx = Math.min(
     8,
     Math.max(5, Math.floor(measureW * 0.85)),
   );
-  /** Row height for track list + timeline (must stay identical for scroll sync). Base ↑ for readable CH + name + controls. */
+  /** Row height for track list + timeline (must stay identical for scroll sync). Base Γåæ for readable CH + name + controls. */
   /** Taller base so ARM / M / S / lock controls fit comfortably. */
   const TRACK_H = Math.round(80 * Math.max(1, Math.min(4, globalVZoom)));
   const isTransportRunning = transport === 'playing' || transport === 'recording';
-  const playheadActiveOnRuler = isTransportRunning || isStudioPrecounting;
-  /** rAF playhead + DOM ruler shades only while moving — paused/stopped use React layout from ticks. */
-  const playheadMotionActive =
-    isStudioScreenActive && (isTransportRunning || isStudioPrecounting);
-  const useDomRulerPlayheadHighlight = playheadMotionActive;
+  /** Ref copy so playhead rAF reads latest `transport` without re-running the effect on every edge. */
+  const transportForPlayheadRef = useRef(transport);
+  transportForPlayheadRef.current = transport;
+  const getIsAudioTransportRunningRef = useRef(getIsAudioTransportRunning);
+  getIsAudioTransportRunningRef.current = getIsAudioTransportRunning;
+  const performancePlaybackActive = performancePlaybackMode && isTransportRunning;
+  /** Include `counting` so ruler/playhead stay live during master count-in (not only local precount). */
+  const playheadActiveOnRuler =
+    isTransportRunning ||
+    transport === 'counting' ||
+    isStudioPrecounting;
+
+  useEffect(() => {
+    const w = window as unknown as { __daMusicStudioPerfPlayback?: boolean };
+    w.__daMusicStudioPerfPlayback = performancePlaybackMode;
+    return () => {
+      delete w.__daMusicStudioPerfPlayback;
+    };
+  }, [performancePlaybackMode]);
   /**
-   * Studio timeline is linear (bars 1…N). Use unwrapped song phase from ticks — not loop-wrapped
-   * loop-wrapped `transportBeatFloat` / display beats, or the playhead jumps bar-wise vs the grid.
+   * Ruler highlights + idle layout: must match **audio** transport (incl. one frame before React
+   * commits `transport`). The cyan-line rAF **effect** no longer depends on this — only reads refs —
+   * so this does not restart that loop.
    */
-  const runningGridBeatFloat = Math.max(0, positionTicks / PPQ);
-  /** Integer quarter index 0… — same columns as ruler cells / track grid (`absoluteBeatToX`). */
-  const studioPlayheadQuarterIdx0 = useMemo(() => {
-    if (isStudioPrecounting && studioPrecountTimelineRef.current) {
-      const b = studioPrecountBeat ?? 1;
-      const { playheadTick, totalBeats } = studioPrecountTimelineRef.current;
-      const precountBeat = playheadTick / PPQ - (totalBeats - (b - 1));
-      return Math.max(0, Math.floor(precountBeat + 1e-9));
-    }
-    if (isTransportRunning) {
-      return Math.max(0, transportUnwrappedQuarterIndex);
-    }
-    const td = wrapGlobalTickToDisplayTick(Math.max(0, positionTicks));
-    return Math.max(0, Math.floor(td / PPQ));
-  }, [
+  const playheadMotionActive =
+    isStudioScreenActive &&
+    (isTransportRunning ||
+      transport === 'counting' ||
+      isStudioPrecounting ||
+      getIsAudioTransportRunning());
+  /**
+   * Keep the playhead column highlight on the same audio-frame path as the cyan playhead line.
+   * Disabling this in PERF mode left only React `playheadBarForRuler` (sparse re-renders) ΓÇö
+   * the grid highlight lagged the line and looked like drift vs the metronome.
+   */
+  const useDomRulerPlayheadHighlight = playheadMotionActive;
+  /** Studio musical clock — playhead, clips, ruler, BBT/TIME (`useStudioMusicalClock` + engine). */
+  const {
+    transportBeatFloatForClips,
+    studioPlayheadQuarterIdx0,
+    effectiveRulerQuarterIdx0,
+    studioLineBeatForPixel,
+    studioTimingReadout,
+    getStudioTransportBeatFloat,
+    studioTransportReadRef,
+  } = useStudioMusicalClock({
+    positionTicks,
+    songTotalBars,
+    ticksPerBar,
+    ticksToSeconds,
+    timeSigs,
+    transport,
+    getTransportBeatUiSnapshot,
+    subscribeTransportBeatUi,
+    getStudioTransportSyncSnapshot,
+    getStudioTransportSyncSnapshotAtAudioNow,
+    getIsAudioTransportRunning,
+    audioCtxRef,
     isStudioPrecounting,
     studioPrecountBeat,
-    isTransportRunning,
-    transportUnwrappedQuarterIndex,
-    positionTicks,
-    wrapGlobalTickToDisplayTick,
-  ]);
-  const effectiveRulerQuarterIdx0 = studioPlayheadQuarterIdx0;
-  const studioLineBeatForPixel = useMemo(() => {
-    if (isStudioPrecounting && studioPrecountTimelineRef.current) {
-      const b = studioPrecountBeat ?? 1;
-      const { playheadTick, totalBeats } = studioPrecountTimelineRef.current;
-      return playheadTick / PPQ - (totalBeats - (b - 1));
-    }
-    if (isTransportRunning) return Math.max(0, runningGridBeatFloat);
-    const tickDisp = wrapGlobalTickToDisplayTick(Math.max(0, Math.floor(positionTicks)));
-    return Math.max(0, tickDisp / PPQ);
-  }, [
-    isStudioPrecounting,
-    studioPrecountBeat,
-    isTransportRunning,
-    runningGridBeatFloat,
-    wrapGlobalTickToDisplayTick,
-    positionTicks,
-  ]);
+    studioPrecountTimelineRef,
+    PPQ,
+  });
+  /** Only for local precount rAF; during real transport, DOM rAF uses {@link getStudioTransportBeatFloat}. */
   const getLivePlayheadBeatForPixel = useCallback((): number | null => {
-    if (isStudioPrecounting && studioPrecountTimelineRef.current) {
-      const b = studioPrecountBeatRef.current ?? 1;
-      const { playheadTick, totalBeats } = studioPrecountTimelineRef.current;
-      return playheadTick / PPQ - (totalBeats - (b - 1));
+    return isStudioPrecounting ? getStudioTransportBeatFloat() : null;
+  }, [isStudioPrecounting, getStudioTransportBeatFloat]);
+
+  const studioPlayheadLineRef = useRef<HTMLDivElement | null>(null);
+  /** Beat-column overlay — painted from the same transport pump as the cyan line (one rAF, one `audioNow`). */
+  const studioRulerHighlightColumnRef = useRef<HTMLDivElement | null>(null);
+  /** Latest `kickPump` from the transport playhead effect — used to boot the rAF chain on transport edges. */
+  const pumpKickRef = useRef<() => void>(() => {});
+  const getStudioSnapAtForPlayheadRef = useRef(getStudioTransportSyncSnapshotAtAudioNow);
+  getStudioSnapAtForPlayheadRef.current = getStudioTransportSyncSnapshotAtAudioNow;
+  const getStudioTransportBeatFloatForPlayheadRef = useRef(getStudioTransportBeatFloat);
+  getStudioTransportBeatFloatForPlayheadRef.current = getStudioTransportBeatFloat;
+
+  /** Bar / beat for ruler React cells — updated only from the same master `audioNow` as cyan line + MET. */
+  const [rulerMusicalPlayhead, setRulerMusicalPlayhead] = useState<{
+    bar: number;
+    beat: number;
+  } | null>(null);
+
+  /** Latest grid quarter-float — updated every display rAF with the same snapshot as the cyan line. */
+  const masterPulseGridBeatRef = useRef(0);
+
+  /** Rebuilt path: only React-publish ruler bar/beat when the global quarter index changes (see `studioGridLockedPlayhead`). */
+  const rulerQuarterGateRef = useRef(createRulerQuarterGate());
+
+  const applyRulerFromGridBeat = useCallback(
+    (beatMono: number) => {
+      if (!Number.isFinite(beatMono)) return;
+      const tbb = studioRulerBarBeatFromAbsoluteQuarter(
+        Math.max(0, beatMono),
+        qpb,
+        BARS,
+      );
+      setRulerMusicalPlayhead((prev) =>
+        prev && prev.bar === tbb.bar && prev.beat === tbb.beatInBar
+          ? prev
+          : { bar: tbb.bar, beat: tbb.beatInBar },
+      );
+    },
+    [qpb, BARS],
+  );
+
+  const readMasterPulseGridBeat = useCallback(
+    () => masterPulseGridBeatRef.current,
+    [],
+  );
+
+  useLayoutEffect(() => {
+    if (!isStudioScreenActive || playheadMotionActive) return;
+    const el = studioPlayheadLineRef.current;
+    if (!el) return;
+    studioPlayheadApplyLeft(
+      el,
+      studioTimelineMapRef.current,
+      studioLineBeatForPixel,
+      false,
+    );
+  }, [isStudioScreenActive, playheadMotionActive, studioLineBeatForPixel, timelineMap]);
+
+  /**
+   * Cyan playhead + ruler pulse: display `requestAnimationFrame` loop while Studio is open (transport).
+   * The loop is **kicked** from `subscribeStudioPlayheadFrame` (same `audioNow` as `emitTransportAudioFrame`)
+   * and from `subscribeTransportBeatUi` + a `transport` edge effect. That covers **master record count-in**,
+   * where `isRunningRef` is still false so the main transport rAF does not emit pulses — the line would
+   * otherwise never start or would drift vs the count-in metronome.
+   * `pulse(null)` on transport stop cancels the pending rAF so the line does not run one stale frame.
+   */
+  useEffect(() => {
+    if (!isStudioScreenActive) {
+      setRulerMusicalPlayhead(null);
+      return;
     }
-    const tr = transportRefForPlayhead.current;
-    if (tr === 'playing' || tr === 'recording') {
-      const ctx = audioCtxRef.current;
-      if (ctx && ctx.state !== 'closed') {
-        return Math.max(
-          0,
-          getGlobalBeatsUnwrappedAtAudioNow(ctx.currentTime),
-        );
+
+    resetRulerQuarterGate(rulerQuarterGateRef.current);
+
+    const paintLine = (audioNow: number) => {
+      const el = studioPlayheadLineRef.current;
+      const map = studioTimelineMapRef.current;
+      if (!el || !map) return;
+      if (
+        isStudioPrecountingRef.current &&
+        studioPrecountTimelineRef.current != null
+      ) {
+        const b = getStudioTransportBeatFloatForPlayheadRef.current();
+        if (Number.isFinite(b)) studioPlayheadApplyLeft(el, map, b, true);
+        return;
       }
-      return Math.max(0, positionTicksRef.current / PPQ);
+      const beat = studioGridBeatFloatFromSnapshot(
+        getStudioSnapAtForPlayheadRef.current(audioNow),
+      );
+      if (Number.isFinite(beat)) {
+        studioPlayheadApplyLeft(el, map, beat, false);
+      }
+    };
+
+    const syncRulerToBeatMono = (beatMono: number) => {
+      masterPulseGridBeatRef.current = beatMono;
+      if (shouldPublishRulerQuarter(rulerQuarterGateRef.current, beatMono)) {
+        applyRulerFromGridBeat(beatMono);
+      }
+    };
+
+    let raf = 0;
+    const precountStep = () => {
+      if (
+        !isStudioPrecountingRef.current ||
+        studioPrecountTimelineRef.current == null
+      ) {
+        return;
+      }
+      paintLine(0);
+      const b = getStudioTransportBeatFloatForPlayheadRef.current();
+      if (Number.isFinite(b)) syncRulerToBeatMono(b);
+      raf = requestAnimationFrame(precountStep);
+    };
+
+    if (isStudioPrecounting) {
+      raf = requestAnimationFrame(precountStep);
+      return () => {
+        cancelAnimationFrame(raf);
+        resetRulerQuarterGate(rulerQuarterGateRef.current);
+        setRulerMusicalPlayhead(null);
+      };
     }
-    return null;
-  }, [isStudioPrecounting, getGlobalBeatsUnwrappedAtAudioNow, audioCtxRef]);
+
+    const motionNow = () => {
+      const tr = transportForPlayheadRef.current;
+      return (
+        tr === 'playing' ||
+        tr === 'recording' ||
+        tr === 'counting' ||
+        isStudioPrecountingRef.current ||
+        getIsAudioTransportRunningRef.current()
+      );
+    };
+
+    let pumpRunning = false;
+    const pump = () => {
+      try {
+        if (!isStudioScreenActive) {
+          pumpRunning = false;
+          return;
+        }
+        if (isStudioPrecountingRef.current) {
+          pumpRunning = false;
+          return;
+        }
+        if (!motionNow()) {
+          if (pumpRunning) {
+            resetRulerQuarterGate(rulerQuarterGateRef.current);
+            setRulerMusicalPlayhead(null);
+          }
+          pumpRunning = false;
+          return;
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx && ctx.state !== 'closed') {
+          const t = studioAudioNowForPaint(ctx) ?? ctx.currentTime;
+          paintLine(t);
+          const snap = getStudioSnapAtForPlayheadRef.current(t);
+          const beat = studioGridBeatFloatFromSnapshot(snap);
+          const map = studioTimelineMapRef.current;
+          const hl = studioRulerHighlightColumnRef.current;
+          if (hl && map && Number.isFinite(beat)) {
+            studioRulerPlayheadApplyHighlight(hl, map, beat, false);
+          }
+          syncRulerToBeatMono(beat);
+        }
+        pumpRunning = true;
+        raf = requestAnimationFrame(pump);
+      } catch {
+        pumpRunning = false;
+      }
+    };
+
+    const kickPump = () => {
+      if (!isStudioScreenActive || isStudioPrecountingRef.current) return;
+      if (!motionNow() || pumpRunning) return;
+      pumpRunning = true;
+      raf = requestAnimationFrame(pump);
+    };
+
+    const onMasterAudioPulse = (t: number | null) => {
+      if (t == null) {
+        cancelAnimationFrame(raf);
+        pumpRunning = false;
+        resetRulerQuarterGate(rulerQuarterGateRef.current);
+        setRulerMusicalPlayhead(null);
+        return;
+      }
+      kickPump();
+    };
+
+    const unsubPulse = subscribeStudioPlayheadFrame(onMasterAudioPulse);
+    const unsubBeatUi = subscribeTransportBeatUi(kickPump);
+    pumpKickRef.current = kickPump;
+    kickPump();
+
+    return () => {
+      unsubPulse();
+      unsubBeatUi();
+      cancelAnimationFrame(raf);
+      pumpRunning = false;
+      pumpKickRef.current = () => {};
+      resetRulerQuarterGate(rulerQuarterGateRef.current);
+      setRulerMusicalPlayhead(null);
+    };
+  }, [
+    isStudioScreenActive,
+    isStudioPrecounting,
+    applyRulerFromGridBeat,
+    subscribeTransportBeatUi,
+  ]);
+
+  useEffect(() => {
+    if (!isStudioScreenActive || isStudioPrecounting) return;
+    if (
+      transport !== 'playing' &&
+      transport !== 'recording' &&
+      transport !== 'counting'
+    ) {
+      return;
+    }
+    pumpKickRef.current();
+  }, [transport, isStudioScreenActive, isStudioPrecounting]);
+
   /**
    * 1-based bar position for paste/UI: snapped to quarter grid while playing/recording/precount;
    * fractional when paused/stopped for scrub accuracy.
@@ -939,13 +2029,85 @@ export default function StudioEditorScreen({
       ? studioPlayheadQuarterIdx0 / qpb + 1
       : transportBeatFloatForClips / qpb + 1;
   const playheadBeat0Grid = effectiveRulerQuarterIdx0;
-  const playheadBarForRuler = Math.floor(effectiveRulerQuarterIdx0 / qpb) + 1;
+  /** Fractional grid — match ruler columns (`studioRulerBarBeatFromAbsoluteQuarter` / timeline map). */
+  const playheadBarBeatIdle = useMemo(() => {
+    const tbb = studioRulerBarBeatFromAbsoluteQuarter(
+      Math.max(0, transportBeatFloatForClips),
+      qpb,
+      BARS,
+    );
+    return { bar: tbb.bar, beat: tbb.beatInBar };
+  }, [transportBeatFloatForClips, qpb, BARS]);
+  const playheadBarForRulerIdle = playheadBarBeatIdle.bar;
+  const playheadBeatInBar1Idle = playheadBarBeatIdle.beat;
+
+  const playheadBarForRuler =
+    rulerMusicalPlayhead?.bar ?? playheadBarForRulerIdle;
   const playheadBeatInBar1 =
-    ((effectiveRulerQuarterIdx0 % qpb) + qpb) % qpb + 1;
+    rulerMusicalPlayhead?.beat ?? playheadBeatInBar1Idle;
+  const [syncCaptureRunning, setSyncCaptureRunning] = useState(false);
+  const captureSyncReport = useCallback(() => {
+    if (syncCaptureRunning) return;
+    setSyncCaptureRunning(true);
+    const rows: string[] = [];
+    const startedAt = performance.now();
+    rows.push('Studio Sync Capture (10s)');
+    rows.push(`started_iso=${new Date().toISOString()}`);
+    rows.push('ms,bar,beatInBar,beatFloat,deltaPx,metroAheadBeats,nextQuarterDeltaTicks,phaseErrorBeats,tickInt,metroNextQuarterTick,metroNextBeatTimeSec');
+    const id = window.setInterval(() => {
+      const snap = getUnifiedStudioSyncSnapshot();
+      const beat = studioCanonicalBeatFromSnapshot(snap);
+      const nearestBeat = Math.round(beat);
+      const gridDeltaPx = (beat - nearestBeat) * timelineMap.pixelsPerBeat;
+      const metroAheadBeats =
+        (snap.metronomeNextQuarterTick - snap.tickFloat) / PPQ;
+      const expectedNextQuarter =
+        Math.ceil(Math.max(0, beat) - 1e-9) * PPQ;
+      const phaseErrorBeats =
+        (snap.metronomeNextQuarterTick - expectedNextQuarter) / PPQ;
+      const tbb = studioTransportToBarBeatFromSnap(snap, qpb, BARS);
+      const nowMs = Math.round(performance.now() - startedAt);
+      rows.push(
+        [
+          nowMs,
+          tbb.bar,
+          tbb.beatInBar,
+          beat.toFixed(6),
+          gridDeltaPx.toFixed(3),
+          metroAheadBeats.toFixed(3),
+          (snap.nextQuarterTick - snap.tickFloat).toFixed(3),
+          phaseErrorBeats.toFixed(3),
+          snap.tickInt,
+          snap.metronomeNextQuarterTick,
+          snap.metronomeNextBeatTimeSec.toFixed(6),
+        ].join(','),
+      );
+      if (nowMs >= 10000) {
+        clearInterval(id);
+        setSyncCaptureRunning(false);
+        const text = rows.join('\n');
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `studio-sync-capture-${Date.now()}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+    }, 100);
+  }, [
+    getUnifiedStudioSyncSnapshot,
+    syncCaptureRunning,
+    timelineMap.pixelsPerBeat,
+    qpb,
+    BARS,
+  ]);
 
   /** Bar index (1-based) for sorting / mkClip; precise alignment uses {@link recordStartTickRef}. */
   const recordStartBarRef = useRef(1);
-  /** Snapped MasterClock tick when capture began — written to the final clip as `startTick`. */
+  /** Snapped MasterClock tick when capture began ΓÇö written to the final clip as `startTick`. */
   const recordStartTickRef = useRef(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -979,58 +2141,18 @@ export default function StudioEditorScreen({
   }
 
   const timelineRef = useRef<HTMLDivElement>(null);
-  /** Latest song tick (avoids re-running recorder effect every tick; fallback if MasterClock tick not on window). */
-  const positionTicksRef = useRef(positionTicks);
-  positionTicksRef.current = positionTicks;
-
-  /** Same beat index as snapped Studio playhead (integer quarter while transport runs). */
-  const getRecordingEndBeat = useCallback(() => {
-    if (
-      isStudioPrecountingRef.current &&
-      studioPrecountTimelineRef.current
-    ) {
-      const b = studioPrecountBeatRef.current ?? 1;
-      const { playheadTick, totalBeats } = studioPrecountTimelineRef.current;
-      return playheadTick / PPQ - (totalBeats - (b - 1));
-    }
-    const tr = transportRefForPlayhead.current;
-    if (tr === 'playing' || tr === 'recording') {
-      const ctx = audioCtxRef.current;
-      if (ctx && ctx.state !== 'closed') {
-        try {
-          const tick = Math.max(
-            0,
-            getTickIntAtAudioNowRef.current(ctx.currentTime),
-          );
-          const displayTick = wrapGlobalTickToDisplayTickRef.current(tick);
-          return Math.max(0, Math.floor(displayTick / PPQ));
-        } catch {
-          /* fall through */
-        }
-      }
-      const tick = Math.max(0, tickCounterRef.current);
-      const displayTick = wrapGlobalTickToDisplayTickRef.current(tick);
-      return Math.max(0, Math.floor(displayTick / PPQ));
-    }
-    const tickDisp = wrapGlobalTickToDisplayTickRef.current(
-      Math.max(0, Math.floor(positionTicksRef.current)),
-    );
-    return tickDisp / PPQ;
-  }, []);
 
   const isRunning   = transport === 'playing' || transport === 'recording';
 
   const tracksPlaybackRef = useRef(tracks);
   tracksPlaybackRef.current = tracks;
-  const positionTicksPlaybackRef = useRef(positionTicks);
-  positionTicksPlaybackRef.current = positionTicks;
   const trackPansPlaybackRef = useRef(trackPans);
   trackPansPlaybackRef.current = trackPans;
   const ticksToSecondsPlaybackRef = useRef(ticksToSeconds);
   ticksToSecondsPlaybackRef.current = ticksToSeconds;
   const studioClipSourcesRef = useRef<Map<string, AudioBufferSourceNode>>(new Map());
   const studioClipRafRef = useRef<number>(0);
-  /** Bumps when cloud load wins so async localStorage restore can’t overwrite it. */
+  /** Bumps when cloud load wins so async localStorage restore canΓÇÖt overwrite it. */
   const studioLoadGenRef = useRef(0);
   const sessionSyncGenRef = useRef(0);
 
@@ -1066,7 +2188,7 @@ export default function StudioEditorScreen({
     }
   }, [tracks, recordArmedTrackId]);
 
-  /** Sync armed row → record target using latest tracks (same tick as transport=recording). */
+  /** Sync armed row ΓåÆ record target using latest tracks (same tick as transport=recording). */
   function syncRecordTargetFromArmedRefs(): boolean {
     const armedId = recordArmedTrackRef.current;
     const list = tracksRef.current;
@@ -1095,7 +2217,7 @@ export default function StudioEditorScreen({
     };
     if (!syncRecordTargetFromArmedRefs() || !recordTargetTrackRef.current) {
       console.error(
-        '[Studio] No record-armed target track — cannot capture. Stop transport.',
+        '[Studio] No record-armed target track ΓÇö cannot capture. Stop transport.',
       );
       stop();
       return;
@@ -1103,7 +2225,7 @@ export default function StudioEditorScreen({
     const stream = w.__daMusicStudioMicStream;
     if (!stream) {
       console.error(
-        '[Studio] No microphone stream after arm — cannot capture. Aborting recording transport.',
+        '[Studio] No microphone stream after arm ΓÇö cannot capture. Aborting recording transport.',
       );
       stop();
       return;
@@ -1111,7 +2233,7 @@ export default function StudioEditorScreen({
     for (const t of stream.getAudioTracks()) {
       t.enabled = true;
     }
-    // Effect may re-run while already capturing — don’t add a second MediaRecorder or flicker monitor.
+    // Effect may re-run while already capturing ΓÇö donΓÇÖt add a second MediaRecorder or flicker monitor.
     if (mediaRecorderRef.current?.state === 'recording') return;
 
     teardownInputMonitor();
@@ -1136,7 +2258,7 @@ export default function StudioEditorScreen({
         }
       };
     } catch (e) {
-      console.warn('[Studio] Input monitor failed — recording still runs; use headphones if you add monitoring hardware.', e);
+      console.warn('[Studio] Input monitor failed ΓÇö recording still runs; use headphones if you add monitoring hardware.', e);
     }
 
     recordChunksRef.current = [];
@@ -1177,7 +2299,7 @@ export default function StudioEditorScreen({
       if (e.data.size > 0) recordChunksRef.current.push(e.data);
     };
 
-    /** Frozen at record start — avoids races if arm/target refs change before `onstop` runs. */
+    /** Frozen at record start ΓÇö avoids races if arm/target refs change before `onstop` runs. */
     const targetSnap = recordTargetTrackRef.current
       ? {
           id: recordTargetTrackRef.current.id,
@@ -1205,7 +2327,7 @@ export default function StudioEditorScreen({
               '[Studio] Recording produced no audio data. Stop may have been too fast, or MediaRecorder failed.',
             );
             setRecordPathHint(
-              'Recording had no audio bytes. Record at least ~1 second, then press Stop. If this persists, try Chrome/Edge or check that the mic isn’t muted in the system.',
+              'Recording had no audio bytes. Record at least ~1 second, then press Stop. If this persists, try Chrome/Edge or check that the mic isnΓÇÖt muted in the system.',
             );
             return;
           }
@@ -1283,7 +2405,7 @@ export default function StudioEditorScreen({
       /* Single payload on stop is more reliable than fixed timeslices for short takes. */
       mr.start();
     } catch (e) {
-      console.error('[Studio] MediaRecorder.start failed — recording aborted.', e);
+      console.error('[Studio] MediaRecorder.start failed ΓÇö recording aborted.', e);
       mediaRecorderRef.current = null;
       teardownInputMonitor();
       stop();
@@ -1417,7 +2539,7 @@ export default function StudioEditorScreen({
     };
   }, [getOrCreateAudioContext, setBpm]);
 
-  // Apply Studio snapshot from Supabase (My Projects → Open in Studio).
+  // Apply Studio snapshot from Supabase (My Projects ΓåÆ Open in Studio).
   useEffect(() => {
     if (!pendingCloudStudioJson) return;
     studioLoadGenRef.current += 1;
@@ -1500,7 +2622,7 @@ export default function StudioEditorScreen({
 
   /**
    * Timeline audio clips: schedule when playhead is inside the clip window.
-   * Skips module-sync clips ([AI]/[Arr]/[CS]) — decoded buffers are for sync/show; playing them stacks noise.
+   * Skips module-sync clips ([AI]/[Arr]/[CS]) ΓÇö decoded buffers are for sync/show; playing them stacks noise.
    */
   useEffect(() => {
     const stopAllStudioClipSources = () => {
@@ -1521,8 +2643,16 @@ export default function StudioEditorScreen({
     }
 
     const tick = () => {
+      const schedulerCadenceMs = performancePlaybackActive ? 90 : 40;
       const ctx = audioCtxRef.current;
-      const pt = positionTicksPlaybackRef.current;
+      /**
+       * Same master frame as MET + cyan playhead: `tickFloat` at `AudioContext.currentTime`
+       * (musio-style single phase sample — not a separate ref beat path that can lag setTimeout).
+       */
+      const pt =
+        ctx && ctx.state !== 'closed'
+          ? studioTransportClock.tickFloatNow()
+          : Math.max(0, tickCounterRef.current);
       const tracksNow = tracksPlaybackRef.current;
       const pans = trackPansPlaybackRef.current;
       const toSec = ticksToSecondsPlaybackRef.current;
@@ -1530,24 +2660,47 @@ export default function StudioEditorScreen({
       if (ctx && ctx.state === 'suspended') void ctx.resume();
 
       const solo = tracksNow.some((tr) => tr.solo);
-
-      studioClipSourcesRef.current.forEach((src, key) => {
-        const parts = key.split('-');
-        const tid = Number(parts[0]);
-        const cid = Number(parts[1]);
-        const track = tracksNow.find((tr) => tr.id === tid);
-        const clip = track?.clips.find((c) => c.id === cid);
-        let shouldPlay = false;
-        if (
-          track &&
-          clip?.audioBuffer &&
-          !isModuleSessionClipLabel(clip.label) &&
-          !track.muted &&
-          (!solo || track.solo)
-        ) {
+      const trackById = new Map<number, Track>();
+      const clipBySourceKey = new Map<
+        string,
+        {
+          track: Track;
+          clip: Clip;
+          clipStartTick: number;
+          clipEndTick: number;
+          songSecAtClipStart: number;
+          songSecAtClipEnd: number;
+        }
+      >();
+      for (const track of tracksNow) {
+        trackById.set(track.id, track);
+        for (const clip of track.clips) {
+          if (!clip.audioBuffer) continue;
+          if (isModuleSessionClipLabel(clip.label)) continue;
           const clipStartTick = clipTimelineStartTick(clip, ticksPerBar);
           const clipEndTick = clipStartTick + clip.len * ticksPerBar;
-          shouldPlay = pt >= clipStartTick && pt < clipEndTick;
+          const songSecAtClipStart = toSec(clipStartTick);
+          const songSecAtClipEnd = toSec(clipEndTick);
+          clipBySourceKey.set(`${track.id}-${clip.id}`, {
+            track,
+            clip,
+            clipStartTick,
+            clipEndTick,
+            songSecAtClipStart,
+            songSecAtClipEnd,
+          });
+        }
+      }
+
+      studioClipSourcesRef.current.forEach((src, key) => {
+        const meta = clipBySourceKey.get(key);
+        let shouldPlay = false;
+        if (
+          meta &&
+          !meta.track.muted &&
+          (!solo || meta.track.solo)
+        ) {
+          shouldPlay = pt >= meta.clipStartTick && pt < meta.clipEndTick;
         }
         if (!shouldPlay) {
           try {
@@ -1560,70 +2713,69 @@ export default function StudioEditorScreen({
       });
 
       if (ctx) {
-        for (const t of tracksNow) {
-          if (t.muted) continue;
+        for (const [key, meta] of clipBySourceKey) {
+          const t = trackById.get(meta.track.id);
+          if (!t || t.muted) continue;
           if (solo && !t.solo) continue;
-          for (const clip of t.clips) {
-            if (!clip.audioBuffer) continue;
-            if (isModuleSessionClipLabel(clip.label)) continue;
-            const clipStartTick = clipTimelineStartTick(clip, ticksPerBar);
-            const clipEndTick = clipStartTick + clip.len * ticksPerBar;
-            const inside = pt >= clipStartTick && pt < clipEndTick;
-            if (!inside) continue;
-            const key = `${t.id}-${clip.id}`;
-            if (studioClipSourcesRef.current.has(key)) continue;
+          const inside = pt >= meta.clipStartTick && pt < meta.clipEndTick;
+          if (!inside) continue;
+          if (studioClipSourcesRef.current.has(key)) continue;
 
-            const buf = clip.audioBuffer;
-            const songSecAtPt = toSec(pt);
-            const songSecAtClipStart = toSec(clipStartTick);
-            const songSecAtClipEnd = toSec(clipEndTick);
+          const buf = meta.clip.audioBuffer;
+          if (!buf) continue;
+          const songSecAtPt = toSec(pt);
+          let offset = songSecAtPt - meta.songSecAtClipStart;
+          offset = Math.max(0, Math.min(offset, Math.max(0, buf.duration - 1e-4)));
 
-            let offset = songSecAtPt - songSecAtClipStart;
-            offset = Math.max(0, Math.min(offset, Math.max(0, buf.duration - 1e-4)));
+          const remainingInClipWindow = Math.max(0, meta.songSecAtClipEnd - songSecAtPt);
+          const remainingInBuffer = Math.max(0, buf.duration - offset);
+          const playDur = Math.min(remainingInClipWindow, remainingInBuffer);
 
-            const remainingInClipWindow = Math.max(0, songSecAtClipEnd - songSecAtPt);
-            const remainingInBuffer = Math.max(0, buf.duration - offset);
-            const playDur = Math.min(remainingInClipWindow, remainingInBuffer);
+          if (playDur <= 0.005) continue;
 
-            if (playDur <= 0.005) continue;
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          const gain = ctx.createGain();
+          gain.gain.value = (t.volume / 100) * 0.75;
+          const panner = ctx.createStereoPanner();
+          panner.pan.value = Math.max(-1, Math.min(1, (pans[t.id] ?? 0) / 100));
+          src.connect(panner);
+          panner.connect(gain);
+          const master =
+            (typeof window !== 'undefined' &&
+              (window as Window & { __daMusicMasterGain?: GainNode }).__daMusicMasterGain) ||
+            null;
+          if (master && master.context === ctx) gain.connect(master);
+          else gain.connect(ctx.destination);
 
-            const src = ctx.createBufferSource();
-            src.buffer = buf;
-            const gain = ctx.createGain();
-            gain.gain.value = (t.volume / 100) * 0.75;
-            const panner = ctx.createStereoPanner();
-            panner.pan.value = Math.max(-1, Math.min(1, (pans[t.id] ?? 0) / 100));
-            src.connect(panner);
-            panner.connect(gain);
-            const master =
-              (typeof window !== 'undefined' &&
-                (window as Window & { __daMusicMasterGain?: GainNode }).__daMusicMasterGain) ||
-              null;
-            if (master && master.context === ctx) gain.connect(master);
-            else gain.connect(ctx.destination);
-
-            try {
-              src.start(ctx.currentTime, offset, playDur);
-            } catch {
-              continue;
-            }
-            src.onended = () => {
-              studioClipSourcesRef.current.delete(key);
-            };
-            studioClipSourcesRef.current.set(key, src);
+          try {
+            src.start(ctx.currentTime, offset, playDur);
+          } catch {
+            continue;
           }
+          src.onended = () => {
+            studioClipSourcesRef.current.delete(key);
+          };
+          studioClipSourcesRef.current.set(key, src);
         }
       }
 
-      studioClipRafRef.current = requestAnimationFrame(tick);
+      studioClipRafRef.current = window.setTimeout(tick, schedulerCadenceMs);
     };
 
-    studioClipRafRef.current = requestAnimationFrame(tick);
+    studioClipRafRef.current = window.setTimeout(tick, 0);
     return () => {
-      cancelAnimationFrame(studioClipRafRef.current);
+      window.clearTimeout(studioClipRafRef.current);
       stopAllStudioClipSources();
     };
-  }, [transport, ticksPerBar, ticksToSeconds, audioCtxRef]);
+  }, [
+    transport,
+    ticksPerBar,
+    ticksToSeconds,
+    audioCtxRef,
+    studioTransportClock,
+    performancePlaybackActive,
+  ]);
 
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
@@ -1641,11 +2793,13 @@ export default function StudioEditorScreen({
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  /** Master bus meter: read post–master-gain analyser (same signal sent to speakers). */
+  /** Master bus meter: read postΓÇômaster-gain analyser (same signal sent to speakers). */
   useEffect(() => {
     if (!mixerOpen) return;
+    if (performancePlaybackActive && isTransportRunning) return;
     let raf = 0;
     const tick = () => {
+      const nowMs = performance.now();
       const analyser = masterMeterAnalyserRef.current;
       const ctx = audioCtxRef.current;
       if (analyser && ctx && ctx.state === 'running') {
@@ -1664,16 +2818,29 @@ export default function StudioEditorScreen({
         }
         const rms = Math.sqrt(sum / buf.length);
         masterPeakHoldRef.current = Math.max(pk, masterPeakHoldRef.current * 0.993);
-        setMasterMeterDisplay({ rms, peak: masterPeakHoldRef.current });
+        const meterPushMs = performancePlaybackActive ? 140 : 66;
+        if (nowMs - masterMeterLastUiPushMsRef.current >= meterPushMs) {
+          masterMeterLastUiPushMsRef.current = nowMs;
+          setMasterMeterDisplay({ rms, peak: masterPeakHoldRef.current });
+        }
       } else {
         masterPeakHoldRef.current *= 0.94;
-        setMasterMeterDisplay({ rms: 0, peak: masterPeakHoldRef.current });
+        if (nowMs - masterMeterLastUiPushMsRef.current >= 90) {
+          masterMeterLastUiPushMsRef.current = nowMs;
+          setMasterMeterDisplay({ rms: 0, peak: masterPeakHoldRef.current });
+        }
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [mixerOpen, masterMeterAnalyserRef, audioCtxRef]);
+  }, [
+    mixerOpen,
+    masterMeterAnalyserRef,
+    audioCtxRef,
+    performancePlaybackActive,
+    isTransportRunning,
+  ]);
 
   const soloActive = tracks.some(t => t.solo);
   const soloTracks = tracks.filter(t => t.solo);
@@ -1819,7 +2986,7 @@ export default function StudioEditorScreen({
     });
   }
 
-  /** Exclusive record arm — transport Record writes the take to this row only (Audio/Vocal). */
+  /** Exclusive record arm ΓÇö transport Record writes the take to this row only (Audio/Vocal). */
   function toggleRecordArm(track: Track) {
     if (track.type !== 'Audio' && track.type !== 'Vocal') {
       setRecordPathHint(
@@ -1918,7 +3085,7 @@ export default function StudioEditorScreen({
         };
         micTestRafRef.current = requestAnimationFrame(tick);
       } catch (e) {
-        console.warn('[Studio] Mic check failed (permission or device). Use Settings → Audio Input.', e);
+        console.warn('[Studio] Mic check failed (permission or device). Use Settings ΓåÆ Audio Input.', e);
         stopMicTest();
       }
     },
@@ -1973,7 +3140,7 @@ export default function StudioEditorScreen({
     setIsStudioPrecounting(true);
     isStudioPrecountingRef.current = true;
 
-    /* Same BPM as `mapGlobalTickToAudioTime` / MET — not React `bpm` alone (can lag `bpmRef` by a frame). */
+    /* Same BPM as `mapGlobalTickToAudioTime` / MET ΓÇö not React `bpm` alone (can lag `bpmRef` by a frame). */
     const bpmN = getTransportAudioBpm();
     const ctx = getOrCreateAudioContext();
     try {
@@ -1998,15 +3165,10 @@ export default function StudioEditorScreen({
     studioPrecountTimelineRef.current = { playheadTick, totalBeats };
     setStudioPrecountBeat(1);
 
-    for (let i = 0; i < totalBeats; i++) {
-      const tickAtClick = playheadTick - (totalBeats - i) * PPQ;
-      const displayTick = wrapGlobalTickToDisplayTick(Math.max(0, tickAtClick));
-      const { beat } = tickToBarBeat(displayTick);
-      playMetronomeClickAt(t0 + i * spb, beat === 1);
-    }
+    // Intentionally silent precount while main transport/metronome sync is being validated.
 
     const deadline = t0 + totalBeats * spb;
-    /* Wall clock: after Pause, MasterClock may leave AudioContext suspended — `currentTime` then
+    /* Wall clock: after Pause, MasterClock may leave AudioContext suspended ΓÇö `currentTime` then
      * never reaches `deadline` and this Promise would hang forever with isStudioPrecounting stuck. */
     const wallGiveUpMs = performance.now() + totalBeats * spb * 1000 + 800;
     studioPrecountUiTimersRef.current = [];
@@ -2055,13 +3217,11 @@ export default function StudioEditorScreen({
     record,
     getTransportAudioBpm,
     getOrCreateAudioContext,
-    playMetronomeClickAt,
     settings.audioInput,
     studioPrecountEnabled,
     studioPrecountBars,
     snapTick,
     tickToBarBeat,
-    wrapGlobalTickToDisplayTick,
     qpb,
   ]);
 
@@ -2228,12 +3388,14 @@ export default function StudioEditorScreen({
       const maxStart = BARS * qpb - dragClipLenBeatsRef.current;
       let startBeat0 = dragOrigStartBeat0Ref.current + deltaBeats;
       startBeat0 = Math.max(0, Math.min(maxStart, startBeat0));
+      let newStartTick = Math.round(startBeat0 * PPQ);
       if (!e.altKey && snapType !== 'off') {
-        startBeat0 = snapClipStartBeat0(startBeat0, snapType, qpb);
+        newStartTick = snapClipStartTick0(newStartTick, snapType, qpb, PPQ);
+        startBeat0 = newStartTick / PPQ;
         startBeat0 = Math.max(0, Math.min(maxStart, startBeat0));
+        newStartTick = Math.round(startBeat0 * PPQ);
       }
       const newBar = startBeat0 / qpb + 1;
-      const newStartTick = Math.round(startBeat0 * PPQ);
       setShadowStartBeat0(startBeat0);
       setTracks(prev => prev.map(t => t.id !== draggingClip.trackId ? t : {
         ...t, clips: t.clips.map(c => c.id !== draggingClip.clipId ? c : { ...c, bar: newBar, startTick: newStartTick }),
@@ -2256,7 +3418,7 @@ export default function StudioEditorScreen({
     setIsBarDragSelecting(false);
   }
 
-  /** Map click X → bar / beat-in-bar via shared timeline map (same as playhead + clips). */
+  /** Map click X ΓåÆ bar / beat-in-bar via shared timeline map (same as playhead + clips). */
   function getTimelineGridFromClientX(clientX: number): { bar: number; measureInBar: number } | null {
     const el = timelineRef.current;
     if (!el) return null;
@@ -2333,11 +3495,20 @@ export default function StudioEditorScreen({
           <div className="flex flex-col gap-0.5">
             <h2 className="text-sm font-bold" style={{ color: '#fff' }}>Studio Editor</h2>
             <span className="text-[10px] font-mono font-semibold" style={{ color: '#a3a3a3' }} title="Recording: add Audio or Vocal, then REC ARM (red), then mixer Record.">
-              Recording: + Audio or + Vocal → REC ARM (red) → MIC to test → Record in mixer
+              Recording: + Audio or + Vocal ΓåÆ REC ARM (red) ΓåÆ MIC to test ΓåÆ Record in mixer
             </span>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0" style={{ marginLeft: -6 }}>
-            <span className="text-xs font-mono px-3 py-1 rounded font-bold" style={{ background: '#000', border: '1px solid #2a2a2a', color: '#ffcc00' }}>⚡ {bpm} BPM</span>
+            <span className="text-xs font-mono px-3 py-1 rounded font-bold" style={{ background: '#000', border: '1px solid #2a2a2a', color: '#ffcc00' }} title="Session tempo">
+              ΓÜí {bpm} BPM
+            </span>
+            <span
+              className="text-xs font-mono px-2 py-1 rounded font-bold"
+              style={{ background: '#000', border: '1px solid #2a2a2a', color: '#93c5fd' }}
+              title="Time signature"
+            >
+              {timeSigs[0]?.numerator ?? 4}/{timeSigs[0]?.denominator ?? 4}
+            </span>
             {soloActive && (
               <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#ffcc0018', color: '#ffcc00', border: '1px solid #ffcc0044' }}>
                 SOLO: {soloTracks.map((t) => `${sessionChDisplayLabel(t, audioTrackDupCounts, displayChannelMap)} ${t.name}`).join(', ')}
@@ -2345,7 +3516,7 @@ export default function StudioEditorScreen({
             )}
             {selectedBar !== null && selectedMeasureInBar !== null && (
               <span className="text-xs px-1.5 py-0.5 rounded font-bold" style={{ background: '#00ff8818', color: '#00ff88', border: '1px solid #00ff8844' }}>
-                ↔ BAR {selectedBar} · M{selectedMeasureInBar}
+                Γåö BAR {selectedBar} ┬╖ M{selectedMeasureInBar}
               </span>
             )}
           </div>
@@ -2361,7 +3532,7 @@ export default function StudioEditorScreen({
           </button>
           <button onClick={() => setAutoScroll(v => !v)} className="px-2 h-5 rounded text-[10px] font-bold"
             style={{ background: autoScroll ? '#00ff8818' : '#111', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
-            ↔ Scroll
+            Γåö Scroll
           </button>
           <div className="w-px h-4" style={{ background: '#2a2a2a' }} />
           {(['MIDI', 'Audio', 'Vocal', 'Drum', 'Bus'] as TrackType[]).map((t) => (
@@ -2439,10 +3610,10 @@ export default function StudioEditorScreen({
 
       {/*
         DAW layout: TOP = timeline + track list (same `tracks` array order as mixer).
-        BOTTOM = full-width mixer — one strip per track + MASTER. audioTrack = session CH.
+        BOTTOM = full-width mixer ΓÇö one strip per track + MASTER. audioTrack = session CH.
       */}
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-        {/* ── TOP: multitrack timeline + track controls ── */}
+        {/* ΓöÇΓöÇ TOP: multitrack timeline + track controls ΓöÇΓöÇ */}
         <div className="flex flex-col flex-1 min-h-0 overflow-hidden" style={{ minHeight: 200 }}>
         <ResizablePanel height={studioHeight} minH={200} maxH={900} defaultH={0} onResize={setStudioHeight}
           style={{ flex: studioHeight > 0 ? `0 0 ${studioHeight}px` : '1', minHeight: studioHeight > 0 ? studioHeight : 200 }}>
@@ -2454,7 +3625,7 @@ export default function StudioEditorScreen({
               {/*
                 items-start + self-start: columns size to content height (no flex shrink).
                 If the timeline column used min-h-0 + overflow-y-hidden, the browser created a
-                nested vertical scroll inside overflow-x-auto — tracks left and waves right drifted.
+                nested vertical scroll inside overflow-x-auto ΓÇö tracks left and waves right drifted.
                 Only vertical scroll here is this parent (single scrollbar).
               */}
               <div
@@ -2462,7 +3633,7 @@ export default function StudioEditorScreen({
                 className="studio-track-timeline-scroll flex flex-1 min-h-0 min-w-0 flex-row overflow-y-auto overflow-x-hidden items-start"
                 style={{ scrollPaddingTop: RULER_H }}
               >
-              {/* Track list — same `tracks` order as timeline rows & mixer strips; no nested vertical scroll */}
+              {/* Track list ΓÇö same `tracks` order as timeline rows & mixer strips; no nested vertical scroll */}
               <div className="shrink-0 self-start overflow-hidden flex flex-col" style={{ width: 248, borderRight: '1px solid #1a1a1a', background: '#080808' }}>
                 <div
                   className="sticky top-0 z-20 flex items-center px-2 font-mono text-[9px] font-bold tracking-wide shrink-0"
@@ -2561,8 +3732,8 @@ export default function StudioEditorScreen({
                                 title={
                                   canMic
                                     ? armedHere
-                                      ? 'Disarm — Record will not target this track'
-                                      : 'REC ARM — mixer Record captures microphone to this track (exclusive)'
+                                      ? 'Disarm ΓÇö Record will not target this track'
+                                      : 'REC ARM ΓÇö mixer Record captures microphone to this track (exclusive)'
                                     : 'Use + Audio or + Vocal in the header for microphone recording'
                                 }
                                 onClick={(e) => {
@@ -2603,7 +3774,7 @@ export default function StudioEditorScreen({
                                   title={
                                     micTestTrackId === t.id
                                       ? 'Stop mic check'
-                                      : 'MIC CHECK — hear input and see level (Settings → Audio Input if silent)'
+                                      : 'MIC CHECK ΓÇö hear input and see level (Settings ΓåÆ Audio Input if silent)'
                                   }
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -2686,7 +3857,7 @@ export default function StudioEditorScreen({
                 })}
               </div>
 
-              {/* Timeline: horizontal scroll only — no min-h-0 (avoids nested vertical scroll) */}
+              {/* Timeline: horizontal scroll only ΓÇö no min-h-0 (avoids nested vertical scroll) */}
               <div 
                 ref={timelineRef} 
                 className="flex-1 min-w-0 shrink-0 self-start overflow-x-auto" 
@@ -2699,6 +3870,7 @@ export default function StudioEditorScreen({
                   {/* Ruler */}
                   <div
                     className="sticky top-0 z-20"
+                    title="Timeline ruler — cyan column & line = playhead. TitleBar MET (magenta) = audible clicks. Toolbar MET lamp = visual quarter flashes."
                     style={{
                       background: '#0a0a0a',
                       borderBottom: '1px solid #1a1a1a',
@@ -2726,8 +3898,8 @@ export default function StudioEditorScreen({
                               left: i * colW,
                               width: colW,
                               height: RULER_BAR_H,
-                              color: isCurrent ? '#D500F9' : isBarActive ? '#00ff88' : '#555',
-                              background: isCurrent ? 'rgba(213,0,249,0.06)' : isBarActive ? 'rgba(0,255,136,0.08)' : 'transparent',
+                              color: isCurrent ? STUDIO_PLAYHEAD_LINE.barText : isBarActive ? '#00ff88' : '#555',
+                              background: isCurrent ? STUDIO_PLAYHEAD_LINE.barBg : isBarActive ? 'rgba(0,255,136,0.08)' : 'transparent',
                               borderLeft: `1px solid ${i % 4 === 0 ? '#1a1a1a' : '#0d0d0d'}`,
                               fontSize: Math.min(9, Math.max(7, colW * 0.2)),
                               fontFamily: 'monospace',
@@ -2743,7 +3915,7 @@ export default function StudioEditorScreen({
                         );
                       })}
                     </div>
-                    {/* Beats 1…N (quarters from time sig) aligned to bar grid */}
+                    {/* Beats 1ΓÇªN (quarters from time sig) aligned to bar grid */}
                     <div style={{ position: 'relative', height: RULER_MEAS_H, minHeight: RULER_MEAS_H, width: timelineMap.totalWidthPx, borderTop: '1px solid #141414' }}>
                       {Array.from({ length: BARS * qpb }, (_, idx) => {
                         const bi = Math.floor(idx / qpb);
@@ -2766,12 +3938,12 @@ export default function StudioEditorScreen({
                               width: measureW,
                               height: RULER_MEAS_H,
                               fontSize: beatRulerFontPx,
-                              color: isSel ? '#00ff88' : isPlayheadBeat ? '#D500F9' : '#555',
+                              color: isSel ? '#00ff88' : isPlayheadBeat ? STUDIO_PLAYHEAD_LINE.measText : '#555',
                               borderLeft: mi === 0 ? `1px solid ${bi % 4 === 0 ? '#1a1a1a' : '#0d0d0d'}` : '1px solid #1a1a1a',
                               background: isSel
                                 ? 'rgba(0,255,136,0.14)'
                                 : isPlayheadBeat
-                                  ? 'rgba(213,0,249,0.14)'
+                                  ? STUDIO_PLAYHEAD_LINE.measBg
                                   : 'transparent',
                               overflow: 'hidden',
                               boxSizing: 'border-box',
@@ -2784,18 +3956,32 @@ export default function StudioEditorScreen({
                         );
                       })}
                     </div>
-                    <StudioRulerPlayheadHighlights
-                      isActive={playheadMotionActive}
-                      timelineMap={timelineMap}
-                      beatForPixel={studioLineBeatForPixel}
-                      liveBeatForPixel={getLivePlayheadBeatForPixel}
-                      allowNeg={
-                        isStudioPrecounting &&
-                        studioPrecountTimelineRef.current != null
-                      }
-                      rulerBarH={RULER_BAR_H}
-                      rulerMeasH={RULER_MEAS_H}
-                    />
+                    {useDomRulerPlayheadHighlight ? (
+                      <StudioRulerPlayheadHighlights
+                        isActive={playheadMotionActive}
+                        timelineMap={timelineMap}
+                        beatForPixel={studioLineBeatForPixel}
+                        liveBeatForPixel={
+                          isStudioPrecounting &&
+                          studioPrecountTimelineRef.current != null
+                            ? getLivePlayheadBeatForPixel
+                            : playheadMotionActive && !isStudioPrecounting
+                              ? readMasterPulseGridBeat
+                              : undefined
+                        }
+                        allowNeg={
+                          isStudioPrecounting &&
+                          studioPrecountTimelineRef.current != null
+                        }
+                        rulerBarH={RULER_BAR_H}
+                        rulerMeasH={RULER_MEAS_H}
+                        getTransportBeatFloat={getStudioTransportBeatFloat}
+                        beatColumnExposeRef={studioRulerHighlightColumnRef}
+                        suppressInternalHighlightRaf={
+                          playheadMotionActive && !isStudioPrecounting
+                        }
+                      />
+                    ) : null}
                     <LoopMarkersBrace
                       visible={studioLoopRegionOk}
                       leftPx={studioLoopBraceLeftPx}
@@ -2841,12 +4027,15 @@ export default function StudioEditorScreen({
                         >
                           {rowCh}
                         </span>
+                        {/*
+                          PERF mode previously used repeating-linear-gradient; browser stop positions
+                          did not always match {@link StudioTimelineMap.absoluteBeatToX} + ruler divs,
+                          so the cyan line looked "off" or jumped vs drawn quarters. Same 1px div grid always.
+                        */}
                         {Array.from({ length: BARS * qpb }, (_, idx) => {
                           const bi = Math.floor(idx / qpb);
                           const mi = idx % qpb;
-                          const left = timelineMap.absoluteBeatToX(
-                            bi * qpb + mi,
-                          );
+                          const left = timelineMap.absoluteBeatToX(bi * qpb + mi);
                           const isBarLine = mi === 0;
                           return (
                             <div
@@ -2868,14 +4057,55 @@ export default function StudioEditorScreen({
                           const clipLeft =
                             timelineMap.absoluteBeatToX(clipStartBeat0(clip, qpb)) + 1;
                           const isDragging = draggingClip?.trackId === t.id && draggingClip.clipId === clip.id;
+                          if (performancePlaybackActive) {
+                            return (
+                              <div
+                                key={clip.id}
+                                data-clip-item="true"
+                                className="absolute top-1 select-none overflow-hidden rounded"
+                                style={{
+                                  left: clipLeft,
+                                  width: clipW,
+                                  height: Math.max(24, TRACK_H - 12),
+                                  zIndex: isDragging ? 12 : 2,
+                                  opacity: isDragging ? 0.9 : 1,
+                                  background: `${t.color}18`,
+                                  border: `1px solid ${t.color}77`,
+                                  boxSizing: 'border-box',
+                                }}
+                                title={clip.label || 'Clip'}
+                              >
+                                {clip.label ? (
+                                  <span
+                                    style={{
+                                      position: 'absolute',
+                                      left: 4,
+                                      bottom: 2,
+                                      fontSize: 8,
+                                      fontFamily: 'monospace',
+                                      fontWeight: 700,
+                                      color: t.color,
+                                      textShadow: '0 0 3px #000',
+                                      whiteSpace: 'nowrap',
+                                      pointerEvents: 'none',
+                                    }}
+                                  >
+                                    {clip.label}
+                                  </span>
+                                ) : null}
+                              </div>
+                            );
+                          }
                           const startBeat0 = clipStartBeat0(clip, qpb);
                           const lenBeats = clipLengthBeats(clip, qpb);
                           // Continuous playhead phase inside clips to avoid beat-quantized visual skipping.
                           const ph = transportBeatFloatForClips;
                           const phFrac =
-                            ph >= startBeat0 && ph < startBeat0 + lenBeats
-                              ? (ph - startBeat0) / lenBeats
-                              : undefined;
+                            performancePlaybackActive
+                              ? undefined
+                              : ph >= startBeat0 && ph < startBeat0 + lenBeats
+                                ? (ph - startBeat0) / lenBeats
+                                : undefined;
                           const hasCrossfade = t.clips.some(c => c.id !== clip.id && c.bar + c.len === clip.bar);
                           return (
                             <div key={clip.id}>
@@ -2914,10 +4144,8 @@ export default function StudioEditorScreen({
                                         left: `${phFrac * 100}%`,
                                         width: 2,
                                         marginLeft: -1,
-                                        background:
-                                          'linear-gradient(180deg, #D500F9 0%, #E040FB 55%, #D500F9 100%)',
-                                        boxShadow:
-                                          '0 0 8px rgba(213,0,249,0.85)',
+                                        background: STUDIO_PLAYHEAD_LINE.gradient,
+                                        boxShadow: STUDIO_PLAYHEAD_LINE.shadowClip,
                                         zIndex: 2,
                                       }}
                                     />
@@ -2963,7 +4191,7 @@ export default function StudioEditorScreen({
                                 height={Math.max(24, TRACK_H - 12)}
                                 startBeat0={liveRecordLane.startBeat0}
                                 pixelsPerBeat={timelineMap.pixelsPerBeat}
-                                getCurrentBeat={getRecordingEndBeat}
+                                getCurrentBeat={getStudioTransportBeatFloat}
                               />
                               <span
                                 className="absolute bottom-0.5 left-1 font-mono font-bold"
@@ -2973,14 +4201,14 @@ export default function StudioEditorScreen({
                                   textShadow: '0 0 5px #000, 0 1px 2px #000',
                                 }}
                               >
-                                REC…
+                                RECΓÇª
                               </span>
                             </div>
                           )}
                       </div>
                     );
                   })}
-                  {/* Full-height bar selection column — spans ruler + all tracks (not clipped by ruler / 100vh) */}
+                  {/* Full-height bar selection column ΓÇö spans ruler + all tracks (not clipped by ruler / 100vh) */}
                   {selectedBar !== null &&
                     selectedBar <= BARS &&
                     selectedMeasureInBar !== null &&
@@ -3002,7 +4230,7 @@ export default function StudioEditorScreen({
                       }}
                     >
                       {/*
-                        Capture pointers here — parent was pointer-events-none so clicks passed
+                        Capture pointers here ΓÇö parent was pointer-events-none so clicks passed
                         through to track rows; the 2nd click of a double-click re-selected the beat.
                       */}
                       <div
@@ -3030,16 +4258,20 @@ export default function StudioEditorScreen({
                       </span>
                     </div>
                   )}
-                  <StudioTransportPlayhead
-                    isActive={isStudioScreenActive}
-                    motionActive={playheadMotionActive}
-                    timelineMap={timelineMap}
-                    beatForPixel={studioLineBeatForPixel}
-                    liveBeatForPixel={getLivePlayheadBeatForPixel}
-                    allowNeg={
-                      isStudioPrecounting &&
-                      studioPrecountTimelineRef.current != null
-                    }
+                  <div
+                    ref={studioPlayheadLineRef}
+                    className="absolute pointer-events-none top-0 bottom-0"
+                    title="Playhead — cyan line = transport grid (same as MET timing). MET offset for speakers is click-only."
+                    style={{
+                      left: 0,
+                      width: 1,
+                      zIndex: 25,
+                      opacity: isStudioScreenActive ? 1 : 0,
+                      background: STUDIO_PLAYHEAD_LINE.gradient,
+                      boxShadow: STUDIO_PLAYHEAD_LINE.shadow,
+                      willChange: 'transform',
+                      transform: `translate3d(var(${STUDIO_PLAYHEAD_X_VAR}, 0px), 0, 0)`,
+                    }}
                   />
                 </div>
               </div>
@@ -3052,19 +4284,48 @@ export default function StudioEditorScreen({
             <WaveformEditor
               clips={editorTrack.clips.map(c => ({ id: c.id, bar: c.bar, len: c.len, label: c.label, trackColor: editorTrack.color, trackType: editorTrack.type }))}
               colW={colW} totalBars={BARS} trackColor={editorTrack.color}
-              trackName={`${sessionChDisplayLabel(editorTrack, audioTrackDupCounts, displayChannelMap)} · ${editorTrack.name}`}
+              trackName={`${sessionChDisplayLabel(editorTrack, audioTrackDupCounts, displayChannelMap)} ┬╖ ${editorTrack.name}`}
               onClose={() => setEditorTrack(null)}
             />
           </div>
         )}
         </div>
 
-        {/* ── BOTTOM: full-width mixer (same `tracks` order + MASTER) ── */}
-        <div className="w-full" style={{ borderTop: '2px solid #2a2a2a', background: '#080808', flexShrink: 0, display: 'flex', flexDirection: 'column', height: mixerOpen ? `${mixerHeight + 24}px` : '22px' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 10, padding: '6px 10px', background: '#0a0a0a', borderBottom: '1px solid #1a1a1a', minHeight: '22px' }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF', flexShrink: 0 }}>🎚️ MIXER</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+        {/* ΓöÇΓöÇ BOTTOM: full-width mixer (same `tracks` order + MASTER) ΓöÇΓöÇ */}
+        <div
+          className="w-full"
+          style={{
+            borderTop: '2px solid #2a2a2a',
+            background: '#080808',
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            height: mixerOpen ? `${mixerHeight + 24}px` : 'auto',
+          }}
+        >
+          {/* Header — wrap + stacked readouts so transport/sync strip stays on-screen when narrow */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'flex-start',
+              justifyContent: 'flex-start',
+              gap: 10,
+              rowGap: 8,
+              padding: '6px 10px',
+              background: '#0a0a0a',
+              borderBottom: '1px solid #1a1a1a',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                flexShrink: 0,
+                flexWrap: 'wrap',
+              }}
+            >
               <button
                 type="button"
                 onClick={() => {
@@ -3150,11 +4411,11 @@ export default function StudioEditorScreen({
                   isStudioPrecounting
                     ? 'Cancel count-in'
                     : transport === 'recording'
-                      ? 'Pause — recording (red)'
+                      ? 'Pause ΓÇö recording (red)'
                       : transport === 'counting'
-                        ? 'Pause — count-in'
+                        ? 'Pause ΓÇö count-in'
                         : transport === 'playing'
-                          ? 'Pause — playing'
+                          ? 'Pause ΓÇö playing'
                           : 'Play'
                 }
               >
@@ -3178,6 +4439,197 @@ export default function StudioEditorScreen({
               >
                 <SkipForward size={11} />
               </button>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  marginLeft: 4,
+                  padding: '2px 6px',
+                  borderRadius: 4,
+                  border: '1px solid #2a2a2a',
+                  background: '#0c0c0c',
+                  flexShrink: 0,
+                }}
+                title="Same audio-time phase as playhead / metronome"
+              >
+                <button
+                  type="button"
+                  onClick={() => setStudioTimingMode('beats')}
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 800,
+                    padding: '2px 5px',
+                    borderRadius: 2,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: studioTimingMode === 'beats' ? '#1e3a5f' : 'transparent',
+                    color: studioTimingMode === 'beats' ? '#93c5fd' : '#666',
+                  }}
+                >
+                  BBT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudioTimingMode('time')}
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 800,
+                    padding: '2px 5px',
+                    borderRadius: 2,
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: studioTimingMode === 'time' ? '#1e3a5f' : 'transparent',
+                    color: studioTimingMode === 'time' ? '#93c5fd' : '#666',
+                  }}
+                >
+                  TIME
+                </button>
+                <span
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#e5e7eb',
+                    minWidth: 118,
+                    textAlign: 'right',
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  {studioTimingMode === 'beats'
+                    ? studioTimingReadout.bbt
+                    : studioTimingReadout.time}
+                </span>
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 5,
+                flex: '1 1 220px',
+                minWidth: 0,
+                maxWidth: '100%',
+              }}
+              title="Playhead grid sync — bar.beat, lock ladder, PH strip (same clock as cyan timeline line)"
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 6,
+                  rowGap: 4,
+                }}
+              >
+                <StudioLockBeatReadout
+                  isActive={isStudioScreenActive}
+                  beatsPerBar={qpb}
+                  totalBars={BARS}
+                  getBeatFloat={getStudioTransportBeatFloat}
+                  clockRunning={playheadMotionActive}
+                />
+                <StudioDawLockStatusReadout
+                  isActive={isStudioScreenActive}
+                  clockRunning={playheadMotionActive}
+                  beatsPerBar={qpb}
+                  totalBars={BARS}
+                  timeSigs={timeSigs as TimeSignature[]}
+                />
+                <StudioRenderCadenceReadout isActive={isStudioScreenActive} />
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 6,
+                  rowGap: 4,
+                  width: '100%',
+                }}
+              >
+                <StudioLiveSyncHud
+                  isActive={isStudioScreenActive}
+                  clockRunning={playheadMotionActive}
+                  metronomeEnabled={metronomeEnabled}
+                  beatsPerBar={qpb}
+                  getStudioTransportSyncSnapshot={getUnifiedStudioSyncSnapshot}
+                  pixelsPerBeat={timelineMap.pixelsPerBeat}
+                />
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 6,
+                  rowGap: 4,
+                }}
+              >
+                <StudioVisualMetronomeLamp
+                  isActive={isStudioScreenActive}
+                  metronomeEnabled={metronomeEnabled}
+                  clockRunning={playheadMotionActive}
+                  beatsPerBar={qpb}
+                />
+                <button
+                  type="button"
+                  onClick={captureSyncReport}
+                  disabled={syncCaptureRunning}
+                  style={{
+                    height: 20,
+                    borderRadius: 3,
+                    border: '1px solid #333',
+                    background: syncCaptureRunning ? '#222' : '#111',
+                    color: syncCaptureRunning ? '#fbbf24' : '#aaa',
+                    fontSize: 9,
+                    padding: '0 6px',
+                    flexShrink: 0,
+                    cursor: syncCaptureRunning ? 'default' : 'pointer',
+                  }}
+                  title="Capture 10 seconds of sync data to a text file"
+                >
+                  {syncCaptureRunning ? 'SYNC REC...' : 'SYNC CAPTURE'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPerformancePlaybackMode((v) => !v)}
+                  disabled={isTransportRunning}
+                  style={{
+                    height: 20,
+                    minWidth: 78,
+                    borderRadius: 3,
+                    border: `1px solid ${performancePlaybackMode ? '#22c55e66' : '#333'}`,
+                    background: performancePlaybackMode ? '#0f2015' : '#111',
+                    color: performancePlaybackMode ? '#86efac' : '#aaa',
+                    fontSize: 9,
+                    fontWeight: 800,
+                    letterSpacing: 0.25,
+                    whiteSpace: 'nowrap',
+                    padding: '0 6px',
+                    flexShrink: 0,
+                    cursor: isTransportRunning ? 'not-allowed' : 'pointer',
+                    opacity: isTransportRunning ? 0.7 : 1,
+                  }}
+                  title={
+                    isTransportRunning
+                      ? 'Performance Playback is locked ON while transport is running'
+                      : 'Performance Playback: reduce scheduler/UI load while preserving full Studio visuals'
+                  }
+                >
+                  PERF {performancePlaybackMode ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                flexShrink: 0,
+                flexWrap: 'wrap',
+              }}
+            >
               <label
                 style={{
                   display: 'flex',
@@ -3188,7 +4640,7 @@ export default function StudioEditorScreen({
                   userSelect: 'none',
                   flexShrink: 0,
                 }}
-                title="Count-in bars (4/4) before recording — transport stays stopped until the last click"
+                title="Count-in bars (4/4) before recording ΓÇö transport stays stopped until the last click"
               >
                 <input
                   type="checkbox"
@@ -3277,8 +4729,8 @@ export default function StudioEditorScreen({
                 }}
                 title={
                   isStudioPrecounting
-                    ? 'Count-in…'
-                    : 'Record — REC ARM (red) on an Audio/Vocal row first'
+                    ? 'Count-inΓÇª'
+                    : 'Record ΓÇö REC ARM (red) on an Audio/Vocal row first'
                 }
               >
                 <Mic size={14} strokeWidth={2.25} />
@@ -3304,7 +4756,7 @@ export default function StudioEditorScreen({
                   padding: 0,
                   fontFamily: 'monospace',
                 }}
-                title="Tempo down (−1 BPM)"
+                title="Tempo down (ΓêÆ1 BPM)"
               >
                 -
               </button>
@@ -3363,7 +4815,7 @@ export default function StudioEditorScreen({
               <span style={{ fontSize: 8, color: '#666', fontFamily: 'monospace' }}>Add by channel (+), drag slots to reorder</span>
             </div>
             <span style={{ fontSize: 8, color: '#666', fontFamily: 'monospace', flex: 1, minWidth: 0, textAlign: 'center' }}>
-              Channels · same order as timeline · CH = audioTrack
+              Channels ┬╖ same order as timeline ┬╖ CH = audioTrack
             </span>
             <button type="button" onClick={() => setMixerOpen(!mixerOpen)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: '2px 4px', flexShrink: 0, marginLeft: 'auto' }}>
               {mixerOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -3379,7 +4831,7 @@ export default function StudioEditorScreen({
               {tracks.map(track => {
                 const sessionCh = mixerRoutingChannel(track);
                 const chLab = sessionChDisplayLabel(track, audioTrackDupCounts, displayChannelMap);
-                const isPlaying = transport === 'playing' || transport === 'recording';
+                const isPlaying = false;
                 const volLevel = (channelVolumes[sessionCh] ?? track.volume) / 100;
                 const rmsLevel = isPlaying ? Math.min(1, (channelLevels[sessionCh] ?? 0) * volLevel) : 0;
                 const peakLevel = isPlaying ? Math.min(1, rmsLevel * 1.25) : 0;
@@ -3495,7 +4947,7 @@ export default function StudioEditorScreen({
                       </div>
                     </div>
 
-                    {/* REC ARM + MIC — full-width stacked for visibility */}
+                    {/* REC ARM + MIC ΓÇö full-width stacked for visibility */}
                     <div
                       style={{
                         display: 'flex',
@@ -3515,7 +4967,7 @@ export default function StudioEditorScreen({
                                 canMic
                                   ? mixArmed
                                     ? 'Disarm track'
-                                    : 'REC ARM — Record in mixer targets this track'
+                                    : 'REC ARM ΓÇö Record in mixer targets this track'
                                   : 'Add Audio or Vocal track for mic recording'
                               }
                               onClick={() => {
@@ -3553,7 +5005,7 @@ export default function StudioEditorScreen({
                                 title={
                                   micTestTrackId === track.id
                                     ? 'Stop mic check'
-                                    : 'MIC — test input level before recording'
+                                    : 'MIC ΓÇö test input level before recording'
                                 }
                                 onClick={() => void toggleMicTest(track.id)}
                                 className="rounded font-mono font-black"
@@ -3611,7 +5063,7 @@ export default function StudioEditorScreen({
                       </div>
                     )}
 
-                    {/* M/S — same state as timeline */}
+                    {/* M/S ΓÇö same state as timeline */}
                     <div style={{ display: 'flex', gap: '4px', fontSize: 10 }}>
                       <button onClick={() => toggleMute(track.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 3, background: track.muted ? '#f4444433' : '#1a1a1a', color: track.muted ? '#ff6666' : '#888', border: `1px solid ${track.muted ? '#f44444' : '#333'}`, cursor: 'pointer', fontWeight: 800, transition: 'all 0.1s' }}>
                         M
@@ -3850,7 +5302,7 @@ export default function StudioEditorScreen({
                         fontWeight: 700,
                       }}
                     >
-                      {masterDb > -58 ? `${masterDb.toFixed(1)} dBFS` : '—∞'}
+                      {masterDb > -58 ? `${masterDb.toFixed(1)} dBFS` : 'ΓÇöΓê₧'}
                     </div>
                     <button
                       type="button"

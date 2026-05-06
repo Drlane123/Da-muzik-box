@@ -79,9 +79,12 @@ export default function TitleBar({
     'melody-transcription',
     'my-projects',
     'export',
+    'studio-editor-2',
   ];
   const loopDisabledForScreen = !!activeScreen && loopDisabledScreens.includes(activeScreen);
   const topLoopDisabled = loopDisabledForScreen;
+  /** Studio Editor 2 drives its own Web Audio transport; master clock controls are inert here. */
+  const disableMasterTransport = activeScreen === 'studio-editor-2';
 
   const selectedLoopLength = loopEndBar - loopStartBar + 1;
   const loopLengthSelectOptions = useMemo(() => {
@@ -170,6 +173,10 @@ export default function TitleBar({
     return () => window.removeEventListener('saveProject', handleSaveEvent);
   }, []);
 
+  /** Same chrome as Settings / MET / MIDI: 32×32 icon buttons, `active:scale-90`. */
+  const transportIconBtn =
+    'w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90 active:opacity-70';
+
   return (
     <div
       className="flex items-center gap-2 px-3 py-1 select-none shrink-0 overflow-x-auto"
@@ -233,24 +240,52 @@ export default function TitleBar({
 
       <div className="w-px h-8 shrink-0 self-center mt-px ml-2" style={{ background: '#2a2a2a' }} />
 
-      {/* ── Transport ── */}
+      {/* ── Transport — same 32×32 + border treatment as Settings; active = solid fills like MET/MIDI ── */}
       <div className="flex items-center gap-1 shrink-0">
-        <button onClick={() => seekToTick(0)} title="Return to start"
-          className="w-8 h-8 rounded flex items-center justify-center transition-all active:scale-90 active:opacity-70"
-          style={{ background: '#1a1a1a', color: '#aaa' }}>
+        <button
+          type="button"
+          disabled={disableMasterTransport}
+          onClick={() => {
+            if (disableMasterTransport) return;
+            seekToTick(0);
+          }}
+          title={disableMasterTransport ? 'Use transport in Studio Editor 2 (footer)' : 'Return to start'}
+          className={transportIconBtn}
+          style={{
+            background: '#1a1a1a',
+            color: '#888',
+            border: '1px solid #333',
+            opacity: disableMasterTransport ? 0.45 : 1,
+            cursor: disableMasterTransport ? 'not-allowed' : undefined,
+          }}
+        >
           <SkipBack size={14} />
         </button>
         <button
+          type="button"
+          disabled={disableMasterTransport}
           onClick={() => {
+            if (disableMasterTransport) return;
             window.dispatchEvent(new CustomEvent(DMB_STUDIO_PRECOUNT_CANCEL));
             stop();
           }}
-          className="w-8 h-8 rounded flex items-center justify-center transition-all active:scale-90 active:opacity-70"
-          style={{ background: isRunning ? '#2a1a1a' : '#1a1a1a', color: !isRunning ? '#fff' : '#666' }}>
+          title={disableMasterTransport ? 'Use transport in Studio Editor 2 (footer)' : 'Stop'}
+          className={transportIconBtn}
+          style={{
+            background: isRunning ? '#ef4444' : '#1a1a1a',
+            color: isRunning ? '#000' : '#888',
+            border: `1px solid ${isRunning ? '#ef4444' : '#333'}`,
+            opacity: disableMasterTransport ? 0.45 : 1,
+            cursor: disableMasterTransport ? 'not-allowed' : undefined,
+          }}
+        >
           <Square size={14} />
         </button>
         <button
+          type="button"
+          disabled={disableMasterTransport}
           onClick={() => {
+            if (disableMasterTransport) return;
             if (transportNeedsPause) pause();
             else {
               window.dispatchEvent(new CustomEvent(DMB_STUDIO_PRECOUNT_CANCEL));
@@ -258,36 +293,47 @@ export default function TitleBar({
             }
           }}
           title={
-            isRecording
-              ? 'Pause — recording'
-              : isCounting
-                ? 'Pause — count-in'
-                : isPlaying
-                  ? 'Pause — playing'
-                  : isPaused
-                    ? 'Resume'
-                    : 'Play'
+            disableMasterTransport
+              ? 'Use transport in Studio Editor 2 (footer)'
+              : isRecording
+                ? 'Pause — recording'
+                : isCounting
+                  ? 'Pause — count-in'
+                  : isPlaying
+                    ? 'Pause — playing'
+                    : isPaused
+                      ? 'Resume'
+                      : 'Play'
           }
-          className="w-9 h-9 rounded-lg flex items-center justify-center transition-all active:scale-90 active:opacity-70"
+          aria-pressed={transportNeedsPause}
+          className={transportIconBtn}
           style={(() => {
+            const faded = {
+              opacity: disableMasterTransport ? 0.45 : 1,
+              cursor: disableMasterTransport ? ('not-allowed' as const) : undefined,
+            };
+            if (disableMasterTransport) {
+              return { ...faded, background: '#1a1a1a', color: '#555', border: '1px solid #333' };
+            }
             if (isRecording) {
               return {
-                background: '#ef444455',
-                color: '#fecaca',
-                border: '1px solid #f87171',
-                boxShadow: '0 0 12px rgba(248,113,113,0.4)',
+                ...faded,
+                background: '#ef4444',
+                color: '#000',
+                border: '1px solid #ef4444',
               };
             }
             if (isCounting) {
               return {
-                background: '#f59e0b33',
-                color: '#fef3c7',
-                border: '1px solid #fbbf24',
-                boxShadow: '0 0 10px rgba(251,191,36,0.35)',
+                ...faded,
+                background: '#ff9800',
+                color: '#000',
+                border: '1px solid #ff9800',
               };
             }
             if (isPlaying) {
               return {
+                ...faded,
                 background: '#D500F9',
                 color: '#000',
                 border: '1px solid #D500F9',
@@ -295,22 +341,27 @@ export default function TitleBar({
             }
             if (isPaused) {
               return {
+                ...faded,
                 background: '#ff9800',
                 color: '#000',
                 border: '1px solid #ff9800',
               };
             }
             return {
+              ...faded,
               background: '#00E5FF22',
               color: '#00E5FF',
               border: '1px solid #00E5FF44',
             };
           })()}
         >
-          {transportNeedsPause ? <Pause size={16} /> : <Play size={16} />}
+          {transportNeedsPause ? <Pause size={16} /> : <Play size={16} className="ml-px" />}
         </button>
         <button
+          type="button"
+          disabled={disableMasterTransport}
           onClick={() => {
+            if (disableMasterTransport) return;
             if (isRecording) {
               stop();
               return;
@@ -323,12 +374,29 @@ export default function TitleBar({
                 void w.__daMusicStudioTryRecord();
                 return;
               }
+              /**
+               * Never use global Settings count-in on Studio: optional bars-only pre-count lives in
+               * {@link StudioEditorScreen} (`studioPrecountEnabled`). If `__daMusicStudioTryRecord` is
+               * missing (mount race), falling through to `countInEnabled` put transport in `counting`
+               * even when Studio pre-count was off — same “surprise count-in” users reported.
+               */
+              record({ countIn: false, countInBeats });
+              return;
             }
             record({ countIn: countInEnabled, countInBeats });
           }}
-          className="w-8 h-8 rounded flex items-center justify-center transition-all active:scale-90 active:opacity-70"
-          style={{ background: isRecording ? '#ff000044' : '#1a1a1a', color: isRecording ? '#ff4444' : '#555', border: `1px solid ${isRecording ? '#ff444466' : 'transparent'}` }}>
-          <Circle size={14} fill={isRecording ? '#ff4444' : 'transparent'} />
+          title={disableMasterTransport ? 'Use transport in Studio Editor 2 (footer)' : isRecording ? 'Stop recording' : 'Record'}
+          aria-pressed={isRecording}
+          className={transportIconBtn}
+          style={{
+            background: isRecording ? '#ef4444' : '#1a1a1a',
+            color: isRecording ? '#000' : '#888',
+            border: `1px solid ${isRecording ? '#ef4444' : '#333'}`,
+            opacity: disableMasterTransport ? 0.45 : 1,
+            cursor: disableMasterTransport ? 'not-allowed' : undefined,
+          }}
+        >
+          <Circle size={14} fill={isRecording ? '#000' : 'transparent'} />
         </button>
       </div>
 
@@ -417,9 +485,12 @@ export default function TitleBar({
 
       <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
 
-      <button onClick={() => setMetronomeEnabled(!metronomeEnabled)}
+      <button
+        onClick={() => setMetronomeEnabled(!metronomeEnabled)}
+        title="Metronome: audible click track. Studio timeline playhead is cyan; this MET button is magenta for clicks only. Toolbar MET lamp = visual quarter pulse."
         className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
-        style={{ background: metronomeEnabled ? '#D500F9' : '#1a1a1a', color: metronomeEnabled ? '#000' : '#888', border: `1px solid ${metronomeEnabled ? '#D500F9' : '#2a2a2a'}` }}>
+        style={{ background: metronomeEnabled ? '#D500F9' : '#1a1a1a', color: metronomeEnabled ? '#000' : '#888', border: `1px solid ${metronomeEnabled ? '#D500F9' : '#2a2a2a'}` }}
+      >
         MET
       </button>
 

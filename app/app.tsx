@@ -42,6 +42,7 @@ import MelodyTranscriptionScreen from '@/app/screens/MelodyTranscriptionScreen';
 import CreationStationScreen from '@/app/screens/CreationStationScreen';
 
 import StudioEditorScreen from '@/app/screens/StudioEditorScreen';
+import StudioEditor2Screen from '@/app/screens/StudioEditor2Screen';
 
 import MyProjectsScreen from '@/app/screens/MyProjectsScreen';
 
@@ -53,8 +54,9 @@ import ExportScreen from '@/app/screens/ExportScreen';
 
 
 /**
- * All screens are always mounted. Visibility is toggled via CSS so that
- * component state (patterns, clips, edits) is never lost when navigating tabs.
+ * Default behavior: keep screens mounted and hide via CSS.
+ * Some modules may still be conditionally unmounted by AppContent to enforce
+ * strict runtime isolation from Studio transport/sync while hidden.
  */
 function ScreenMount({ active, children }: { active: boolean; children: React.ReactNode }) {
   return (
@@ -95,22 +97,16 @@ function AppContent() {
   }, []);
 
   /**
-   * Shared DAW record arm: one global hook for getUserMedia + `__daMusicStudioMicStream`.
-   * MasterClock `record()` requires `window.__daMusicStudioRecordArm` while any DAW recording
-   * screen is active (Studio / Creation Station / Master Arranger). StudioEditorScreen
-   * MediaRecorder effect consumes the same stream when transport === 'recording'.
+   * Studio-only DAW record arm hook: isolates Studio recording pipeline from
+   * AI Pattern / Creation Station / Arranger while Studio transport is being hardened.
    */
   useEffect(() => {
     const w = window as unknown as {
       __daMusicStudioRecordArm?: () => Promise<void>;
       __daMusicStudioMicStream?: MediaStream | null;
+      __daMusicStudio2RecordInputDeviceId?: string;
     };
-    const dawRecordingScreens: ScreenId[] = [
-      'studio-editor',
-      'creation-station',
-      'master-arranger',
-    ];
-    if (!dawRecordingScreens.includes(activeScreen)) {
+    if (activeScreen !== 'studio-editor' && activeScreen !== 'studio-editor-2') {
       delete w.__daMusicStudioRecordArm;
       return;
     }
@@ -123,8 +119,13 @@ function AppContent() {
       }
       if (prev) prev.getTracks().forEach((t) => t.stop());
       w.__daMusicStudioMicStream = null;
+      const v2 = w.__daMusicStudio2RecordInputDeviceId;
+      const inputDeviceId =
+        activeScreen === 'studio-editor-2' && typeof v2 === 'string' && v2.length > 0
+          ? v2
+          : settings.audioInput;
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: studioMicTrackConstraints(settings.audioInput),
+        audio: studioMicTrackConstraints(inputDeviceId),
       });
       w.__daMusicStudioMicStream = stream;
     };
@@ -145,10 +146,23 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    const w = window as unknown as {
+      __daMusicStudioTransportAuthority?: boolean;
+    };
+    /** Studio Editor 2 uses its own AudioContext — only Studio 1 holds master transport authority. */
+    w.__daMusicStudioTransportAuthority = activeScreen === 'studio-editor';
+    return () => {
+      delete w.__daMusicStudioTransportAuthority;
+    };
+  }, [activeScreen]);
+
+  useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       // Spacebar: Play/Stop
       if (e.code === 'Space' && (e.target as HTMLElement).tagName !== 'INPUT' &&
           (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+        if (activeScreen === 'studio-editor-2') return;
+        if (activeScreen !== 'studio-editor') return;
         e.preventDefault();
         if (transport === 'counting') {
           pause();
@@ -174,12 +188,12 @@ function AppContent() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [transport, play, pause, stop]);
+  }, [activeScreen, transport, play, pause, stop]);
 
   /** Supports: (screenId), (screenId, audioBlob), or (midiNotes[], screenId) from Melody Transcription. */
   function handleExport(a: string | unknown[], b?: string | Blob) {
     if (typeof a === 'string') {
-      if (a === 'studio-editor' && b instanceof Blob && b.size > 0) {
+      if ((a === 'studio-editor' || a === 'studio-editor-2') && b instanceof Blob && b.size > 0) {
         setPendingStudioAudioBlob(b);
       }
       setActiveScreen(a as ScreenId);
@@ -207,13 +221,20 @@ function AppContent() {
             <AiSongScreen onExport={handleExport} />
           </ScreenMount>
           <ScreenMount active={activeScreen === 'ai-pattern'}>
-            <AiPatternScreen onExport={handleExport} />
+            {activeScreen === 'ai-pattern' ? (
+              <AiPatternScreen
+                onExport={handleExport}
+                isScreenActive
+              />
+            ) : null}
           </ScreenMount>
           <ScreenMount active={activeScreen === 'melody-transcription'}>
             <MelodyTranscriptionScreen onExport={handleExport} onBack={() => setActiveScreen('vocal-lab')} />
           </ScreenMount>
           <ScreenMount active={activeScreen === 'creation-station'}>
-            <CreationStationScreen onExport={handleExport} isScreenActive={activeScreen === 'creation-station'} />
+            {activeScreen === 'creation-station' ? (
+              <CreationStationScreen onExport={handleExport} isScreenActive />
+            ) : null}
           </ScreenMount>
           <ScreenMount active={activeScreen === 'studio-editor'}>
             <StudioEditorScreen
@@ -225,12 +246,20 @@ function AppContent() {
               isStudioScreenActive={activeScreen === 'studio-editor'}
             />
           </ScreenMount>
+          <ScreenMount active={activeScreen === 'studio-editor-2'}>
+            <StudioEditor2Screen
+              isScreenActive={activeScreen === 'studio-editor-2'}
+              pendingStudioAudioBlob={pendingStudioAudioBlob}
+              onPendingStudioAudioConsumed={clearPendingStudioAudio}
+            />
+          </ScreenMount>
           <ScreenMount active={activeScreen === 'my-projects'}>
             <MyProjectsScreen
               onOpenStudioWithCloudProject={(studioTimelineJson) => {
                 setPendingStudioCloudJson(studioTimelineJson);
                 setActiveScreen('studio-editor');
               }}
+              onNavigate={(screen) => setActiveScreen(screen as ScreenId)}
             />
           </ScreenMount>
           <ScreenMount active={activeScreen === 'master-arranger'}>

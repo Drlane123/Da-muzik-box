@@ -1,0 +1,27 @@
+Da Music Box v2 — run from VS Code (or any terminal)
+====================================================
+
+Prerequisites
+  - Node.js 18+ (LTS): https://nodejs.org
+  - Optional: Bun (package.json); npm is enough.
+
+First time
+  1. Unzip, then open the folder in VS Code (File → Open Folder).
+  2. Terminal → New Terminal:
+
+     npm install
+
+   3. If the app needs API keys: copy .env.example to .env and edit.
+
+  4. Start the app:
+
+     npm run dev
+
+  5. Open the URL Vite shows (usually http://localhost:5173).
+
+Other commands
+  npm run typecheck
+  npm run build
+  npm run preview
+
+Note: node_modules and dist are not in the zip. Always run npm install after unzip.

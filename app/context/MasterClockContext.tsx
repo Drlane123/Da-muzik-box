@@ -1,44 +1,40 @@
 /**
  * MasterClockContext — Universal Master Clock for Da Music Box
  *
- * ⚙️ UNIFIED SYNC ARCHITECTURE:
+ * ## Core architecture (Web Audio as master — not wall-clock BPM timers)
  *
- * • INDEPENDENT MODULES: Each screen (Creation Station, Studio, Piano Roll, AI Pattern, …) keeps its own
- *   UI state, editors, and data — nothing requires another tab to be “in charge.” What is **shared** is only
- *   the clock: `useMasterClock()` + one `AudioContext` graph for tempo, transport, and scheduled audio.
- * • SINGLE TIMEBASE: Transport tick + bar/beat are driven only from AudioContext.currentTime (+ anchors);
- *   requestAnimationFrame publishes display state for painting — not used as an oscillator or time integrator.
- * • HYBRID SCHEDULER: rAF publishes display/UI only; `TransportPulseWorker` wakes main for metronome + MIDI clock lookahead.
- * • METRONOME: `runMetronomeScheduler` runs on a ~25ms worker pulse (+ initial call from `startMetronomeLoop`) so React-heavy
- *   frames cannot drain the click lookahead buffer; `metronomeSchedulerRunIdRef` invalidates stale callbacks on stop.
- *   (`playStartTimeRef` / `originBeatFloatRef` / AudioContext.currentTime), not from a looping buffer
- * • CREATION STATION AS LOOP ANCHOR: Session loop length/start (for wrap + drums) is stored against the
- *   Creation Station profile row (`loopProfiles['creation-station']`), kept in sync across modules via
- *   `applyLoopPatchAll` — not “CS owns other screens,” only one agreed loop window for the shared clock.
- * • LOOP WRAP ANCHOR: `wrapGlobalTickToDisplayTick` uses that same Creation Station profile slice for refs,
- *   so bar-phase and metronome accents stay aligned app-wide.
- * • ZERO DRIFT: Transport tick = inverse of `mapGlobalTickToAudioTime` (elapsed AudioContext time).
- * • NO SHADOW CLOCKS: Any musical step, preview, or scheduled note must use this timebase
- *   (`getTickIntAtAudioNow`, `positionTicks`, `transportBeatIndex`, `wrapGlobalTickToDisplayTick`,
- *   `getOrCreateAudioContext`) — not `setInterval(…, 60000/bpm)` or a second `AudioContext` for tempo.
+ * 1. **Audio clock (source of truth)** — One shared `AudioContext`. All musical time is derived from
+ *    `audioContext.currentTime` (high-resolution seconds since the context was created), plus anchors
+ *    `startAudioTimeRef` / `originBeatFloatRef`. Never integrate tempo by counting `setInterval(60 / BPM)` ticks.
  *
- * TIMING GUARANTEES:
- * - **Single transport truth:** hardware phase `originBeatFloat + (audioCtx.currentTime - sessionStart) * bpm / 60`
- *   (quarter beats), then `round(· * PPQ)` for integer ticks — no transport `measure++` accumulation.
- *   Loop display: `wrapGlobalBeatsToDisplayFloat`; metronome uses the same tick map / `wrapGlobalTickToDisplayTick`.
- * - Playhead UI, bar/beat counters, grid, sub-steps: all derived from `transportBeatFloat` (React state ~60fps + `transportBeatFloatRef` every RAF).
- * - Beat scheduling: metronome + MIDI lookahead use the same small worker interval on the main thread scheduler.
- * - Metronome: same audio-time anchor as transport; refills from the pulse worker, not from the display rAF.
- * - Do not drive playhead from CSS animation or a second clock — use `transportBeatFloat`.
+ * 2. **Metronome scheduler (lookahead, not “play now”)** — `runMetronomeScheduler` walks global quarter ticks,
+ *    maps each to **audio time** with {@link mapGlobalTickToAudioTime}, and calls {@link playMetronomeClickAt}
+ *    so clicks use `OscillatorNode.start(scheduledTime)` on the audio timeline. `secondsPerBeat = 60 / BPM`
+ *    appears only inside that map (same formula as transport).
+ *
+ * 3. **Wake thread (not the beat clock)** — `transportPulse.worker` uses a **fixed** short recursive
+ *    `setTimeout` chain (ms), matching the web.dev lookahead “scheduler” pattern (not `setInterval(60/BPM)`).
+ *    Pulses only wake the main thread to refill lookahead; beat spacing is still `mapGlobalTickToAudioTime`.
+ *
+ * 4. **UI / playhead** — Pure math lives in `@/app/lib/masterTransportSync` (`computeMasterTransportPhase`).
+ *    `publishTransportVisualFrameAtAudioNow` and the metronome worker both sample the same phase for one
+ *    `audioNow`. Studio HUD/playhead wake uses {@link pulseStudioPlayheadFrame} with that same `audioNow`;
+ *    paints call `getStudioTransportSyncSnapshotAtAudioNow(t)` (no cached ingest). Clip math uses the same API.
+ *
+ * 5. **BPM** — `bpmRef` updates `mapGlobalTickToAudioTime` slope; changing BPM while playing realigns lookahead.
+ *
+ * 6. **Loop** — Display phase uses `wrapGlobalBeatsToDisplayFloat`; metronome downbeats use
+ *    `wrapGlobalTickToDisplayTick` on the same tick stream so loop wrap and accents stay one rule.
+ *
+ * 7. **Browser** — `AudioContext` may start `suspended`; resume after a user gesture (play/record paths call `resume`).
+ *
+ * ---
+ * • INDEPENDENT MODULES: Each screen keeps its own UI/data; **shared** clock is `useMasterClock()` + this graph.
+ * • ZERO DRIFT (integer tick): `getTickIntAtAudioNow` ↔ inverse `mapGlobalTickToAudioTime` (no measure++ drift).
+ * • NO SHADOW CLOCKS: previews/scheduling use this timebase — not a second `AudioContext` for tempo.
  *
  * CONSUMPTION:
- * Export: const { currentBar, songBar, playheadFrac, transport, bpm } = useMasterClock()
- * All returned values update at least 60fps and are guaranteed in sync.
- *
- * FIXES APPLIED:
- * - currentBeat uses currentBeatInBar (1–4), not raw tick value
- * - currentTick is beat-within-bar (0–3), not ticks-mod-bar
- * - No parallel “display” timing refs — bar/beat/playhead derive only from `transportBeatFloat`
+ * `const { positionTicks, transport, bpm, … } = useMasterClock()` — display fields follow the RAF/audio path above.
  */
 
 import React, {
@@ -94,13 +90,25 @@ import {
 
 
 import TransportPulseWorker from '@/app/workers/transportPulse.worker?worker';
+import {
+  computeMasterTransportPhase,
+  createMasterSyncFrame,
+  mapMasterSyncTickToAudioTime,
+  transportBeatFloatFromDisplayTick as transportBeatFloatFromDisplayTickCore,
+  wrapGlobalBeatsForLoop,
+  wrapGlobalTickFloatForLoop,
+  wrapGlobalTickIntForLoop,
+} from '@/app/lib/masterTransportSync';
+import {
+  displayAudioNowForStudio,
+  pulseStudioPlayheadFrame,
+} from '@/app/lib/studioPlayheadSharedFrame';
 
 export const PPQ = 960 as const;
 
 /** Fractional quarter-note beat from an integer (loop-wrapped) tick — avoids `tick/PPQ` FP jitter at large positions. */
 export function transportBeatFloatFromDisplayTick(displayTick: number): number {
-  const q = Math.floor(displayTick / PPQ);
-  return q + (displayTick - q * PPQ) / PPQ;
+  return transportBeatFloatFromDisplayTickCore(displayTick, PPQ);
 }
 
 /** Throttle for {@link debugTransportSyncTruth} when driven from RAF. */
@@ -427,15 +435,52 @@ export type TransportBeatUiSnapshot = {
    */
   beatFloat: number;
   /**
-   * Linear arranger quarters — metronome grid–locked, **not** loop-wrapped (`getStudioTimelineBeatFloatGridLockedAtAudioNow` at publish).
-   * Matches Studio clips/ruler; use for in-clip playhead and record shade vs `beatFloat` (loop window).
+   * Studio song-grid quarters — unwrapped timeline phase for the recording editor.
+   * This stays on real Studio measure bars (bar 1, 2, 3...) instead of module loop/display wrapping.
    */
   studioTimelineBeatFloat: number;
+  /**
+   * Raw `originBeat + elapsed·bpm/60` at publish — same slope as {@link getGlobalBeatsUnwrappedAtAudioNow}
+   * (not latency-shifted). Aligns Studio clip phase with the main playhead / `unwrappedQuarter`.
+   */
+  globalBeatsUnwrapped: number;
   /**
    * Increments every master transport RAF while running — even when the two integers above are unchanged.
    * Lets `useSyncExternalStore` repaint Creation Station each frame (ties LEDs/columns to `transportBeatFloat`).
    */
   frameSeq: number;
+};
+
+export type StudioTransportSyncSnapshot = {
+  frameSeq: number;
+  running: boolean;
+  audioNowSec: number;
+  startAudioTimeSec: number;
+  originBeatFloat: number;
+  bpm: number;
+  /** Graph / clip grid phase — `origin + (audioNow - start)·bpm/60` (same as MET schedule instants). */
+  beatFloat: number;
+  tickFloat: number;
+  tickInt: number;
+  quarterIndex0: number;
+  nextQuarterTick: number;
+  metronomeNextQuarterTick: number;
+  metronomeNextBeatTimeSec: number;
+  /**
+   * Same as {@link beatFloat} / {@link tickFloat} — Studio cyan line, ruler, and clip scheduler must share
+   * one grid (MET + {@link mapGlobalTickToAudioTime}). Use TitleBar MET ms offset to align *clicks* with speakers.
+   */
+  heardBeatFloat: number;
+  heardTickFloat: number;
+  /**
+   * Same quarter phase as main HUD + MET bar/beat accents: {@link computeMasterTransportPhase}.`transportBeatFloatGrid`
+   * (loop-wrapped display beats). Studio **paint** (cyan line, 1–4 ruler) must use this — not raw unwrapped
+   * `tickFloat`/`beatFloat` — or the playhead “skips” vs the metronome count when loop/display wrap applies.
+   * @see https://github.com/mpatti/musio-create/blob/main/DAWCore/Sources/DAWCore/Transport/TransportState.swift (audio-authoritative + display sync)
+   */
+  displayBeatFloatGrid: number;
+  /** Loop-wrapped display tick float — Studio paint uses ÷ PPQ (same tick line as MET). */
+  displayTickFloat: number;
 };
 
 export interface MasterClockContextValue {
@@ -464,7 +509,17 @@ export interface MasterClockContextValue {
    * Schedule one metronome click at shared AudioContext time `t` (does not start transport).
    * For Studio count-in and similar; uses the same click timbre as the main metronome.
    */
-  playMetronomeClickAt: (t: number, isDownbeat: boolean) => void;
+  /**
+   * Optional `audioNowForClamp` should be the same `AudioContext.currentTime` sample as the lookahead
+   * scheduler (e.g. `runMetronomeScheduler`'s `now`) so the first downbeat is not nudged forward vs the playhead.
+   */
+  playMetronomeClickAt: (
+    t: number,
+    isDownbeat: boolean,
+    audioNowForClamp?: number,
+  ) => boolean;
+  /** True after `startTimer` until `stopTimer` — use so Studio playhead rAF can start before React commits `transport`. */
+  getIsAudioTransportRunning: () => boolean;
   seekToTick: (tick: number) => void;
   positionTicks: number;
   /**
@@ -487,7 +542,9 @@ export interface MasterClockContextValue {
    */
   transportBeatIndex: number;
   /**
-   * Global quarter index from **integer** transport ticks: `floor(positionTicks / ppq)` (MIDI / metronome step grid).
+   * Unwrapped song quarter index: `floor(globalBeatsUnwrapped + ε)` at publish — same grid as
+   * `getGlobalBeatsUnwrappedAtAudioNow` / Studio ruler columns. Differs from `floor(positionTicks/ppq)`
+   * when `positionTicks` is `round(globalBeats*ppq)` (can be ±1 quarter at boundaries).
    */
   transportUnwrappedQuarterIndex: number;
   /** Same as {@link transportUnwrappedQuarterIndex}, updated every RAF / seek / pause — for non-React consumers. */
@@ -497,7 +554,23 @@ export interface MasterClockContextValue {
    * Prefer over context alone for step LEDs / pattern columns so commits cannot skip an integer boundary.
    */
   subscribeTransportBeatUi: (onStoreChange: () => void) => () => void;
+  /**
+   * After each master transport frame (same `audioNow` as HUD publish), and when the metronome
+   * scheduler resyncs if RAF stalls — use for Studio playhead instead of a separate `requestAnimationFrame`.
+   */
+  subscribeTransportAudioFrame: (
+    cb: (audioNowSec: number) => void,
+  ) => () => void;
   getTransportBeatUiSnapshot: () => TransportBeatUiSnapshot;
+  /**
+   * Studio Editor's clean DAW clock contract. This bypasses display/loop/module phases:
+   * `beatFloat = originBeat + (audioNow - startAudioTime) * bpm / 60`.
+   */
+  getStudioTransportSyncSnapshot: () => StudioTransportSyncSnapshot;
+  /** Same as {@link getStudioTransportSyncSnapshot} for one explicit `AudioContext.currentTime` sample (one clock read per paint). */
+  getStudioTransportSyncSnapshotAtAudioNow: (
+    audioNowSec: number,
+  ) => StudioTransportSyncSnapshot;
   currentStep: number;
   currentBar: number;
   currentTick: number;
@@ -639,15 +712,13 @@ export interface MasterClockContextValue {
    */
   getTransportBeatFloatGridLockedAtAudioNow: (audioNowSec: number) => number;
   /**
-   * **Linear arranger / Studio timeline**: same unwrapped phase as {@link getGlobalBeatsUnwrappedAtAudioNow}
-   * (matches constant-BPM {@link mapGlobalTickToAudioTime} spacing — no extra piecewise interpolation).
-   * When the metronome is on and click latency is set, uses `audioNow - latency` so the line tracks **heard** clicks.
+   * **Studio song-grid phase**: unwrapped quarter-note phase for the Studio Editor ruler/recording grid.
+   * Studio records against real timeline bars, so this must not use module loop/display wrapping.
    */
   getStudioTimelineBeatFloatGridLockedAtAudioNow: (audioNowSec: number) => number;
   /**
-   * **Studio measure grid**: loop-wrapped quarter index at `audioNow` — `floor(getDisplayBeatsAtAudioNow)`;
-   * same integer as RAF `transportBeat` / `transportBeatIndexRef`. Avoids piecewise beat maps that can advance
-   * two quarters in one frame vs a linear clock.
+   * **Studio measure grid**: linear song quarter index at `audioNow`.
+   * Studio Editor is a linear DAW ruler, so this does not use loop/display wrapping.
    */
   getStudioGridQuarterIndexAtAudioNow: (audioNowSec: number) => number;
   /**
@@ -656,6 +727,13 @@ export interface MasterClockContextValue {
    * can advance the integer quarter index every other heard step.
    */
   getGlobalBeatsUnwrappedAtAudioNow: (audioNowSec: number) => number;
+  /**
+   * Studio playhead vs MET: grid-locked to `audioNow` when MET offset is 0 or negative (negative =
+   * clicks scheduled earlier via `syncMetronomeClickLatencyFromOutput` — do not nudge playhead forward).
+   * Positive ms (late clicks) lags the line; with offset 0, optional output/base latency keeps the line
+   * from sitting ahead of an unadjusted click.
+   */
+  getPlayheadBeatAtAudioNow: (audioNowSec: number) => number;
   /** Single shared graph: always use this instead of `new AudioContext()` from screens. */
   getOrCreateAudioContext: () => AudioContext;
   /** Post–master-gain analyser (for master output metering). Null until graph built. */
@@ -735,9 +813,9 @@ export function MasterClockProvider({
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const [metronomeClickLatencyMs, setMetronomeClickLatencyMsState] =
     useState(0);
-  const [countInEnabled, setCountInEnabled] = useState(true);
+  const [countInEnabled, setCountInEnabled] = useState(false);
   const [countInBeats, setCountInBeats] = useState(4);
-  const countInEnabledRef = useRef(true);
+  const countInEnabledRef = useRef(false);
   const countInBeatsRef = useRef(4);
   countInEnabledRef.current = countInEnabled;
   countInBeatsRef.current = countInBeats;
@@ -804,15 +882,21 @@ export function MasterClockProvider({
     wrappedQuarter: 0,
     beatFloat: 0,
     studioTimelineBeatFloat: 0,
+    globalBeatsUnwrapped: 0,
     frameSeq: 0,
   });
   const beatUiListenersRef = useRef(new Set<() => void>());
+  /** Studio playhead: same `audioNow` sample as {@link publishTransportVisualFrameAtAudioNow} (no second rAF / skew). */
+  const transportAudioFrameListenersRef = useRef(
+    new Set<(audioNowSec: number) => void>(),
+  );
   const publishTransportBeatUiRef = useRef<
     (
       u: number,
       s: number,
       beatFloat: number,
       studioTimelineBeatFloat: number,
+      globalBeatsUnwrapped: number,
     ) => void
   >(() => {});
   publishTransportBeatUiRef.current = (
@@ -820,6 +904,7 @@ export function MasterClockProvider({
     s: number,
     beatFloat: number,
     studioTimelineBeatFloat: number,
+    globalBeatsUnwrapped: number,
   ) => {
     // Always publish audio-derived beats. A former ±1 throttle let the metronome (audio clock)
     // run ahead of this store when RAF lagged — metronome heard before the playhead moved.
@@ -831,6 +916,7 @@ export function MasterClockProvider({
       wrappedQuarter: s,
       beatFloat,
       studioTimelineBeatFloat,
+      globalBeatsUnwrapped,
       frameSeq: beatUiFrameSeqRef.current,
     };
     beatUiListenersRef.current.forEach((fn) => {
@@ -842,7 +928,7 @@ export function MasterClockProvider({
     });
   };
   const currentBeatInBarRef = useRef(1);
-  /** Latest `syncTransportDisplayRefsFromAudio` — scheduler calls this so closures never go stale. */
+  /** Latest `syncTransportDisplayRefsFromAudio` — metronome worker + schedulers call this when RAF lags. */
   const syncTransportDisplayFromAudioFnRef = useRef<() => void>(() => {});
   /** Last audio-time (ms) touched on RAF publish — bookkeeping for resume/seek paths. */
   const lastUiPublishMsRef = useRef(0);
@@ -863,6 +949,8 @@ export function MasterClockProvider({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sampleRate = audioCtxRef.current?.sampleRate ?? DEFAULT_SR;
   const masterGainRef = useRef<GainNode | null>(null);
+  /** Metronome + count-in clicks → master. Replaced on each MET start so old scheduled oscillators stay disconnected from master. */
+  const metronomeBusGainRef = useRef<GainNode | null>(null);
   const masterMeterAnalyserRef = useRef<AnalyserNode | null>(null);
   /** 0–1 linear gain into speakers (single master bus). */
   const masterOutputLinearRef = useRef(0.8);
@@ -879,17 +967,26 @@ export function MasterClockProvider({
   const metronomePulseWorkerRef = useRef<Worker | null>(null);
   /** When true, transport rAF refills metronome lookahead (`startMetronomeLoop` / `stopMetronomeLoop`). */
   const metronomeActiveRef = useRef(false);
-  const runMetronomeSchedulerRef = useRef<() => void>(() => {});
+  const runMetronomeSchedulerRef = useRef<(audioNowSnapshot?: number) => void>(() => {});
   const metronomeNextBeatTimeRef = useRef(0);
   /** Next metronome click — global quarter tick (integer). */
   const metronomeNextQuarterTickRef = useRef(0);
+  /** Hard anti-double-click guard: never emit two clicks inside one beat window. */
+  const metronomeLastClickTimeRef = useRef(-Infinity);
+  /** Hard anti-double-metronome guard: emit at most once per quarter tick. */
+  const metronomeLastEmittedQuarterTickRef = useRef(-PPQ);
   const metronomeBeatIndexRef = useRef(0);
-  const playMetronomeClickAtRef = useRef<(t: number, isDownbeat: boolean) => void>(
-    () => {},
-  );
+  const playMetronomeClickAtRef = useRef<
+    (t: number, isDownbeat: boolean, audioNowForClamp?: number) => boolean
+  >(() => false);
   const lastMetronomeBeatRef = useRef(-1);
   /** Bumped on metronome stop — stale `TransportPulseWorker` callbacks no-op (same pattern as MIDI clock). */
   const metronomeSchedulerRunIdRef = useRef(0);
+  /**
+   * After {@link runMetronomeScheduler} runs synchronously in {@link startMetronomeLoop}, ignore the **next**
+   * worker pulse so we do not schedule the same opening quarters twice (audible double on beats 1–2).
+   */
+  const metroSkipNextWorkerPulseRef = useRef(false);
   const midiClockPulseWorkerRef = useRef<Worker | null>(null);
   const runMidiClockSchedulerRef = useRef<(runId: number) => void>(() => {});
   const midiClockSchedulerRunIdRef = useRef(0);
@@ -956,6 +1053,7 @@ export function MasterClockProvider({
         (window as any).webkitAudioContext)();
       audioCtxRef.current = ctx;
       masterGainRef.current = null;
+      metronomeBusGainRef.current = null;
       masterMeterAnalyserRef.current = null;
       // Avoid connecting nodes from the new ctx to a GainNode from a closed/old context.
       (window as unknown as { __daMusicMasterGain?: GainNode | null }).__daMusicMasterGain =
@@ -969,6 +1067,10 @@ export function MasterClockProvider({
     ) {
       const master = ctx.createGain();
       master.gain.value = Math.max(0, Math.min(1, masterOutputLinearRef.current));
+      const metroBus = ctx.createGain();
+      metroBus.gain.value = 1;
+      metroBus.connect(master);
+      metronomeBusGainRef.current = metroBus;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.65;
@@ -980,6 +1082,15 @@ export function MasterClockProvider({
         master;
       (window as unknown as { __daMusicMasterAnalyser?: AnalyserNode }).__daMusicMasterAnalyser =
         analyser;
+    } else if (
+      !metronomeBusGainRef.current ||
+      metronomeBusGainRef.current.context !== ctx
+    ) {
+      const master = masterGainRef.current;
+      const metroBus = ctx.createGain();
+      metroBus.gain.value = 1;
+      metroBus.connect(master);
+      metronomeBusGainRef.current = metroBus;
     }
     return ctx;
   }, []);
@@ -993,6 +1104,30 @@ export function MasterClockProvider({
         Math.max(-500, Math.min(500, Math.round(-lat * 1000))),
       );
     }
+  }, [getOrCreateAudioContext]);
+
+  /**
+   * Replace the metronome output bus so any oscillators still connected to the **previous** bus stay
+   * off the master graph. Re-opening gain on one shared bus after stop re-enabled **old** lookahead
+   * clicks (double metronome until they drained).
+   */
+  const attachNewMetronomeBus = useCallback(() => {
+    const ctx = getOrCreateAudioContext();
+    if (ctx.state === 'closed') return;
+    const master = masterGainRef.current;
+    if (!master || master.context !== ctx) return;
+    const prev = metronomeBusGainRef.current;
+    if (prev) {
+      try {
+        prev.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(master);
+    metronomeBusGainRef.current = bus;
   }, [getOrCreateAudioContext]);
 
   // ── Visibility handler — prevents drift when tab loses/regains focus ──────
@@ -1065,6 +1200,20 @@ export function MasterClockProvider({
     const CHANNEL_DECAY_MS = 10;
     const CHANNEL_ZERO_SNAP = 0.03;
     const id = setInterval(() => {
+      const studioPerfPlaybackActive =
+        typeof window !== 'undefined' &&
+        (
+          window as unknown as {
+            __daMusicStudioPerfPlayback?: boolean;
+            __daMusicStudioTransportAuthority?: boolean;
+          }
+        ).__daMusicStudioPerfPlayback === true &&
+        (
+          window as unknown as { __daMusicStudioTransportAuthority?: boolean }
+        ).__daMusicStudioTransportAuthority !== false;
+      if (studioPerfPlaybackActive && isRunningRef.current) {
+        return;
+      }
       setChannelLevels((prev) => {
         const next: Record<number, number> = {};
         let changed = false;
@@ -1083,23 +1232,53 @@ export function MasterClockProvider({
   // ── Metronome (AudioContext clock — not tied to recording buffer loop) ─
   /** Schedule one click at audio time `t` into the master bus (lookahead path). */
   const playMetronomeClickAt = useCallback(
-    (t: number, isDownbeat: boolean) => {
+    (
+      t: number,
+      isDownbeat: boolean,
+      audioNowForClamp?: number,
+    ): boolean => {
       try {
         const ctx = getOrCreateAudioContext();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
-        const master = masterGainRef.current;
-        const dest =
-          master && master.context === ctx ? master : ctx.destination;
-        gain.connect(dest);
+        const metroBus = metronomeBusGainRef.current;
+        if (!metroBus || metroBus.context !== ctx) {
+          return false;
+        }
+        gain.connect(metroBus);
         osc.frequency.value = isDownbeat ? 1000 : 800;
         osc.type = 'sine';
         const clickDuration = 0.12;
-        // Click-only latency (Bluetooth, etc.): UI/transport stay on the true grid clock.
+        // User ms offset shifts **audible** time vs grid-locked `t`. Studio does not auto-set this from
+        // `outputLatency` (that made clicks disagree with the playhead). Adjust manually if needed.
         const tAdj = t + metronomeClickLatencyMsRef.current / 1000;
-        // Past times break scheduling when the main thread stalls; clamp to now (tiny shift, avoids dropped clicks).
-        const tSafe = Math.max(tAdj, ctx.currentTime + 0.0005);
+        const now =
+          audioNowForClamp !== undefined && Number.isFinite(audioNowForClamp)
+            ? audioNowForClamp
+            : ctx.currentTime;
+        /**
+         * Never start in the past. When the lookahead loop schedules several late quarters in one run,
+         * a plain `max(tAdj, now)` can put two clicks within **minBeatGap** — the old path returned
+         * `false`, the scheduler **broke**, and **beats were skipped** after the first downbeat.
+         * Instead, nudge `tSafe` forward to honor spacing so every quarter still sounds.
+         */
+        const tGridAudible = Math.max(tAdj, now + 0.00002);
+        const spb = 60 / Math.max(1, bpmRef.current);
+        /**
+         * Only enough separation to avoid overlapping oscillator starts when catching up — must stay
+         * **well under** one quarter note or clicks creep late vs {@link mapGlobalTickToAudioTime} and
+         * the cyan playhead (heard as steady drift behind the grid).
+         */
+        /** Tighter ceiling so catch-up clicks re-lock to the grid sooner (large gaps read as MET drift). */
+        const minBeatGapSec = Math.max(0.004, Math.min(0.014, spb * 0.028));
+        const lastClick = metronomeLastClickTimeRef.current;
+        const minFromPrevious =
+          lastClick > -1e6 && Number.isFinite(lastClick)
+            ? lastClick + minBeatGapSec
+            : Number.NEGATIVE_INFINITY;
+        const tSafe = Math.max(tGridAudible, minFromPrevious);
+        metronomeLastClickTimeRef.current = tSafe;
         // Soft attack + decay — no DynamicsCompressor (avoids LF pumping / noise floor).
         gain.gain.setValueAtTime(0.0001, tSafe);
         gain.gain.exponentialRampToValueAtTime(0.38, tSafe + 0.004);
@@ -1115,8 +1294,10 @@ export function MasterClockProvider({
             /* already disconnected */
           }
         };
+        return true;
       } catch (e) {
         console.debug('Metronome error (non-critical):', e);
+        return false;
       }
     },
     [getOrCreateAudioContext],
@@ -1133,117 +1314,307 @@ export function MasterClockProvider({
     [getOrCreateAudioContext, playMetronomeClickAt],
   );
 
-  /** Single loop-remap helper — declared before metronome align + lookahead (must exist before use). */
+  /** Loop wrap in beat space — delegated to {@link wrapGlobalBeatsForLoop} (single implementation). */
   const remapBeatToTransport = useCallback((beatGlobalFloat: number) => {
-    if (!loopEnabledRef.current) return beatGlobalFloat;
-    const qpb = ticksPerBarRef.current / PPQ;
-    const loopStartBeat = (loopStartBarRef.current - 1) * qpb;
-    const loopBeatsN = Math.max(1, loopBarsRef.current * qpb);
-    const rel = beatGlobalFloat - loopStartBeat;
-    const wrapped = ((rel % loopBeatsN) + loopBeatsN) % loopBeatsN;
-    return loopStartBeat + wrapped;
+    return wrapGlobalBeatsForLoop(
+      beatGlobalFloat,
+      {
+        enabled: loopEnabledRef.current,
+        ticksPerBar: ticksPerBarRef.current,
+        loopStartBar: loopStartBarRef.current,
+        loopBars: loopBarsRef.current,
+      },
+      PPQ,
+    );
   }, []);
+
+  /** Single master sync frame for playhead, grid, and metronome. */
+  const getMasterSyncFrameAtAudioNow = useCallback((audioNow: number) => {
+    return createMasterSyncFrame({
+      audioNowSec: audioNow,
+      startAudioTimeSec: startAudioTimeRef.current,
+      originBeatFloat: originBeatFloatRef.current,
+      bpm: bpmRef.current,
+      ppq: PPQ,
+    });
+  }, []);
+
+  /**
+   * One audio sample → full phase (unwrapped frame + loop display). Prefer this over re-deriving
+   * `displayBeats` / `transportBeatFloatGrid` separately so RAF, metronome, and Studio stay unified.
+   */
+  const getMasterTransportPhaseAtAudioNow = useCallback((audioNow: number) => {
+    return computeMasterTransportPhase(
+      {
+        startAudioTimeSec: startAudioTimeRef.current,
+        originBeatFloat: originBeatFloatRef.current,
+        bpm: bpmRef.current,
+        ppq: PPQ,
+      },
+      {
+        enabled: loopEnabledRef.current,
+        ticksPerBar: ticksPerBarRef.current,
+        loopStartBar: loopStartBarRef.current,
+        loopBars: loopBarsRef.current,
+      },
+      audioNow,
+    );
+  }, []);
+
+  /** Canonical backend transport phase in unwrapped quarter-note beats. */
+  const getGlobalBeatFloatAtAudioNow = useCallback(
+    (audioNow: number): number => getMasterSyncFrameAtAudioNow(audioNow).beatFloat,
+    [getMasterSyncFrameAtAudioNow],
+  );
+
+  /** Canonical backend transport phase in unwrapped PPQ ticks. */
+  const getGlobalTickFloatAtAudioNow = useCallback(
+    (audioNow: number): number => getMasterSyncFrameAtAudioNow(audioNow).tickFloat,
+    [getMasterSyncFrameAtAudioNow],
+  );
 
   /**
    * MASTER TIMEBASE: integer MIDI ticks from hardware clock — **never** increment with measure++.
    * `round((originBeat + elapsed*bpm/60) * PPQ)` — exact inverse of {@link mapGlobalTickToAudioTime}.
    */
-  const getTickIntAtAudioNow = useCallback((audioNow: number): number => {
-    const bpm = Math.max(1, bpmRef.current);
-    const elapsedSec = Math.max(0, audioNow - startAudioTimeRef.current);
-    const globalBeats = originBeatFloatRef.current + (elapsedSec * bpm) / 60;
-    return Math.max(0, Math.round(globalBeats * PPQ));
-  }, []);
+  const getTickIntAtAudioNow = useCallback(
+    (audioNow: number): number =>
+      getMasterSyncFrameAtAudioNow(audioNow).tickInt,
+    [getMasterSyncFrameAtAudioNow],
+  );
+
+  /** Next quarter-note grid tick at or after `audioNow`, from the same backend phase as the playhead. */
+  const getNextQuarterTickAtAudioNow = useCallback(
+    (audioNow: number): number =>
+      getMasterSyncFrameAtAudioNow(audioNow).nextQuarterTick,
+    [getMasterSyncFrameAtAudioNow],
+  );
 
   /**
    * Global tick → loop-wrapped **display** tick (same as bar/beat counter + grid). Metronome accents
    * use this so click 1 lines up with the UI beat "1", not float `remapBeatToTransport` jitter.
    */
   const wrapGlobalTickToDisplayTick = useCallback((tickInt: number): number => {
-    if (!loopEnabledRef.current) return tickInt;
-    const tb = ticksPerBarRef.current;
-    const loopStartTick = (loopStartBarRef.current - 1) * tb;
-    const loopLenTicks = Math.max(1, loopBarsRef.current * tb);
-    const rel = tickInt - loopStartTick;
-    return loopStartTick + ((rel % loopLenTicks) + loopLenTicks) % loopLenTicks;
+    return wrapGlobalTickIntForLoop(tickInt, {
+      enabled: loopEnabledRef.current,
+      ticksPerBar: ticksPerBarRef.current,
+      loopStartBar: loopStartBarRef.current,
+      loopBars: loopBarsRef.current,
+    });
   }, []);
 
-  /**
-   * Loop wrap in **quarter-beat** space — same window as tick wrap (`loopLen * PPQ` ticks).
-   * Display phase = `(originBeat + elapsed * bpm/60)` then this wrap when LOOP is on.
-   */
   const wrapGlobalBeatsToDisplayFloat = useCallback((globalBeats: number): number => {
-    if (!loopEnabledRef.current) return globalBeats;
-    const qpb = ticksPerBarRef.current / PPQ;
-    const loopStartBeats = (loopStartBarRef.current - 1) * qpb;
-    const loopLenBeats = Math.max(1, loopBarsRef.current * qpb);
-    const rel = globalBeats - loopStartBeats;
-    return loopStartBeats + ((rel % loopLenBeats) + loopLenBeats) % loopLenBeats;
+    return wrapGlobalBeatsForLoop(
+      globalBeats,
+      {
+        enabled: loopEnabledRef.current,
+        ticksPerBar: ticksPerBarRef.current,
+        loopStartBar: loopStartBarRef.current,
+        loopBars: loopBarsRef.current,
+      },
+      PPQ,
+    );
   }, []);
 
-  /** Fractional tick in loop window — derivable from {@link wrapGlobalBeatsToDisplayFloat}(tick/PPQ)*PPQ. */
   const wrapGlobalTickToDisplayTickFloat = useCallback(
     (tickFloat: number): number =>
-      wrapGlobalBeatsToDisplayFloat(tickFloat / PPQ) * PPQ,
-    [wrapGlobalBeatsToDisplayFloat],
+      wrapGlobalTickFloatForLoop(
+        tickFloat,
+        {
+          enabled: loopEnabledRef.current,
+          ticksPerBar: ticksPerBarRef.current,
+          loopStartBar: loopStartBarRef.current,
+          loopBars: loopBarsRef.current,
+        },
+        PPQ,
+      ),
+    [],
   );
 
   /** Exact linear inverse of {@link getTickIntAtAudioNow} — `AudioContext` clock, no tick accumulation. */
   const mapGlobalTickToAudioTime = useCallback((globalTick: number): number => {
-    const bpm = Math.max(1, bpmRef.current);
-    const targetBeats = globalTick / PPQ;
-    const deltaBeats = targetBeats - originBeatFloatRef.current;
-    return startAudioTimeRef.current + (deltaBeats * 60) / bpm;
+    return mapMasterSyncTickToAudioTime({
+      globalTick,
+      startAudioTimeSec: startAudioTimeRef.current,
+      originBeatFloat: originBeatFloatRef.current,
+      bpm: bpmRef.current,
+      ppq: PPQ,
+    });
   }, []);
 
-  /** Loop-wrapped fractional quarter index — same as MasterClock RAF `displayBeats`; pure `audioCtx.currentTime` grid. */
-  const getDisplayBeatsAtAudioNow = useCallback((audioNow: number): number => {
-    const bpm = Math.max(1, bpmRef.current);
-    const elapsed = Math.max(0, audioNow - startAudioTimeRef.current);
-    const globalBeats = originBeatFloatRef.current + (elapsed * bpm) / 60;
-    return wrapGlobalBeatsToDisplayFloat(globalBeats);
-  }, [wrapGlobalBeatsToDisplayFloat]);
+  const getDisplayBeatsAtAudioNow = useCallback(
+    (audioNow: number): number =>
+      getMasterTransportPhaseAtAudioNow(audioNow).displayBeats,
+    [getMasterTransportPhaseAtAudioNow],
+  );
 
-  /**
-   * Transport playhead phase: same linear clock + loop wrap as {@link getDisplayBeatsAtAudioNow}, then
-   * {@link transportBeatFloatFromDisplayTick} for stable fractional beats at large tick positions.
-   */
   const getTransportBeatFloatGridLockedAtAudioNow = useCallback(
-    (audioNow: number): number => {
-      const displayBeats = getDisplayBeatsAtAudioNow(audioNow);
-      return transportBeatFloatFromDisplayTick(displayBeats * PPQ);
-    },
-    [getDisplayBeatsAtAudioNow],
+    (audioNow: number): number =>
+      getMasterTransportPhaseAtAudioNow(audioNow).transportBeatFloatGrid,
+    [getMasterTransportPhaseAtAudioNow],
   );
 
   /** Unwrapped quarter-note float — same `globalBeats` as tick math before `round(globalBeats*PPQ)`. */
-  const getGlobalBeatsUnwrappedAtAudioNow = useCallback((audioNow: number): number => {
-    const bpm = Math.max(1, bpmRef.current);
-    const elapsed = Math.max(0, audioNow - startAudioTimeRef.current);
-    return originBeatFloatRef.current + (elapsed * bpm) / 60;
-  }, []);
+  const getGlobalBeatsUnwrappedAtAudioNow = getGlobalBeatFloatAtAudioNow;
 
-  /**
-   * Linear arranger phase — **exact** `originBeat + Δt·bpm/60` (same slope as {@link mapGlobalTickToAudioTime} at constant BPM).
-   * Avoids a second piecewise interpolation path that can micro-jitter vs the metronome grid.
-   * When the metronome is on and click latency is non-zero, uses `audioNow - latency` so the line matches **heard** clicks.
-   */
-  const getStudioTimelineBeatFloatGridLockedAtAudioNow = useCallback(
-    (audioNow: number): number => {
-      let t = audioNow;
-      if (metronomeRef.current && metronomeClickLatencyMsRef.current !== 0) {
-        t = audioNow - metronomeClickLatencyMsRef.current / 1000;
+  const getPlayheadBeatAtAudioNow = useCallback(
+    (audioNowSec: number): number => {
+      const userMs = metronomeClickLatencyMsRef.current;
+      /**
+       * `playMetronomeClickAt` uses `tAdj = tGrid + userMs/1000`. Negative ms moves clicks earlier so
+       * the **heard** hit tracks the grid; subtracting that same ms here was `tEff = audioNow - userMs`,
+       * i.e. shifting the playhead **forward** — visibly out of sync. Positive ms = late clicks → lag
+       * the line. Zero ms → optional DAC hint only (clicks still at grid time).
+       */
+      let latSec = 0;
+      if (userMs > 0) {
+        latSec = userMs / 1000;
+      } else if (userMs < 0) {
+        latSec = userMs / 1000;
+      } else if (userMs === 0) {
+        let hwSec = 0;
+        const ctx = audioCtxRef.current;
+        if (ctx && ctx.state !== 'closed') {
+          const ol = ctx.outputLatency;
+          const bl = ctx.baseLatency;
+          if (typeof ol === 'number' && Number.isFinite(ol) && ol > 0) hwSec += ol;
+          if (typeof bl === 'number' && Number.isFinite(bl) && bl > 0) hwSec += bl;
+          hwSec = Math.min(0.12, hwSec);
+        }
+        latSec = hwSec;
       }
-      return getGlobalBeatsUnwrappedAtAudioNow(t);
+      const tEff = audioNowSec - latSec;
+      const t0 = startAudioTimeRef.current;
+      const tClamped =
+        Number.isFinite(t0) && Number.isFinite(tEff)
+          ? Math.max(t0, tEff)
+          : tEff;
+      return getGlobalBeatsUnwrappedAtAudioNow(tClamped);
     },
     [getGlobalBeatsUnwrappedAtAudioNow],
   );
 
-  /** Same integer quarter as transport RAF `transportBeat` — linear display phase (every quarter advances +1). */
+  const buildStudioTransportSyncSnapshot = useCallback(
+    (audioNow: number): StudioTransportSyncSnapshot => {
+      /**
+       * Studio cyan playhead + bar·beat must use **only** `isRunningRef` to gate `createMasterSyncFrame`.
+       * Do **not** OR in `transportRef === playing/recording`: `play()` / `record()` used to set that ref
+       * **before** `startTimer()` finished re-anchoring `startAudioTimeRef`. While `anchored` was true from
+       * a previous pause, `elapsed = audioNow - staleStart` made `beatFloat` explode — the line sprinted
+       * through measures while metronome clicks stayed on the real quarter grid.
+       *
+       * `play` / `record` now call `startTimer` before flipping `transportRef`, and seek uses a short
+       * `!isRunningRef` window with `originBeatFloatRef` already at the target — frozen origin is correct.
+       */
+      const running = isRunningRef.current;
+      const bpm = Math.max(1, bpmRef.current);
+      const frame = getMasterSyncFrameAtAudioNow(audioNow);
+      /**
+       * Studio must stay on one continuous audio phase. If `running` briefly blips false during
+       * play/record transitions, falling back to `originBeatFloatRef` creates visible quarter jumps.
+       * Always expose the frame beat/tick; idle pause/stop already re-anchor origin/start so this
+       * still freezes correctly when transport is truly not moving.
+       */
+      const beatFloat = frame.beatFloat;
+      const tickFloat = frame.tickFloat;
+      /** Same grid as clips / `getGridBeatFloat` — never latency-shift vs {@link tickFloat} (caused visible drift). */
+      const heardBeatFloat = beatFloat;
+      const heardTickFloat = tickFloat;
+      const phase = getMasterTransportPhaseAtAudioNow(audioNow);
+      /** Same 1–2–3–4 / downbeat grid as {@link runMetronomeScheduler} accent math (display-wrapped). */
+      const displayBeatFloatGrid = phase.transportBeatFloatGrid;
+      const displayTickFloat = phase.displayTickFloat;
+      /** Same {@link MasterSyncFrame.nextQuarterTick} as {@link tickFloat} — avoids a second frame sample drifting HUD phase. */
+      const metronomeHeadTick = running
+        ? frame.nextQuarterTick
+        : metronomeNextQuarterTickRef.current;
+      return {
+        frameSeq: beatUiFrameSeqRef.current,
+        running,
+        audioNowSec: audioNow,
+        startAudioTimeSec: startAudioTimeRef.current,
+        originBeatFloat: originBeatFloatRef.current,
+        bpm,
+        beatFloat,
+        tickFloat,
+        tickInt: frame.tickInt,
+        quarterIndex0: frame.quarterIndex0,
+        nextQuarterTick: frame.nextQuarterTick,
+        metronomeNextQuarterTick: metronomeHeadTick,
+        metronomeNextBeatTimeSec: mapGlobalTickToAudioTime(metronomeHeadTick),
+        heardBeatFloat,
+        heardTickFloat,
+        displayBeatFloatGrid,
+        displayTickFloat,
+      };
+    },
+    [
+      getMasterSyncFrameAtAudioNow,
+      getMasterTransportPhaseAtAudioNow,
+      mapGlobalTickToAudioTime,
+    ],
+  );
+
+  const getStudioTransportSyncSnapshotAtAudioNow = useCallback(
+    (audioNowSec: number): StudioTransportSyncSnapshot => {
+      const t = Number.isFinite(audioNowSec)
+        ? audioNowSec
+        : startAudioTimeRef.current;
+      return buildStudioTransportSyncSnapshot(t);
+    },
+    [buildStudioTransportSyncSnapshot],
+  );
+
+  const getStudioTransportSyncSnapshot = useCallback((): StudioTransportSyncSnapshot => {
+    const ctx = audioCtxRef.current;
+    const audioNow =
+      ctx && ctx.state !== 'closed' ? ctx.currentTime : startAudioTimeRef.current;
+    return buildStudioTransportSyncSnapshot(audioNow);
+  }, [buildStudioTransportSyncSnapshot]);
+
+  /**
+   * Studio cyan line + `subscribeTransportAudioFrame`.
+   * When the AudioContext is live, sample {@link displayAudioNowForStudio} so pulses match the same
+   * **output-aligned** instant as `readStudioTransportSnapshotForUi` / imperative paint (not raw
+   * `currentTime`, which can disagree with what you hear vs the metronome).
+   */
+  const emitTransportAudioFrame = useCallback(
+    (audioNow: number) => {
+      const ctx = audioCtxRef.current;
+      const tLive =
+        ctx && ctx.state !== 'closed' ? ctx.currentTime : audioNow;
+      const t =
+        ctx && ctx.state !== 'closed'
+          ? displayAudioNowForStudio(ctx) ?? tLive
+          : tLive;
+      if (!Number.isFinite(t)) return;
+      pulseStudioPlayheadFrame(t);
+      transportAudioFrameListenersRef.current.forEach((fn) => {
+        try {
+          fn(t);
+        } catch {
+          /* ignore */
+        }
+      });
+    },
+    [],
+  );
+
+  /**
+   * Studio song-grid phase: exact audio-clock phase against the unwrapped Studio ruler.
+   * This locks recording/playhead motion to real measure bars, not loop/module display wrapping.
+   */
+  const getStudioTimelineBeatFloatGridLockedAtAudioNow = useCallback(
+    (audioNow: number): number =>
+      Math.max(0, getMasterTransportPhaseAtAudioNow(audioNow).beatFloat),
+    [getMasterTransportPhaseAtAudioNow],
+  );
+
+  /** Same integer quarter as Studio's linear song ruler — no loop/display wrap. */
   const getStudioGridQuarterIndexAtAudioNow = useCallback(
     (audioNow: number): number =>
-      Math.floor(getDisplayBeatsAtAudioNow(audioNow) + 1e-9),
-    [getDisplayBeatsAtAudioNow],
+      Math.floor(getGlobalBeatsUnwrappedAtAudioNow(audioNow) + 1e-9),
+    [getGlobalBeatsUnwrappedAtAudioNow],
   );
 
   /** Global quarter-note phase (beats); equals `getTickIntAtAudioNow / PPQ` for all consumers. */
@@ -1293,24 +1664,22 @@ export function MasterClockProvider({
   /**
    * Push transport phase refs using the same monotonic tick rule as the RAF loop.
    * Called from lookahead schedulers when `requestAnimationFrame` is delayed.
+   * Always reads `ctx.currentTime` at call time so a long metronome scheduling pass cannot publish
+   * UI at a stale instant while the hardware clock has moved on.
    */
   const syncTransportDisplayRefsFromAudio = useCallback(() => {
     if (!isRunningRef.current) return;
     const ctx = audioCtxRef.current;
     if (!ctx || ctx.state === 'closed') return;
     const audioNow = ctx.currentTime;
-    const bpm = Math.max(1, bpmRef.current);
-    const elapsed = Math.max(0, audioNow - startAudioTimeRef.current);
-    const globalBeats = originBeatFloatRef.current + (elapsed * bpm) / 60;
-    const tickInt = Math.max(0, Math.round(globalBeats * PPQ));
-    tickCounterRef.current = tickInt;
-    const displayBeats = getDisplayBeatsAtAudioNow(audioNow);
-    const displayTickFloat = displayBeats * PPQ;
-    /** Audio-time quarter index — must match `floor(displayBeats)`, not `floor(wrapTick(round(beats*PPQ)))` (those diverge at beat boundaries and “skip”). */
+    const phase = getMasterTransportPhaseAtAudioNow(audioNow);
+    const globalBeats = phase.beatFloat;
+    tickCounterRef.current = phase.tickInt;
+    const displayBeats = phase.displayBeats;
+    const displayTickFloat = phase.displayTickFloat;
     const transportBeat = Math.floor(displayBeats + 1e-9);
-    const unwrappedQuarterGridLocked = Math.floor(globalBeats + 1e-9);
-    const beatFloatSync =
-      transportBeatFloatFromDisplayTick(displayTickFloat);
+    const unwrappedQuarterGridLocked = phase.quarterIndex0;
+    const beatFloatSync = phase.transportBeatFloatGrid;
     transportBeatFloatRef.current = beatFloatSync;
     transportBeatIndexRef.current = transportBeat;
     currentBeatInBarRef.current = dawTickToBarBeatFromFloat(
@@ -1318,19 +1687,20 @@ export function MasterClockProvider({
       timeSigsRef.current,
       PPQ,
     ).beat;
-    const studioTimelineBeatFloat =
-      getStudioTimelineBeatFloatGridLockedAtAudioNow(audioNow);
+    const studioTimelineBeatFloat = Math.max(0, phase.beatFloat);
     publishTransportBeatUiRef.current(
       unwrappedQuarterGridLocked,
       transportBeat,
       beatFloatSync,
       studioTimelineBeatFloat,
+      globalBeats,
     );
-  }, [getDisplayBeatsAtAudioNow, getStudioTimelineBeatFloatGridLockedAtAudioNow]);
+    emitTransportAudioFrame(audioNow);
+  }, [emitTransportAudioFrame, getMasterTransportPhaseAtAudioNow]);
   syncTransportDisplayFromAudioFnRef.current = syncTransportDisplayRefsFromAudio;
 
   // ── Metronome lookahead (decoupled from MIDI scheduler & buffer loop) ───
-  const runMetronomeScheduler = useCallback(() => {
+  const runMetronomeScheduler = useCallback((audioNowSnapshot?: number) => {
     try {
       const ctx = audioCtxRef.current;
       if (
@@ -1345,57 +1715,76 @@ export function MasterClockProvider({
       if (ctx.state === 'suspended') {
         void ctx.resume().catch(() => {});
       }
-      const now = ctx.currentTime;
+      /** Same instant as transport UI when driven from rAF — aligns lookahead window with published playhead. */
+      const now =
+        audioNowSnapshot !== undefined && Number.isFinite(audioNowSnapshot)
+          ? audioNowSnapshot
+          : ctx.currentTime;
       const bpmSched = Math.max(1, bpmRef.current);
       const spbSched = 60 / bpmSched;
-      /* Deep enough buffer for choppy rAF (low-power tab, one bad frame) — thin lookahead runs dry → missing clicks. */
-      const scheduleUntil = now + Math.max(1.25, spbSched * 4.5);
-      /**
-       * Past grid times: **do not** stack many clicks at `now` with stagger — that sounds like a burst and
-       * reads as “metronome not locked” vs the linear playhead. Skip beats that are too far behind (silent
-       * phase advance), clamp slightly-late to `now`, and allow **at most one** late audible click per
-       * scheduler pass so catch-up stays aligned with the transport clock.
+      /*
+       * DAW-style metronome buffer: schedule far enough ahead that Studio's heavy
+       * grid/React work cannot drain the click queue and make the count skip bars.
+       * BPM changes restart/rephase this scheduler, so a larger audio buffer is safer
+       * here than trying to recover missed clicks after the main thread stalls.
        */
-      const lateDropSec = Math.min(0.1, Math.max(0.04, spbSched * 0.25));
+      const scheduleUntil = now + Math.max(12, spbSched * 24);
+      /**
+       * Late quarters must still go through {@link playMetronomeClickAt} (clamps + min spacing).
+       * A “stale grid” branch that only did `nextTick += PPQ` **without** a click caused audible
+       * skipped beats whenever `tGrid` fell behind `now` by more than ~0.5–1s (stall / tab busy).
+       */
+      const canonicalNextTick = getNextQuarterTickAtAudioNow(now);
       let nextTick = metronomeNextQuarterTickRef.current;
+      if (!Number.isFinite(nextTick) || nextTick < canonicalNextTick - PPQ) {
+        nextTick = canonicalNextTick;
+      }
       let iter = 0;
-      let usedLateCatchUpThisRun = false;
       while (iter++ < 512) {
         const tGrid = mapGlobalTickToAudioTime(nextTick);
         if (tGrid >= scheduleUntil) break;
 
-        if (tGrid < now - lateDropSec) {
+        if (nextTick <= metronomeLastEmittedQuarterTickRef.current) {
           nextTick += PPQ;
           continue;
         }
 
-        let tPlay = tGrid;
-        if (tGrid < now) {
-          if (usedLateCatchUpThisRun) {
-            nextTick += PPQ;
-            continue;
-          }
-          usedLateCatchUpThisRun = true;
-          tPlay = Math.max(now + 0.0005, tGrid);
-        }
-
-        const displayTick = wrapGlobalTickToDisplayTick(nextTick);
+        const tickForAccent = wrapGlobalTickToDisplayTick(nextTick);
         const { beat: beat1 } = dawTickToBarBeat(
-          displayTick,
+          tickForAccent,
           timeSigsRef.current,
           PPQ,
         );
         const isDown = beat1 === 1;
-        playMetronomeClickAtRef.current(tPlay, isDown);
+        /** Fresh clock each click so a long lookahead pass does not clamp many beats to one stale `now`. */
+        const scheduled = playMetronomeClickAtRef.current(
+          tGrid,
+          isDown,
+          ctx.currentTime,
+        );
+        if (!scheduled) {
+          break;
+        }
+        metronomeLastEmittedQuarterTickRef.current = nextTick;
         nextTick += PPQ;
       }
       metronomeNextQuarterTickRef.current = nextTick;
-      metronomeBeatIndexRef.current = Math.floor(nextTick / PPQ);
-      metronomeNextBeatTimeRef.current = mapGlobalTickToAudioTime(nextTick);
+      const headTick = getNextQuarterTickAtAudioNow(now);
+      metronomeBeatIndexRef.current = Math.floor(headTick / PPQ);
+      metronomeNextBeatTimeRef.current = mapGlobalTickToAudioTime(headTick);
+      /**
+       * Refresh beat UI + studio ingest at **fresh** `ctx.currentTime` after scheduling (see
+       * {@link syncTransportDisplayRefsFromAudio} — do not pass the scheduler's captured `now`).
+       */
+      syncTransportDisplayFromAudioFnRef.current();
     } catch (e) {
       console.debug('Metronome scheduler error (non-critical):', e);
     }
-  }, [mapGlobalTickToAudioTime, wrapGlobalTickToDisplayTick]);
+  }, [
+    getNextQuarterTickAtAudioNow,
+    mapGlobalTickToAudioTime,
+    wrapGlobalTickToDisplayTick,
+  ]);
 
   const runMidiClockScheduler = useCallback((runId: number) => {
     if (runId !== midiClockSchedulerRunIdRef.current) return;
@@ -1422,6 +1811,8 @@ export function MasterClockProvider({
     (
       _bpm: number,
       align?: { metronomeAnchorTick?: number },
+      /** Optional: same `AudioContext.currentTime` as `startTimer` / play so beat 1 is not ~1 frame late. */
+      audioNowLock?: number,
     ) => {
       if (!metronomeRef.current) return;
       /* Second start without an anchor: no-op only if worker is alive. Otherwise we must rebuild — e.g.
@@ -1446,29 +1837,29 @@ export function MasterClockProvider({
           metronomePulseWorkerRef.current = null;
         }
         metronomeActiveRef.current = true;
-        const now = ctx.currentTime;
+        metronomeLastClickTimeRef.current = -Infinity;
+        metronomeLastEmittedQuarterTickRef.current = -PPQ;
+        attachNewMetronomeBus();
+        const now =
+          typeof audioNowLock === 'number' && Number.isFinite(audioNowLock)
+            ? audioNowLock
+            : ctx.currentTime;
         const anchor = align?.metronomeAnchorTick;
         if (typeof anchor === 'number' && Number.isFinite(anchor)) {
-          /* Same global tick as `startTimer` + `metronomeBeat0AudioTime` — keeps lookahead on precount grid. */
-          /*
-           * Fire the downbeat once here: first lookahead pass may see `anchor` in the past; `playMetronomeClickAt`
-           * clamps to a safe start time.
-           */
-          const tClick = mapGlobalTickToAudioTime(anchor);
-          const displayTickA = wrapGlobalTickToDisplayTick(Math.max(0, anchor));
-          const { beat: beat1a } = dawTickToBarBeat(
-            displayTickA,
-            timeSigsRef.current,
-            PPQ,
-          );
-          playMetronomeClickAtRef.current(tClick, beat1a === 1);
-          metronomeNextQuarterTickRef.current = anchor + PPQ;
+          /* Phase-lock to transport anchor.
+           * Set lastEmitted = anchor - PPQ so the scheduler INCLUDES the downbeat click
+           * at `anchor`. The worker is the sole clock authority — no immediate call here. */
+          metronomeLastEmittedQuarterTickRef.current = anchor - PPQ;
+          metronomeNextQuarterTickRef.current = anchor;
         } else {
-          const tickNow = getTickIntAtAudioNow(now);
-          /** Next quarter boundary whose scheduled time is not in the past. */
-          let nextTick = Math.ceil(tickNow / PPQ) * PPQ;
+          /**
+           * Same continuous phase as Studio / `getGlobalBeatsUnwrappedAtAudioNow` — not
+           * `round(globalBeats·PPQ)` (`getTickIntAtAudioNow`), which can sit ±½ tick off the
+           * bar grid and make the metronome sound early/late vs the measure lines.
+           */
+          let nextTick = getNextQuarterTickAtAudioNow(now);
           for (let i = 0; i < 64; i++) {
-            if (mapGlobalTickToAudioTime(nextTick) >= now - 0.1) break;
+            if (mapGlobalTickToAudioTime(nextTick) >= now - 0.02) break;
             nextTick += PPQ;
           }
           metronomeNextQuarterTickRef.current = nextTick;
@@ -1480,7 +1871,6 @@ export function MasterClockProvider({
           metronomeNextQuarterTickRef.current / PPQ,
         );
         runMetronomeSchedulerRef.current = runMetronomeScheduler;
-        runMetronomeScheduler();
         const metroRunId = metronomeSchedulerRunIdRef.current + 1;
         metronomeSchedulerRunIdRef.current = metroRunId;
         const MetroWorkerCtor = TransportPulseWorker as unknown as { new (): Worker };
@@ -1494,11 +1884,21 @@ export function MasterClockProvider({
           ) {
             return;
           }
+          if (metroSkipNextWorkerPulseRef.current) {
+            metroSkipNextWorkerPulseRef.current = false;
+            return;
+          }
           runMetronomeSchedulerRef.current();
         };
+        /**
+         * Set skip + run immediate lookahead **before** arming the worker so an early pulse cannot duplicate
+         * the same opening quarters (stop → play could sound like two metronomes for ~2 bars).
+         */
+        metroSkipNextWorkerPulseRef.current = true;
+        runMetronomeScheduler(now);
         mw.postMessage({
           cmd: 'start',
-          intervalMs: 12,
+          intervalMs: 8,
         });
         metronomePulseWorkerRef.current = mw;
       } catch (e) {
@@ -1509,11 +1909,11 @@ export function MasterClockProvider({
       }
     },
     [
+      attachNewMetronomeBus,
       getOrCreateAudioContext,
-      getTickIntAtAudioNow,
+      getNextQuarterTickAtAudioNow,
       mapGlobalTickToAudioTime,
       runMetronomeScheduler,
-      wrapGlobalTickToDisplayTick,
     ],
   );
 
@@ -1564,8 +1964,20 @@ export function MasterClockProvider({
   }, []);
 
   const stopMetronomeLoop = useCallback(() => {
+    const bus = metronomeBusGainRef.current;
+    if (bus) {
+      try {
+        bus.disconnect();
+      } catch {
+        /* ignore */
+      }
+      metronomeBusGainRef.current = null;
+    }
     metronomeSchedulerRunIdRef.current += 1;
     metronomeActiveRef.current = false;
+    metroSkipNextWorkerPulseRef.current = false;
+    metronomeLastClickTimeRef.current = -Infinity;
+    metronomeLastEmittedQuarterTickRef.current = -PPQ;
     if (metronomePulseWorkerRef.current) {
       try {
         metronomePulseWorkerRef.current.postMessage({ cmd: 'stop' });
@@ -1612,6 +2024,7 @@ export function MasterClockProvider({
     lastPublishedTransportBeatIntRef.current = null;
     stopMetronomeLoop();
     stopMidiClockLoop();
+    pulseStudioPlayheadFrame(null);
   }, [stopMetronomeLoop, stopMidiClockLoop]);
 
   // ── Display state ───────────────────────────────────────────────────────
@@ -1662,36 +2075,29 @@ export function MasterClockProvider({
       const loopOn = loopEnabledRef.current;
       const songTotalB = songTotalBarsRef.current;
 
-      const bpmRun = Math.max(1, bpmRef.current);
-      const elapsed = Math.max(0, audioNow - startAudioTimeRef.current);
-      const globalBeatsUnwrapped =
-        originBeatFloatRef.current + (elapsed * bpmRun) / 60;
+      const phase = getMasterTransportPhaseAtAudioNow(audioNow);
+      const globalBeatsUnwrapped = phase.beatFloat;
       const tickInt = ctx
-        ? Math.max(0, Math.round(globalBeatsUnwrapped * PPQ))
+        ? phase.tickInt
         : Math.max(0, Math.round(originBeatFloatRef.current * PPQ));
 
       tickCounterRef.current = tickInt;
-      /** Bar/beat + playhead float — same phase as {@link getDisplayBeatsAtAudioNow} (linear clock + loop wrap). */
-      const displayBeats = getDisplayBeatsAtAudioNow(audioNow);
-      const displayTickFloat = displayBeats * PPQ;
+      const displayBeats = phase.displayBeats;
+      const displayTickFloat = phase.displayTickFloat;
       const transportBeat = Math.floor(displayBeats + 1e-9);
-      /** Unwrapped quarter index — same linear phase as {@link getGlobalBeatsUnwrappedAtAudioNow} / studio playhead (not `round(tick)/PPQ`). */
-      const transportUnwrappedQuarterIndex = Math.floor(
-        globalBeatsUnwrapped + 1e-9,
-      );
+      const transportUnwrappedQuarterIndex = phase.quarterIndex0;
       const globalBeat = transportUnwrappedQuarterIndex;
 
-      const transportBeatFloat =
-        transportBeatFloatFromDisplayTick(displayTickFloat);
+      const transportBeatFloat = phase.transportBeatFloatGrid;
       transportBeatFloatRef.current = transportBeatFloat;
       transportBeatIndexRef.current = transportBeat;
-      const studioTimelineBeatFloat =
-        getStudioTimelineBeatFloatGridLockedAtAudioNow(audioNow);
+      const studioTimelineBeatFloat = Math.max(0, phase.beatFloat);
       publishTransportBeatUiRef.current(
         transportUnwrappedQuarterIndex,
         transportBeat,
         transportBeatFloat,
         studioTimelineBeatFloat,
+        globalBeatsUnwrapped,
       );
 
       const qpb = ticksPerBarRef.current / PPQ;
@@ -1736,7 +2142,7 @@ export function MasterClockProvider({
           debugTransportSyncTruth({
             audioCtx: ctx,
             sessionStartTime: startAudioTimeRef.current,
-            bpm: bpmRun,
+            bpm: Math.max(1, bpmRef.current),
             originBeats: originBeatFloatRef.current,
             totalBeatsUnwrapped: globalBeatsUnwrapped,
             displayBeats,
@@ -1747,8 +2153,29 @@ export function MasterClockProvider({
         }
       }
 
+      const publishMs = audioNow * 1000;
+      const studioPerfPlaybackActive =
+        typeof window !== 'undefined' &&
+        (
+          window as unknown as {
+            __daMusicStudioPerfPlayback?: boolean;
+            __daMusicStudioTransportAuthority?: boolean;
+          }
+        ).__daMusicStudioPerfPlayback === true &&
+        (
+          window as unknown as {
+            __daMusicStudioTransportAuthority?: boolean;
+          }
+        ).__daMusicStudioTransportAuthority !== false;
+      const shouldPublishReactState =
+        (!studioPerfPlaybackActive &&
+          lastPublishedTransportBeatIntRef.current !== transportBeat) ||
+        !isRunningRef.current ||
+        (!studioPerfPlaybackActive &&
+          publishMs - lastUiPublishMsRef.current >= 250);
       lastPublishedTransportBeatIntRef.current = transportBeat;
-      lastUiPublishMsRef.current = audioNow * 1000;
+      if (!shouldPublishReactState) return;
+      lastUiPublishMsRef.current = publishMs;
       setDisplayState({
         positionTicks: tickInt,
         transportBeatFloat: transportBeatFloat,
@@ -1764,7 +2191,7 @@ export function MasterClockProvider({
         currentBeatInBar: beatInBar + 1,
       });
     },
-    [getDisplayBeatsAtAudioNow, getStudioTimelineBeatFloatGridLockedAtAudioNow],
+    [getMasterTransportPhaseAtAudioNow],
   );
 
   // ── RAF loop ────────────────────────────────────────────────────────────
@@ -1787,13 +2214,13 @@ export function MasterClockProvider({
         sampleRateRef.current = ctx.sampleRate;
       }
 
-      // Transport UI first; then a cheap metronome refill so a stalled worker interval cannot drain the
-      // click buffer (~1s). Worker is still primary for sub-frame timing when the main thread is busy.
+      // One master sync frame drives both visual publish and metronome scheduling.
       const audioNow = ctx ? ctx.currentTime : 0;
       publishTransportVisualFrameAtAudioNow(audioNow);
-      if (metronomeActiveRef.current && metronomeRef.current) {
-        runMetronomeSchedulerRef.current();
-      }
+      emitTransportAudioFrame(audioNow);
+      // Single metronome authority: worker-driven lookahead only.
+      // Avoid RAF fallback here; during start/stop transitions it can race with
+      // worker pulses and create audible double-click artifacts.
     } catch (e) {
       console.error('RAF loop error:', e);
     } finally {
@@ -1813,11 +2240,11 @@ export function MasterClockProvider({
     opts?: { metronomeBeat0AudioTime?: number },
   ) => {
     stopTimer();
-    // Keep transport clock monotonic; loop affects windowing/display, not clock anchors.
-    const startTick = initialTick;
+    // Linear DAW model with grid-locked transport start: snap to the nearest quarter grid
+    // so playhead + metronome begin on the same visible Studio measure column.
+    const startTick = Math.max(0, Math.round(initialTick / PPQ) * PPQ);
 
     tickCounterRef.current = startTick;
-    isRunningRef.current = true;
     lastUiPublishMsRef.current = 0;
     lastPublishedTransportBeatIntRef.current = null;
     originBeatFloatRef.current = startTick / PPQ;
@@ -1876,16 +2303,27 @@ export function MasterClockProvider({
       ).beat;
     }
 
-    // Publish playhead before metronome: startMetronomeLoop schedules clicks synchronously
-    // (precount downbeat + first lookahead) and should not run before beat UI subscribers update.
-    publishTransportVisualFrameAtAudioNow(ctx.currentTime);
+    /**
+     * Must be **after** `startAudioTimeRef` + any precount `originBeatFloat` nudge. If `isRunningRef` flips
+     * true first, `buildStudioTransportSyncSnapshot` / `createMasterSyncFrame` can sample a **new** origin
+     * with a **stale** session start (still `0` on first play) → huge `elapsed` → Studio cyan + amber skip;
+     * `play()` also sets `transportRef` to `playing` before `startTimer`, so `transportLive && anchored`
+     * could be true with `start === 0` for one stack frame.
+     */
+    isRunningRef.current = true;
 
+    // One clock sample for first paint + first MET schedule (avoids a second `currentTime` read feeling “late”).
+    publishTransportVisualFrameAtAudioNow(ctxNow);
+    emitTransportAudioFrame(ctxNow);
+
+    const startOnQuarterGrid = Math.abs(startTick % PPQ) < 1;
     if (metronomeRef.current) {
       startMetronomeLoop(
         bpmRef.current,
-        usePrecountAlign
+        usePrecountAlign || startOnQuarterGrid
           ? { metronomeAnchorTick }
           : undefined,
+        ctxNow,
       );
     }
 
@@ -1895,6 +2333,7 @@ export function MasterClockProvider({
       rafLoopRef.current(rafRunId),
     );
   }, [
+    emitTransportAudioFrame,
     getOrCreateAudioContext,
     publishTransportVisualFrameAtAudioNow,
     startMetronomeLoop,
@@ -1902,9 +2341,21 @@ export function MasterClockProvider({
     wrapGlobalBeatsToDisplayFloat,
   ]);
 
+  const isStudioTransportAuthority = useCallback((): boolean => {
+    if (typeof window === 'undefined') return true;
+    const w = window as unknown as {
+      __daMusicStudioTransportAuthority?: boolean;
+    };
+    return w.__daMusicStudioTransportAuthority !== false;
+  }, []);
+
   // ── Transport controls ──────────────────────────────────────────────────
   const play = useCallback(() => {
     void (async () => {
+      if (!isStudioTransportAuthority()) {
+        console.warn('[MasterClock] Play ignored: Studio Editor is transport authority.');
+        return;
+      }
       if (transportRef.current === 'counting' || countInPhaseRef.current) return;
       try {
         const ctx = getOrCreateAudioContext();
@@ -1916,10 +2367,14 @@ export function MasterClockProvider({
             0.0001,
             Math.min(1, masterOutputLinearRef.current),
           );
-          // Anti-click: tiny fade-in when transport starts/resumes.
+          /**
+           * Metronome routes through this bus — a 20ms ramp from ~silence made beat 1 **inaudible** and
+           * felt “late”. Start at an audible fraction, short ramp (pro DAW: click on grid is heard).
+           */
+          const startAudible = Math.max(0.07, Math.min(target * 0.35, 0.35));
           master.gain.cancelScheduledValues(now);
-          master.gain.setValueAtTime(0.0001, now);
-          master.gain.exponentialRampToValueAtTime(target, now + 0.02);
+          master.gain.setValueAtTime(startAudible, now);
+          master.gain.exponentialRampToValueAtTime(target, now + 0.01);
         }
       } catch (e) {
         console.warn('[MasterClock] play: AudioContext resume failed', e);
@@ -1929,17 +2384,22 @@ export function MasterClockProvider({
         sendMidiSongPositionPointer(tickCounterRef.current || 0);
         sendMidiRealtimeRef.current(wasPaused ? 0xfb : 0xfa);
       }
-      setTransport('playing');
       startTimer(tickCounterRef.current || 0);
+      transportRef.current = 'playing';
+      setTransport('playing');
       if (midiClockEnabledRef.current && midiOutputRef.current) {
         startMidiClockLoop();
       }
     })();
-  }, [startTimer, getOrCreateAudioContext, startMidiClockLoop]);
+  }, [startTimer, getOrCreateAudioContext, startMidiClockLoop, isStudioTransportAuthority]);
 
   const record = useCallback((opts?: RecordInvokeOptions) => {
     void (async () => {
-      // DAW model: arm = getUserMedia; registered in app.tsx while Studio / Creation Station / Master Arranger is active.
+      if (!isStudioTransportAuthority()) {
+        console.warn('[MasterClock] Record ignored: Studio Editor is transport authority.');
+        return;
+      }
+      // DAW model: arm = getUserMedia; registered in app.tsx while Studio Editor is active.
       const arm = (
         window as unknown as {
           __daMusicStudioRecordArm?: () => Promise<void>;
@@ -1947,7 +2407,7 @@ export function MasterClockProvider({
       ).__daMusicStudioRecordArm;
       if (typeof arm !== 'function') {
         console.warn(
-          '[MasterClock] Record requires a DAW recording screen. Open Studio Editor, Creation Station, or Master Arranger, then press Record.',
+          '[MasterClock] Record requires Studio Editor. Open Studio Editor, then press Record.',
         );
         return;
       }
@@ -2011,9 +2471,10 @@ export function MasterClockProvider({
           0.0001,
           Math.min(1, masterOutputLinearRef.current),
         );
+        const startAudible = Math.max(0.07, Math.min(target * 0.35, 0.35));
         master.gain.cancelScheduledValues(now);
-        master.gain.setValueAtTime(0.0001, now);
-        master.gain.exponentialRampToValueAtTime(target, now + 0.02);
+        master.gain.setValueAtTime(startAudible, now);
+        master.gain.exponentialRampToValueAtTime(target, now + 0.01);
       } catch {
         /* non-fatal — count-in clicks still route to ctx.destination if master fails */
       }
@@ -2029,14 +2490,26 @@ export function MasterClockProvider({
       const ctx = getOrCreateAudioContext();
       const spb = 60 / Math.max(1, bpmRef.current);
       const t0 = ctx.currentTime;
+      /**
+       * While `isRunningRef` is still false, the main transport rAF + `emitTransportAudioFrame` do not run.
+       * Anchor the same linear clock used by `getMasterSyncFrameAtAudioNow` so Studio’s cyan line / grid
+       * stay in phase with the count-in clicks (which are scheduled at `t0 + i * spb`).
+       */
+      const virtualStartTick = Math.max(0, countStartTick - countQuarters * PPQ);
+      startAudioTimeRef.current = t0;
+      originBeatFloatRef.current = virtualStartTick / PPQ;
+      attachNewMetronomeBus();
       setCountDownTicks(countQuarters * PPQ);
       const metroClick = playMetronomeClickAtRef.current;
       /* Same downbeat rule as {@link runMetronomeScheduler} — bar/beat from song + loop wrap, not i%4. */
       for (let i = 0; i < countQuarters; i++) {
         const tickAtClick = countStartTick - (countQuarters - i) * PPQ;
-        const displayTick = wrapGlobalTickToDisplayTick(Math.max(0, tickAtClick));
-        const { beat } = dawTickToBarBeat(displayTick, timeSigsRef.current, PPQ);
-        metroClick(t0 + i * spb, beat === 1);
+        const { beat } = dawTickToBarBeat(
+          Math.max(0, tickAtClick),
+          timeSigsRef.current,
+          PPQ,
+        );
+        metroClick(t0 + i * spb, beat === 1, t0 + i * spb);
       }
       const deadline = t0 + countQuarters * spb;
       const tickIv =
@@ -2055,6 +2528,9 @@ export function MasterClockProvider({
               return;
             }
             if (ctx.state === 'suspended') void ctx.resume();
+            pulseStudioPlayheadFrame(
+              displayAudioNowForStudio(ctx) ?? ctx.currentTime,
+            );
             if (
               ctx.currentTime >= deadline - 0.002 ||
               performance.now() >= wallGiveUpMs
@@ -2074,9 +2550,9 @@ export function MasterClockProvider({
       if (transportRef.current !== 'counting') {
         return;
       }
+      startTimer(countStartTick, { metronomeBeat0AudioTime: deadline });
       setTransport('recording');
       transportRef.current = 'recording';
-      startTimer(countStartTick, { metronomeBeat0AudioTime: deadline });
     } else {
       const alignT = opts?.metronomeBeat0AudioTime;
       const hasPrecountHandoff =
@@ -2103,8 +2579,6 @@ export function MasterClockProvider({
           /* ignore */
         }
       }
-      setTransport('recording');
-      transportRef.current = 'recording';
       const startT =
         typeof opts?.recordStartTick === 'number' &&
         Number.isFinite(opts.recordStartTick)
@@ -2117,6 +2591,8 @@ export function MasterClockProvider({
           ? { metronomeBeat0AudioTime: alignT as number }
           : undefined,
       );
+      setTransport('recording');
+      transportRef.current = 'recording';
     }
     if (midiClockEnabledRef.current && midiOutputRef.current) {
       sendMidiSongPositionPointer(tickCounterRef.current || 0);
@@ -2138,9 +2614,10 @@ export function MasterClockProvider({
   }, [
     startTimer,
     getOrCreateAudioContext,
+    attachNewMetronomeBus,
     startMidiClockLoop,
     sendMidiSongPositionPointer,
-    wrapGlobalTickToDisplayTick,
+    isStudioTransportAuthority,
   ]);
 
   const pause = useCallback(() => {
@@ -2209,7 +2686,8 @@ export function MasterClockProvider({
       transportBeatFloatRef.current = transportBeatFloat;
       transportBeatIndexRef.current = transportBeat;
       currentBeatInBarRef.current = tbb.beat;
-      let nextMq = Math.ceil(tickInt / PPQ) * PPQ;
+      const tickFloatPause = Math.max(0, globalBeatsFrozen * PPQ);
+      let nextMq = Math.ceil(tickFloatPause / PPQ - 1e-9) * PPQ;
       for (let i = 0; i < 64; i++) {
         if (mapGlobalTickToAudioTime(nextMq) >= audioNowPause - 0.005) break;
         nextMq += PPQ;
@@ -2246,6 +2724,7 @@ export function MasterClockProvider({
         transportBeat,
         transportBeatFloat,
         studioTimelineBeatFloat,
+        globalBeatsFrozen,
       );
     }
     setTransport('paused');
@@ -2294,7 +2773,7 @@ export function MasterClockProvider({
       songPlayheadFrac: 0,
       currentBeatInBar: 1,
     });
-    publishTransportBeatUiRef.current(0, 0, 0, 0);
+    publishTransportBeatUiRef.current(0, 0, 0, 0, 0);
     if (midiClockEnabledRef.current && midiOutputRef.current) {
       sendMidiRealtimeRef.current(0xfc);
     }
@@ -2380,13 +2859,13 @@ export function MasterClockProvider({
       songPlayheadFrac: songFracSeek,
       currentBeatInBar: beatInBar + 1, // FIX: 1-indexed (1–4)
     });
-    const studioTimelineBeatFloat =
-      transportBeatFloatFromDisplayTick(targetTick);
+    const studioTimelineBeatFloat = targetTick / PPQ;
     publishTransportBeatUiRef.current(
       beatGlobalSeek,
       transportBeatSeek,
       transportBeatSeekFloat,
       studioTimelineBeatFloat,
+      targetTick / PPQ,
     );
     setTransportTimelineEpoch((e) => e + 1);
     if (midiClockEnabledRef.current && midiOutputRef.current) {
@@ -2458,9 +2937,10 @@ export function MasterClockProvider({
         tempoMapRef.current = [{ tick: 0, bpm: v }];
 
         if (playingOrRec) {
-          const snapped = tickCounterRef.current;
-          let nextMq = Math.ceil(snapped / PPQ) * PPQ;
           const ctxBpm = audioCtxRef.current;
+          /** `originBeatFloatRef` was just set from continuous phase inside `if (ctx)` above. */
+          const tickFloatBpm = Math.max(0, originBeatFloatRef.current * PPQ);
+          let nextMq = Math.ceil(tickFloatBpm / PPQ - 1e-9) * PPQ;
           if (ctxBpm) {
             const nowBpm = ctxBpm.currentTime;
             for (let i = 0; i < 64; i++) {
@@ -2787,10 +3267,23 @@ export function MasterClockProvider({
         Math.max(MIN_AUDIBLE_VELOCITY, Math.min(1, shapedVelocity)) * 127,
       );
       const vol = channelVolsRef.current[chId] ?? 80;
-      setChannelLevels((prev) => ({
-        ...prev,
-        [chId]: Math.min(1, (safeVelocity / 127) * (vol / 100)),
-      }));
+      const studioPerfPlaybackActive =
+        typeof window !== 'undefined' &&
+        (
+          window as unknown as {
+            __daMusicStudioPerfPlayback?: boolean;
+            __daMusicStudioTransportAuthority?: boolean;
+          }
+        ).__daMusicStudioPerfPlayback === true &&
+        (
+          window as unknown as { __daMusicStudioTransportAuthority?: boolean }
+        ).__daMusicStudioTransportAuthority !== false;
+      if (!(studioPerfPlaybackActive && isRunningRef.current)) {
+        setChannelLevels((prev) => ({
+          ...prev,
+          [chId]: Math.min(1, (safeVelocity / 127) * (vol / 100)),
+        }));
+      }
       playDrumSound(chId, safeVelocity, when);
     },
     [playDrumSound],
@@ -3075,6 +3568,16 @@ export function MasterClockProvider({
     };
   }, []);
 
+  const subscribeTransportAudioFrame = useCallback(
+    (cb: (audioNowSec: number) => void) => {
+      transportAudioFrameListenersRef.current.add(cb);
+      return () => {
+        transportAudioFrameListenersRef.current.delete(cb);
+      };
+    },
+    [],
+  );
+
   const getTransportBeatUiSnapshot = useCallback(
     () => beatUiSnapshotRef.current,
     [],
@@ -3082,6 +3585,11 @@ export function MasterClockProvider({
 
   const getTransportAudioBpm = useCallback(
     () => Math.max(1, bpmRef.current),
+    [],
+  );
+
+  const getIsAudioTransportRunning = useCallback(
+    () => isRunningRef.current,
     [],
   );
 
@@ -3118,6 +3626,7 @@ export function MasterClockProvider({
         stop,
         record,
         playMetronomeClickAt,
+        getIsAudioTransportRunning,
         seekToTick,
         positionTicks: displayState.positionTicks,
         transportBeatFloat: displayState.transportBeatFloat,
@@ -3128,7 +3637,10 @@ export function MasterClockProvider({
         transportUnwrappedQuarterIndex: displayState.transportUnwrappedQuarterIndex,
         transportUnwrappedQuarterIndexRef,
         subscribeTransportBeatUi,
+        subscribeTransportAudioFrame,
         getTransportBeatUiSnapshot,
+        getStudioTransportSyncSnapshot,
+        getStudioTransportSyncSnapshotAtAudioNow,
         currentStep: displayState.currentStep,
         currentBar: displayState.currentBar,
         currentTick: displayState.currentTick,
@@ -3220,6 +3732,7 @@ export function MasterClockProvider({
         getStudioTimelineBeatFloatGridLockedAtAudioNow,
         getStudioGridQuarterIndexAtAudioNow,
         getGlobalBeatsUnwrappedAtAudioNow,
+        getPlayheadBeatAtAudioNow,
         masterMeterAnalyserRef,
         audioCtxRef,
         secondsPerStepRef,

@@ -1549,7 +1549,7 @@ export default function CreationStationScreen({
 
   // Lookahead drum sequencer: `AudioContext` hardware clock; worker only wakes the main thread.
   useEffect(() => {
-    if (!isPlaying) {
+    if (!isScreenActive || !isPlaying) {
       return;
     }
 
@@ -1633,6 +1633,7 @@ export default function CreationStationScreen({
     getOrCreateAudioContext,
     getTickIntAtAudioNow,
     mapGlobalTickToAudioTime,
+    isScreenActive,
     isPlaying,
     loopBars,
     loopEnabled,

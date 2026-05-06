@@ -250,13 +250,17 @@ export function tickToBarBeatFromFloatTick(
     timeSigs[0] ?? { tick: 0, numerator: 4, denominator: 4 as TimeSigDenominator };
   const ticksPerBeat = ppq * (4 / sig.denominator);
   const ticksPerBar = ticksPerBeat * sig.numerator;
-  const bar = Math.floor(tick / ticksPerBar) + 1;
-  const rem = tick - (bar - 1) * ticksPerBar;
+  const t = Math.max(0, tick);
+  /** Bar index from **quarter** space, remainder in **ticks** — avoids `t - floor(t/L)*L` drift at large `t`. */
+  const quartersGlobal = t / ppq;
+  const quartersPerBar = ticksPerBar / ppq;
+  const bar = Math.floor(quartersGlobal / quartersPerBar + 1e-12) + 1;
+  const rem = Math.max(0, Math.min(ticksPerBar, t - (bar - 1) * ticksPerBar));
   const beat = Math.min(
     sig.numerator,
-    Math.max(1, Math.floor(rem / ticksPerBeat) + 1),
+    Math.max(1, Math.floor(rem / ticksPerBeat + 1e-9) + 1),
   );
-  const tickInBeat = rem - (beat - 1) * ticksPerBeat;
+  const tickInBeat = Math.max(0, rem - (beat - 1) * ticksPerBeat);
   return { bar, beat, tickInBeat };
 }
 

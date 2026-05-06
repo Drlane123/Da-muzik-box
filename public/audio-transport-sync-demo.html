@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DAW sync demo — transport + drag/drop + snap + mixer</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: #111; color: #ddd; font-family: system-ui, sans-serif; }
+    .daw-wrapper { display: flex; height: 100vh; min-height: 0; }
+    .sidebar {
+      width: 250px; flex-shrink: 0;
+      background: #252525; border-right: 1px solid #444;
+      padding: 10px; overflow-y: auto;
+    }
+    .sidebar h3 { font-size: 12px; color: #888; margin: 0 0 8px; letter-spacing: 0.06em; }
+    #sampleList { list-style: none; padding: 0; margin: 0; }
+    .sample-item {
+      padding: 10px; cursor: grab; border-bottom: 1px solid #333;
+      border-radius: 4px; margin-bottom: 4px; background: #2d2d2d;
+      user-select: none;
+    }
+    .sample-item:hover { background: #383838; }
+    .sample-item:active { cursor: grabbing; }
+    .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 12px; gap: 10px; }
+    .transport-bar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+      padding: 10px; background: #1e1e1e; border: 1px solid #444; border-radius: 6px;
+    }
+    .mixer-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; font-size: 13px; }
+    .mixer-row label { color: #aaa; }
+    input[type="range"] { width: 120px; vertical-align: middle; }
+    button {
+      background: #2e7d32; border: none; color: #fff;
+      padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: 600;
+    }
+    button.stop { background: #c62828; }
+    input[type="number"] { width: 56px; background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; }
+    .timeline-wrap {
+      flex: 1; min-height: 0; border: 1px solid #555; border-radius: 4px; overflow: hidden;
+      background: #0a0a0a;
+    }
+    #timeline {
+      display: block; width: 100%; height: 200px;
+      background: #000; cursor: crosshair;
+    }
+    .hint { font-size: 11px; color: #666; line-height: 1.45; max-width: 720px; }
+  </style>
+</head>
+<body>
+  <div class="daw-wrapper">
+    <aside class="sidebar">
+      <h3>BROWSER</h3>
+      <p class="hint" style="margin-bottom:10px;">Drag onto timeline. Buffers are synthesized (no network).</p>
+      <ul id="sampleList">
+        <li class="sample-item" draggable="true" data-kind="kick">Kick (synth)</li>
+        <li class="sample-item" draggable="true" data-kind="snare">Snare (synth)</li>
+      </ul>
+    </aside>
+    <div class="main-content">
+      <div class="transport-bar">
+        <button type="button" id="playBtn">START ENGINE</button>
+        <div><label for="bpmInput">BPM</label> <input type="number" id="bpmInput" value="120" min="40" max="240" /></div>
+        <label><input type="checkbox" id="snapToggle" checked /> Snap to beat</label>
+        <span id="beatIndicator">Beat —</span>
+        <span id="timeDisplay">0.000s</span>
+      </div>
+      <div class="mixer-row">
+        <label>Master <input type="range" id="masterFader" min="0" max="100" value="70" /></label>
+        <label>Clip level <input type="range" id="clipFader" min="0" max="100" value="85" /></label>
+      </div>
+      <div class="timeline-wrap">
+        <canvas id="timeline" width="900" height="200"></canvas>
+      </div>
+      <p class="hint">
+        <strong>Clock:</strong> metronome + clips use <code>AudioBufferSourceNode.start(audioTime)</code> on the
+        <code>AudioContext</code> timeline. <strong>Playhead:</strong> <code>requestAnimationFrame</code> reads
+        <code>currentTime - startTime</code> (same anchor). <strong>Drop:</strong> x → time in one 4-beat loop;
+        optional snap rounds to nearest <code>60/BPM</code> second. <strong>Mixer:</strong> clip → trackGain → masterGain → destination.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function synthKickBuffer(ctx) {
+      const dur = 0.14;
+      const len = Math.ceil(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / ctx.sampleRate;
+        d[i] = Math.sin(2 * Math.PI * (55 + 80 * Math.exp(-t * 40)) * t) * Math.exp(-t * 18) * 0.95;
+      }
+      return buf;
+    }
+    function synthSnareBuffer(ctx) {
+      const dur = 0.12;
+      const len = Math.ceil(ctx.sampleRate * dur);
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) {
+        const t = i / ctx.sampleRate;
+        d[i] = (Math.random() * 2 - 1) * Math.exp(-t * 35) * 0.45;
+      }
+      return buf;
+    }
+
+    /** Clips: seconds from transport epoch (same origin as playhead). Scheduled once on audio grid. */
+    const project = {
+      clips: [],
+      nextId: 1,
+      addClip(buffer, startSec, label, color, volume) {
+        this.clips.push({
+          id: this.nextId++,
+          buffer,
+          startSec,
+          scheduled: false,
+          label,
+          color: color || '#6c9',
+          volume: typeof volume === 'number' ? volume : 0.85,
+        });
+      },
+    };
+
+    class Transport {
+      constructor() {
+        this.audioCtx = null;
+        this.buffers = null;
+        this.isPlaying = false;
+        this.nextNoteTime = 0;
+        this.startTime = 0;
+        this.currentBeat = 0;
+        this.masterGain = null;
+      }
+
+      /** Lazily create context + synth buffers so clips can be placed before START. */
+      ensureAudioReady() {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!this.audioCtx) this.audioCtx = new Ctx();
+        if (!this.buffers) {
+          this.buffers = {
+            kick: synthKickBuffer(this.audioCtx),
+            snare: synthSnareBuffer(this.audioCtx),
+          };
+        }
+      }
+
+      start() {
+        this.ensureAudioReady();
+        this.masterGain = this.audioCtx.createGain();
+        const m = Number(document.getElementById('masterFader').value) / 100;
+        this.masterGain.gain.setValueAtTime(m, this.audioCtx.currentTime);
+        this.masterGain.connect(this.audioCtx.destination);
+
+        this.isPlaying = true;
+        this.startTime = this.audioCtx.currentTime;
+        this.nextNoteTime = this.audioCtx.currentTime;
+        this.currentBeat = 0;
+        for (const c of project.clips) c.scheduled = false;
+        this.scheduler();
+      }
+
+      getSecondsPerBeat() {
+        const raw = document.getElementById('bpmInput').value;
+        const n = Number(raw);
+        const bpm = Number.isFinite(n) && n > 0 ? n : 120;
+        return 60.0 / bpm;
+      }
+
+      scheduler() {
+        if (!this.audioCtx || !this.isPlaying) return;
+        const ctx = this.audioCtx;
+        if (ctx.state === 'suspended') void ctx.resume();
+        const lookahead = 0.12;
+        const now = ctx.currentTime;
+        const spb = this.getSecondsPerBeat();
+
+        while (this.nextNoteTime < now + lookahead) {
+          this.playClick(this.currentBeat, this.nextNoteTime);
+          this.nextNoteTime += spb;
+          this.currentBeat++;
+        }
+
+        const clipLevel = Number(document.getElementById('clipFader').value) / 100;
+        for (const clip of project.clips) {
+          if (clip.scheduled) continue;
+          const tClip = this.startTime + clip.startSec;
+          if (tClip < now - 0.05) {
+            clip.scheduled = true;
+            continue;
+          }
+          if (tClip >= now - 0.001 && tClip < now + lookahead) {
+            this.scheduleSample(clip.buffer, tClip, clip.volume * clipLevel);
+            clip.scheduled = true;
+          }
+        }
+
+        if (this.isPlaying) setTimeout(() => this.scheduler(), 25);
+      }
+
+      playClick(beat, time) {
+        const ctx = this.audioCtx;
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.frequency.value = beat % 4 === 0 ? 880 : 440;
+        g.gain.setValueAtTime(0.12, time);
+        g.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+        osc.connect(g).connect(this.masterGain);
+        osc.start(time);
+        osc.stop(time + 0.09);
+      }
+
+      scheduleSample(buffer, time, trackVolume) {
+        const ctx = this.audioCtx;
+        const src = ctx.createBufferSource();
+        const tg = ctx.createGain();
+        tg.gain.setValueAtTime(Math.max(0.0001, trackVolume), time);
+        src.buffer = buffer;
+        src.connect(tg).connect(this.masterGain);
+        const dur = buffer.duration;
+        src.start(time);
+        src.stop(time + dur + 0.01);
+      }
+
+      getElapsed() {
+        if (!this.audioCtx || !this.isPlaying) return 0;
+        return this.audioCtx.currentTime - this.startTime;
+      }
+    }
+
+    const transport = new Transport();
+    const canvas = document.getElementById('timeline');
+    const ctx2d = canvas.getContext('2d');
+    const playBtn = document.getElementById('playBtn');
+    const beatEl = document.getElementById('beatIndicator');
+    const timeEl = document.getElementById('timeDisplay');
+    const snapToggle = document.getElementById('snapToggle');
+    const masterFader = document.getElementById('masterFader');
+    const clipFader = document.getElementById('clipFader');
+
+    let rafId = 0;
+
+    masterFader.addEventListener('input', () => {
+      if (!transport.audioCtx || !transport.masterGain) return;
+      const g = Number(masterFader.value) / 100;
+      const t = transport.audioCtx.currentTime;
+      transport.masterGain.gain.setTargetAtTime(g, t, 0.02);
+    });
+
+    document.querySelectorAll('.sample-item').forEach((item) => {
+      item.setAttribute('draggable', 'true');
+      item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('kind', item.dataset.kind);
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+    });
+
+    canvas.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+
+    canvas.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const kind = e.dataTransfer.getData('kind');
+      if (!kind) return;
+      transport.ensureAudioReady();
+
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const x = (e.clientX - rect.left) * scaleX;
+      const spb = transport.getSecondsPerBeat();
+      const loopLen = 4 * spb;
+      const rawTime = (x / canvas.width) * loopLen;
+      const snapped = snapToggle.checked
+        ? Math.round(rawTime / spb) * spb
+        : rawTime;
+      const startSec = Math.max(0, Math.min(loopLen - 0.01, snapped));
+
+      const buf =
+        kind === 'kick'
+          ? transport.buffers.kick
+          : kind === 'snare'
+            ? transport.buffers.snare
+            : null;
+      if (!buf) return;
+
+      const label = kind === 'kick' ? 'Kick' : 'Snare';
+      const color = kind === 'kick' ? '#4fc3f7' : '#ffb74d';
+      project.addClip(buf, startSec, label, color, 1);
+    });
+
+    playBtn.addEventListener('click', () => {
+      if (transport.isPlaying) {
+        transport.isPlaying = false;
+        cancelAnimationFrame(rafId);
+        location.reload();
+        return;
+      }
+      transport.start();
+      playBtn.textContent = 'RESET ENGINE';
+      playBtn.className = 'stop';
+      loop();
+    });
+
+    function loop() {
+      const elapsed = transport.getElapsed();
+      const spb = transport.getSecondsPerBeat();
+      const loopLen = 4 * spb;
+      const w = canvas.width;
+      const h = canvas.height;
+      const playX = ((elapsed % loopLen) / loopLen) * w;
+
+      ctx2d.clearRect(0, 0, w, h);
+
+      ctx2d.strokeStyle = '#2a2a2a';
+      ctx2d.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const gx = (i / 4) * w;
+        ctx2d.beginPath();
+        ctx2d.moveTo(gx, 0);
+        ctx2d.lineTo(gx, h);
+        ctx2d.stroke();
+      }
+
+      const laneH = Math.floor(h / 2);
+      for (const clip of project.clips) {
+        const cx = (clip.startSec / loopLen) * w;
+        const cw = Math.max(8, (clip.buffer.duration / loopLen) * w);
+        ctx2d.fillStyle = clip.color + '99';
+        ctx2d.fillRect(cx, 8, cw, laneH - 16);
+        ctx2d.strokeStyle = clip.color;
+        ctx2d.lineWidth = 1;
+        ctx2d.strokeRect(cx, 8, cw, laneH - 16);
+        ctx2d.fillStyle = '#fff';
+        ctx2d.font = '11px system-ui';
+        ctx2d.fillText(clip.label, cx + 4, 28);
+      }
+
+      ctx2d.strokeStyle = '#0f0';
+      ctx2d.lineWidth = 2;
+      ctx2d.beginPath();
+      ctx2d.moveTo(playX, 0);
+      ctx2d.lineTo(playX, h);
+      ctx2d.stroke();
+
+      timeEl.textContent = elapsed.toFixed(3) + 's';
+      beatEl.textContent = 'Beat ' + (Math.floor(elapsed / spb) % 4);
+
+      rafId = requestAnimationFrame(loop);
+    }
+
+    rafId = requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

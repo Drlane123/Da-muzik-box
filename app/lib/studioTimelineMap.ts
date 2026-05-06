@@ -1,6 +1,7 @@
 /**
  * Single source of truth for Studio timeline pixel ↔ beat mapping.
- * `colW` = one bar width; transport beats align with `MasterClockContext.transportBeatFloat`.
+ * `colW` = one bar width; playhead phase comes from `@/app/lib/masterTransportSync` via MasterClock
+ * (`studioTimelineBeatFloat` / `getStudioTransportSyncSnapshotAtAudioNow`).
  */
 
 export type StudioTimelineMap = {
@@ -40,13 +41,11 @@ export function createStudioTimelineMap(opts: {
 
   function gridFromContentX(contentX: number): { bar: number; beatInBar: number } {
     const beatsFromStart = xToAbsoluteBeat(contentX);
-    const bar = Math.max(
-      1,
-      Math.min(totalBars, Math.floor(beatsFromStart / beatsPerBar) + 1),
-    );
-    const beatIndex0 = Math.floor(beatsFromStart);
-    const beatInBar =
-      ((beatIndex0 % beatsPerBar) + beatsPerBar) % beatsPerBar + 1;
+    const beatIndex0 = Math.floor(beatsFromStart + 1e-9);
+    const barIndex0 = Math.floor(beatIndex0 / beatsPerBar + 1e-9);
+    const bar = Math.max(1, Math.min(totalBars, barIndex0 + 1));
+    const beatInBar0 = beatIndex0 - barIndex0 * beatsPerBar;
+    const beatInBar = Math.floor(beatInBar0 + 1e-9) + 1;
     return { bar, beatInBar };
   }
 
