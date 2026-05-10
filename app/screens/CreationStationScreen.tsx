@@ -1,22 +1,23 @@
 import {
   useState,
   useEffect,
+  useLayoutEffect,
   useSyncExternalStore,
   useRef,
   useCallback,
   useMemo,
   memo,
 } from 'react';
-import { flushSync } from 'react-dom';
+import type { MutableRefObject } from 'react';
+import { flushSync, createPortal } from 'react-dom';
+import { Send, ZoomIn, ZoomOut, Maximize2, Zap, ChevronUp, ChevronDown, Volume2, Play, Pause, Square, Circle, SkipBack, Repeat, Save, Cable, Mic, Upload, X, Download, Plus, SlidersHorizontal } from 'lucide-react';
 
-import { Send, ZoomIn, ZoomOut, Maximize2, Zap, ChevronUp, ChevronDown, Volume2, Plus, X } from 'lucide-react';
-
-import { useMasterClock, PPQ } from '@/app/context/MasterClockContext';
-import TransportPulseWorker from '../workers/transportPulse.worker?worker';
+import {
+  useMasterClock,
+  PPQ,
+} from '@/app/context/MasterClockContext';
 
 import { usePianoNotes } from '@/app/context/PianoNotesContext';
-
-import ProMeter from '@/app/components/ProMeter';
 import LoopMarkersBrace, { LoopVerticalGuides } from '@/app/components/LoopMarkersBrace';
 
 
@@ -30,14 +31,64 @@ import {
 
 import { CREATION_STATION_CLIP_DATA_KEY } from '@/app/lib/sessionClipContent';
 
+/* Creation ↔ SE2 parity: transport + playhead mirror Studio Editor 2 **contracts** using
+ * `app/lib/creationStation/*`, `creationPlaylineWapi`, and **constants only** from
+ * `@/app/lib/studio/se2TransportClock`. Do **not** import or modify `StudioEditor2Screen.tsx` here. */
 import {
+  SE2_AUDIO_START_FLOOR_SEC,
+  refillCreationTransportLookahead,
+  resetCreationTransportStepClock,
+  reanchorNextStepWhileRunning,
+  reanchorNextStepWhileStopped,
+} from '@/app/lib/creationStation/creationTransportSystem';
+import { useCreationTransportPump } from '@/app/hooks/useCreationTransportPump';
+import {
+  getCreationTransportBeatEpoch,
+  publishCreationTransportBeat,
+  subscribeCreationTransportBeat,
+} from '@/app/lib/creationStation/creationTransportBeatExternal';
+import { beatAtSessionTime, CREATION_METRO_CLICK_ATTACK_SEC } from '@/app/lib/creationStation/creationTransportSync';
+import {
+  CREATION_DRUM_PLAYLINE_CENTER_X,
+  CREATION_PIANO_PLAYLINE_CENTER_X,
+  cancelCreationPlaylineWapi,
+  creationPlaylineColFAndPx,
+  launchCreationPlaylineWapi,
+  setCreationPlaylineTransformStatic,
+} from '@/app/lib/creationStation/creationPlaylineWapi';
+import {
+  creationDrumGridStepBottomBorder,
+  creationDrumGridVerticalLineColor,
+} from '@/app/lib/creationStation/creationDrumGridAdaptive';
+
+import {
+  defaultPadSamplerPlaybackOpts,
   fileToStoredPadSample,
   loadPadSampleStore,
   padSampleKey,
+  type PadSamplerPlaybackOpts,
+  samplerOptsFromStored,
   savePadSampleStore,
   storedToArrayBuffer,
+  writeSamplerOptsToStored,
 } from '@/app/lib/padSampleStorage';
+import { DrumKitGeneratorModal } from '@/app/components/creation/DrumKitGeneratorModal';
+import {
+  audioBufferToStoredKitSample,
+  buildKitGroovePattern,
+  synthesizeKitPadBuffer,
+  type DrumKitGeneratorStyle,
+} from '@/app/lib/creationStation/drumKitGenerator';
 
+import {
+  normalizePianoSnapSubdiv,
+  PIANO_SNAP_SUBDIV_STORAGE_KEY,
+  readPianoSnapSubdivFromStorage,
+  snapLabelFromPianoSnapSubdiv,
+  ticksPerPianoSnapCell,
+} from '@/app/lib/sharedPianoSnapSubdiv';
+
+const DMB_STUDIO_PRECOUNT_CANCEL = 'dmb-studio-precount-cancel';
 
 // ── MIDI Note to Frequency (standard A=440Hz) ──────────────────────────────────
 
@@ -74,8 +125,6 @@ const PAD_VEL      = [115,90,90,90,90,90,90,90,90,90,90,90,90,90,90,127];
 
 const INSTRUMENTS  = ['Piano','Synth','Bass','Lead'];
 
-const EFFECTS      = ['Reverb','Delay','Distortion','Filter','Compressor','EQ','Chorus','Phaser'];
-
 
 const DRUM_GRID_BARS   = 16;
 const CREATION_PIANO_BARS = 64;
@@ -97,26 +146,261 @@ const PIANO_RULER_BAR_STEP_COUNTS = Array.from(
   () => MEASURES_PER_BAR,
 );
 
-const KEY_W            = 56;
+const KEY_W            = 64;
 
-const LABEL_W          = 72;
+/** Wider rail for Genius-style sound-bank labels (group + name + CH). */
+const LABEL_W          = 124;
 
-const ROW_H            = 30;
+/** Piano-roll note mode: one row height per semitone (pitch lane). */
+const ROW_H            = 28;
 
-const MIN_CW           = 10;
+const MIN_CW           = 24;
 
-const MAX_CW           = 48;
+const MAX_CW           = 128;
 
-const DEF_CW           = 26;
+const DEF_CW           = 64;
 
 const ZOOM_STEP        = 4;
 
 // Keep drum programming grid comfortably large for faster step entry.
-const DRUM_GRID_ROW_H  = 30;
-const DRUM_GRID_MIN_CW = 24;
-const PIANO_GRID_MIN_CW = 34;
+const DRUM_GRID_ROW_H  = 60;
+const DRUM_GRID_MIN_CW = MIN_CW;
+const PIANO_GRID_MIN_CW = 24;
 
-const SUB_CHANNEL      = 17;
+/** Max “cells per quarter” (1/128 straight → 32; triplet modes use 3 / 6). */
+const DRUM_MAX_SUBDIV = 32;
+
+/**
+ * WAAPI runs on the compositor timeline; clicks are scheduled on the audio clock. The playline uses
+ * {@link CREATION_PLAYLINE_WAPI_LEAD_SEC} plus {@link creationPlaylineOutputDacLeadSec} (same idea as
+ * Studio `displayAudioNowForStudio` DAC term) so the line lines up with **heard** downbeats. Applies
+ * **only** while `play === true` — not to `sessionStartRef`, `beatAtSessionTime`, or HUD.
+ */
+const CREATION_PLAYLINE_WAPI_LEAD_SEC = 0.052;
+
+/** Same cap as Studio playhead DAC term — `outputLatency` + `baseLatency` can over-report on some stacks. */
+function creationPlaylineOutputDacLeadSec(ctx: AudioContext | null): number {
+  if (!ctx || ctx.state === 'closed') return 0;
+  const ol = typeof ctx.outputLatency === 'number' && ctx.outputLatency > 0 ? ctx.outputLatency : 0;
+  const bl = typeof ctx.baseLatency === 'number' && ctx.baseLatency > 0 ? ctx.baseLatency : 0;
+  return Math.min(0.12, ol + bl);
+}
+
+/** One readout for BAR / MSR / phrase — derived from the same pattern column as the playhead + ruler. */
+type CreationHudSync = { bar: number; measure: number; phrase: number };
+
+function creationDrumColOffsetSteps(
+  loopOn: boolean,
+  loopStartBeat: number,
+  subdiv: number,
+): number {
+  const s = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(subdiv)));
+  return Math.floor(Math.max(0, loopOn ? loopStartBeat * s : 0) + 1e-8);
+}
+
+/** Integer pattern column `ci` — same math as `beatMathCol` / playline loop wrap. */
+function creationPatternColFromTransportStep(
+  transportStepIndexLive: number,
+  subdiv: number,
+  patternColsDrums: number,
+  loopOn: boolean,
+  loopStartBeat: number,
+  loopEndBeat: number,
+  playMode: 'single' | 'chainAB',
+): number {
+  const subdivR = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(subdiv)));
+  const pcols = Math.max(1, patternColsDrums);
+  const ls = Math.floor(loopStartBeat + 1e-8);
+  const le = Math.floor(loopEndBeat + 1e-8);
+  const lsStep = ls * subdivR;
+  const leStep = le * subdivR;
+  const drumColOffset = creationDrumColOffsetSteps(loopOn, loopStartBeat, subdivR);
+
+  if (loopOn && leStep > lsStep) {
+    const span = Math.max(1, leStep - lsStep);
+    const relLoop = Math.max(0, transportStepIndexLive - lsStep);
+    const pos = (relLoop % span + span) % span;
+    return ((pos % pcols) + pcols) % pcols;
+  }
+  const rel = Math.max(0, transportStepIndexLive - drumColOffset);
+  if (playMode === 'chainAB') {
+    return ((rel % pcols) + pcols) % pcols;
+  }
+  return Math.max(0, Math.min(pcols - 1, rel));
+}
+
+/** Pattern column from fractional beat — same mapping as `creationPatternColFromTransportStep` + playline. */
+function creationPatternColFromDisplayBeat(
+  bDisplay: number,
+  subdiv: number,
+  patternColsDrums: number,
+  loopOn: boolean,
+  loopStartBeat: number,
+  loopEndBeat: number,
+  playMode: 'single' | 'chainAB',
+): number {
+  const subdivR = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(subdiv)));
+  const stepIdx = Math.floor(Math.max(0, bDisplay * subdivR) + 1e-8);
+  return creationPatternColFromTransportStep(
+    stepIdx,
+    subdivR,
+    patternColsDrums,
+    loopOn,
+    loopStartBeat,
+    loopEndBeat,
+    playMode,
+  );
+}
+
+/** Resets quant cell imperative styles (legacy pump tint — kept for tab switches / cleanup). */
+function clearQuantMeasureCellImperativeLit(el: HTMLElement | null): void {
+  if (!el) return;
+  el.style.background = '#121212';
+  el.style.color = '#b98ab9';
+  el.style.boxShadow = 'none';
+  el.removeAttribute('data-drum-quant-imperative-lit');
+}
+
+/** Parse `translate3d(tx px,…)` or CSS `matrix` / `matrix3d` translate X (px) from a keyframe string. */
+function readTranslateXFromTransformString(t: string | undefined): number | null {
+  if (!t) return null;
+  const td = t.match(/translate3d\(\s*([-0-9.eE+]+)\s*px/i);
+  if (td) {
+    const v = parseFloat(td[1]!);
+    return Number.isFinite(v) ? v : null;
+  }
+  if (t.startsWith('matrix3d(')) {
+    const parts = t.slice(9, -1).split(/\s*,\s*/);
+    if (parts.length >= 13) {
+      const tx = parseFloat(parts[12]!);
+      return Number.isFinite(tx) ? tx : null;
+    }
+    return null;
+  }
+  if (t.startsWith('matrix(')) {
+    const parts = t.slice(7, -1).split(/\s*,\s*/);
+    if (parts.length >= 6) {
+      const tx = parseFloat(parts[4]!);
+      return Number.isFinite(tx) ? tx : null;
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Read-only: translate X from the stored drum playline `Animation` (same timeline as compositor arrow).
+ * Does not modify `currentTime` — only reads keyframes + timing.
+ */
+function readDrumPlaylineTxFromKeyframeEffect(a: Animation | null): number | null {
+  if (!a || (a.playState !== 'running' && a.playState !== 'paused')) return null;
+  const eff = a.effect;
+  if (!eff || !(eff instanceof KeyframeEffect)) return null;
+  const kfs = eff.getKeyframes() as { transform?: string | string[] }[];
+  if (kfs.length < 2) return null;
+  const tf0 = kfs[0]?.transform;
+  const tfL = kfs[kfs.length - 1]?.transform;
+  const s0 = Array.isArray(tf0) ? tf0[0] : tf0;
+  const s1 = Array.isArray(tfL) ? tfL[0] : tfL;
+  const t0 = readTranslateXFromTransformString(s0);
+  const t1 = readTranslateXFromTransformString(s1);
+  if (t0 == null || t1 == null) return null;
+  const span = t1 - t0;
+  if (Math.abs(span) < 1e-6) return null;
+  const ct = eff.getComputedTiming();
+  const lp = (ct as ComputedEffectTiming & { localProgress?: number | null }).localProgress;
+  let u: number;
+  if (typeof lp === 'number' && Number.isFinite(lp)) {
+    u = Math.min(1, Math.max(0, lp));
+  } else {
+    const dur = ct.duration;
+    const cur = a.currentTime;
+    if (typeof dur !== 'number' || dur <= 0 || typeof cur !== 'number' || !Number.isFinite(cur)) return null;
+    const local = ((cur % dur) + dur) % dur;
+    u = Math.min(1, Math.max(0, local / dur));
+  }
+  return t0 + (t1 - t0) * u;
+}
+
+function readTranslateXFromWapiKeyframeAnim(el: HTMLElement | null): number | null {
+  if (!el) return null;
+  for (const anim of el.getAnimations()) {
+    const tx = readDrumPlaylineTxFromKeyframeEffect(anim);
+    if (tx != null) return tx;
+  }
+  return null;
+}
+
+function readTranslateXFromComputedTransform(el: HTMLElement | null): number | null {
+  if (!el) return null;
+  const t = getComputedStyle(el).transform;
+  if (!t || t === 'none') return null;
+  return readTranslateXFromTransformString(t);
+}
+
+/**
+ * BAR / MSR / phrase from **global** integer beat (same clock as SE2 `refillMetronome` / `k`).
+ * - **Bar** stays anchored to the visible loop (`loopStartBar` + `loopStartBeat`) for ruler alignment.
+ * - **Measure** uses the same phase as the metronome: `(⌊beat⌋ − transportOriginBeat) % q` so MSR
+ *   rolls with **k % bpb** downbeats (Studio Editor 2), not pattern column `ci` (which repeats in a loop).
+ */
+function computeCreationTransportHudFromBeat(
+  beatNow: number,
+  opts: {
+    subdiv: number;
+    pcols: number;
+    loopOn: boolean;
+    loopStartBeat: number;
+    loopEndBeat: number;
+    playMode: 'single' | 'chainAB';
+    loopStartBar: number;
+    qpb: number;
+    /** Same quarter index as `nextStepBeatRef` / SE2 `nextMetroKRef` at play (session origin beat). */
+    transportOriginBeat: number;
+  },
+): CreationHudSync {
+  const { loopStartBeat, loopStartBar, qpb, transportOriginBeat } = opts;
+  void opts.subdiv;
+  void opts.pcols;
+  void opts.loopOn;
+  void opts.loopEndBeat;
+  void opts.playMode;
+  const q = Math.max(2, Math.min(16, Math.round(qpb)));
+  const bInt = Math.floor(Math.max(0, beatNow) + 1e-8);
+  const lsB = Math.floor(Math.max(0, loopStartBeat) + 1e-8);
+  const orgB = Math.floor(Math.max(0, transportOriginBeat) + 1e-8);
+  const beatInRegion = Math.max(0, bInt - lsB);
+  const bar = loopStartBar + Math.floor(beatInRegion / q);
+  const measure = (((bInt - orgB) % q) + q) % q + 1;
+  const phrase = Math.floor((Math.max(1, bar) - 1) / MEASURES_PER_4BAR_PHRASE) + 1;
+  return { bar, measure, phrase };
+}
+
+/** Studio Editor 2 `formatBarsBeatsTicks` — global bar · beat-in-bar · centisecond tick. */
+function formatCreationSe2BarsBeatsTicks(displayBeats: number, beatsPerBar: number): string {
+  const bpb = Math.max(1, beatsPerBar);
+  const db = Math.max(0, displayBeats);
+  const bar = Math.floor(db / bpb) + 1;
+  const beatInBar = Math.floor(db % bpb) + 1;
+  const tick = Math.floor((db % 1) * 100);
+  return `${bar}.${beatInBar}.${String(tick).padStart(2, '0')}`;
+}
+
+/** Studio Editor 2 `formatTimeMmSsFf` — MM:SS:cs from musical time at BPM. */
+function formatCreationSe2TimeMmSsFf(beats: number, bpm: number): string {
+  const totalSeconds = (Math.max(0, beats) / Math.max(1, bpm)) * 60;
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  const f = Math.floor((totalSeconds % 1) * 100);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(f).padStart(2, '0')}`;
+}
+
+/** Fixed 1:1 pad index → mixer channel (CH1–CH16); not user-editable. */
+function creationPadMixerCh(padIndex: number): number {
+  return padIndex + 1;
+}
+
+const CREATION_PAD_CHANNELS_FIXED = Array.from({ length: 16 }, (_, i) => i + 1);
 
 // ── BAR/MEASURE HUD: display-only from master transport frame state ────────────────────────────────
 
@@ -146,121 +430,212 @@ function publishCreationRulerBeat(m: number | null) {
   });
 }
 
-type CreationTransportHudProps = {
-  transportNotStopped: boolean;
-  qpb: number;
-  measureInBar: number;
-  displayBarNumber: number;
-  phraseEveryFourMeasures: number;
-  debugText?: string;
+/** DOM slots RAF paints for BAR + beat-in-bar fraction + phrase (no separate MSR LED strip). */
+type CreationHudDomSlots = {
+  barDigits: HTMLSpanElement | null;
+  msrFrac: HTMLSpanElement | null;
+  phrase: HTMLSpanElement | null;
 };
 
-/** Display-only: numbers come from parent so MEASURE/BAR use the same quarter index as the playhead. */
-function CreationTransportHud({
+function paintCreationHudQuarterIntoDom(
+  slots: CreationHudDomSlots,
+  hud: CreationHudSync,
+  qpb: number,
+  opts: { active: boolean },
+  holdRef: MutableRefObject<{ m: number; b: number; ph: number }>,
+  publishBeatToRuler: boolean,
+): void {
+  const q = Math.max(2, Math.min(16, Math.round(qpb)));
+  const m = Math.max(1, Math.min(q, hud.measure));
+  const bar = Math.max(1, hud.bar);
+  const ph = hud.phrase;
+  holdRef.current = { m, b: bar, ph };
+  const { active } = opts;
+  const bEl = slots.barDigits;
+  if (bEl) {
+    bEl.textContent = String(bar).padStart(3, '0');
+    bEl.style.color = active ? '#00E5FF' : '#444';
+  }
+  const msrEl = slots.msrFrac;
+  if (msrEl) {
+    msrEl.textContent = `${m}/${q}`;
+  }
+  const phEl = slots.phrase;
+  if (phEl) {
+    phEl.textContent = `PH${ph}`;
+  }
+  if (publishBeatToRuler) {
+    publishCreationRulerBeat(m);
+  }
+}
+
+type CreationTransportHudBarProps = {
+  transportNotStopped: boolean;
+  displayBarNumber: number;
+  measureInBar: number;
+  measureLedCount: number;
+  paintHudFromRaf?: boolean;
+  hudDomSlotsRef?: MutableRefObject<CreationHudDomSlots>;
+  /** Compact row (sequence toolbar) vs transport strip */
+  compact?: boolean;
+};
+
+/** BAR digits only — {@link paintCreationHudQuarterIntoDom} updates `barDigits` during play/rec. */
+function CreationTransportHudBar({
   transportNotStopped,
+  displayBarNumber,
+  measureInBar,
+  measureLedCount,
+  paintHudFromRaf,
+  hudDomSlotsRef,
+  compact,
+}: CreationTransportHudBarProps) {
+  const barTitle = `Creation bar ${displayBarNumber}. Measure ${measureInBar} of ${measureLedCount}.`;
+  const showReactHudText = !paintHudFromRaf;
+  return (
+    <div
+      role="group"
+      aria-label={`Bar ${displayBarNumber}`}
+      title={barTitle}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        fontFamily: 'monospace',
+        padding: compact ? '0 2px' : undefined,
+      }}
+    >
+      <span style={{ fontSize: compact ? 4 : 5, color: '#444', letterSpacing: 1.2, lineHeight: 1 }}>BAR</span>
+      <span
+        ref={(el) => {
+          if (hudDomSlotsRef) hudDomSlotsRef.current.barDigits = el;
+        }}
+        style={{
+          fontSize: compact ? 12 : 14,
+          fontWeight: 900,
+          color: paintHudFromRaf ? '#00E5FF' : transportNotStopped ? '#00E5FF' : '#444',
+          lineHeight: 1,
+        }}
+      >
+        {showReactHudText ? String(displayBarNumber).padStart(3, '0') : '\u2007\u2007\u2007'}
+      </span>
+    </div>
+  );
+}
+
+type CreationTransportHudMsrProps = {
+  qpb: number;
+  measureInBar: number;
+  phraseEveryFourMeasures: number;
+  debugText?: string;
+  paintHudFromRaf?: boolean;
+  hudDomSlotsRef?: MutableRefObject<CreationHudDomSlots>;
+};
+
+/** Measure / phrase readout (BAR counter mounts next to SEQUENCE on the grid tab). */
+function CreationTransportHudMsr({
   qpb,
   measureInBar,
-  displayBarNumber,
   phraseEveryFourMeasures,
   debugText,
-}: CreationTransportHudProps) {
-  const measureLedCount = MEASURES_PER_BAR;
+  paintHudFromRaf,
+  hudDomSlotsRef,
+}: CreationTransportHudMsrProps) {
+  const measureLedCount = Math.max(2, Math.min(16, Math.round(qpb)));
+  const showReactHudText = !paintHudFromRaf;
 
   return (
     <div
       style={{
         display: 'flex',
-        alignItems: 'stretch',
-        background: '#000',
-        border: `1px solid ${transportNotStopped ? '#D500F966' : '#222'}`,
-        borderRadius: 4,
-        overflow: 'hidden',
-        fontFamily: 'monospace',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        padding: '1px 8px',
       }}
     >
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          padding: '2px 8px',
-          borderRight: '1px solid #1a1a1a',
+          fontSize: 7,
+          color: '#888',
+          fontWeight: 700,
+          lineHeight: 1.15,
+          justifyContent: 'center',
         }}
-        title={`Creation bar ${displayBarNumber}: four measures (1→2→3→4) per bar — not DAW time sig (${qpb} beats/notated bar). Now measure ${measureInBar} of ${CREATION_QUARTERS_PER_BAR}. Phrase ${phraseEveryFourMeasures} (every ${MEASURES_PER_4BAR_PHRASE} Creation bars).`}
       >
-        <span style={{ fontSize: 6, color: '#444', letterSpacing: 2 }}>BAR</span>
         <span
-          style={{
-            fontSize: 18,
-            fontWeight: 900,
-            color: transportNotStopped ? '#00E5FF' : '#444',
-            lineHeight: 1,
+          ref={(el) => {
+            if (hudDomSlotsRef) hudDomSlotsRef.current.msrFrac = el;
           }}
         >
-          {String(displayBarNumber).padStart(3, '0')}
+          {showReactHudText ? `${measureInBar}/${measureLedCount}` : '\u2007\u2007\u2007\u2007'}
         </span>
-        <span style={{ fontSize: 9, color: '#aaa', marginTop: 1, fontWeight: 700 }}>
-          {measureInBar}→{CREATION_QUARTERS_PER_BAR}
+        <span
+          ref={(el) => {
+            if (hudDomSlotsRef) hudDomSlotsRef.current.phrase = el;
+          }}
+          style={{ color: '#555', fontSize: 6 }}
+        >
+          {showReactHudText ? `PH${phraseEveryFourMeasures}` : '\u2007\u2007\u2007\u2007'}
         </span>
-        <span style={{ fontSize: 8, color: '#666', marginTop: 1 }}>
-          PH {phraseEveryFourMeasures}
-        </span>
-        {debugText ? (
-          <span style={{ fontSize: 7, color: '#f66', marginTop: 1, letterSpacing: 0.3 }}>
-            {debugText}
-          </span>
-        ) : null}
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          padding: '2px 8px',
-        }}
-        title={`Measures 1–${measureLedCount} in order within each Creation bar (${CREATION_QUARTERS_PER_BAR} per bar). Not the same as DAW bar lines (${qpb} beats/notated bar).`}
-      >
-        <span style={{ fontSize: 6, color: '#444', letterSpacing: 1 }}>MEASURE</span>
-        <div style={{ display: 'flex', gap: 3, marginTop: 2, flexWrap: 'wrap' }}>
-          {Array.from({ length: measureLedCount }, (_, i) => i + 1).map((m) => (
-            <div
-              key={m}
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 8,
-                fontWeight: 900,
-                background:
-                  transportNotStopped && measureInBar === m ? '#D500F920' : '#0f0f0f',
-                color: transportNotStopped && measureInBar === m ? '#D500F9' : '#2a2a2a',
-                border: `1px solid ${
-                  transportNotStopped && measureInBar === m ? '#D500F9' : '#1a1a1a'
-                }`,
-                boxShadow:
-                  transportNotStopped && measureInBar === m ? '0 0 8px #D500F9' : 'none',
-              }}
-            >
-              {m}
-            </div>
-          ))}
-        </div>
-      </div>
+      {debugText ? (
+        <span
+          title={debugText}
+          style={{
+            fontSize: 6,
+            color: '#f66',
+            maxWidth: 56,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            letterSpacing: 0.2,
+          }}
+        >
+          {debugText}
+        </span>
+      ) : null}
     </div>
   );
 }
 
-const BAR_PALETTE = ['#ffff00','#00E5FF','#00ff88','#ff6b35','#a78bfa','#f472b6','#60a5fa','#ffcc00'];
+const BAR_PALETTE = ['#ffff00','#00E5FF','#00ff88','#ff6b35','#a78bfa','#f472b6','#60a5fa','#c4b5fd'];
 
 function barColor(b: number) { return BAR_PALETTE[b % BAR_PALETTE.length]; }
 
 function colColor(ci: number) { return barColor(Math.floor(ci / MEASURES_PER_BAR)); }
 
+const PAD_BANK_GROUP_TAGS = [
+  'KICK', 'KICK', 'SNR', 'HAT', 'HAT', 'TOM', 'TOM', 'RIM',
+  'PERC', 'PERC', 'CYM', 'CYM', 'FX', 'FX', 'FX', 'SUB',
+] as const;
+
+/** Beat Lab lane labels (left rail + pattern rows). */
+const GENIUS_LANE_LABELS = [
+  'Kick 1',
+  'Snare 1',
+  'Snare 2',
+  'Hi Hat 2',
+  'Open Hat',
+  'Pan Crash',
+  'Tom',
+  'Rim',
+  'Perc 1',
+  'Perc 2',
+  'China',
+  'Ride',
+  'FX 1',
+  'FX 2',
+  'FX 3',
+  'My Place',
+] as const;
+
 function drumLaneBg(rowIndex: number): string {
-  return rowIndex % 2 === 0 ? '#102938' : '#0e2432';
+  return rowIndex % 2 === 0 ? '#12182a' : '#0e1626';
 }
 
 function drumStepBg(
@@ -269,10 +644,11 @@ function drumStepBg(
   isHead: boolean,
   stepsPerBar: number = MEASURES_PER_BAR,
 ): string {
-  if (isHead) return '#1a3a4f';
+  if (isHead) return '#1f3d5c';
   const lane = drumLaneBg(rowIndex);
-  if (ci % (stepsPerBar * 4) === 0) return '#1c3e54';
-  if (ci % stepsPerBar === 0) return '#18405a';
+  /* Genius-style bar banding: every 4 steps (one “measure” strip) slightly lifted */
+  if (ci % (stepsPerBar * 4) === 0) return '#1a2840';
+  if (ci % stepsPerBar === 0) return '#162238';
   return lane;
 }
 
@@ -293,7 +669,10 @@ function pianoStepBg(
 }
 
 
-/** One-shot sample through the same master bus / pan as drum synth (MPC-style pad sample). */
+/**
+ * One-shot sample through the same master bus / pan as drum synth (MPC-style pad sample).
+ * Returns `stop()` to cut this voice (long files, stacking hits, accidental “loops” from retriggers).
+ */
 function playPadSampleBuffer(
   ctx: AudioContext,
   buffer: AudioBuffer,
@@ -301,7 +680,12 @@ function playPadSampleBuffer(
   vel: number,
   when: number,
   channelVolumes: Record<number, number>,
-) {
+  /** 1 = native file speed — rate also shifts pitch (Web Audio). */
+  playbackRate = 1,
+  /** Fires when this voice ends (natural or `stop()`) — for sampler voice bookkeeping. */
+  afterDispose?: () => void,
+  sampler: PadSamplerPlaybackOpts = defaultPadSamplerPlaybackOpts(),
+): () => void {
   const chVol = (channelVolumes[chId] ?? 80) / 100;
   const vol = (vel / 127) * 0.85 * chVol;
   const rawPan =
@@ -314,21 +698,221 @@ function playPadSampleBuffer(
   panNode.connect(dest);
   const src = ctx.createBufferSource();
   src.buffer = buffer;
+  const rateMul = Math.pow(2, sampler.fineSemi / 12);
+  src.playbackRate.value = Math.min(4, Math.max(0.0625, playbackRate * rateMul));
   const g = ctx.createGain();
-  g.gain.value = vol;
-  src.connect(g);
+  const snap = Math.max(0, Math.min(1, sampler.triggerSnap ?? 0));
+
+  const sr = buffer.sampleRate;
+  const ny = sr * 0.48;
+  const hpNode =
+    sampler.hpHz >= 25
+      ? (() => {
+          const hp = ctx.createBiquadFilter();
+          hp.type = 'highpass';
+          hp.frequency.value = Math.min(sampler.hpHz, ny);
+          hp.Q.value = 0.707;
+          return hp;
+        })()
+      : null;
+  const lpNode =
+    sampler.lpHz >= 200 && sampler.lpHz < 19900
+      ? (() => {
+          const lp = ctx.createBiquadFilter();
+          lp.type = 'lowpass';
+          lp.frequency.value = Math.min(sampler.lpHz, ny);
+          lp.Q.value = 0.707;
+          return lp;
+        })()
+      : null;
+
+  let tail: AudioNode = src;
+  if (hpNode) {
+    src.connect(hpNode);
+    tail = hpNode;
+  }
+  if (lpNode) {
+    tail.connect(lpNode);
+    tail = lpNode;
+  }
+  tail.connect(g);
   g.connect(panNode);
-  src.start(when);
-  src.onended = () => {
+
+  const dur = buffer.duration;
+  const t0 = Math.max(0, Math.min(0.9999, sampler.trim0)) * dur;
+  const t1 = Math.max(t0 + 0.002, Math.min(dur, sampler.trim1 * dur));
+  const playDur = Math.max(0.002, t1 - t0);
+
+  let disposed = false;
+  const disposeGraph = () => {
+    if (disposed) return;
+    disposed = true;
+    try {
+      g.gain.cancelScheduledValues(ctx.currentTime);
+    } catch {
+      /* */
+    }
     try {
       src.disconnect();
+      hpNode?.disconnect();
+      lpNode?.disconnect();
       g.disconnect();
       panNode.disconnect();
     } catch {
       /* */
     }
+    afterDispose?.();
   };
+  src.onended = disposeGraph;
+
+  const stop = () => {
+    if (disposed) return;
+    try {
+      src.stop(0);
+    } catch {
+      /* InvalidStateError — already stopped or not started */
+    }
+    disposeGraph();
+  };
+
+  try {
+    /** MPC-style sample trigger: brief overshoot on the output gain, then settle (harder one-shot punch). */
+    if (snap < 1e-4) {
+      g.gain.setValueAtTime(vol, when);
+    } else {
+      const peakMul = 1 + snap * 0.62;
+      const decaySec = 0.0012 + (1 - snap) * 0.016;
+      g.gain.cancelScheduledValues(when);
+      g.gain.setValueAtTime(vol * peakMul, when);
+      g.gain.linearRampToValueAtTime(vol, when + decaySec);
+    }
+    src.start(when, t0, playDur);
+  } catch {
+    disposeGraph();
+    return () => {};
+  }
+  return stop;
 }
+
+/** Decimated peaks for sample-edit waveform (absolute sample magnitudes, 0…1 per bucket). */
+function computePadSampleWaveformPeaks(buf: AudioBuffer, bucketCount = 400): number[] {
+  const channels = Math.min(buf.numberOfChannels, 2);
+  const len = buf.length;
+  if (len <= 0 || bucketCount <= 0) {
+    return Array.from({ length: Math.max(1, bucketCount) }, () => 0);
+  }
+  const step = len / bucketCount;
+  const peaks: number[] = new Array(bucketCount);
+  for (let i = 0; i < bucketCount; i++) {
+    let max = 0;
+    const j0 = Math.floor(i * step);
+    const j1 = Math.min(Math.floor((i + 1) * step), len);
+    for (let c = 0; c < channels; c++) {
+      const ch = buf.getChannelData(c);
+      for (let j = j0; j < j1; j++) {
+        const v = Math.abs(ch[j]!);
+        if (v > max) max = v;
+      }
+    }
+    peaks[i] = max;
+  }
+  return peaks;
+}
+
+function formatBeatLabSampleTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00.000';
+  const totalMs = Math.round(seconds * 1000);
+  const m = Math.floor(totalMs / 60000);
+  const s = Math.floor((totalMs % 60000) / 1000);
+  const ms = totalMs % 1000;
+  return `${m}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+}
+
+const PAD_TRIM_WAVE_CSS_H = 56;
+
+const PadSampleTrimWaveform = memo(function PadSampleTrimWaveform({
+  peaks,
+  trim0,
+  trim1,
+}: {
+  peaks: number[] | null;
+  trim0: number;
+  trim1: number;
+}) {
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useLayoutEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const draw = () => {
+      const ctx2 = canvas.getContext('2d');
+      if (!ctx2) return;
+      const cssW = Math.max(120, canvas.clientWidth || 280);
+      const cssH = PAD_TRIM_WAVE_CSS_H;
+      const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+      canvas.width = Math.max(1, Math.floor(cssW * dpr));
+      canvas.height = Math.floor(cssH * dpr);
+      ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx2.clearRect(0, 0, cssW, cssH);
+      ctx2.fillStyle = '#060b0a';
+      ctx2.fillRect(0, 0, cssW, cssH);
+      const n = peaks?.length ?? 0;
+      if (n < 1) {
+        ctx2.fillStyle = '#4b5563';
+        ctx2.font = '10px ui-monospace, system-ui, sans-serif';
+        ctx2.fillText('No waveform', 8, cssH / 2 + 3);
+        return;
+      }
+      let peakMax = 1e-6;
+      for (let i = 0; i < n; i++) peakMax = Math.max(peakMax, peaks[i]!);
+      const scale = Math.min((cssH * 0.46) / peakMax, cssH * 4);
+      const midY = cssH / 2;
+      const barW = Math.max(1, cssW / n);
+      const t0 = Math.max(0, Math.min(1, trim0));
+      const t1 = Math.max(t0 + 1e-4, Math.min(1, trim1));
+      const iStart = Math.max(0, Math.min(n - 1, Math.floor(t0 * n)));
+      const iEnd = Math.max(iStart + 1, Math.min(n, Math.ceil(t1 * n)));
+      for (let i = 0; i < n; i++) {
+        const x = (i / n) * cssW;
+        const bh = Math.min(peaks[i]! * scale, cssH * 0.48);
+        const outside = i < iStart || i >= iEnd;
+        ctx2.fillStyle = outside ? 'rgba(45, 55, 52, 0.65)' : '#5eead4';
+        ctx2.fillRect(x, midY - bh / 2, barW - 0.55, Math.max(1, bh));
+      }
+      ctx2.strokeStyle = 'rgba(251, 191, 72, 0.95)';
+      ctx2.lineWidth = 1.25;
+      const x0 = t0 * cssW;
+      const x1 = t1 * cssW;
+      ctx2.beginPath();
+      ctx2.moveTo(x0 + 0.5, 0);
+      ctx2.lineTo(x0 + 0.5, cssH);
+      ctx2.stroke();
+      ctx2.beginPath();
+      ctx2.moveTo(x1 - 0.5, 0);
+      ctx2.lineTo(x1 - 0.5, cssH);
+      ctx2.stroke();
+    };
+    draw();
+    const ro = new ResizeObserver(() => draw());
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [peaks, trim0, trim1]);
+
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden
+      style={{
+        width: '100%',
+        height: PAD_TRIM_WAVE_CSS_H,
+        display: 'block',
+        borderRadius: 4,
+        border: '1px solid #1a2824',
+        background: '#060b0a',
+      }}
+    />
+  );
+});
 
 
 type DrumPattern = boolean[][];
@@ -337,377 +921,12 @@ type PianoNote   = { row: number; col: number };
 
 interface Bank   { drums: DrumPattern; notes: PianoNote[]; }
 
-interface FxParam { label: string; value: number; }
-
-interface Effect { type: string; enabled: boolean; params: FxParam[]; }
-
-function GraphicEQ({
-  params,
-  color,
-  signal,
-  onBandGainChange,
-}: {
-  params: FxParam[];
-  color: string;
-  signal: number;
-  onBandGainChange?: (bandIndex: number, value: number) => void;
-}) {
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const [dragBand, setDragBand] = useState<number | null>(null);
-  const dragStartYRef = useRef(0);
-  const dragStartValueRef = useRef(50);
-  const bandColors = [
-    '#00E5FF', '#2ad9ff', '#5bd4ff', '#7fc3ff',
-    '#9a7cff', '#b56bff', '#D500F9', '#e64bd1',
-    '#ff5bb0', '#ff7f8a', '#ffad5b', '#ffcc00',
-  ];
-  const chartW = 236;
-  const chartH = 92;
-  const bandXs = [14, 30, 46, 62, 78, 94, 110, 126, 146, 166, 190, 214];
-  const bandLabels = ['60', '90', '140', '220', '350', '550', '850', '1.3k', '2k', '3.2k', '5k', '8k'];
-  const gainFromParams = (i: number) =>
-    params.find((p) => p.label === `Band ${i + 1} Gain`)?.value ??
-    params.find((p) => p.label === ['Low Gain', 'Mid Gain', 'High Gain'][i])?.value ??
-    50;
-  const gains = Array.from({ length: 12 }, (_, i) => gainFromParams(i));
-  const toDb = (v: number) => ((v - 50) / 50) * 24; // wider range: -24..+24dB
-  const valueToY = (v: number) => 46 - (toDb(v) / 24) * 34;
-  const yToValue = (y: number) => {
-    const clamped = Math.max(8, Math.min(84, y));
-    const db = ((46 - clamped) / 34) * 24;
-    return Math.round(Math.max(0, Math.min(100, 50 + (db / 24) * 50)));
-  };
-  const points = gains.map((g, i) => ({ x: bandXs[i], y: valueToY(g) }));
-  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  const bandEnergy = gains.map((g) => Math.max(0, Math.min(1, signal * (0.65 + Math.abs(g - 50) / 70))));
-  const bins = Array.from({ length: 54 }, (_, i) => {
-    const x = 4 + i * 4.2;
-    const posX = Math.round(x);
-    let y = points[0].y;
-    for (let j = 0; j < points.length - 1; j += 1) {
-      const a = points[j];
-      const b = points[j + 1];
-      if (posX >= a.x && posX <= b.x) {
-        const t = (posX - a.x) / Math.max(1, b.x - a.x);
-        y = a.y + (b.y - a.y) * t;
-        break;
-      }
-      if (posX > points[points.length - 1].x) y = points[points.length - 1].y;
-    }
-    const reactiveLift = 8 + Math.round(signal * 34);
-    const h = Math.max(4, Math.min(82, Math.round(86 - y + reactiveLift)));
-    return { x, h };
-  });
-  const beginDrag = (bandIndex: number, e: React.PointerEvent<SVGCircleElement>) => {
-    setDragBand(bandIndex);
-    dragStartYRef.current = e.clientY;
-    dragStartValueRef.current = gains[bandIndex] ?? 50;
-  };
-  const endDrag = () => setDragBand(null);
-  const moveDrag = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (dragBand === null || !onBandGainChange || !svgRef.current) return;
-    const deltaY = dragStartYRef.current - e.clientY;
-    // Shift = fine, Alt = large.
-    const sensitivity = e.shiftKey ? 0.12 : e.altKey ? 0.7 : 0.32;
-    const next = Math.max(0, Math.min(100, Math.round(dragStartValueRef.current + deltaY * sensitivity)));
-    onBandGainChange(dragBand, next);
-  };
-
-  return (
-    <div style={{ marginTop: 6, marginBottom: 6, borderRadius: 4, border: '1px solid #233746', background: 'linear-gradient(180deg, #071019 0%, #071627 100%)', padding: 8 }}>
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${chartW} ${chartH}`}
-        width="100%"
-        height="186"
-        preserveAspectRatio="none"
-        aria-label="6-band graphic EQ response"
-        onPointerMove={moveDrag}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-      >
-        <defs>
-          <linearGradient id="eqBgGradient6" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#08131e" />
-            <stop offset="100%" stopColor="#0a1f2f" />
-          </linearGradient>
-          <linearGradient id="eqCurveGradient6" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#00E5FF" />
-            <stop offset="50%" stopColor="#D500F9" />
-            <stop offset="100%" stopColor="#ffcc00" />
-          </linearGradient>
-          <linearGradient id="eqBarsGradient6" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#30d5ff" />
-            <stop offset="55%" stopColor="#1ab3f0" />
-            <stop offset="100%" stopColor="#1274a4" />
-          </linearGradient>
-        </defs>
-        <rect x="0" y="0" width={chartW} height={chartH} fill="url(#eqBgGradient6)" />
-        {[10, 18, 26, 34, 42, 50, 58, 66, 74, 82].map((y, yi) => (
-          <line
-            key={`h-${y}`}
-            x1="0"
-            y1={y}
-            x2={chartW}
-            y2={y}
-            stroke={signal > 0.04 && yi % 2 === 0 ? 'rgba(66,191,255,0.45)' : '#1a3246'}
-            strokeWidth={signal > 0.08 && yi % 2 === 0 ? 1.2 : 1}
-          />
-        ))}
-        {Array.from({ length: 24 }, (_, i) => 10 + i * ((chartW - 20) / 23)).map((x) => {
-          let nearest = 0;
-          let minD = Infinity;
-          for (let bi = 0; bi < bandXs.length; bi += 1) {
-            const d = Math.abs(x - bandXs[bi]);
-            if (d < minD) {
-              minD = d;
-              nearest = bi;
-            }
-          }
-          const e = bandEnergy[nearest] ?? 0;
-          const lit = e > 0.06;
-          return (
-            <line
-              key={`v-${x}`}
-              x1={x}
-              y1="0"
-              x2={x}
-              y2={chartH}
-              stroke={lit ? bandColors[nearest] : '#1a3246'}
-              strokeOpacity={lit ? 0.25 + e * 0.65 : 1}
-              strokeWidth={lit ? 1 + e * 0.8 : 1}
-            />
-          );
-        })}
-        {bins.map((b, i) => (
-          <rect key={`bin-${i}`} x={b.x} y={chartH - 4 - b.h} width="2.8" height={b.h} rx="0.8" fill="url(#eqBarsGradient6)" opacity={0.92} />
-        ))}
-        <path d={path} fill="none" stroke="url(#eqCurveGradient6)" strokeWidth={2.4 + signal * 2.4} />
-        {points.map((p, i) => (
-          <circle
-            key={`pt-${i}`}
-            cx={p.x}
-            cy={p.y}
-            r={2.8 + signal * 1.2}
-            fill={bandColors[i]}
-            stroke="#0b0b0b"
-            strokeWidth="1"
-            style={{ cursor: 'ns-resize', touchAction: 'none' }}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              beginDrag(i, e);
-              (e.currentTarget as SVGCircleElement).setPointerCapture(e.pointerId);
-            }}
-            onDoubleClick={(e) => {
-              e.preventDefault();
-              onBandGainChange?.(i, 50); // 0 dB center
-            }}
-          />
-        ))}
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 7, color: '#7ca0bb', fontFamily: 'monospace', marginTop: 6 }}>
-        {bandLabels.map((l, i) => (
-          <span key={l} style={{ color: bandColors[i], fontWeight: 700 }}>{l}</span>
-        ))}
-      </div>
-      <div style={{ marginTop: 4, fontSize: 7, color: '#6f879a', fontFamily: 'monospace', textAlign: 'right' }}>
-        Drag dots: Shift=fine, Alt=big
-      </div>
-      <div style={{ marginTop: 2, fontSize: 7, color: '#6f879a', fontFamily: 'monospace', textAlign: 'right' }}>
-        Double-click dot: reset band to 0 dB
-      </div>
-    </div>
-  );
-}
-
-function formatFxParamValue(label: string, value: number): string {
-  const l = label.toLowerCase();
-  if (l.includes('gain')) {
-    const db = (((value - 50) / 50) * 12).toFixed(1);
-    return `${db} dB`;
-  }
-  if (l === 'low freq') {
-    const hz = Math.round(40 * Math.pow(12, value / 100)); // ~40..480 Hz
-    return `${hz} Hz`;
-  }
-  if (l === 'mid freq') {
-    const hz = Math.round(200 * Math.pow(10, value / 100)); // ~200..2000 Hz
-    return `${hz} Hz`;
-  }
-  if (l === 'high freq') {
-    const hz = Math.round(1500 * Math.pow(8, value / 100)); // ~1.5k..12k Hz
-    return `${hz} Hz`;
-  }
-  if (l.includes('time') || l.includes('attack')) return `${Math.round(5 + value * 4.5)} ms`;
-  if (l.includes('pre-delay')) return `${Math.round(value * 2.4)} ms`;
-  if (l.includes('release')) return `${Math.round(20 + value * 8)} ms`;
-  if (l.includes('rate')) return `${(0.1 + (value / 100) * 9.9).toFixed(2)} Hz`;
-  if (l.includes('depth') || l.includes('width') || l.includes('shape') || l.includes('size') || l.includes('diffusion')) return `${value}%`;
-  if (l.includes('threshold')) return `${Math.round(-60 + value * 0.6)} dB`;
-  if (l.includes('ratio')) return `${(1 + (value / 100) * 19).toFixed(1)}:1`;
-  if (l.includes('output') || l.includes('trim') || l.includes('gain')) return `${(((value - 50) / 50) * 12).toFixed(1)} dB`;
-  if (l.includes('feedback')) return `${value}%`;
-  if (l.includes('mix') || l.includes('wet') || l.includes('dry')) return `${value}%`;
-  if (l.includes('drive')) return `${value}%`;
-  if (l.includes('cutoff')) return `${Math.round(40 * Math.pow(250, value / 100))} Hz`;
-  if (l.includes('resonance')) return `${(0.1 + (value / 100) * 9.9).toFixed(1)} Q`;
-  return String(value);
-}
-
-function normalizeEqParams(params: FxParam[]): FxParam[] {
-  const read = (label: string) => params.find((p) => p.label === label)?.value;
-  const lowLegacy = read('Low Gain');
-  const midLegacy = read('Mid Gain');
-  const highLegacy = read('High Gain');
-  const filled = Array.from({ length: 12 }, (_, i) => {
-    const bandLabel = `Band ${i + 1} Gain`;
-    const bandVal = read(bandLabel);
-    if (typeof bandVal === 'number') return { label: bandLabel, value: bandVal };
-    // Backfill legacy 3-band EQ into 12-band layout.
-    if (i < 4 && typeof lowLegacy === 'number') return { label: bandLabel, value: lowLegacy };
-    if (i >= 4 && i < 8 && typeof midLegacy === 'number') return { label: bandLabel, value: midLegacy };
-    if (i >= 8 && typeof highLegacy === 'number') return { label: bandLabel, value: highLegacy };
-    return { label: bandLabel, value: 50 };
-  });
-  return filled;
-}
-
-function FxKnob({
-  label,
-  value,
-  color,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  color: string;
-  onChange: (v: number) => void;
-}) {
-  const startYRef = useRef(0);
-  const startValRef = useRef(value);
-  const draggingRef = useRef(false);
-  const angle = -135 + (Math.max(0, Math.min(100, value)) / 100) * 270;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 74 }}>
-      <div
-        onPointerDown={(e) => {
-          e.preventDefault();
-          draggingRef.current = true;
-          startYRef.current = e.clientY;
-          startValRef.current = value;
-          (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={(e) => {
-          if (!draggingRef.current) return;
-          const sensitivity = e.shiftKey ? 0.18 : e.altKey ? 1.0 : 0.58;
-          const delta = (startYRef.current - e.clientY) * sensitivity;
-          onChange(Math.max(0, Math.min(100, Math.round(startValRef.current + delta))));
-        }}
-        onPointerUp={(e) => {
-          draggingRef.current = false;
-          (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
-        }}
-        onPointerCancel={(e) => {
-          draggingRef.current = false;
-          (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
-        }}
-        style={{
-          width: 42,
-          height: 42,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle at 30% 25%, #2f3941 0%, #1a2127 65%, #10161b 100%)',
-          border: `1px solid ${color}66`,
-          boxShadow: `inset 0 0 0 1px #000, 0 0 8px ${color}33`,
-          position: 'relative',
-          cursor: 'ns-resize',
-          touchAction: 'none',
-        }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            width: 2,
-            height: 15,
-            borderRadius: 2,
-            background: color,
-            transform: `translate(-50%, -96%) rotate(${angle}deg)`,
-            transformOrigin: '50% 100%',
-            boxShadow: `0 0 4px ${color}`,
-          }}
-        />
-      </div>
-      <span style={{ fontSize: 8, fontWeight: 700, color: '#90a9bc', fontFamily: 'monospace' }}>{label}</span>
-      <span style={{ fontSize: 8, color: '#6f879a', fontFamily: 'monospace' }}>{formatFxParamValue(label, value)}</span>
-    </div>
-  );
-}
-
-function EffectVisualizer({
-  type,
-  params,
-  signal,
-}: {
-  type: string;
-  params: FxParam[];
-  signal: number;
-}) {
-  const p = (i: number, fallback = 50) => params[i]?.value ?? fallback;
-  const a = p(0);
-  const b = p(1);
-  const c = p(2);
-  const hueBase =
-    type === 'Reverb' ? 165 :
-    type === 'Delay' ? 205 :
-    type === 'Distortion' ? 12 :
-    type === 'Filter' ? 58 :
-    type === 'Compressor' ? 300 :
-    type === 'Chorus' ? 230 :
-    type === 'Phaser' ? 280 : 190;
-  const points = Array.from({ length: 28 }, (_, i) => {
-    const t = (i / 27) * Math.PI * 2;
-    const wobble = 14 + (a / 100) * 10 + signal * 10 + Math.sin(t * (1 + b / 60)) * (4 + c / 20 + signal * 6);
-    const x = 70 + Math.cos(t) * wobble;
-    const y = 50 + Math.sin(t) * wobble;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  return (
-    <div
-      style={{
-        marginBottom: 8,
-        borderRadius: 6,
-        border: `1px solid hsla(${hueBase}, 80%, 60%, 0.35)`,
-        background: `radial-gradient(circle at 30% 25%, hsla(${hueBase}, 85%, 50%, 0.20) 0%, rgba(8,18,28,0.95) 55%, rgba(7,15,24,1) 100%)`,
-        boxShadow: `inset 0 0 ${30 + signal * 36}px hsla(${hueBase}, 75%, 45%, ${0.14 + signal * 0.3})`,
-        padding: 8,
-      }}
-    >
-      <svg viewBox="0 0 140 96" width="100%" height="96" preserveAspectRatio="xMidYMid meet" aria-label={`${type} visualizer`}>
-        <defs>
-          <linearGradient id={`fx-grad-${type}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={`hsla(${hueBase}, 100%, 72%, 0.85)`} />
-            <stop offset="100%" stopColor={`hsla(${(hueBase + 70) % 360}, 100%, 58%, 0.70)`} />
-          </linearGradient>
-        </defs>
-        {Array.from({ length: 9 }, (_, i) => {
-          const r = 8 + i * 6;
-          return <circle key={r} cx="70" cy="50" r={r} fill="none" stroke="rgba(90,130,160,0.22)" strokeWidth="0.8" />;
-        })}
-        <polygon points={points} fill={`url(#fx-grad-${type})`} opacity={0.45 + signal * 0.45} stroke={`hsla(${hueBase}, 100%, 70%, 0.95)`} strokeWidth={1.2 + signal * 1.2} />
-        <circle cx="70" cy="50" r={8 + (a / 100) * 7 + signal * 6} fill={`hsla(${hueBase}, 90%, 55%, ${0.7 + signal * 0.3})`} />
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2, fontSize: 8, fontFamily: 'monospace', color: '#7ea1b7' }}>
-        <span>{type.toUpperCase()}</span>
-        <span>{formatFxParamValue(params[0]?.label ?? 'Amt', a)}</span>
-      </div>
-    </div>
-  );
-}
-
 function emptyDrums(): DrumPattern {
   return Array.from({ length: 16 }, () => Array(TOTAL_COLS).fill(false));
 }
+
+type CreationStarterPreset = 'hiphopA' | 'hiphopB' | 'rnbA' | 'rnbB';
+type PatternSlot = 'A' | 'B';
 
 
 // ── Ruler ─────────────────────────────────────────────────────────────────────
@@ -726,10 +945,16 @@ function Ruler({
   /** Map pattern column index → DAW bar for loop drag; required when segment count ≠ DAW bars in range. */
   patternColToDawBar,
   /**
-   * When set to 1–4, the beat row lights that number inside the segment that contains `activeCol`.
-   * (Pattern may have only 2 columns in 2/4 but each segment still shows 1–4 — avoids “2/4 ruler”.)
+   * When set, the beat row highlights the **beat within the bar** (1…`creationBeatsPerBar`) that contains `activeCol`,
+   * using `creationStepSubdiv` columns per beat (e.g. 4 for 16ths). Omit `creationStepSubdiv` for 1 column = 1 beat.
    */
   creationBeatHighlight,
+  creationBeatsPerBar,
+  creationStepSubdiv,
+  disablePlayheadHighlight = false,
+  /** When set, each beat cell is exactly `colWidth` px (border-box) with pad-matching vertical grid lines — required for playline ↔ digit alignment. */
+  drumGridBeatBorders,
+  onSeekPatternCol,
 }: {
   activeCol: number;
   colWidth: number;
@@ -744,9 +969,16 @@ function Ruler({
   segmentHeaderLabels?: number[];
   patternColToDawBar?: (patternCol: number) => number;
   creationBeatHighlight?: number | null;
+  creationBeatsPerBar?: number;
+  creationStepSubdiv?: number;
+  disablePlayheadHighlight?: boolean;
+  drumGridBeatBorders?: { bankColOffset: number; qpb: number; subdiv: number };
+  onSeekPatternCol?: (patternCol: number) => void;
 }) {
   const headerRef = useRef<HTMLDivElement>(null);
   const dragStartBarRef = useRef<number | null>(null);
+  const highlightBeats = Math.max(1, Math.min(16, Math.round(creationBeatsPerBar ?? MEASURES_PER_BAR)));
+  const highlightSubdiv = Math.max(1, Math.round(creationStepSubdiv ?? 1));
 
   const counts =
     barStepCounts && barStepCounts.length > 0
@@ -803,15 +1035,37 @@ function Ruler({
         const stepsThisBar = counts[bi]!;
         const colStart = colStartAcc;
         colStartAcc += stepsThisBar;
+        /** Drum Beat Lab: no segment-wide header tint — only the digit under the playline column turns violet. */
         const isActiveBar =
-          activeCol >= colStart && activeCol < colStart + stepsThisBar;
+          drumGridBeatBorders == null &&
+          !disablePlayheadHighlight &&
+          activeCol >= colStart &&
+          activeCol < colStart + stepsThisBar;
         const color = barColor(bi);
         const barLabel =
           segmentHeaderLabels && segmentHeaderLabels.length === barN
             ? segmentHeaderLabels[bi]!
             : barNumberStart + bi;
+        const segmentOuterStyle =
+          drumGridBeatBorders != null
+            ? {
+                width: colWidth * stepsThisBar,
+                flexShrink: 0 as const,
+                boxSizing: 'border-box' as const,
+                /** Flat column model — pad grid has no per-bar inset; extra 1px here skewed playline vs digits. */
+                borderLeft: 'none',
+                display: 'flex' as const,
+                flexDirection: 'column' as const,
+              }
+            : {
+                width: colWidth * stepsThisBar,
+                flexShrink: 0 as const,
+                borderLeft: `1px solid ${bi % 4 === 0 ? '#333' : '#1e1e1e'}`,
+                display: 'flex' as const,
+                flexDirection: 'column' as const,
+              };
         return (
-          <div key={bi} style={{ width: colWidth * stepsThisBar, flexShrink: 0, borderLeft: `1px solid ${bi % 4 === 0 ? '#333' : '#1e1e1e'}`, display: 'flex', flexDirection: 'column' }}>
+          <div key={bi} style={segmentOuterStyle}>
             <div
               onPointerDown={onRangeCommit ? (e) => {
                 dragStartBarRef.current = dawBarFromPointer(e.clientX);
@@ -846,16 +1100,79 @@ function Ruler({
                 const inActiveSeg =
                   activeCol >= colStart &&
                   activeCol < colStart + stepsThisBar;
+                const beatInSeg = Math.floor(mi / highlightSubdiv) + 1;
                 const useCreationHighlight =
                   creationBeatHighlight != null &&
                   creationBeatHighlight >= 1 &&
-                  creationBeatHighlight <= MEASURES_PER_BAR;
-                const isHead = useCreationHighlight
-                  ? inActiveSeg && mi + 1 === creationBeatHighlight
+                  creationBeatHighlight <= highlightBeats;
+                const isHead = disablePlayheadHighlight
+                  ? false
+                  : useCreationHighlight
+                  ? inActiveSeg && beatInSeg === creationBeatHighlight
                   : activeCol === ci;
+                /** Drum grid: playline column only tints digit (violet), not bar-color cell wash. */
+                const drumBeatPlayline =
+                  drumGridBeatBorders != null && isHead;
+                /** Quantize row: global step index in bar (1/8 ⇒ 1…8, 1/16 ⇒ 1…16, …) — one digit per sequencer column. */
+                const quantStepLabel = String(mi + 1);
+                const bankCol =
+                  drumGridBeatBorders != null ? ci + drumGridBeatBorders.bankColOffset : -1;
+                const beatBorderLeft =
+                  drumGridBeatBorders != null && bankCol >= 0
+                    ? `1px solid ${creationDrumGridVerticalLineColor({
+                        colWidthPx: colWidth,
+                        bankCol,
+                        qpb: drumGridBeatBorders.qpb,
+                        subdiv: drumGridBeatBorders.subdiv,
+                        blendTo: '#0a0a0a',
+                      })}`
+                    : mi > 0
+                      ? '1px solid #181818'
+                      : 'none';
+                const beatCellSizing =
+                  drumGridBeatBorders != null
+                    ? {
+                        width: colWidth,
+                        minWidth: colWidth,
+                        maxWidth: colWidth,
+                        flexShrink: 0 as const,
+                        boxSizing: 'border-box' as const,
+                      }
+                    : { flex: 1 };
                 return (
-                  <div key={mi} style={{ flex: 1, fontSize: 7, textAlign: 'center', color: isHead ? color : '#2a2a2a', fontWeight: isHead ? 700 : 400, background: isHead ? `${color}20` : 'transparent', borderLeft: mi > 0 ? '1px solid #181818' : 'none', fontFamily: 'monospace', lineHeight: '13px' }}>
-                    {mi + 1}
+                  <div
+                    key={mi}
+                    onClick={
+                      onSeekPatternCol && drumGridBeatBorders
+                        ? (e) => {
+                            e.stopPropagation();
+                            onSeekPatternCol(ci);
+                          }
+                        : undefined
+                    }
+                    data-drum-pattern-col={drumGridBeatBorders != null ? ci : undefined}
+                    data-drum-playline-lit-cell={drumGridBeatBorders != null ? '1' : undefined}
+                    style={{
+                      ...beatCellSizing,
+                      fontSize: 7,
+                      textAlign: 'center',
+                      color: drumBeatPlayline ? '#e9d5ff' : isHead ? color : '#2a2a2a',
+                      fontWeight: drumBeatPlayline ? 900 : isHead ? 700 : 400,
+                      background: drumBeatPlayline
+                        ? 'rgba(139, 92, 246, 0.18)'
+                        : isHead
+                          ? `${color}20`
+                          : 'transparent',
+                      boxShadow: drumBeatPlayline ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.45)' : undefined,
+                      borderLeft: beatBorderLeft,
+                      fontFamily: 'monospace',
+                      lineHeight: '13px',
+                      position: 'relative' as const,
+                      cursor: onSeekPatternCol && drumGridBeatBorders ? 'pointer' : undefined,
+                    }}
+                    title={onSeekPatternCol && drumGridBeatBorders ? 'Move playhead here' : undefined}
+                  >
+                    {quantStepLabel}
                   </div>
                 );
               })}
@@ -863,144 +1180,6 @@ function Ruler({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-
-// ── Pad button ────────────────────────────────────────────────────────────────
-
-function Pad({ name, color, channel, flashTick, onTap, onChannelChange, hasSample, onLoadSample, onClearSample }: {
-  name: string; color: string; channel: number;
-  flashTick: number;
-  onTap: () => void; onChannelChange: (ch: number) => void;
-  hasSample: boolean;
-  onLoadSample: () => void;
-  onClearSample: () => void;
-}) {
-  const [pressed, setPressed]   = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
-  const timerRef                = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevTickRef             = useRef(0);
-  const PAD_SEQ_FLASH_MS = 65;
-  const PAD_TAP_FLASH_MS = 85;
-
-  useEffect(() => {
-    if (flashTick === 0 || flashTick === prevTickRef.current) return;
-    prevTickRef.current = flashTick;
-    setPressed(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setPressed(false), PAD_SEQ_FLASH_MS);
-  }, [flashTick]);
-
-  function handlePointerDown(e: React.PointerEvent) {
-    e.preventDefault();
-    // Render press/light state immediately before audio/parent updates.
-    flushSync(() => {
-      setPressed(true);
-    });
-    onTap();
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setPressed(false), PAD_TAP_FLASH_MS);
-  }
-
-  return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-      <button
-        type="button"
-        title="Tap = trigger · Right-click = sampler + mixer channel"
-        onPointerDown={handlePointerDown}
-        onContextMenu={e => { e.preventDefault(); setShowMenu(p => !p); }}
-        style={{
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-          padding: '8px 10px', width: '100%', height: '100%',
-          background: pressed 
-            ? `linear-gradient(145deg, ${color}, ${color}dd)` 
-            : `linear-gradient(145deg, ${color}15, ${color}08)`,
-          backdropFilter: 'blur(10px)',
-          border: `2px solid ${pressed ? color : `${color}66`}`,
-          borderRadius: 12,
-          color: pressed ? '#000' : color,
-          cursor: 'pointer', userSelect: 'none',
-          boxShadow: pressed 
-            ? `0 0 30px ${color}, 0 0 60px ${color}88, inset 0 0 20px ${color}44, 0 4px 15px rgba(0,0,0,0.4)` 
-            : `0 0 8px ${color}22, inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 12px rgba(0,0,0,0.3)`,
-          transition: 'none',
-          transform: pressed ? 'scale(0.95) translateY(2px)' : 'scale(1)',
-          backgroundImage: pressed ? 'none' : `linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 50%, rgba(0,0,0,0.2) 100%)`,
-        }}>
-        {/* LED Indicator */}
-        <div style={{
-          position: 'absolute', top: 6, right: 6,
-          width: 8, height: 8, borderRadius: '50%',
-          background: pressed ? '#fff' : color,
-          boxShadow: pressed ? `0 0 12px #fff, 0 0 20px ${color}` : `0 0 6px ${color}66`,
-          transition: 'none'
-        }} />
-        
-        <span style={{ 
-          fontWeight: 800, fontSize: 11, letterSpacing: 1.5,
-          textShadow: pressed ? 'none' : `0 0 10px ${color}88`,
-          textTransform: 'uppercase'
-        }}>{name}</span>
-        
-        <span style={{ 
-          fontFamily: 'monospace', fontSize: 9, opacity: 0.7,
-          background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4,
-          marginTop: 4
-        }}>CH{channel}{hasSample ? ' · SAMP' : ''}</span>
-      </button>
-      
-      {showMenu && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, zIndex: 999,
-          background: 'linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%)',
-          border: '1px solid #333',
-          borderRadius: 8, padding: 4, marginTop: 4,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(10px)'
-        }}>
-          <div style={{ fontSize: 9, color: '#888', padding: '4px 8px', letterSpacing: 1 }}>SAMPLER</div>
-          <button
-            type="button"
-            onClick={() => { onLoadSample(); setShowMenu(false); }}
-            style={{
-              display: 'block', width: '100%', padding: '6px 12px',
-              background: '#00ff8822', color: '#00ff88', border: 'none', borderRadius: 4,
-              cursor: 'pointer', fontSize: 11, textAlign: 'left', marginBottom: 4,
-            }}
-          >
-            Load sample…
-          </button>
-          {hasSample && (
-            <button
-              type="button"
-              onClick={() => { onClearSample(); setShowMenu(false); }}
-              style={{
-                display: 'block', width: '100%', padding: '6px 12px',
-                background: '#ff444422', color: '#ff8888', border: 'none', borderRadius: 4,
-                cursor: 'pointer', fontSize: 11, textAlign: 'left', marginBottom: 6,
-              }}
-            >
-              Clear sample
-            </button>
-          )}
-          <div style={{ fontSize: 9, color: '#888', padding: '4px 8px', letterSpacing: 1 }}>MIXER CH</div>
-          {[...Array(24)].map((_, i) => (
-            <button key={i} onClick={() => { onChannelChange(i + 1); setShowMenu(false); }}
-              style={{
-                display: 'block', width: '100%', padding: '6px 12px',
-                background: channel === i + 1 ? color : 'transparent',
-                color: channel === i + 1 ? '#000' : '#fff',
-                border: 'none', borderRadius: 4, cursor: 'pointer',
-                fontSize: 11, textAlign: 'left',
-                transition: 'all 0.1s'
-              }}>
-              CH {i + 1}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -1031,89 +1210,1203 @@ const BankButtons = memo(({ activeBank, setActiveBank, hasDrums, hasNotes }: Ban
 BankButtons.displayName = 'BankButtons';
 
 
-// ── PadSection ──────────────────────────────────────────────────────────────────
+// ── Beat Lab deck toolbar (under transport — preset, uploads, kit, sampler) ─
 
-interface PadSectionProps {
-  padChannels: number[];
-  padFlashTicks: number[];
-  subFlashTick: number;
-  subOn: boolean;
-  onHitPad: (i: number) => void;
-  onChannelChange: (i: number, ch: number) => void;
-  onSubToggle: () => void;
+interface BeatLabDeckToolbarProps {
+  kit: string;
+  setKit: (k: string) => void;
   hasPadSample: (padIndex: number) => boolean;
   onLoadPadSample: (padIndex: number) => void;
   onClearPadSample: (padIndex: number) => void;
+  geniusStarterActive?: CreationStarterPreset | null;
+  onGeniusStarter?: (k: CreationStarterPreset) => void;
+  onGeniusRecord?: () => void;
+  onGeniusUpload?: () => void;
+  onGeniusMySoundPlay?: (padIndex: number) => void;
+  /** Stop all currently playing sample voices on this pad (long samples / stacked hits). */
+  onStopPadSamplePlayback?: (padIndex: number) => void;
+  /** Pad index 0–15 that receives the next file from “Upload sound”. */
+  geniusSamplerTargetPad?: number;
+  onGeniusSamplerTargetPadChange?: (padIndex: number) => void;
+  /** Source BPM for tempo sync (optional per pad). */
+  padSampleRootBpmForPad?: (padIndex: number) => number | undefined;
+  onCommitPadSampleRootBpm?: (padIndex: number, raw: string) => void;
+  /** Loaded sample display name (matches sequencer lane when set). */
+  padSampleLabelForPad?: (padIndex: number) => string | undefined;
+  /** Bump local numeric field when bank / stored root changes */
+  samplerUiBank?: number;
+  /** Per-pad HPF/LPF/trim/fine (stored with sample). */
+  getPadSamplerOpts?: (padIndex: number) => PadSamplerPlaybackOpts;
+  commitPadSamplerOpts?: (padIndex: number, o: PadSamplerPlaybackOpts) => void;
+  /** One-shot preview using these opts (does not persist until Apply). */
+  onPreviewSamplerFx?: (padIndex: number, o: PadSamplerPlaybackOpts) => void;
+  /** Preview with SRC BPM field value (does not persist until blur/Enter). */
+  onPreviewSamplerRootBpmDraft?: (padIndex: number, raw: string) => void;
+  /** Loaded buffer for trim waveform + time readouts (same pad as Beat Lab lane). */
+  getPadSampleAudioBuffer?: (padIndex: number) => AudioBuffer | undefined;
+  /** Same row as kit: pattern clear + Studio handoff */
+  patternActionsDisabled?: boolean;
+  onClearPattern?: () => void;
+  onDownloadHandoff?: () => void;
 }
 
+function BeatLabDeckToolbar({
+  kit,
+  setKit,
+  hasPadSample,
+  onLoadPadSample,
+  onClearPadSample,
+  geniusStarterActive,
+  onGeniusStarter,
+  onGeniusRecord,
+  onGeniusUpload,
+  onGeniusMySoundPlay,
+  onStopPadSamplePlayback,
+  geniusSamplerTargetPad = 14,
+  onGeniusSamplerTargetPadChange,
+  padSampleRootBpmForPad,
+  onCommitPadSampleRootBpm,
+  padSampleLabelForPad,
+  samplerUiBank = 0,
+  getPadSamplerOpts,
+  commitPadSamplerOpts,
+  onPreviewSamplerFx,
+  onPreviewSamplerRootBpmDraft,
+  getPadSampleAudioBuffer,
+  patternActionsDisabled = false,
+  onClearPattern,
+  onDownloadHandoff,
+}: BeatLabDeckToolbarProps) {
+  /** Which pad’s SRC BPM popover is open (null = all closed). */
+  const [srcBpmOpenPad, setSrcBpmOpenPad] = useState<number | null>(null);
+  const [srcBpmDraft, setSrcBpmDraft] = useState('');
+  const srcBpmDraftRef = useRef('');
+  srcBpmDraftRef.current = srcBpmDraft;
+  const srcBpmOpenPadRef = useRef<number | null>(null);
+  srcBpmOpenPadRef.current = srcBpmOpenPad;
 
-function PadSection({ padChannels, padFlashTicks, subFlashTick, subOn, onHitPad, onChannelChange, onSubToggle, hasPadSample, onLoadPadSample, onClearPadSample }: PadSectionProps) {
-  const [subPressed, setSubPressed] = useState(false);
-  const subPrevTickRef = useRef(0);
-  const subTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const SUB_SEQ_FLASH_MS = 65;
-  const SUB_TAP_FLASH_MS = 140;
+  const [fxOpenPad, setFxOpenPad] = useState<number | null>(null);
+  const [fxDraft, setFxDraft] = useState<PadSamplerPlaybackOpts>(() => defaultPadSamplerPlaybackOpts());
+  const fxDraftRef = useRef(fxDraft);
+  fxDraftRef.current = fxDraft;
+
+  const fxOpenTrimBuffer =
+    fxOpenPad !== null ? getPadSampleAudioBuffer?.(fxOpenPad) : undefined;
+  const fxTrimWavePeaks = useMemo(() => {
+    if (!fxOpenTrimBuffer || fxOpenTrimBuffer.length === 0) return null;
+    return computePadSampleWaveformPeaks(fxOpenTrimBuffer, 400);
+  }, [fxOpenPad, fxOpenTrimBuffer]);
+
+  const toggleSrcBpmMenu = useCallback(
+    (padIndex: number) => {
+      if (srcBpmOpenPad === padIndex) {
+        onCommitPadSampleRootBpm?.(padIndex, srcBpmDraftRef.current);
+        setSrcBpmOpenPad(null);
+        return;
+      }
+      if (fxOpenPad !== null) {
+        commitPadSamplerOpts?.(fxOpenPad, fxDraftRef.current);
+        setFxOpenPad(null);
+      }
+      if (srcBpmOpenPad !== null && srcBpmOpenPad !== padIndex) {
+        onCommitPadSampleRootBpm?.(srcBpmOpenPad, srcBpmDraftRef.current);
+      }
+      setSrcBpmOpenPad(padIndex);
+      const r = padSampleRootBpmForPad?.(padIndex);
+      setSrcBpmDraft(r != null && r > 0 ? String(r) : '');
+    },
+    [srcBpmOpenPad, fxOpenPad, padSampleRootBpmForPad, onCommitPadSampleRootBpm, commitPadSamplerOpts],
+  );
+
+  const toggleFxMenu = useCallback(
+    (padIndex: number) => {
+      if (!commitPadSamplerOpts || !getPadSamplerOpts) return;
+      if (fxOpenPad === padIndex) {
+        commitPadSamplerOpts(padIndex, fxDraftRef.current);
+        setFxOpenPad(null);
+        return;
+      }
+      if (srcBpmOpenPad !== null) {
+        onCommitPadSampleRootBpm?.(srcBpmOpenPad, srcBpmDraftRef.current);
+        setSrcBpmOpenPad(null);
+      }
+      if (fxOpenPad !== null && fxOpenPad !== padIndex) {
+        commitPadSamplerOpts(fxOpenPad, fxDraftRef.current);
+      }
+      setFxOpenPad(padIndex);
+      setFxDraft({ ...getPadSamplerOpts(padIndex) });
+    },
+    [fxOpenPad, srcBpmOpenPad, commitPadSamplerOpts, getPadSamplerOpts, onCommitPadSampleRootBpm],
+  );
 
   useEffect(() => {
-    if (subFlashTick === 0 || subFlashTick === subPrevTickRef.current) return;
-    subPrevTickRef.current = subFlashTick;
-    setSubPressed(true);
-    if (subTimerRef.current) clearTimeout(subTimerRef.current);
-    subTimerRef.current = setTimeout(() => setSubPressed(false), SUB_SEQ_FLASH_MS);
-  }, [subFlashTick]);
+    const pad = srcBpmOpenPadRef.current;
+    if (pad !== null) {
+      onCommitPadSampleRootBpm?.(pad, srcBpmDraftRef.current);
+      setSrcBpmOpenPad(null);
+    }
+    /** Bank switch: close FX panel without auto-commit (avoids writing to wrong bank index). */
+    setFxOpenPad(null);
+  }, [samplerUiBank, onCommitPadSampleRootBpm]);
+
+  useEffect(() => {
+    if (srcBpmOpenPad === null) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('[data-src-bpm-root]')) return;
+      if (t?.closest?.('[data-fx-root]')) return;
+      if (t?.closest?.('[data-beatlab-portal-popover]')) return;
+      onCommitPadSampleRootBpm?.(srcBpmOpenPad, srcBpmDraftRef.current);
+      setSrcBpmOpenPad(null);
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+  }, [srcBpmOpenPad, onCommitPadSampleRootBpm]);
+
+  useEffect(() => {
+    if (fxOpenPad === null) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.('[data-fx-root]')) return;
+      if (t?.closest?.('[data-src-bpm-root]')) return;
+      if (t?.closest?.('[data-beatlab-portal-popover]')) return;
+      commitPadSamplerOpts?.(fxOpenPad, fxDraftRef.current);
+      setFxOpenPad(null);
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    return () => document.removeEventListener('mousedown', onDocMouseDown, true);
+  }, [fxOpenPad, commitPadSamplerOpts]);
+
+  /** Anchors for fixed popovers (portaled to `document.body` — avoids Creation root `overflow:hidden`). */
+  const srcBpmTriggerRefs = useRef<Array<HTMLButtonElement | null>>(Array.from({ length: 16 }, () => null));
+  const fxTriggerRefs = useRef<Array<HTMLButtonElement | null>>(Array.from({ length: 16 }, () => null));
+  const srcBpmPopoverMeasureRef = useRef<HTMLDivElement | null>(null);
+  const fxPopoverMeasureRef = useRef<HTMLDivElement | null>(null);
+  type BeatLabPopRect = { left: number; top: number; width: number };
+  const [srcBpmPopRect, setSrcBpmPopRect] = useState<BeatLabPopRect | null>(null);
+  const [fxPopRect, setFxPopRect] = useState<BeatLabPopRect | null>(null);
+
+  const layoutBeatLabPortals = useCallback(() => {
+    const VIEW = 8;
+    const GAP = 4;
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+    const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
+
+    if (fxOpenPad !== null) {
+      const btn = fxTriggerRefs.current[fxOpenPad];
+      if (btn) {
+        const br = btn.getBoundingClientRect();
+        const w = Math.min(220, vw - 2 * VIEW);
+        const panel = fxPopoverMeasureRef.current;
+        const rawH = panel?.offsetHeight ?? 360;
+        const h = Math.min(rawH, vh - 2 * VIEW);
+        let left = br.right - w;
+        left = Math.max(VIEW, Math.min(left, vw - w - VIEW));
+        let top = br.bottom + GAP;
+        if (top + h > vh - VIEW) {
+          top = br.top - GAP - h;
+        }
+        if (top < VIEW) {
+          top = VIEW;
+        }
+        setFxPopRect({ left, top, width: w });
+      } else {
+        setFxPopRect(null);
+      }
+    } else {
+      setFxPopRect(null);
+    }
+
+    if (srcBpmOpenPad !== null) {
+      const btn = srcBpmTriggerRefs.current[srcBpmOpenPad];
+      if (btn) {
+        const br = btn.getBoundingClientRect();
+        const w = Math.min(Math.max(br.width, 180), vw - 2 * VIEW);
+        let left = br.left;
+        left = Math.max(VIEW, Math.min(left, vw - w - VIEW));
+        const panel = srcBpmPopoverMeasureRef.current;
+        const rawH = panel?.offsetHeight ?? 120;
+        const h = Math.min(rawH, vh - 2 * VIEW);
+        let top = br.bottom + GAP;
+        if (top + h > vh - VIEW) {
+          top = br.top - GAP - h;
+        }
+        if (top < VIEW) {
+          top = VIEW;
+        }
+        setSrcBpmPopRect({ left, top, width: w });
+      } else {
+        setSrcBpmPopRect(null);
+      }
+    } else {
+      setSrcBpmPopRect(null);
+    }
+  }, [fxOpenPad, srcBpmOpenPad]);
+
+  useLayoutEffect(() => {
+    layoutBeatLabPortals();
+    const id = requestAnimationFrame(() => layoutBeatLabPortals());
+    return () => cancelAnimationFrame(id);
+  }, [layoutBeatLabPortals, fxDraft, srcBpmDraft]);
+
+  useEffect(() => {
+    if (fxOpenPad === null && srcBpmOpenPad === null) return;
+    const onResizeOrScroll = () => layoutBeatLabPortals();
+    window.addEventListener('resize', onResizeOrScroll);
+    window.addEventListener('scroll', onResizeOrScroll, true);
+    return () => {
+      window.removeEventListener('resize', onResizeOrScroll);
+      window.removeEventListener('scroll', onResizeOrScroll, true);
+    };
+  }, [fxOpenPad, srcBpmOpenPad, layoutBeatLabPortals]);
+
+  const showGeniusDeck = typeof onGeniusStarter === 'function';
+
+  const starterPresets = (
+    [
+      ['Hip-Hop A', 'hiphopA'],
+      ['Hip-Hop B', 'hiphopB'],
+      ['R&B A', 'rnbA'],
+      ['R&B B', 'rnbB'],
+    ] as const
+  );
+
+  const miniBtn = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    padding: '5px 10px',
+    borderRadius: 6,
+    border: '1px solid #2b3754',
+    background: '#111629',
+    color: '#9dc6ff',
+    cursor: 'pointer',
+    fontSize: 10,
+    fontWeight: 800,
+    whiteSpace: 'nowrap',
+  } as const;
 
   return (
-    <div style={{ flexShrink: 0, padding: '6px 8px 0', background: '#080808', borderBottom: '1px solid #1a1a1a' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(4, 54px)', gap: 4 }}>
-        {PAD_NAMES.map((name, i) => (
-          <Pad
-            key={i}
-            name={name}
-            color={PAD_COLORS[i]}
-            channel={padChannels[i]}
-            flashTick={padFlashTicks[i]}
-            onTap={() => onHitPad(i)}
-            onChannelChange={ch => onChannelChange(i, ch)}
-            hasSample={hasPadSample(i)}
-            onLoadSample={() => onLoadPadSample(i)}
-            onClearSample={() => onClearPadSample(i)}
-          />
-        ))}
-      </div>
-      <div style={{ marginTop: 4, marginBottom: 6 }}>
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault();
-            onSubToggle();
-            flushSync(() => {
-              setSubPressed(true);
-            });
-            if (subTimerRef.current) clearTimeout(subTimerRef.current);
-            subTimerRef.current = setTimeout(() => setSubPressed(false), SUB_TAP_FLASH_MS);
+    <>
+    <div
+      style={{
+        width: '100%',
+        maxWidth: '100%',
+        padding: '5px 7px 6px',
+        borderRadius: 10,
+        border: '1px solid rgba(139, 92, 246, 0.22)',
+        background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 5,
+        overflow: 'visible',
+        position: 'relative',
+        zIndex: 120,
+        isolation: 'isolate',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 6,
+          rowGap: 4,
+        }}
+      >
+        {showGeniusDeck ? (
+          <>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: '50%',
+                flexShrink: 0,
+                border: '2px solid rgba(196, 181, 253, 0.75)',
+                background: 'radial-gradient(circle at 35% 30%, #1e1830 0%, #0a0812 70%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Preset beat — pick a style"
+            >
+              <span style={{ fontSize: 6, fontWeight: 800, color: '#888', textAlign: 'center', lineHeight: 1.1 }}>
+                PRE
+                <br />
+                SET
+              </span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 8, color: '#555', fontWeight: 900, letterSpacing: 1 }}>STYLE</span>
+              {starterPresets.map(([label, key]) => {
+                const on = geniusStarterActive === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onGeniusStarter?.(key)}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: 4,
+                      border: `1px solid ${on ? 'rgba(139, 92, 246, 0.55)' : '#2b3754'}`,
+                      background: on ? 'rgba(139, 92, 246, 0.16)' : '#111629',
+                      color: on ? '#c4b5fd' : '#ccc',
+                      fontSize: 9,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => onGeniusRecord?.()} style={{ ...miniBtn }}>
+              <Mic size={16} strokeWidth={2} />
+              Record vocals
+            </button>
+            <button type="button" onClick={() => onGeniusUpload?.()} style={{ ...miniBtn }}>
+              <Upload size={16} strokeWidth={2} />
+              Upload
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 140, maxWidth: 220 }}>
+              <label style={{ fontSize: 7, color: '#555', fontWeight: 800 }}>Upload → pad</label>
+              <select
+                value={geniusSamplerTargetPad}
+                title="File from Upload assigns here"
+                onChange={(e) => onGeniusSamplerTargetPadChange?.(Number(e.target.value))}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  border: '1px solid #333',
+                  background: '#151515',
+                  color: '#ccc',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {Array.from({ length: 16 }, (_, i) => (
+                  <option key={i} value={i}>
+                    {i + 1}. {PAD_NAMES[i]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ width: 1, height: 32, background: 'rgba(139, 92, 246, 0.2)', flexShrink: 0 }} aria-hidden />
+          </>
+        ) : null}
+
+        <div
+          style={{
+            display: 'inline-flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 6,
+            flexShrink: 0,
+            minWidth: 0,
+            padding: '4px 6px 4px 8px',
+            borderRadius: 8,
+            border: '1px solid rgba(167, 139, 250, 0.4)',
+            background: '#0a0812',
+            boxSizing: 'border-box',
           }}
-          style={{ 
-            width: '100%', padding: '12px 0', borderRadius: 12, 
-            fontWeight: 900, fontSize: 14, letterSpacing: 3,
-            textTransform: 'uppercase',
-            background: subPressed
-              ? 'linear-gradient(145deg, #D500F9, #9C27B0)' 
-              : 'linear-gradient(145deg, #1a1a2a, #0d0d1a)',
-            color: subPressed ? '#fff' : '#D500F9', 
-            border: `2px solid ${subPressed ? '#D500F9' : '#D500F944'}`,
-            cursor: 'pointer',
-            boxShadow: subPressed
-              ? '0 0 30px #D500F988, 0 0 60px #D500F944, inset 0 0 20px rgba(255,255,255,0.2)' 
-              : '0 4px 15px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05)',
-            transition: 'all 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
-            transform: subPressed ? 'scale(1.02)' : 'scale(1)',
-            backdropFilter: 'blur(10px)'
+          title="Kit (e.g. Default) · Clear pattern · Download to Studio"
+        >
+          <select
+            value={kit}
+            onChange={(e) => setKit(e.target.value)}
+            title="Drum kit"
+            style={{
+              padding: '5px 8px',
+              borderRadius: 4,
+              border: '1px solid rgba(167, 139, 250, 0.35)',
+              background: '#120e1c',
+              color: '#f5f3ff',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              maxWidth: 124,
+              minWidth: 0,
+              flex: '0 1 auto',
+              boxSizing: 'border-box',
+            }}
+          >
+            {KITS.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+          {typeof onClearPattern === 'function' ? (
+            <button
+              type="button"
+              disabled={patternActionsDisabled}
+              onClick={() => {
+                if (patternActionsDisabled) return;
+                onClearPattern();
+              }}
+              title="Clear drum steps for current bank / pattern slot — Genius-style Clear."
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 28,
+                padding: '0 8px',
+                borderRadius: 4,
+                border: '1px solid #633',
+                background: '#1a1414',
+                color: '#f6a9a9',
+                fontSize: 10,
+                fontWeight: 800,
+                cursor: patternActionsDisabled ? 'not-allowed' : 'pointer',
+                opacity: patternActionsDisabled ? 0.45 : 1,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <X size={13} />
+              Clear
+            </button>
+          ) : null}
+          {typeof onDownloadHandoff === 'function' ? (
+            <button
+              type="button"
+              disabled={patternActionsDisabled}
+              onClick={() => {
+                if (patternActionsDisabled) return;
+                onDownloadHandoff();
+              }}
+              title="Export / Studio handoff (closest to Genius Home Studio Download WAV — full render uses Export)."
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 28,
+                padding: '0 8px',
+                borderRadius: 4,
+                border: '1px solid rgba(139, 92, 246, 0.35)',
+                background: 'rgba(24, 18, 42, 0.65)',
+                color: '#c4b5fd',
+                fontSize: 10,
+                fontWeight: 800,
+                cursor: patternActionsDisabled ? 'not-allowed' : 'pointer',
+                opacity: patternActionsDisabled ? 0.45 : 1,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Download size={13} />
+              Download
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+        <div
+          style={{
+            borderTop: '1px solid rgba(139, 92, 246, 0.15)',
+            paddingTop: 4,
+            overflow: 'visible',
+            position: 'relative',
+            zIndex: 1,
           }}
         >
-          ◉ SUB BASS <span style={{ fontFamily: 'monospace', fontSize: 10, opacity: 0.7, marginLeft: 8 }}>CH{SUB_CHANNEL}</span>
-        </button>
+        <div
+          style={{ fontSize: 8, color: '#c4b5fd', fontWeight: 800, marginBottom: 3, letterSpacing: 0.5 }}
+          title={
+            'Sampler pad 1–16 is the same pad as Beat Lab lane 1–16: a sound loaded here is that lane’s sample. 8×2 MPC layout. FX/SRC BPM per pad; Apply FX before switching bank.'
+          }
+        >
+          SAMPLER · 16 PADS
+        </div>
+        {/* Fixed 8×2 MPC layout — short BAR/MSR header frees vertical space for taller pad cells */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(8, minmax(0, 1fr))',
+            gridTemplateRows: 'repeat(2, minmax(44px, auto))',
+            gap: 5,
+            width: '100%',
+            overflow: 'visible',
+          }}
+        >
+          {Array.from({ length: 16 }, (_, padIndex) => {
+            const has = hasPadSample(padIndex);
+            const root = padSampleRootBpmForPad?.(padIndex);
+            const uploadHere = padIndex === geniusSamplerTargetPad;
+            const tag = PAD_BANK_GROUP_TAGS[padIndex];
+            const sampleName = (has ? padSampleLabelForPad?.(padIndex) : undefined)?.trim() ?? '';
+            const rowTag = has && sampleName ? sampleName : tag;
+            return (
+              <div
+                key={padIndex}
+                title={`Sampler pad ${padIndex + 1} = Beat Lab lane ${padIndex + 1} · ${PAD_NAMES[padIndex]} — ${GENIUS_LANE_LABELS[padIndex]} — ${rowTag}${has ? ' · SAMPLE' : ''}${uploadHere ? ' · UPLOAD → this pad' : ''}`}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  gap: 4,
+                  minWidth: 0,
+                  minHeight: 44,
+                  padding: '5px 6px',
+                  borderRadius: 6,
+                  border: `1px solid ${
+                    uploadHere
+                      ? 'rgba(196, 181, 253, 0.65)'
+                      : has
+                        ? 'rgba(139, 92, 246, 0.35)'
+                        : '#2b3754'
+                  }`,
+                  background: uploadHere
+                    ? 'linear-gradient(165deg, rgba(36, 28, 58, 0.92) 0%, rgba(12, 10, 20, 0.98) 100%)'
+                    : has
+                      ? 'linear-gradient(165deg, rgba(24, 18, 42, 0.65) 0%, rgba(8, 8, 14, 0.96) 100%)'
+                      : '#111629',
+                  boxShadow: uploadHere ? '0 0 0 1px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255,255,255,0.04)' : undefined,
+                  position: 'relative',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 900, color: '#c4b5fd', flexShrink: 0, width: 14, textAlign: 'center' }}>
+                    {padIndex + 1}
+                  </span>
+                  {getPadSamplerOpts && commitPadSamplerOpts ? (
+                    <div data-fx-root={padIndex} style={{ display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}>
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          fxTriggerRefs.current[padIndex] = el;
+                        }}
+                        disabled={!has}
+                        onClick={() => {
+                          if (!has) return;
+                          toggleFxMenu(padIndex);
+                        }}
+                        title={
+                          has
+                            ? 'Sample edit: filters, trim, pitch, trigger (saved with this pad)'
+                            : 'Load a sample on this pad first — then you can open sample edit'
+                        }
+                        style={{
+                          width: 26,
+                          height: 22,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 4,
+                          border: `1px solid ${
+                            !has ? '#2b3754' : fxOpenPad === padIndex ? 'rgba(139, 92, 246, 0.55)' : '#2b3754'
+                          }`,
+                          background: !has
+                            ? '#0a0a0a'
+                            : fxOpenPad === padIndex
+                              ? 'rgba(139, 92, 246, 0.14)'
+                              : '#101010',
+                          color: !has ? '#4b5563' : fxOpenPad === padIndex ? '#c4b5fd' : '#9dc6ff',
+                          cursor: !has ? 'not-allowed' : 'pointer',
+                          padding: 0,
+                          opacity: has ? 1 : 0.75,
+                        }}
+                      >
+                        <SlidersHorizontal size={12} strokeWidth={2.2} />
+                      </button>
+                    </div>
+                  ) : null}
+                  <span
+                    style={{
+                      fontSize: 7,
+                      fontWeight: 800,
+                      color: has && sampleName ? '#d4c4f0' : '#6b5a8f',
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {rowTag}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, marginLeft: 'auto' }}>
+                    <button
+                      type="button"
+                      onClick={() => onGeniusMySoundPlay?.(padIndex)}
+                      style={{ border: 'none', background: 'transparent', color: '#9dc6ff', cursor: 'pointer', padding: 2, flexShrink: 0, lineHeight: 0 }}
+                      title="Play"
+                    >
+                      <Play size={15} fill="currentColor" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onStopPadSamplePlayback?.(padIndex)}
+                      style={{ border: 'none', background: 'transparent', color: '#9ca3af', cursor: 'pointer', padding: 2, flexShrink: 0, lineHeight: 0 }}
+                      title="Stop — cut all playing sample voices on this pad (long loops / stacked hits)"
+                    >
+                      <Square size={12} fill="currentColor" strokeWidth={0} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onLoadPadSample(padIndex)}
+                      style={{ border: 'none', background: 'transparent', color: '#9dc6ff', cursor: 'pointer', padding: 2, flexShrink: 0, lineHeight: 0 }}
+                      title="Load sample"
+                    >
+                      <Plus size={15} strokeWidth={2.5} />
+                    </button>
+                    {has ? (
+                      <button
+                        type="button"
+                        onClick={() => onClearPadSample(padIndex)}
+                        style={{ border: 'none', background: 'transparent', color: '#f87171', cursor: 'pointer', padding: 2, flexShrink: 0, lineHeight: 0 }}
+                        title="Clear"
+                      >
+                        <X size={14} strokeWidth={2.5} />
+                      </button>
+                    ) : (
+                      <span style={{ width: 16, flexShrink: 0 }} aria-hidden />
+                    )}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                    width: '100%',
+                    minWidth: 0,
+                  }}
+                >
+                  <div data-src-bpm-root={padIndex} style={{ minWidth: 0, position: 'relative', width: '100%' }}>
+                    <button
+                      type="button"
+                      ref={(el) => {
+                        srcBpmTriggerRefs.current[padIndex] = el;
+                      }}
+                      onClick={() => toggleSrcBpmMenu(padIndex)}
+                      title="Source BPM (optional) — click to set. Session BPM scales sample speed+pitch."
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 4,
+                        padding: '3px 6px',
+                        borderRadius: 4,
+                        border: `1px solid ${
+                          srcBpmOpenPad === padIndex ? 'rgba(139, 92, 246, 0.5)' : '#2b3754'
+                        }`,
+                        background:
+                          srcBpmOpenPad === padIndex
+                            ? 'linear-gradient(165deg, rgba(24, 18, 42, 0.75) 0%, rgba(10, 9, 16, 0.95) 100%)'
+                            : '#101010',
+                        color: '#7d87a2',
+                        cursor: 'pointer',
+                        fontSize: 6,
+                        fontWeight: 800,
+                        letterSpacing: 0.5,
+                        textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                        <span style={{ color: '#6b5a8f', letterSpacing: 0.4 }}>SRC BPM</span>
+                        {root != null && root > 0 ? (
+                          <span style={{ color: '#9dc6ff', fontFamily: 'monospace', fontSize: 9, fontWeight: 700 }}>{root}</span>
+                        ) : (
+                          <span style={{ color: '#4b5563', fontSize: 7, fontWeight: 700 }}>—</span>
+                        )}
+                      </span>
+                      <ChevronDown
+                        size={11}
+                        style={{
+                          flexShrink: 0,
+                          color: srcBpmOpenPad === padIndex ? '#c4b5fd' : '#6b5a8f',
+                          transform: srcBpmOpenPad === padIndex ? 'rotate(180deg)' : 'none',
+                          transition: 'transform 0.12s',
+                        }}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
+    {typeof document !== 'undefined' &&
+      srcBpmOpenPad !== null &&
+      srcBpmPopRect &&
+      createPortal(
+        <div
+          data-beatlab-portal-popover=""
+          ref={srcBpmPopoverMeasureRef}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: srcBpmPopRect.left,
+            top: srcBpmPopRect.top,
+            width: srcBpmPopRect.width,
+            zIndex: 50000,
+            padding: 8,
+            borderRadius: 6,
+            border: '1px solid rgba(139, 92, 246, 0.35)',
+            background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.75) 0%, rgba(8, 8, 12, 0.96) 100%)',
+            boxShadow: '0 10px 28px rgba(0,0,0,0.65)',
+            boxSizing: 'border-box',
+            maxHeight: 'min(280px, calc(100vh - 16px))',
+            overflow: 'auto',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+              marginBottom: 6,
+            }}
+          >
+            <div style={{ fontSize: 8, color: '#777', fontWeight: 700 }}>Source tempo (40–320)</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <button
+                type="button"
+                title="Preview — hear sample at this tempo (not saved until you leave the field or press Enter)"
+                onClick={() => {
+                  if (srcBpmOpenPad === null) return;
+                  onPreviewSamplerRootBpmDraft?.(srcBpmOpenPad, srcBpmDraft);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 28,
+                  height: 26,
+                  borderRadius: 4,
+                  border: '1px solid rgba(139, 92, 246, 0.35)',
+                  background: 'rgba(24, 18, 42, 0.75)',
+                  color: '#9dc6ff',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                <Play size={13} fill="currentColor" />
+              </button>
+              <button
+                type="button"
+                title="Stop sample on this pad"
+                onClick={() => {
+                  if (srcBpmOpenPad === null) return;
+                  onStopPadSamplePlayback?.(srcBpmOpenPad);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 28,
+                  height: 26,
+                  borderRadius: 4,
+                  border: '1px solid #444',
+                  background: '#141414',
+                  color: '#9ca3af',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                <Square size={11} fill="currentColor" strokeWidth={0} />
+              </button>
+            </div>
+          </div>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={40}
+            max={320}
+            autoFocus
+            value={srcBpmDraft}
+            onChange={(e) => setSrcBpmDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (srcBpmOpenPad === null) return;
+              if (e.key === 'Enter') {
+                onCommitPadSampleRootBpm?.(srcBpmOpenPad, srcBpmDraft);
+                setSrcBpmOpenPad(null);
+              } else if (e.key === 'Escape') {
+                const r = padSampleRootBpmForPad?.(srcBpmOpenPad);
+                setSrcBpmDraft(r != null && r > 0 ? String(r) : '');
+                setSrcBpmOpenPad(null);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              borderRadius: 4,
+              border: '1px solid #444',
+              background: '#0a0a0a',
+              color: '#e8eef5',
+              fontSize: 13,
+              fontFamily: 'monospace',
+              fontWeight: 700,
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>,
+        document.body,
+      )}
+    {typeof document !== 'undefined' &&
+      fxOpenPad !== null &&
+      fxPopRect &&
+      commitPadSamplerOpts &&
+      getPadSamplerOpts &&
+      createPortal(
+        <div
+          data-beatlab-portal-popover=""
+          ref={fxPopoverMeasureRef}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            left: fxPopRect.left,
+            top: fxPopRect.top,
+            width: fxPopRect.width,
+            zIndex: 50000,
+            boxSizing: 'border-box',
+            padding: 10,
+            borderRadius: 6,
+            border: '1px solid rgba(139, 92, 246, 0.35)',
+            background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.92) 0%, rgba(8, 8, 12, 0.98) 100%)',
+            boxShadow: '0 12px 36px rgba(0,0,0,0.75)',
+            overflow: 'hidden',
+            maxHeight: 'min(420px, calc(100vh - 16px))',
+          }}
+        >
+          <div
+            style={{
+              maxHeight: 'min(62vh, 380px)',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              margin: '-2px',
+              padding: '2px 6px 2px 2px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ fontSize: 8, color: '#6b7280', fontWeight: 800 }}>SAMPLE EDIT</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  title="Preview — hear current slider settings (not saved until Apply)"
+                  onClick={() => {
+                    if (fxOpenPad === null) return;
+                    onPreviewSamplerFx?.(fxOpenPad, { ...fxDraft });
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 28,
+                    height: 26,
+                    borderRadius: 4,
+                    border: '1px solid rgba(139, 92, 246, 0.45)',
+                    background: 'rgba(139, 92, 246, 0.12)',
+                    color: '#c4b5fd',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  <Play size={13} fill="currentColor" />
+                </button>
+                <button
+                  type="button"
+                  title="Stop sample on this pad"
+                  onClick={() => {
+                    if (fxOpenPad === null) return;
+                    onStopPadSamplePlayback?.(fxOpenPad);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 28,
+                    height: 26,
+                    borderRadius: 4,
+                    border: '1px solid #444',
+                    background: '#141414',
+                    color: '#9ca3af',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  <Square size={11} fill="currentColor" strokeWidth={0} />
+                </button>
+              </div>
+            </div>
+            <label style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 2 }}>High-pass (0 = off)</label>
+            <input
+              type="range"
+              min={0}
+              max={8000}
+              step={10}
+              value={fxDraft.hpHz < 25 ? 0 : fxDraft.hpHz}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setFxDraft((d) => ({ ...d, hpHz: v < 25 ? 0 : v }));
+              }}
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                display: 'block',
+                margin: '6px 0',
+                accentColor: '#a78bfa',
+              }}
+            />
+            <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 6 }}>
+              {fxDraft.hpHz < 25 ? 'Off' : `${Math.round(fxDraft.hpHz)} Hz`}
+            </div>
+            <label style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 2 }}>Low-pass (max = open)</label>
+            <input
+              type="range"
+              min={200}
+              max={20000}
+              step={50}
+              value={fxDraft.lpHz >= 200 && fxDraft.lpHz < 19900 ? fxDraft.lpHz : 20000}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setFxDraft((d) => ({ ...d, lpHz: v >= 19900 ? 0 : v }));
+              }}
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                display: 'block',
+                margin: '6px 0',
+                accentColor: '#a78bfa',
+              }}
+            />
+            <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 6 }}>
+              {fxDraft.lpHz >= 200 && fxDraft.lpHz < 19900 ? `${Math.round(fxDraft.lpHz)} Hz` : 'Full bandwidth'}
+            </div>
+            <label
+              style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 2 }}
+              title="MPC-style pad trigger: short gain spike on hit so one-shots bite harder (more hardware sampler punch)."
+            >
+              Sample trigger (MPC punch)
+            </label>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={Math.round((fxDraft.triggerSnap ?? 0) * 100)}
+              onChange={(e) =>
+                setFxDraft((d) => ({ ...d, triggerSnap: Math.max(0, Math.min(1, Number(e.target.value) / 100)) }))
+              }
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                display: 'block',
+                margin: '6px 0',
+                accentColor: '#f472b6',
+              }}
+            />
+            <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 6 }}>
+              {Math.round((fxDraft.triggerSnap ?? 0) * 100)}% — harder hit / less soft fade-in to level
+            </div>
+            <label
+              style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 4 }}
+              title="Studio-style trim: waveform = full file; teal = plays back; dim = outside region. Yellow lines = start / end."
+            >
+              Trim · wave + time (start / end)
+            </label>
+            <PadSampleTrimWaveform peaks={fxTrimWavePeaks} trim0={fxDraft.trim0} trim1={fxDraft.trim1} />
+            {(() => {
+              const dur = fxOpenPad !== null ? getPadSampleAudioBuffer?.(fxOpenPad)?.duration ?? 0 : 0;
+              const t0s = fxDraft.trim0 * dur;
+              const t1s = fxDraft.trim1 * dur;
+              const playLen = Math.max(0, t1s - t0s);
+              return (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px 12px',
+                    fontSize: 8,
+                    color: '#9ca3af',
+                    marginBottom: 6,
+                    marginTop: 4,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  <span>
+                    Start <strong style={{ color: '#fcd34d' }}>{formatBeatLabSampleTime(t0s)}</strong>{' '}
+                    <span style={{ color: '#6b7280' }}>({Math.round(fxDraft.trim0 * 100)}%)</span>
+                  </span>
+                  <span>
+                    End <strong style={{ color: '#fcd34d' }}>{formatBeatLabSampleTime(t1s)}</strong>{' '}
+                    <span style={{ color: '#6b7280' }}>({Math.round(fxDraft.trim1 * 100)}%)</span>
+                  </span>
+                  <span>
+                    Play <strong style={{ color: '#a7f3d0' }}>{formatBeatLabSampleTime(playLen)}</strong>
+                    {dur > 0 ? <span style={{ color: '#6b7280' }}>{` · file ${dur.toFixed(3)} s`}</span> : null}
+                  </span>
+                </div>
+              );
+            })()}
+            <div style={{ fontSize: 7, color: '#6b7280', marginBottom: 4 }}>Start % (top) · end % (bottom)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%', boxSizing: 'border-box' }}>
+              <input
+                type="range"
+                min={0}
+                max={95}
+                step={1}
+                value={Math.round(fxDraft.trim0 * 100)}
+                onChange={(e) => {
+                  const t0 = Math.min(0.95, Number(e.target.value) / 100);
+                  setFxDraft((d) => {
+                    let t1 = d.trim1;
+                    if (t1 <= t0 + 0.02) t1 = Math.min(1, t0 + 0.08);
+                    return { ...d, trim0: t0, trim1: t1 };
+                  });
+                }}
+                style={{
+                  width: '100%',
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                  display: 'block',
+                  margin: '4px 0',
+                  accentColor: '#fbbf24',
+                }}
+              />
+              <input
+                type="range"
+                min={5}
+                max={100}
+                step={1}
+                value={Math.round(fxDraft.trim1 * 100)}
+                onChange={(e) => {
+                  const t1 = Math.max(0.05, Math.min(1, Number(e.target.value) / 100));
+                  setFxDraft((d) => {
+                    let t0 = d.trim0;
+                    if (t1 <= t0 + 0.02) t0 = Math.max(0, t1 - 0.08);
+                    return { ...d, trim0: t0, trim1: t1 };
+                  });
+                }}
+                style={{
+                  width: '100%',
+                  maxWidth: '100%',
+                  boxSizing: 'border-box',
+                  display: 'block',
+                  margin: '4px 0',
+                  accentColor: '#fbbf24',
+                }}
+              />
+            </div>
+            <label style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 2 }}>
+              Fine pitch (semitones, on top of SRC BPM rate)
+            </label>
+            <input
+              type="range"
+              min={-12}
+              max={12}
+              step={0.25}
+              value={fxDraft.fineSemi}
+              onChange={(e) => setFxDraft((d) => ({ ...d, fineSemi: Number(e.target.value) }))}
+              style={{
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+                display: 'block',
+                margin: '6px 0',
+                accentColor: '#a78bfa',
+              }}
+            />
+            <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 8 }}>
+              {fxDraft.fineSemi >= 0 ? '+' : ''}
+              {fxDraft.fineSemi.toFixed(2)} st
+            </div>
+            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setFxDraft(defaultPadSamplerPlaybackOpts())}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 4,
+                  border: '1px solid #444',
+                  background: '#151515',
+                  color: '#888',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (fxOpenPad === null) return;
+                  commitPadSamplerOpts(fxOpenPad, fxDraft);
+                  setFxOpenPad(null);
+                }}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: 4,
+                  border: '1px solid rgba(139, 92, 246, 0.45)',
+                  background: 'rgba(139, 92, 246, 0.14)',
+                  color: '#c4b5fd',
+                  fontSize: 9,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+  </>
   );
+}
+
+/** Isolated rAF tick so elapsed `m:ss` updates smoothly without forcing the whole screen to re-render. */
+function CreationGeniusElapsedDisplay({
+  displayBeatRef,
+  bpmRef,
+  isPlaybackOrRecord,
+}: {
+  displayBeatRef: MutableRefObject<number>;
+  bpmRef: MutableRefObject<number>;
+  isPlaybackOrRecord: boolean;
+}) {
+  const [, setRafTick] = useState(0);
+  useEffect(() => {
+    if (!isPlaybackOrRecord) return;
+    let raf = 0;
+    const loop = () => {
+      setRafTick((n) => (n + 1) & 0xffff);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaybackOrRecord]);
+  const beatNow = Math.max(0, displayBeatRef.current);
+  const sec = beatNow * (60 / Math.max(1, bpmRef.current));
+  const total = Math.floor(Math.min(5999, Math.max(0, sec)));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return <>{`${m}:${String(s).padStart(2, '0')}`}</>;
 }
 
 
@@ -1126,87 +2419,627 @@ export default function CreationStationScreen({
   onExport: (dest: string) => void;
   isScreenActive?: boolean;
 }) {
+  /** Transport: audio = `creationTransportSystem`; UI pump = `useCreationTransportPump` (single rAF + single 25ms timer). */
+  const CREATION_BACKEND_BLANK = false;
+
   const {
-    transport,
-    bpm,
-    setBpm,
     triggerChannel,
-    channelLevels,
     channelVolumes,
-    setChannelVolume,
     getOrCreateAudioContext,
-    loopBars,
-    loopStartBar,
-    loopEndBar,
-    loopEnabled,
-    loopSection,
-    setLoopRange,
-    getTickIntAtAudioNow,
-    mapGlobalTickToAudioTime,
-    wrapGlobalTickToDisplayTick,
-    songStep,
-    transportBeatFloat,
-    getDisplayBeatsAtAudioNow,
-    audioCtxRef,
-    quartersPerBar,
-    ticksPerBar,
-    loopStartTick,
-    metronomeClickLatencyMs,
-    setMetronomeClickLatencyMs,
-    syncMetronomeClickLatencyFromOutput,
-    subscribeTransportBeatUi,
-    getTransportBeatUiSnapshot,
+    getMetronomeBusGain,
+    // Keep shared audio routing / synth only; Creation transport is local.
   } = useMasterClock();
 
-  /** Tie Creation Station repaints to the same transport frame store as the master clock RAF. */
-  const _transportFrameSeq = useSyncExternalStore(
-    subscribeTransportBeatUi,
-    () => getTransportBeatUiSnapshot().frameSeq,
-    () => 0,
-  );
-  void _transportFrameSeq;
+  type LocalTransportState = 'stopped' | 'playing' | 'paused' | 'recording';
+  const [transport, setTransport] = useState<LocalTransportState>('stopped');
+  /** Audio lookahead + rAF gate — set only in start / pause / stop (do not mirror from React state here). */
+  const runningRef = useRef(false);
+  const recordingRef = useRef(false);
 
-  /** Quarters per bar from time sig — keep for drum step columns (beat ↔ column index). */
-  const qpb = Math.max(1, Math.round(quartersPerBar + 1e-6));
-  /** Quarter steps in one loop — `(loopBars*ticksPerBar)/PPQ`, not `loopBars*round(qpb)` (avoids wrap drift). */
-  const patternColsDrums = Math.max(1, Math.round((loopBars * ticksPerBar) / PPQ + 1e-6));
-  /** Ruler segments: always `MEASURES_PER_BAR` quarter columns per Creation “bar” (4 clicks = 1 bar). */
+  const [bpm, setBpm] = useState(120);
+  const bpmRef = useRef(120);
+  bpmRef.current = bpm;
+  const [metronomeEnabled, setMetronomeEnabled] = useState(true);
+  const metroOnRef = useRef(true);
+  metroOnRef.current = metronomeEnabled;
+  const currentDrumsRef = useRef<boolean[][]>([]);
+
+  // SE2-style loop region in beats (bars * beatsPerBar).
+  const [beatsPerBar, setBeatsPerBar] = useState(4);
+  const beatsPerBarRef = useRef(4);
+  beatsPerBarRef.current = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
+  const [loopOn, setLoopOn] = useState(false);
+  const loopOnRef = useRef(false);
+  loopOnRef.current = loopOn;
+  const [loopBars, setLoopBars] = useState(4);
+  const loopBarsRef = useRef(4);
+  loopBarsRef.current = loopBars;
+  /** Same subdivision key as Studio Editor 2 piano/drum grid (1/4 … 1/64). */
+  const [pianoSnapSubdiv, setPianoSnapSubdiv] = useState(readPianoSnapSubdivFromStorage);
+  const [loopStartBeat, setLoopStartBeat] = useState(0);
+  const [loopEndBeat, setLoopEndBeat] = useState(() => beatsPerBarRef.current * 4);
+  const loopStartBeatRef = useRef(0);
+  const loopEndBeatRef = useRef(loopEndBeat);
+  loopStartBeatRef.current = loopStartBeat;
+  loopEndBeatRef.current = loopEndBeat;
+  const [patternPlayMode, setPatternPlayMode] = useState<'single' | 'chainAB'>('single');
+  const patternPlayModeRef = useRef<'single' | 'chainAB'>('single');
+  patternPlayModeRef.current = patternPlayMode;
+  const [colWidth, setColWidth]     = useState(DEF_CW);
+  const [follow, setFollow]         = useState(true);
+  const followRef = useRef(follow);
+  followRef.current = follow;
+  const isPlaybackOrRecordRef = useRef(false);
+  const transportNotStoppedRef = useRef(false);
+  const [pianoMode, setPianoMode]   = useState<'notes'|'drums'>('notes');
+  const [pianoRegisterShift, setPianoRegisterShift] = useState(0);
+
+  const qpb = beatsPerBarRef.current; // SE2 grid: beats per bar (denom fixed 4)
+  const ticksPerBar = qpb * PPQ;
+  const loopStartTick = Math.round(loopStartBeatRef.current * PPQ);
+  const drumStepSubdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, normalizePianoSnapSubdiv(pianoSnapSubdiv)));
+  const patternColsDrumsBeats = Math.max(1, Math.round((loopBars * ticksPerBar) / PPQ + 1e-6));
+  const patternColsDrums = Math.max(
+    1,
+    Math.min(TOTAL_COLS, patternColsDrumsBeats * drumStepSubdiv),
+  );
+
+  const ctxRef = useRef<AudioContext | null>(null);
+  const sessionStartRef = useRef(0);
+  const originBeatRef = useRef(0);
+  const cursorBeatRef = useRef(0);
+  const displayBeatRef = useRef(0);
+  /** Last BAR/MEASURE/PH; RAF paints BAR + beat-in-bar + phrase into `creationHudDomRef` during playback. */
+  const creationHudHoldRef = useRef({ m: 1, b: 1, ph: 1 });
+  const creationHudDomRef = useRef<CreationHudDomSlots>({
+    barDigits: null,
+    msrFrac: null,
+    phrase: null,
+  });
+  /** Studio Editor 2–style Bars / Time chips above the grid (imperative `textContent`, same strings as SE2). */
+  const creationSe2BarsReadoutRef = useRef<HTMLSpanElement | null>(null);
+  const creationSe2TimeReadoutRef = useRef<HTMLSpanElement | null>(null);
+  /** Last painted BAR|MSR key — from `computeCreationTransportHudFromBeat` during playback. */
+  const creationHudQuarterPaintedRef = useRef('');
+  const colWidthRef = useRef(colWidth);
+  const patternColsDrumsRef = useRef(patternColsDrums);
+  const drumStepSubdivRef = useRef(drumStepSubdiv);
+  const patternColsDrumsBeatsRef = useRef(patternColsDrumsBeats);
+  const drumPlaylineRef = useRef<HTMLDivElement>(null);
+  const drumGridContentRef = useRef<HTMLDivElement>(null);
+  const pianoPlaylineRef = useRef<HTMLDivElement>(null);
+  /** Compositor-thread playline (Studio Editor 2 pattern); RAF must not overwrite while `playState === 'running'`. */
+  const creationDrumPlaylineAnimRef = useRef<Animation | null>(null);
+  const creationPianoPlaylineAnimRef = useRef<Animation | null>(null);
+  const creationDrumQuantGlowAnimRef = useRef<Animation | null>(null);
+  /** Beat Lab quant row cells — ref array for clearing any legacy imperative styles on tab change. */
+  const quantMeasureCellElsRef = useRef<(HTMLDivElement | null)[]>([]);
+  colWidthRef.current = colWidth;
+  patternColsDrumsRef.current = patternColsDrums;
+  drumStepSubdivRef.current = drumStepSubdiv;
+  patternColsDrumsBeatsRef.current = patternColsDrumsBeats;
+
+  /** Latest rAF frame handler (assigned each render so the pump always calls current HUD/playline logic). */
+  const creationTransportOnFrameRef = useRef<(bDisplay: number) => void>(() => {});
+  /**
+   * Last values for which we publish {@link publishCreationTransportBeat}.
+   * We only bump on **pattern column** or **BAR|MSR|PH** changes — not every subdiv step — so the main
+   * screen is not re-rendered ~32×/s while the playline still moves on the compositor (WAAPI).
+   */
+  const creationTransportUiPublishRef = useRef<{
+    activeCol: number;
+    hudKey: string;
+  }>({
+    activeCol: Number.NaN,
+    hudKey: '',
+  });
+  /** Solid transport clock: next step index/time are advanced monotonically from the audio clock only. */
+  const nextStepBeatRef = useRef(0);
+  const nextStepTimeRef = useRef(0);
+  const lastScheduledQuarterRef = useRef<number>(Number.NEGATIVE_INFINITY);
+  /** Set from `refillCreationSchedule` (defined after `fireStepAt`) so cold start can call it. */
+  const refillCreationScheduleRef = useRef<(ctx: AudioContext, ctSnap: number) => void>(() => {});
+
+  /** Same idea as SE2 `scheduledMetroNodesRef` — lookahead queues clicks ~3s ahead; must stop on pause/stop. */
+  const scheduledCreationMetroNodesRef = useRef<{ osc: OscillatorNode; gain: GainNode }[]>([]);
+
+  const cancelScheduledCreationMetroNodes = useCallback(() => {
+    const arr = scheduledCreationMetroNodesRef.current;
+    for (const { osc, gain } of arr) {
+      try {
+        const c = osc.context;
+        if (c.state !== 'closed') osc.stop(c.currentTime);
+      } catch {
+        /* already stopped */
+      }
+      try {
+        osc.disconnect();
+        gain.disconnect();
+      } catch {
+        /* */
+      }
+    }
+    arr.length = 0;
+  }, []);
+
+  /**
+   * Metronome click — same contract as SE2 `playClick`: `t0 = max(idealT, ctSnap + 1ms)`.
+   * No user “CLICK ms” offset (that was Creation-only and fought the lookahead grid).
+   */
+  const scheduleMetronomeClickAt = useCallback(
+    (ctx: AudioContext, idealT: number, accent: boolean, audioNowForClamp: number) => {
+      if (!metroOnRef.current) return;
+      try {
+        const now = Number.isFinite(audioNowForClamp)
+          ? Math.max(0, audioNowForClamp)
+          : ctx.currentTime;
+        const tSafe = Math.max(idealT, now + 0.001);
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(accent ? 1760 : 1320, tSafe);
+        gain.gain.setValueAtTime(0.0001, tSafe);
+        gain.gain.exponentialRampToValueAtTime(accent ? 0.14 : 0.1, tSafe + CREATION_METRO_CLICK_ATTACK_SEC);
+        gain.gain.exponentialRampToValueAtTime(0.0001, tSafe + 0.03);
+        osc.connect(gain);
+        const bus = getMetronomeBusGain();
+        if (bus && bus.context === ctx) gain.connect(bus);
+        else gain.connect(ctx.destination);
+        const clickDur = 0.12;
+        osc.start(tSafe);
+        osc.stop(tSafe + clickDur);
+        const entry = { osc, gain };
+        scheduledCreationMetroNodesRef.current.push(entry);
+        osc.onended = () => {
+          const arr = scheduledCreationMetroNodesRef.current;
+          const idx = arr.indexOf(entry);
+          if (idx !== -1) arr.splice(idx, 1);
+          try {
+            osc.disconnect();
+            gain.disconnect();
+          } catch {
+            /* already disconnected */
+          }
+        };
+      } catch {
+        /* non-critical */
+      }
+    },
+    [getMetronomeBusGain],
+  );
+
+  const ensureCtx = useCallback(async (): Promise<AudioContext> => {
+    const ctx = ctxRef.current ?? getOrCreateAudioContext();
+    ctxRef.current = ctx;
+    if (ctx.state === 'suspended') {
+      try { await ctx.resume(); } catch { /* autoplay */ }
+    }
+    return ctx;
+  }, [getOrCreateAudioContext]);
+
+  const resetCreationPlaylineTransforms = useCallback(() => {
+    const cw = Math.max(colWidthRef.current, DRUM_GRID_MIN_CW);
+    cancelCreationPlaylineWapi(
+      {
+        drumAnimRef: creationDrumPlaylineAnimRef,
+        pianoAnimRef: creationPianoPlaylineAnimRef,
+        drumQuantGlowAnimRef: creationDrumQuantGlowAnimRef,
+      },
+      drumPlaylineRef.current,
+      pianoPlaylineRef.current,
+      null,
+    );
+    const drumEl = drumPlaylineRef.current;
+    const pianoEl = pianoPlaylineRef.current;
+    if (drumEl) drumEl.style.transform = `translate3d(${-CREATION_DRUM_PLAYLINE_CENTER_X}px, 0, 0)`;
+    if (pianoEl) pianoEl.style.transform = `translate3d(${-CREATION_PIANO_PLAYLINE_CENTER_X}px, 0, 0)`;
+  }, []);
+
+  /**
+   * Imperative snap: cancel WAAPI + `transform` — **only while transport is not running**.
+   * During play, motion + loop wrap are owned by {@link launchCreationPlaylineWapiNow} (compositor);
+   * calling this with `runningRef` true would cancel that anim and desync the line from audio.
+   */
+  const updateCreationPlaylineTransforms = useCallback((beatNow: number) => {
+    if (runningRef.current) return;
+    cancelCreationPlaylineWapi(
+      {
+        drumAnimRef: creationDrumPlaylineAnimRef,
+        pianoAnimRef: creationPianoPlaylineAnimRef,
+        drumQuantGlowAnimRef: creationDrumQuantGlowAnimRef,
+      },
+      drumPlaylineRef.current,
+      pianoPlaylineRef.current,
+      null,
+    );
+    const cw = Math.max(colWidthRef.current, DRUM_GRID_MIN_CW);
+    const pcw = Math.max(colWidthRef.current, PIANO_GRID_MIN_CW);
+    setCreationPlaylineTransformStatic({
+      drumEl: drumPlaylineRef.current,
+      pianoEl: pianoPlaylineRef.current,
+      drumQuantGlowEl: null,
+      beatNow,
+      subdiv: drumStepSubdivRef.current,
+      pcols: patternColsDrumsRef.current,
+      drumColW: cw,
+      pianoColW: pcw,
+      loopOn: loopOnRef.current,
+      loopStartBeat: loopStartBeatRef.current,
+      loopEndBeat: loopEndBeatRef.current,
+      playMode: patternPlayModeRef.current,
+    });
+  }, []);
+
+  /** WAAPI owns drum/piano playline motion + loop segment (pause → seek → play); SE2 contract. */
+  const launchCreationPlaylineWapiNow = useCallback((beatNow: number, play: boolean) => {
+    const cw = Math.max(colWidthRef.current, DRUM_GRID_MIN_CW);
+    const pcw = Math.max(colWidthRef.current, PIANO_GRID_MIN_CW);
+    const bpmR = Math.max(1, bpmRef.current);
+    const leadSec =
+      CREATION_PLAYLINE_WAPI_LEAD_SEC + creationPlaylineOutputDacLeadSec(ctxRef.current);
+    const beatForWapi = play ? beatNow + leadSec * (bpmR / 60) : beatNow;
+    launchCreationPlaylineWapi(
+      {
+        drumAnimRef: creationDrumPlaylineAnimRef,
+        pianoAnimRef: creationPianoPlaylineAnimRef,
+        drumQuantGlowAnimRef: creationDrumQuantGlowAnimRef,
+      },
+      {
+        drumEl: drumPlaylineRef.current,
+        pianoEl: pianoPlaylineRef.current,
+        drumQuantGlowEl: null,
+        beatNow: beatForWapi,
+        play,
+        bpm: bpmRef.current,
+        subdiv: drumStepSubdivRef.current,
+        pcols: patternColsDrumsRef.current,
+        drumColW: cw,
+        pianoColW: pcw,
+        loopOn: loopOnRef.current,
+        loopStartBeat: loopStartBeatRef.current,
+        loopEndBeat: loopEndBeatRef.current,
+        playMode: patternPlayModeRef.current,
+      },
+    );
+  }, []);
+
+  /** Studio Editor 2–style Bars / Time text (same `formatBarsBeatsTicks` + `formatTimeMmSsFf` as SE2). */
+  const paintCreationSe2TransportReadouts = useCallback((beats: number, paused: boolean) => {
+    const db = Math.max(0, beats);
+    const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+    const bpmR = Math.max(1, bpmRef.current);
+    const bars = formatCreationSe2BarsBeatsTicks(db, bpb);
+    const time = formatCreationSe2TimeMmSsFf(db, bpmR);
+    const br = creationSe2BarsReadoutRef.current;
+    const tr = creationSe2TimeReadoutRef.current;
+    if (br) br.textContent = paused ? `pause ${bars}` : bars;
+    if (tr) tr.textContent = time;
+  }, []);
+
+  const startTransport = useCallback(async (mode: 'play' | 'record') => {
+    const ctx = await ensureCtx();
+    /** Preserve fractional beat (stop / pause / scrub) — snapping to `floor` here caused playhead + audio to jump on Play. */
+    const origin = Math.max(0, cursorBeatRef.current);
+    cursorBeatRef.current = origin;
+    originBeatRef.current = origin;
+    displayBeatRef.current = origin;
+    const tCapture = Math.max(0, ctx.currentTime);
+    sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+    const spb = 60 / Math.max(1, bpmRef.current);
+    /** Next quarter boundary at/after `origin` — `floor` put `tGrid` in the past mid-beat and broke refill sync. */
+    const k0 = Math.ceil(origin - 1e-8);
+    nextStepBeatRef.current = k0;
+    nextStepTimeRef.current = sessionStartRef.current + (k0 - origin) * spb;
+    lastScheduledQuarterRef.current = k0 - 1;
+    // Must flip refs before immediate refill so beat-0 is actually queued now (not one interval late).
+    runningRef.current = true;
+    recordingRef.current = mode === 'record';
+    refillCreationScheduleRef.current(ctx, tCapture);
+    /**
+     * Commit transport (playhead opacity, etc.) **before** the first `element.animate()`.
+     * Otherwise the same commit that applies `opacity` can drop or stall the compositor animation
+     * until a later relaunch — `flushSync` forces DOM updates synchronously in the gesture stack.
+     */
+    flushSync(() => {
+      setTransport(mode === 'record' ? 'recording' : 'playing');
+    });
+    /**
+     * WAAPI playhead: one launch after DOM matches `playing`, on the **audio** clock.
+     */
+    const tPost = Math.max(0, ctx.currentTime);
+    const ss = sessionStartRef.current;
+    /** Same beat for playline + `displayBeatRef` / MSR — a WAAPI-only advance here skewed the arrow ahead of the 1–8 count. */
+    const beatLaunch = beatAtSessionTime(tPost, ss, originBeatRef.current, bpmRef.current);
+    displayBeatRef.current = beatLaunch;
+    launchCreationPlaylineWapiNow(beatLaunch, true);
+    /**
+     * Defer follow-scroll + HUD paint to the next macrotask so the compositor can commit the first WAAPI
+     * frame before this thread runs heavy DOM — removes a slight “stuck then moves” feel on Play.
+     */
+    window.setTimeout(() => {
+      if (!runningRef.current) return;
+      if (followRef.current) {
+        const subdivR = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+        const pcolsR = Math.max(1, patternColsDrumsRef.current);
+        const cwD = Math.max(colWidthRef.current, DRUM_GRID_MIN_CW);
+        const cwP = Math.max(colWidthRef.current, PIANO_GRID_MIN_CW);
+        const pos0 = creationPlaylineColFAndPx(
+          beatLaunch,
+          subdivR,
+          pcolsR,
+          loopOnRef.current,
+          loopStartBeatRef.current,
+          loopEndBeatRef.current,
+          patternPlayModeRef.current,
+          cwD,
+          cwP,
+        );
+        const scrollOne = (el: HTMLDivElement | null, px: number) => {
+          if (!el) return;
+          const left = el.scrollLeft;
+          const right = left + el.clientWidth;
+          const m = el.clientWidth * 0.3;
+          if (px < left + m || px > right - m) {
+            el.scrollLeft = Math.max(0, px - el.clientWidth * 0.35);
+          }
+        };
+        scrollOne(drumScrollRef.current, pos0.drumX);
+        scrollOne(pianoScrollRef.current, pos0.pianoX);
+      }
+      const qpbR = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+      const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+      const pcols = Math.max(1, patternColsDrumsRef.current);
+      const loopStartBarR = Math.floor(loopStartBeatRef.current / qpbR) + 1;
+      const hud = computeCreationTransportHudFromBeat(beatLaunch, {
+        subdiv,
+        pcols,
+        loopOn: loopOnRef.current,
+        loopStartBeat: loopStartBeatRef.current,
+        loopEndBeat: loopEndBeatRef.current,
+        playMode: patternPlayModeRef.current,
+        loopStartBar: loopStartBarR,
+        qpb: qpbR,
+        transportOriginBeat: originBeatRef.current,
+      });
+      creationHudQuarterPaintedRef.current = `${hud.bar}|${hud.measure}|${hud.phrase}`;
+      paintCreationHudQuarterIntoDom(
+        creationHudDomRef.current,
+        hud,
+        qpbR,
+        { active: true },
+        creationHudHoldRef,
+        true,
+      );
+      creationTransportUiPublishRef.current = { activeCol: Number.NaN, hudKey: '' };
+      publishCreationTransportBeat();
+      paintCreationSe2TransportReadouts(beatLaunch, false);
+    }, 0);
+  }, [ensureCtx, SE2_AUDIO_START_FLOOR_SEC, launchCreationPlaylineWapiNow, paintCreationSe2TransportReadouts]);
+
+  const pauseTransport = useCallback(async () => {
+    cancelScheduledCreationMetroNodes();
+    const ctx = await ensureCtx();
+    const t = Math.max(0, ctx.currentTime);
+    const b = beatAtSessionTime(t, sessionStartRef.current, originBeatRef.current, bpmRef.current);
+    cursorBeatRef.current = b;
+    displayBeatRef.current = b;
+    originBeatRef.current = b;
+    runningRef.current = false;
+    recordingRef.current = false;
+    // Keep compositor ownership: paused WAAPI at `b`, never cancel-while-running + CSS snap.
+    launchCreationPlaylineWapiNow(b, false);
+    const qpbR = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+    const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+    const pcols = Math.max(1, patternColsDrumsRef.current);
+    const loopStartBarR = Math.floor(loopStartBeatRef.current / qpbR) + 1;
+    const hudPause = computeCreationTransportHudFromBeat(b, {
+      subdiv,
+      pcols,
+      loopOn: loopOnRef.current,
+      loopStartBeat: loopStartBeatRef.current,
+      loopEndBeat: loopEndBeatRef.current,
+      playMode: patternPlayModeRef.current,
+      loopStartBar: loopStartBarR,
+      qpb: qpbR,
+      transportOriginBeat: originBeatRef.current,
+    });
+    creationHudQuarterPaintedRef.current = `${hudPause.bar}|${hudPause.measure}|${hudPause.phrase}`;
+    paintCreationHudQuarterIntoDom(
+      creationHudDomRef.current,
+      hudPause,
+      qpbR,
+      { active: false },
+      creationHudHoldRef,
+      true,
+    );
+    creationTransportUiPublishRef.current = {
+      activeCol: Number.NaN,
+      hudKey: '',
+    };
+    paintCreationSe2TransportReadouts(b, true);
+    setTransport('paused');
+    publishCreationTransportBeat();
+  }, [cancelScheduledCreationMetroNodes, ensureCtx, launchCreationPlaylineWapiNow, paintCreationSe2TransportReadouts]);
+
+  const stopTransport = useCallback(() => {
+    cancelScheduledCreationMetroNodes();
+    let b = displayBeatRef.current;
+    const ctx = ctxRef.current;
+    if (ctx && ctx.state !== 'closed' && sessionStartRef.current > 0 && runningRef.current) {
+      const t = Math.max(0, ctx.currentTime);
+      b = beatAtSessionTime(t, sessionStartRef.current, originBeatRef.current, bpmRef.current);
+    }
+    runningRef.current = false;
+    recordingRef.current = false;
+    cursorBeatRef.current = b;
+    originBeatRef.current = b;
+    displayBeatRef.current = b;
+    sessionStartRef.current = 0;
+    lastScheduledQuarterRef.current = Number.NEGATIVE_INFINITY;
+    resetCreationTransportStepClock({ nextStepBeatRef, nextStepTimeRef });
+    reanchorNextStepWhileStopped({ nextStepBeatRef, nextStepTimeRef }, b);
+    updateCreationPlaylineTransforms(b);
+    const z = creationHudDomRef.current;
+    const qpbR = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+    const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+    const pcols = Math.max(1, patternColsDrumsRef.current);
+    const loopStartBarR = Math.floor(loopStartBeatRef.current / qpbR) + 1;
+    const hudStop = computeCreationTransportHudFromBeat(b, {
+      subdiv,
+      pcols,
+      loopOn: loopOnRef.current,
+      loopStartBeat: loopStartBeatRef.current,
+      loopEndBeat: loopEndBeatRef.current,
+      playMode: patternPlayModeRef.current,
+      loopStartBar: loopStartBarR,
+      qpb: qpbR,
+      transportOriginBeat: originBeatRef.current,
+    });
+    creationHudQuarterPaintedRef.current = `${hudStop.bar}|${hudStop.measure}|${hudStop.phrase}`;
+    paintCreationHudQuarterIntoDom(z, hudStop, qpbR, { active: false }, creationHudHoldRef, true);
+    paintCreationSe2TransportReadouts(b, false);
+    setTransport('stopped');
+    creationTransportUiPublishRef.current = { activeCol: Number.NaN, hudKey: '' };
+    publishCreationTransportBeat();
+  }, [
+    cancelScheduledCreationMetroNodes,
+    lastScheduledQuarterRef,
+    updateCreationPlaylineTransforms,
+    paintCreationSe2TransportReadouts,
+  ]);
+
+  const seekBeats = useCallback((b: number) => {
+    const nb = Math.max(0, b);
+    cursorBeatRef.current = nb;
+    displayBeatRef.current = nb;
+    if (runningRef.current && ctxRef.current) {
+      const ctx = ctxRef.current;
+      const tCapture = Math.max(0, ctx.currentTime);
+      sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+      originBeatRef.current = nb;
+      const spb = 60 / Math.max(1, bpmRef.current);
+      reanchorNextStepWhileRunning(
+        {
+          nextStepBeatRef,
+          nextStepTimeRef,
+          sessionStartRef,
+          originBeatRef,
+          lastScheduledQuarterRef,
+        },
+        sessionStartRef.current,
+        nb,
+        spb,
+      );
+    } else {
+      originBeatRef.current = nb;
+      sessionStartRef.current = 0;
+      reanchorNextStepWhileStopped({ nextStepBeatRef, nextStepTimeRef }, nb);
+    }
+    if (runningRef.current) {
+      launchCreationPlaylineWapiNow(nb, true);
+    } else {
+      updateCreationPlaylineTransforms(nb);
+    }
+    const qpbR = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+    const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+    const pcols = Math.max(1, patternColsDrumsRef.current);
+    const loopStartBarR = Math.floor(loopStartBeatRef.current / qpbR) + 1;
+    const hudSeek = computeCreationTransportHudFromBeat(nb, {
+      subdiv,
+      pcols,
+      loopOn: loopOnRef.current,
+      loopStartBeat: loopStartBeatRef.current,
+      loopEndBeat: loopEndBeatRef.current,
+      playMode: patternPlayModeRef.current,
+      loopStartBar: loopStartBarR,
+      qpb: qpbR,
+      transportOriginBeat: originBeatRef.current,
+    });
+    if (runningRef.current) {
+      creationHudQuarterPaintedRef.current = '';
+    } else {
+      creationHudQuarterPaintedRef.current = `${hudSeek.bar}|${hudSeek.measure}|${hudSeek.phrase}`;
+      paintCreationHudQuarterIntoDom(
+        creationHudDomRef.current,
+        hudSeek,
+        qpbR,
+        { active: false },
+        creationHudHoldRef,
+        true,
+      );
+    }
+    creationTransportUiPublishRef.current = { activeCol: Number.NaN, hudKey: '' };
+    publishCreationTransportBeat();
+    paintCreationSe2TransportReadouts(nb, false);
+  }, [
+    SE2_AUDIO_START_FLOOR_SEC,
+    updateCreationPlaylineTransforms,
+    launchCreationPlaylineWapiNow,
+    paintCreationSe2TransportReadouts,
+  ]);
+
+  /** Click timeline column (ruler / quant row / Ctrl+pad) → move playhead to that step. */
+  const seekTransportToPatternColumn = useCallback(
+    (patternColCi: number) => {
+      if (CREATION_BACKEND_BLANK) return;
+      const s = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+      const off = creationDrumColOffsetSteps(loopOnRef.current, loopStartBeatRef.current, s);
+      const pc = Math.max(1, patternColsDrumsRef.current);
+      const ci = Math.max(0, Math.min(pc - 1, Math.floor(patternColCi)));
+      const beat = (ci + off) / s;
+      seekBeats(beat);
+    },
+    [seekBeats],
+  );
+
+  const setLoopRangeBeats = useCallback((startB: number, endB: number) => {
+    const s = Math.max(0, Math.min(startB, endB));
+    const e = Math.max(s + beatsPerBarRef.current, Math.max(startB, endB));
+    setLoopStartBeat(s);
+    setLoopEndBeat(e);
+    setLoopBars(Math.max(1, Math.round((e - s) / beatsPerBarRef.current)));
+  }, []);
+
+  // Compatibility vars for existing UI components (Creation now uses local SE2-style loop).
+  const loopEnabled = loopOn;
+  const setLoopEnabled = setLoopOn;
+  const loopStartBar = Math.floor(loopStartBeatRef.current / beatsPerBarRef.current) + 1;
+  const loopEndBar = Math.floor(loopEndBeatRef.current / beatsPerBarRef.current);
+  const loopSection: string | null = null;
+  const setLoopRange = useCallback(
+    (startBar: number, endBar: number) => {
+      const s = Math.max(1, Math.round(startBar));
+      const e = Math.max(s, Math.round(endBar));
+      setLoopRangeBeats((s - 1) * beatsPerBarRef.current, e * beatsPerBarRef.current);
+    },
+    [setLoopRangeBeats],
+  );
+
+  const drumStepSubdivUi = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdiv)));
+
+  /** Ruler segments: one header per DAW bar = `beatsPerBar` × current step subdivision. */
   const creationDrumRulerCounts = useMemo(() => {
     const cols = patternColsDrums;
-    const step = MEASURES_PER_BAR;
+    const q = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
+    const step = q * drumStepSubdivUi;
     const out: number[] = [];
     for (let o = 0; o < cols; o += step) {
       out.push(Math.min(step, cols - o));
     }
     return out;
-  }, [patternColsDrums]);
+  }, [patternColsDrums, drumStepSubdivUi, beatsPerBar]);
   const { notes: sharedNotes, addNote: addSharedNote, removeNote: removeSharedNote } = usePianoNotes();
 
-  const [tab, setTab]               = useState<'drums' | 'grid' | 'piano' | 'mixer'>('drums');
+  /** Land on Genius Home Studio layout (sounds rail + sequence) — drums / piano remain one click away. */
+  const [tab, setTab]               = useState<'drums' | 'grid' | 'piano'>('grid');
+  const [drumKitGenOpen, setDrumKitGenOpen] = useState(false);
+  const [drumKitGenStyle, setDrumKitGenStyle] = useState<DrumKitGeneratorStyle>('house');
+  const [drumKitGenBusy, setDrumKitGenBusy] = useState(false);
   const [bpmInput, setBpmInput]     = useState(String(bpm));
   const [kit, setKit]               = useState(KITS[0]);
   const [activeBank, setActiveBank] = useState(0);
-  const [padChannels, setPadChannels] = useState<number[]>(() => {
-    try {
-      const s = localStorage.getItem('creationStation_padChannels');
-      if (s) {
-        const parsed = JSON.parse(s) as unknown;
-        if (Array.isArray(parsed) && parsed.length === 16 && parsed.every((x) => typeof x === 'number')) {
-          return parsed as number[];
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-    return PAD_NAMES.map((_, i) => i + 1);
-  });
-  const [subOn, setSubOn]           = useState(false);
   const [rollInstr, setRollInstr]   = useState(0);
-
-  // Sync bpmInput with actual bpm when changed from other sources
-  useEffect(() => {
-    setBpmInput(String(bpm));
-  }, [bpm]);
   const [banks, setBanks]           = useState<Bank[]>(() => {
     const saved = localStorage.getItem('creationStation_banks');
     if (saved) {
@@ -1222,94 +3055,114 @@ export default function CreationStationScreen({
     }
     return BANKS.map(() => ({ drums: emptyDrums(), notes: [] }));
   });
+  const [patternSlot, setPatternSlot] = useState<PatternSlot>('A');
+  const [bankPatternSlots, setBankPatternSlots] = useState<
+    Array<Record<PatternSlot, DrumPattern>>
+  >(() => BANKS.map(() => ({ A: emptyDrums(), B: emptyDrums() })));
+  const patternSlotsInitializedRef = useRef(false);
+  const bankPatternSlotsRef = useRef<Array<Record<PatternSlot, DrumPattern>>>([]);
+
+  useEffect(() => {
+    setBpmInput(String(Math.round(bpm)));
+  }, [bpm]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        PIANO_SNAP_SUBDIV_STORAGE_KEY,
+        String(normalizePianoSnapSubdiv(pianoSnapSubdiv)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [pianoSnapSubdiv]);
+
+  useEffect(() => {
+    if (!isScreenActive) return;
+    setPianoSnapSubdiv(readPianoSnapSubdivFromStorage());
+  }, [isScreenActive]);
 
   // Persist banks to localStorage
   useEffect(() => {
     localStorage.setItem('creationStation_banks', JSON.stringify(banks));
   }, [banks]);
-
   useEffect(() => {
     try {
-      localStorage.setItem('creationStation_padChannels', JSON.stringify(padChannels));
+      localStorage.setItem('creationStation_patternSlots', JSON.stringify(bankPatternSlots));
     } catch {
       /* ignore */
     }
-  }, [padChannels]);
+  }, [bankPatternSlots]);
+  useEffect(() => {
+    if (patternSlotsInitializedRef.current) return;
+    if (banks.length === 0) return;
+    let loaded: Array<Record<PatternSlot, DrumPattern>> | null = null;
+    try {
+      const raw = localStorage.getItem('creationStation_patternSlots');
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (Array.isArray(parsed)) {
+          loaded = parsed.map((entry) => {
+            const e = entry as Partial<Record<PatternSlot, DrumPattern>>;
+            const a = Array.isArray(e.A) ? e.A : emptyDrums();
+            const b = Array.isArray(e.B) ? e.B : emptyDrums();
+            return { A: a, B: b };
+          });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    setBankPatternSlots(() =>
+      BANKS.map((_, i) => ({
+        A: loaded?.[i]?.A?.map((r) => r.slice()) ?? banks[i]?.drums.map((r) => r.slice()) ?? emptyDrums(),
+        B: loaded?.[i]?.B?.map((r) => r.slice()) ?? emptyDrums(),
+      })),
+    );
+    patternSlotsInitializedRef.current = true;
+  }, [banks]);
+  useEffect(() => {
+    if (!patternSlotsInitializedRef.current) return;
+    const slotDrums = bankPatternSlots[activeBank]?.[patternSlot];
+    if (!slotDrums) return;
+    setBanks((prev) =>
+      prev.map((b, i) => (i === activeBank ? { ...b, drums: slotDrums.map((r) => r.slice()) } : b)),
+    );
+  }, [activeBank, patternSlot, bankPatternSlots]);
+  useEffect(() => {
+    bankPatternSlotsRef.current = bankPatternSlots;
+  }, [bankPatternSlots]);
 
-  const [colWidth, setColWidth]     = useState(DEF_CW);
-  const [follow, setFollow]         = useState(true);
-  const [pianoMode, setPianoMode]   = useState<'notes'|'drums'>('notes');
-  const [pianoRegisterShift, setPianoRegisterShift] = useState(0);
   const [pressedPianoKeyRow, setPressedPianoKeyRow] = useState<number | null>(null);
-  const [padFlashTicks, setPadFlashTicks] = useState<number[]>(Array(16).fill(0));
-  const [subFlashTick, setSubFlashTick] = useState(0);
-  const [selectedMixerPad, setSelectedMixerPad] = useState(0);
-  const [addEffectOpen, setAddEffectOpen] = useState(false);
-  const [drumEffects, setDrumEffects] = useState<Record<number, Effect[]>>(
-    Object.fromEntries(Array.from({ length: 17 }, (_, i) => [i + 1, []]))
-  );
-  const [localMeterBoost, setLocalMeterBoost] = useState<Record<number, number>>({});
-  const [padStereoModes, setPadStereoModes] = useState<Record<number, 'stereo' | 'mono'>>({});
-  const [subStereoMode, setSubStereoMode] = useState<'stereo' | 'mono'>('mono');
-  const [drumPans, setDrumPans] = useState<Record<number, number>>(
-    Object.fromEntries(Array.from({ length: 17 }, (_, i) => [i + 1, 0]))
-  );
   const [selectedDrumPad, setSelectedDrumPad] = useState<number | null>(null);
-  const METER_BOOST_DECAY_STEP = 0.35;
-  const METER_BOOST_DECAY_MS = 16;
-
+  const [activeGeniusStarter, setActiveGeniusStarter] = useState<CreationStarterPreset | null>(null);
+  const [mutedPads, setMutedPads] = useState<boolean[]>(() => Array(16).fill(false));
+  const mutedPadsRef = useRef<boolean[]>(Array(16).fill(false));
+  mutedPadsRef.current = mutedPads;
   /** MPC-style: per-bank pad samples (key `${bank}_${pad}`) — presence drives UI; buffers in ref for playback. */
   const [padSamplePresence, setPadSamplePresence] = useState<Record<string, boolean>>({});
+  /** Optional source BPM per sample key — drives simple session sync (playbackRate). */
+  const [padSampleRootBpms, setPadSampleRootBpms] = useState<Record<string, number>>({});
+  const padSampleRootBpmRef = useRef<Record<string, number>>({});
+  /** Display name per pad sample key — mirrors `StoredPadSample.label` (sampler + sequencer lane). */
+  const [padSampleLabels, setPadSampleLabels] = useState<Record<string, string>>({});
+  const [geniusSamplerTargetPad, setGeniusSamplerTargetPad] = useState(14);
   const padSampleBuffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+  /** HPF/LPF/trim/fine-tune per `${bank}_${pad}` — mirrors optional fields on `StoredPadSample`. */
+  const padSamplePlaybackOptsRef = useRef<Record<string, PadSamplerPlaybackOpts>>({});
+  /** Active `BufferSource` stop fns per pad key — used to silence long/looping samples and stacked hits. */
+  const padSampleActiveStoppersRef = useRef<Map<string, Set<() => void>>>(new Map());
   const playPadSoundRef = useRef<(pi: number, vel: number, when?: number) => void>(() => {});
-  const padChannelsRef = useRef(padChannels);
   const activeBankRef = useRef(activeBank);
   const channelVolumesRef = useRef(channelVolumes);
   const pendingPadSampleRef = useRef<number | null>(null);
   const padSampleFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => { padChannelsRef.current = padChannels; }, [padChannels]);
   useEffect(() => { activeBankRef.current = activeBank; }, [activeBank]);
   useEffect(() => { channelVolumesRef.current = channelVolumes; }, [channelVolumes]);
-
-  // Ensure every EQ effect uses the active 12-band parameter layout.
   useEffect(() => {
-    setDrumEffects((prev) => {
-      let changed = false;
-      const next: Record<number, Effect[]> = {};
-      for (const k in prev) {
-        const fxList = prev[k] || [];
-        next[k] = fxList.map((fx) => {
-          if (fx.type !== 'EQ') return fx;
-          const normalized = normalizeEqParams(fx.params);
-          const same =
-            fx.params.length === normalized.length &&
-            fx.params.every((p, i) => p.label === normalized[i].label && p.value === normalized[i].value);
-          if (same) return fx;
-          changed = true;
-          return { ...fx, params: normalized };
-        });
-      }
-      return changed ? next : prev;
-    });
-  }, []);
-
-  // Immediate local meter attack for manual taps; fast drop-off.
-  useEffect(() => {
-    const id = setInterval(() => {
-      setLocalMeterBoost(prev => {
-        let changed = false;
-        const next: Record<number, number> = {};
-        for (const k in prev) {
-          const d = Math.max(0, prev[k] - METER_BOOST_DECAY_STEP);
-          if (d > 0) next[k] = d;
-          if (d !== prev[k]) changed = true;
-        }
-        return changed ? next : prev;
-      });
-    }, METER_BOOST_DECAY_MS);
-    return () => clearInterval(id);
-  }, [METER_BOOST_DECAY_MS, METER_BOOST_DECAY_STEP]);
+    padSampleRootBpmRef.current = padSampleRootBpms;
+  }, [padSampleRootBpms]);
 
   // Load persisted pad samples (decode once into AudioBuffers).
   useEffect(() => {
@@ -1320,6 +3173,8 @@ export default function CreationStationScreen({
     const ctx = getOrCreateAudioContext();
     void (async () => {
       const nextPresence: Record<string, boolean> = {};
+      const nextRoots: Record<string, number> = {};
+      const nextLabels: Record<string, string> = {};
       for (const k of keys) {
         if (cancelled) return;
         try {
@@ -1328,12 +3183,21 @@ export default function CreationStationScreen({
           const buf = await ctx.decodeAudioData(ab.slice(0));
           if (cancelled) return;
           padSampleBuffersRef.current.set(k, buf);
+          padSamplePlaybackOptsRef.current[k] = samplerOptsFromStored(st);
           nextPresence[k] = true;
+          const rb = st.rootBpm;
+          if (typeof rb === 'number' && rb > 0) nextRoots[k] = rb;
+          const lb = typeof st.label === 'string' ? st.label.trim() : '';
+          if (lb) nextLabels[k] = lb;
         } catch {
           /* skip corrupt entry */
         }
       }
-      if (!cancelled) setPadSamplePresence(prev => ({ ...prev, ...nextPresence }));
+      if (!cancelled) {
+        setPadSamplePresence((prev) => ({ ...prev, ...nextPresence }));
+        setPadSampleRootBpms((prev) => ({ ...prev, ...nextRoots }));
+        setPadSampleLabels((prev) => ({ ...prev, ...nextLabels }));
+      }
     })();
     return () => { cancelled = true; };
   }, [getOrCreateAudioContext]);
@@ -1365,32 +3229,55 @@ export default function CreationStationScreen({
       const key = `${activeBankRef.current}_${pi}`;
       const buf = padSampleBuffersRef.current.get(key);
       if (buf) {
-        playPadSampleBuffer(
+        const root = padSampleRootBpmRef.current[key];
+        const sessionBpm = Math.max(1, bpmRef.current);
+        const rate =
+          typeof root === 'number' && root > 0
+            ? Math.min(4, Math.max(0.25, sessionBpm / root))
+            : 1;
+        let bag = padSampleActiveStoppersRef.current.get(key);
+        if (!bag) {
+          bag = new Set();
+          padSampleActiveStoppersRef.current.set(key, bag);
+        }
+        let voiceStop: () => void;
+        const afterVoice = () => {
+          bag!.delete(voiceStop);
+          if (bag!.size === 0) padSampleActiveStoppersRef.current.delete(key);
+        };
+        const sampOpts =
+          padSamplePlaybackOptsRef.current[key] ?? defaultPadSamplerPlaybackOpts();
+        voiceStop = playPadSampleBuffer(
           ctx,
           buf,
-          padChannelsRef.current[pi],
+          creationPadMixerCh(pi),
           safeVelocity,
           t,
           channelVolumesRef.current,
+          rate,
+          afterVoice,
+          sampOpts,
         );
+        bag.add(voiceStop);
       } else {
-        triggerChannel(padChannelsRef.current[pi], safeVelocity, t);
+        triggerChannel(creationPadMixerCh(pi), safeVelocity, t);
       }
     };
   }, [triggerChannel, getOrCreateAudioContext]);
 
   // Shared DAW session: manifest + per-channel sequencer data → Studio tracks/clips (audioTrack === mixer CH).
   useEffect(() => {
-    const meta = computeUsedCreationChannelMeta(banks, padChannels, subOn);
+    const meta = computeUsedCreationChannelMeta(banks, CREATION_PAD_CHANNELS_FIXED, false);
     writeCreationChannelManifestToStorage(meta);
     const maxCols = patternColsDrums;
     const payload = {
       bpm,
       drumLoopBars: loopBars,
       measuresPerBar: qpb,
-      padChannels,
+      drumStepSubdiv,
+      padChannels: CREATION_PAD_CHANNELS_FIXED,
       activeBank,
-      subOn,
+      subOn: false,
       drums: (banks[activeBank]?.drums ?? []).map((row) => row.slice(0, maxCols)),
     };
     try {
@@ -1399,7 +3286,7 @@ export default function CreationStationScreen({
       /* ignore */
     }
     window.dispatchEvent(new Event(DA_SESSION_TRACKS_SYNC_EVENT));
-  }, [banks, padChannels, subOn, bpm, loopBars, activeBank, qpb, patternColsDrums]);
+  }, [banks, bpm, loopBars, activeBank, qpb, drumStepSubdiv, patternColsDrums, CREATION_BACKEND_BLANK]);
 
   // Re-sync Studio [CS] clips when pad samples load/clear (payload unchanged; Studio reads pad sample store).
   useEffect(() => {
@@ -1408,14 +3295,46 @@ export default function CreationStationScreen({
 
   const drumScrollRef  = useRef<HTMLDivElement>(null);
   const pianoScrollRef = useRef<HTMLDivElement>(null);
-  const gridScrollRef  = useRef<HTMLDivElement>(null);
-  /** Last BAR/MEASURE/PH while transport runs; frozen when stopped for display-only HUD. */
-  const creationHudHoldRef = useRef({ m: 1, b: 1, ph: 1 });
+  /** Beat Lab: keep lane labels ↔ pattern rows scrolled together. */
+  const geniusLaneScrollRef = useRef<HTMLDivElement>(null);
+  const geniusLaneGridScrollSync = useRef<'lane' | 'grid' | null>(null);
 
-  const isPlaying = transport === 'playing' || transport === 'recording';
+  const onGeniusPatternScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const lane = geniusLaneScrollRef.current;
+    if (!lane || geniusLaneGridScrollSync.current === 'lane') return;
+    geniusLaneGridScrollSync.current = 'grid';
+    lane.scrollTop = e.currentTarget.scrollTop;
+    queueMicrotask(() => {
+      geniusLaneGridScrollSync.current = null;
+    });
+  }, []);
+
+  const onGeniusLaneRailScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const grid = drumScrollRef.current;
+    if (!grid || geniusLaneGridScrollSync.current === 'grid') return;
+    geniusLaneGridScrollSync.current = 'lane';
+    grid.scrollTop = e.currentTarget.scrollTop;
+    queueMicrotask(() => {
+      geniusLaneGridScrollSync.current = null;
+    });
+  }, []);
+
+  const isPlaybackOrRecord = transport === 'playing' || transport === 'recording';
+  const isRecording = transport === 'recording';
+  const isCounting = false;
+  const isPaused = transport === 'paused';
+  const transportNeedsPause = isPlaybackOrRecord || isCounting;
+  const isPlaying = isPlaybackOrRecord;
   const transportNotStopped = transport !== 'stopped';
-  /** Ironclad grid: `AudioContext` + master clock math — no beat “events” / incremental counters. */
-  const transportClockLive = isScreenActive && transport !== 'stopped';
+  isPlaybackOrRecordRef.current = isPlaybackOrRecord;
+  transportNotStoppedRef.current = transportNotStopped;
+
+  /** When not playing, keep SE2 Bars/Time in sync with scrub / BPM (rAF pump only runs while `runningRef`). */
+  useEffect(() => {
+    if (tab !== 'grid') return;
+    if (isPlaybackOrRecord) return;
+    paintCreationSe2TransportReadouts(Math.max(0, displayBeatRef.current), transport === 'paused');
+  }, [tab, transport, isPlaybackOrRecord, bpm, paintCreationSe2TransportReadouts]);
 
   /** Ruler highlight: updates only when isolated HUD changes measure (avoids 60fps full-screen repaints). */
   const _creationRulerPulse = useSyncExternalStore(
@@ -1425,103 +3344,99 @@ export default function CreationStationScreen({
   );
   void _creationRulerPulse;
 
-  /**
-   * Single source of timing truth: transport external-store wrapped quarter index.
-   * Using context `songStep` directly can skip integer steps under React batching.
-   */
-  const transportBeatIndexLive = getTransportBeatUiSnapshot().wrappedQuarter;
+  const transportBeatEpoch = useSyncExternalStore(
+    subscribeCreationTransportBeat,
+    getCreationTransportBeatEpoch,
+    () => 0,
+  );
+  /** `displayBeatRef` is advanced every rAF; React re-reads it when `transportBeatEpoch` bumps (see `creationTransportBeatExternal.ts`). */
+  const displayBeatLive = displayBeatRef.current;
+  void transportBeatEpoch;
+
+  /** Same subdiv the audio scheduler + playline use (`drumStepSubdivRef`) — avoids one-frame HUD/grid mismatch after snap changes. */
+  const subdivHud = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+  const transportStepIndexLive = Math.floor(Math.max(0, displayBeatLive * subdivHud) + 1e-8);
 
   /**
    * Quarter index of **loopStartTick** — matches `floor(tick / PPQ)`; avoids
    * `(loopStartBar - 1) * round(qpb)` when `ticksPerBar` and PPQ don’t line up with rounded quarters.
    */
-  const drumColOffset = Math.floor(loopStartTick / PPQ);
+  const drumColOffset = Math.floor(
+    Math.max(0, loopOnRef.current ? loopStartBeatRef.current * subdivHud : 0) + 1e-8,
+  );
 
   const creationDrumRulerHeaderLabels = useMemo(() => {
     const labels: number[] = [];
-    const base = Math.floor(drumColOffset / qpb);
+    const colsPerBar = Math.max(1, qpb * subdivHud);
+    const base = Math.floor(drumColOffset / colsPerBar);
     let acc = 0;
     for (let i = 0; i < creationDrumRulerCounts.length; i++) {
       labels.push(
         loopStartBar +
-          Math.floor((drumColOffset + acc) / qpb) -
+          Math.floor((drumColOffset + acc) / colsPerBar) -
           base,
       );
       acc += creationDrumRulerCounts[i]!;
     }
     return labels;
-  }, [creationDrumRulerCounts, drumColOffset, qpb, loopStartBar]);
+  }, [creationDrumRulerCounts, drumColOffset, qpb, loopStartBar, subdivHud]);
 
   const drumPatternColToDawBar = useCallback(
     (ci: number) =>
       loopStartBar +
-      Math.floor((drumColOffset + ci) / qpb) -
-      Math.floor(drumColOffset / qpb),
-    [loopStartBar, drumColOffset, qpb],
+      Math.floor((drumColOffset + ci) / Math.max(1, qpb * subdivHud)) -
+      Math.floor(drumColOffset / Math.max(1, qpb * subdivHud)),
+    [loopStartBar, drumColOffset, qpb, subdivHud],
   );
 
-  /**
-   * Relative quarter index for grid + playhead: **integer** (must match lookahead / column).
-   */
-  const relBeatMonotonic = transportBeatIndexLive - drumColOffset;
-  const relColWrapped =
-    ((relBeatMonotonic % patternColsDrums) + patternColsDrums) %
-    patternColsDrums;
-
+  /** Pattern column index — shared helper with playline / scheduler / transport rAF. */
+  const visualSyncCol = creationPatternColFromDisplayBeat(
+    displayBeatLive,
+    subdivHud,
+    patternColsDrums,
+    loopOnRef.current,
+    loopStartBeatRef.current,
+    loopEndBeatRef.current,
+    patternPlayModeRef.current,
+  );
+  // Single source of truth for visible transport column (grid + HUD stay linked).
   let activeCol = -1;
-  if (transportNotStopped) {
-    if (tab === 'piano' || tab === 'mixer') {
-      activeCol = transportBeatIndexLive % TOTAL_COLS;
-    } else {
-      activeCol = relColWrapped;
-    }
-  }
+  if (transportNotStopped) activeCol = visualSyncCol;
 
-  /**
-   * Global wrapped quarter — BAR (`floor/4)+1`) and MEASURE (`%4+1`) **must** use the same value so
-   * each bar runs `1→2→3→4` then advances BAR. Pattern playhead can differ when loop start isn’t mod‑4.
-   */
-  /**
-   * HUD follows the rendered playhead column exactly.
-   * If columns look correct, MEASURE/BAR cannot diverge.
-   */
-  const hudCol = transportNotStopped ? Math.max(0, activeCol) : 0;
-  const measureInBarLive = transportNotStopped
-    ? (hudCol % MEASURES_PER_BAR) + 1
-    : 1;
-  const displayBarNumberLive = transportNotStopped
-    ? Math.floor(hudCol / MEASURES_PER_BAR) + 1
-    : 1;
-  const phraseEveryFourMeasuresLive = transportNotStopped
-    ? Math.floor(
-        (Math.max(1, displayBarNumberLive) - 1) / MEASURES_PER_4BAR_PHRASE,
-      ) + 1
-    : 1;
-  if (transportNotStopped) {
-    creationHudHoldRef.current = {
-      m: measureInBarLive,
-      b: displayBarNumberLive,
-      ph: phraseEveryFourMeasuresLive,
-    };
-  }
-  const measureInBarHud = transportNotStopped
+  /** BAR / MSR / phrase from transport `displayBeatLive`. */
+  const qpbHud = Math.max(2, Math.min(16, Math.round(qpb)));
+  const hudGridSync = computeCreationTransportHudFromBeat(displayBeatLive, {
+    subdiv: subdivHud,
+    pcols: patternColsDrums,
+    loopOn: loopOnRef.current,
+    loopStartBeat: loopStartBeatRef.current,
+    loopEndBeat: loopEndBeatRef.current,
+    playMode: patternPlayModeRef.current,
+    loopStartBar,
+    qpb: qpbHud,
+    transportOriginBeat: originBeatRef.current,
+  });
+  const globalQuarter = Math.floor(Math.max(0, displayBeatLive) + 1e-8);
+  const measureInBarLive = transportNotStopped ? hudGridSync.measure : 1;
+  const displayBarNumberLive = transportNotStopped ? hudGridSync.bar : 1;
+  const phraseEveryFourMeasuresLive = transportNotStopped ? hudGridSync.phrase : 1;
+  const measureInBarHud = isPlaybackOrRecord
     ? measureInBarLive
     : creationHudHoldRef.current.m;
-  const displayBarNumberHud = transportNotStopped
+  const displayBarNumberHud = isPlaybackOrRecord
     ? displayBarNumberLive
     : creationHudHoldRef.current.b;
-  const phraseEveryFourMeasuresHud = transportNotStopped
+  const phraseEveryFourMeasuresHud = isPlaybackOrRecord
     ? phraseEveryFourMeasuresLive
     : creationHudHoldRef.current.ph;
-  const hudDebugText = `col:${hudCol} m:${measureInBarLive} b:${displayBarNumberLive} s:${songStep}`;
+  const hudDebugCol = visualSyncCol;
+  const hudDebugText = `⌊b⌋:${globalQuarter} col:${hudDebugCol} step:${transportStepIndexLive} msr:${measureInBarLive}/${qpbHud} bar:${displayBarNumberLive}`;
 
   useEffect(() => {
-    if (transportNotStopped) {
-      publishCreationRulerBeat(measureInBarLive);
-    } else {
+    if (!transportNotStopped) {
       publishCreationRulerBeat(null);
     }
-  }, [transportNotStopped, measureInBarLive]);
+  }, [transportNotStopped]);
 
   const currentDrums = banks[activeBank].drums;
   const currentNotes = banks[activeBank].notes;
@@ -1533,174 +3448,245 @@ export default function CreationStationScreen({
       }),
     [pianoRegisterShift],
   );
-  const currentDrumsRef = useRef(currentDrums);
-  useEffect(() => { currentDrumsRef.current = currentDrums; }, [currentDrums]);
-  const subOnRef = useRef(subOn);
-  useEffect(() => { subOnRef.current = subOn; }, [subOn]);
-  const nextNoteTimeRef = useRef(0);
-  /** Global quarter-note tick — each step uses mapGlobalTickToAudioTime(tick) (hardware-clock style: no +=duration drift). */
-  const nextGlobalQuarterTickRef = useRef(0);
-  /**
-   * Pulse interval driven by a Web Worker so main-thread/UI pauses don’t starve lookahead.
-   * Timing still uses `AudioContext.currentTime` + `mapGlobalTickToAudioTime` inside each pulse.
-   */
-  const SCHEDULER_PULSE_MS = 8;
-  const SCHEDULE_AHEAD_TIME = 0.16;
+  currentDrumsRef.current = currentDrums;
 
-  // Lookahead drum sequencer: `AudioContext` hardware clock; worker only wakes the main thread.
-  useEffect(() => {
-    if (!isScreenActive || !isPlaying) {
-      return;
+  const fireStepAt = useCallback((k: number, idealGridT: number, ctx: AudioContext) => {
+    const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+    const drumBeatOff = Math.floor(Math.max(0, loopOnRef.current ? loopStartBeatRef.current : 0) + 1e-8);
+    const drumColOff = Math.floor(Math.max(0, loopOnRef.current ? loopStartBeatRef.current * subdiv : 0) + 1e-8);
+    /** Must match {@link patternColsDrums} / playline / grid — `patternColsDrumsBeats * subdiv` can exceed `TOTAL_COLS`. */
+    const gridCols = Math.max(1, patternColsDrumsRef.current);
+    const quarterSpan = Math.max(1, Math.floor(gridCols / subdiv));
+    let posInPattern = k - drumBeatOff;
+    if (loopOnRef.current && loopEndBeatRef.current > loopStartBeatRef.current) {
+      const ls = Math.floor(loopStartBeatRef.current + 1e-8);
+      const le = Math.floor(loopEndBeatRef.current + 1e-8);
+      const span = Math.max(1, le - ls);
+      posInPattern = ((k - ls) % span + span) % span;
     }
-
-    const ctx = getOrCreateAudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
-
-    const tickNow = getTickIntAtAudioNow(ctx.currentTime);
-    let startTick = Math.ceil(tickNow / PPQ) * PPQ;
-    let guard = 0;
-    while (mapGlobalTickToAudioTime(startTick) < ctx.currentTime && guard++ < 16) {
-      startTick += PPQ;
-    }
-    nextGlobalQuarterTickRef.current = startTick;
-    nextNoteTimeRef.current = mapGlobalTickToAudioTime(startTick);
-
-    const scheduleStep = (when: number, globalTick: number) => {
-      const whenSafe = Math.max(when, ctx.currentTime + 0.0015);
-      const displayTick = wrapGlobalTickToDisplayTick(globalTick);
-      const scheduledBeat = Math.floor(displayTick / PPQ + 1e-9);
-      const cols = patternColsDrums;
-      const relBeat = scheduledBeat - drumColOffset;
-      const colIndex = ((relBeat % cols) + cols) % cols;
-      const bankCol = colIndex + drumColOffset;
-      currentDrumsRef.current.forEach((row, pi) => {
-        if (row[bankCol]) {
-          playPadSoundRef.current(pi, PAD_VEL[pi] ?? 90, whenSafe);
+    const playModeR = patternPlayModeRef.current;
+    const activeSlots = bankPatternSlotsRef.current[activeBank];
+    const patternDrums =
+      playModeR === 'chainAB' && activeSlots
+        ? (((Math.floor(posInPattern / Math.max(1, quarterSpan)) % 2 + 2) % 2) === 0 ? activeSlots.A : activeSlots.B)
+        : currentDrumsRef.current;
+    const ctSnap = ctx.currentTime;
+    const whenSnap = Math.max(idealGridT, ctSnap + 0.001);
+    const subSpb = (60 / Math.max(1, bpmRef.current)) / subdiv;
+    for (let s = 0; s < subdiv; s += 1) {
+      const colInPattern = ((posInPattern * subdiv + s) % gridCols + gridCols) % gridCols;
+      const bankCol = colInPattern + drumColOff;
+      const whenSub = whenSnap + s * subSpb;
+      patternDrums.forEach((row, pi) => {
+        if (row[bankCol] && !mutedPadsRef.current[pi]) {
+          playPadSoundRef.current(pi, PAD_VEL[pi] ?? 90, whenSub);
         }
       });
-      if (subOnRef.current && colIndex % 2 === 1) {
-        triggerChannel(SUB_CHANNEL, 127, whenSafe);
+    }
+    /**
+     * Downbeat matches MSR / quant row: same quarter phase as {@link computeCreationTransportHudFromBeat}
+     * (`floor(originBeat)`), not raw global `k % bpb` (which desyncs accents when play/seek starts mid-bar).
+     */
+    const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+    const orgQ = Math.floor(Math.max(0, originBeatRef.current) + 1e-8);
+    const downbeat = (((k - orgQ) % bpb) + bpb) % bpb === 0;
+    const tMetro = Math.max(idealGridT, ctSnap + 0.001);
+    scheduleMetronomeClickAt(ctx, tMetro, downbeat, ctSnap);
+    return true;
+  }, [activeBank, originBeatRef, patternPlayModeRef, scheduleMetronomeClickAt, triggerChannel]);
+
+  const refillCreationSchedule = useCallback(
+    (ctx: AudioContext, ctSnap: number) => {
+      const spb = 60 / Math.max(1, bpmRef.current);
+      refillCreationTransportLookahead(
+        ctx,
+        ctSnap,
+        spb,
+        {
+          nextStepBeatRef,
+          nextStepTimeRef,
+          sessionStartRef,
+          originBeatRef,
+          lastScheduledQuarterRef,
+        },
+        fireStepAt,
+        () => runningRef.current,
+      );
+    },
+    [fireStepAt],
+  );
+
+  refillCreationScheduleRef.current = refillCreationSchedule;
+
+  const clearAllQuantMeasureImperativeLit = useCallback(() => {
+    const cells = quantMeasureCellElsRef.current;
+    for (let i = 0; i < cells.length; i++) {
+      const el = cells[i];
+      if (!el) continue;
+      if (el.hasAttribute('data-drum-quant-imperative-lit')) {
+        clearQuantMeasureCellImperativeLit(el);
       }
-    };
+    }
+  }, []);
 
-    let cancelled = false;
-
-    const schedulerLoop = () => {
-      if (cancelled) return;
-      const now = ctx.currentTime;
-      const horizon = now + SCHEDULE_AHEAD_TIME;
-      const recomputedTime = mapGlobalTickToAudioTime(nextGlobalQuarterTickRef.current);
-      if (Math.abs(recomputedTime - nextNoteTimeRef.current) > 0.03) {
-        const liveTickRealign = getTickIntAtAudioNow(ctx.currentTime);
-        let realignTick = Math.ceil(liveTickRealign / PPQ) * PPQ;
-        let gg = 0;
-        while (mapGlobalTickToAudioTime(realignTick) < ctx.currentTime && gg++ < 16) {
-          realignTick += PPQ;
-        }
-        nextGlobalQuarterTickRef.current = realignTick;
-        nextNoteTimeRef.current = mapGlobalTickToAudioTime(realignTick);
+  /** Clear any legacy imperative quant styles after React commits / transport bumps. */
+  useLayoutEffect(() => {
+    if (tab !== 'grid') {
+      for (const el of quantMeasureCellElsRef.current) {
+        clearQuantMeasureCellImperativeLit(el);
       }
-      // Main-thread stall recovery: do not leave the cursor behind "now" or we'll burst late hits.
-      if (nextNoteTimeRef.current < now - 0.02) {
-        let guard = 0;
-        while (nextNoteTimeRef.current < now + 0.001 && guard++ < 256) {
-          nextGlobalQuarterTickRef.current += PPQ;
-          nextNoteTimeRef.current = mapGlobalTickToAudioTime(nextGlobalQuarterTickRef.current);
-        }
-      }
-      while (nextNoteTimeRef.current < horizon) {
-        scheduleStep(nextNoteTimeRef.current, nextGlobalQuarterTickRef.current);
-        nextGlobalQuarterTickRef.current += PPQ;
-        nextNoteTimeRef.current = mapGlobalTickToAudioTime(nextGlobalQuarterTickRef.current);
-      }
-    };
-
-    const PulseCtor = TransportPulseWorker as unknown as { new (): Worker };
-    const pulseWorker = new PulseCtor();
-    pulseWorker.postMessage({ cmd: 'start', intervalMs: SCHEDULER_PULSE_MS });
-    pulseWorker.onmessage = () => {
-      if (cancelled) return;
-      schedulerLoop();
-    };
-    schedulerLoop();
-
-    return () => {
-      cancelled = true;
-      pulseWorker.postMessage({ cmd: 'stop' });
-      pulseWorker.terminate();
-    };
-  }, [
-    getOrCreateAudioContext,
-    getTickIntAtAudioNow,
-    mapGlobalTickToAudioTime,
-    isScreenActive,
-    isPlaying,
-    loopBars,
-    loopEnabled,
-    drumColOffset,
-    patternColsDrums,
-    qpb,
-    triggerChannel,
-    wrapGlobalTickToDisplayTick,
-  ]);
-
-  const prevPlayheadColRef = useRef<number>(-1);
-  // Visual flashes follow live transport column (not lookahead-scheduled audio).
-  useEffect(() => {
-    if (!isPlaying || activeCol < 0) {
-      if (!isPlaying) prevPlayheadColRef.current = -1;
       return;
     }
-    if (!isScreenActive) return;
-    const prev = prevPlayheadColRef.current;
-    prevPlayheadColRef.current = activeCol;
-    /** When the main thread stalls, `activeCol` can jump forward several steps in one commit — flash every column we skipped. */
-    const forwardCatchUp =
-      prev >= 0 &&
-      activeCol > prev &&
-      activeCol - prev <= patternColsDrums;
-    const colsToFlash = forwardCatchUp
-      ? Array.from({ length: activeCol - prev }, (_, i) => prev + 1 + i)
-      : [activeCol];
-    setPadFlashTicks((p0) => {
-      const next = [...p0];
-      for (const ci of colsToFlash) {
-        const bankCol = ci + drumColOffset;
-        currentDrums.forEach((row, pi) => {
-          if (row[bankCol]) next[pi] = next[pi] + 1;
-        });
-      }
-      return next;
+    void transportBeatEpoch;
+    clearAllQuantMeasureImperativeLit();
+  }, [tab, transportBeatEpoch, clearAllQuantMeasureImperativeLit]);
+
+  creationTransportOnFrameRef.current = (bDisplay: number) => {
+    const qpbR = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
+    const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+    const pcols = Math.max(1, patternColsDrumsRef.current);
+    const loopStartBarR = Math.floor(loopStartBeatRef.current / qpbR) + 1;
+    const acFromAudio = creationPatternColFromDisplayBeat(
+      bDisplay,
+      subdiv,
+      pcols,
+      loopOnRef.current,
+      loopStartBeatRef.current,
+      loopEndBeatRef.current,
+      patternPlayModeRef.current,
+    );
+    const ac = acFromAudio;
+
+    if (!runningRef.current) clearAllQuantMeasureImperativeLit();
+
+    const hudRaf = computeCreationTransportHudFromBeat(bDisplay, {
+      subdiv,
+      pcols,
+      loopOn: loopOnRef.current,
+      loopStartBeat: loopStartBeatRef.current,
+      loopEndBeat: loopEndBeatRef.current,
+      playMode: patternPlayModeRef.current,
+      loopStartBar: loopStartBarR,
+      qpb: qpbR,
+      transportOriginBeat: originBeatRef.current,
     });
-    if (subOn) {
-      let bumps = 0;
-      for (const ci of colsToFlash) {
-        if (ci % 2 === 1) bumps++;
-      }
-      if (bumps > 0) setSubFlashTick((n) => n + bumps);
+    const gqHudKey = `${hudRaf.bar}|${hudRaf.measure}|${hudRaf.phrase}`;
+    if (gqHudKey !== creationHudQuarterPaintedRef.current) {
+      creationHudQuarterPaintedRef.current = gqHudKey;
+      paintCreationHudQuarterIntoDom(
+        creationHudDomRef.current,
+        hudRaf,
+        qpbR,
+        { active: true },
+        creationHudHoldRef,
+        true,
+      );
+    }
+
+    if (followRef.current && isPlaybackOrRecordRef.current && transportNotStoppedRef.current) {
+      const cwD = Math.max(colWidthRef.current, DRUM_GRID_MIN_CW);
+      const cwP = Math.max(colWidthRef.current, PIANO_GRID_MIN_CW);
+      /** Fractional X — same as `creationPlaylineWapi` / static snap (not `⌊col⌋ * cw`, which lags the arrow). */
+      const pos = creationPlaylineColFAndPx(
+        bDisplay,
+        subdiv,
+        pcols,
+        loopOnRef.current,
+        loopStartBeatRef.current,
+        loopEndBeatRef.current,
+        patternPlayModeRef.current,
+        cwD,
+        cwP,
+      );
+      /** Prefer compositor translate when WAAPI is running (SE2 scroll tracks `b` from WAPI, not floored column). */
+      const txD = readTranslateXFromWapiKeyframeAnim(drumPlaylineRef.current);
+      const txP = readTranslateXFromWapiKeyframeAnim(pianoPlaylineRef.current);
+      const pxDrum =
+        runningRef.current && txD != null ? txD + CREATION_DRUM_PLAYLINE_CENTER_X : pos.drumX;
+      const pxPiano =
+        runningRef.current && txP != null ? txP + CREATION_PIANO_PLAYLINE_CENTER_X : pos.pianoX;
+      const scrollFollowPx = (el: HTMLDivElement | null, px: number) => {
+        if (!el) return;
+        const left = el.scrollLeft;
+        const right = left + el.clientWidth;
+        const m = el.clientWidth * 0.3;
+        if (px < left + m || px > right - m) el.scrollLeft = Math.max(0, px - el.clientWidth * 0.35);
+      };
+      scrollFollowPx(drumScrollRef.current, pxDrum);
+      scrollFollowPx(pianoScrollRef.current, pxPiano);
+    }
+
+    const pub = creationTransportUiPublishRef.current;
+    const churn = ac !== pub.activeCol || gqHudKey !== pub.hudKey;
+    if (churn) {
+      pub.activeCol = ac;
+      pub.hudKey = gqHudKey;
+      publishCreationTransportBeat();
+    }
+    paintCreationSe2TransportReadouts(bDisplay, false);
+  };
+
+  useCreationTransportPump(
+    {
+      ctxRef,
+      runningRef,
+      sessionStartRef,
+      originBeatRef,
+      displayBeatRef,
+      bpmRef,
+      lastScheduledQuarterRef,
+    },
+    {
+      isScreenActive: !!isScreenActive,
+      isPlaying,
+      getOrCreateAudioContext,
+      refillRef: refillCreationScheduleRef,
+      onFrameRef: creationTransportOnFrameRef,
+    },
+  );
+
+  /**
+   * Playline relaunch — **same split as Studio Editor 2** (`StudioEditor2Screen` ~6220–6231):
+   * 1) “zoom” (here: column width + Creation-only grid geometry: snap subdiv, chain mode, pattern width).
+   * 2) Loop bounds only (`loopOn` / `loopStartBeat` / `loopEndBeat`).
+   * 3) **BPM / pattern column count** — separate effects below so WAAPI `durationMs` always matches
+   *    `60/bpm` like the metronome / lookahead when tempo or loop bar count changes during play.
+   * Uses `runningRef` like SE2 uses `runningRef`, **not** `isPlaying` in deps, so Play/Resume does not
+   * immediately re-cancel the anim that `startTransport` just started.
+   */
+  useEffect(() => {
+    if (!isScreenActive) return;
+    if (runningRef.current) {
+      launchCreationPlaylineWapiNow(displayBeatRef.current, true);
+    } else {
+      updateCreationPlaylineTransforms(cursorBeatRef.current);
     }
   }, [
-    activeCol,
-    currentDrums,
-    drumColOffset,
-    isPlaying,
-    isScreenActive,
-    subOn,
+    colWidth,
+    drumStepSubdiv,
+    patternPlayMode,
     patternColsDrums,
+    isScreenActive,
+    launchCreationPlaylineWapiNow,
+    updateCreationPlaylineTransforms,
   ]);
 
-  // Auto-scroll
+  /** Tempo change during play — rebuild WAAPI so sweep/segment duration tracks `bpmRef` like metronome spacing. */
   useEffect(() => {
-    if (!follow || !isPlaying || activeCol < 0) return;
-    const scroll = (ref: React.RefObject<HTMLDivElement | null>, offset: number) => {
-      const el = ref.current; if (!el) return;
-      const px    = activeCol * colWidth + offset;
-      const left  = el.scrollLeft, right = left + el.clientWidth, m = el.clientWidth * 0.3;
-      if (px < left + m || px > right - m) el.scrollLeft = Math.max(0, px - el.clientWidth * 0.35);
-    };
-    scroll(drumScrollRef, LABEL_W);
-    scroll(pianoScrollRef, KEY_W);
-  }, [activeCol, colWidth, follow, isPlaying]);
+    if (!isScreenActive || !runningRef.current) return;
+    launchCreationPlaylineWapiNow(displayBeatRef.current, true);
+  }, [bpm, isScreenActive, launchCreationPlaylineWapiNow]);
+
+  useEffect(() => {
+    if (!isScreenActive || !runningRef.current) return;
+    launchCreationPlaylineWapiNow(displayBeatRef.current, true);
+  }, [loopOn, loopStartBeat, loopEndBeat, isScreenActive, launchCreationPlaylineWapiNow]);
+
+  /** Loop bounds change while stopped — static playline only (no second WAAPI launch with zoom effect). */
+  useEffect(() => {
+    if (!isScreenActive || runningRef.current) return;
+    updateCreationPlaylineTransforms(cursorBeatRef.current);
+  }, [loopOn, loopStartBeat, loopEndBeat, isScreenActive, updateCreationPlaylineTransforms]);
 
   // Keyboard shortcuts ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1718,12 +3704,11 @@ export default function CreationStationScreen({
         }
         return;
       }
-      // Tab switch: T = drums, G = grid, P = piano, M = mixer
+      // Tab switch: Ctrl+T drums, Ctrl+G grid, Ctrl+P piano
       if (e.ctrlKey) {
-        if (e.key === 't') { e.preventDefault(); setTab('drums'); }
-        else if (e.key === 'g') { e.preventDefault(); setTab('grid'); }
+        if (e.key === 't') { e.preventDefault(); setTab('drums'); /* More (placeholder) */ }
+        else if (e.key === 'g') { e.preventDefault(); setTab('grid'); /* Beat Lab */ }
         else if (e.key === 'p') { e.preventDefault(); setTab('piano'); }
-        else if (e.key === 'm') { e.preventDefault(); setTab('mixer'); }
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -1733,11 +3718,53 @@ export default function CreationStationScreen({
   const zoomIn    = useCallback(() => setColWidth(w => Math.min(MAX_CW, w + ZOOM_STEP)), []);
   const zoomOut   = useCallback(() => setColWidth(w => Math.max(MIN_CW, w - ZOOM_STEP)), []);
   const zoomReset = useCallback(() => setColWidth(DEF_CW), []);
+  const fitDrumGridToLoop = useCallback(() => {
+    const el = drumScrollRef.current;
+    if (!el) return;
+    const visible = Math.max(120, el.clientWidth - 8);
+    const n = Math.max(1, patternColsDrums);
+    /** Integer px/column so N columns fit the scroll viewport — keeps playhead `col*cw` aligned with cell edges. */
+    const next = Math.floor(visible / n);
+    setColWidth(Math.max(MIN_CW, Math.min(MAX_CW, next)));
+    el.scrollLeft = 0;
+  }, [patternColsDrums]);
+  /** Refit column width whenever loop length / step count changes the column count (not only on manual Fit). */
+  useEffect(() => {
+    if (tab !== 'grid') return;
+    const id = requestAnimationFrame(() => fitDrumGridToLoop());
+    return () => cancelAnimationFrame(id);
+  }, [fitDrumGridToLoop, patternColsDrums, loopBars, pianoSnapSubdiv, tab]);
+
+  const stopPadSamplePlayback = useCallback((padIndex: number) => {
+    const key = padSampleKey(activeBank, padIndex);
+    const bag = padSampleActiveStoppersRef.current.get(key);
+    if (!bag?.size) return;
+    padSampleActiveStoppersRef.current.delete(key);
+    for (const fn of [...bag]) {
+      try {
+        fn();
+      } catch {
+        /* */
+      }
+    }
+  }, [activeBank]);
 
   const clearPadSample = useCallback((padIndex: number) => {
+    stopPadSamplePlayback(padIndex);
     const k = padSampleKey(activeBank, padIndex);
     padSampleBuffersRef.current.delete(k);
+    delete padSamplePlaybackOptsRef.current[k];
     setPadSamplePresence(prev => {
+      const n = { ...prev };
+      delete n[k];
+      return n;
+    });
+    setPadSampleRootBpms((prev) => {
+      const n = { ...prev };
+      delete n[k];
+      return n;
+    });
+    setPadSampleLabels((prev) => {
       const n = { ...prev };
       delete n[k];
       return n;
@@ -1745,7 +3772,7 @@ export default function CreationStationScreen({
     const store = loadPadSampleStore();
     delete store[k];
     savePadSampleStore(store);
-  }, [activeBank]);
+  }, [activeBank, stopPadSamplePlayback]);
 
   const beginLoadPadSample = useCallback((padIndex: number) => {
     pendingPadSampleRef.current = padIndex;
@@ -1755,35 +3782,343 @@ export default function CreationStationScreen({
   const handlePadSampleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    const pad = pendingPadSampleRef.current;
+    const padRaw = pendingPadSampleRef.current;
     pendingPadSampleRef.current = null;
-    if (pad == null || !file) return;
+    if (padRaw == null || !file) return;
+    /** Same index as Beat Lab lane 1–16 (row 0 = lane 1). */
+    const pad = Math.max(0, Math.min(15, Math.floor(Number(padRaw))));
     const ctx = getOrCreateAudioContext();
     try {
-      const stored = await fileToStoredPadSample(file);
+      const storedBase = await fileToStoredPadSample(file);
+      const stored = { ...storedBase, rootBpm: bpm };
       const ab = storedToArrayBuffer(stored);
       const buffer = await ctx.decodeAudioData(ab.slice(0));
       const k = padSampleKey(activeBank, pad);
       padSampleBuffersRef.current.set(k, buffer);
       setPadSamplePresence(prev => ({ ...prev, [k]: true }));
+      setPadSampleRootBpms((prev) => ({ ...prev, [k]: bpm }));
+      const name = typeof stored.label === 'string' ? stored.label.trim() : '';
+      if (name) setPadSampleLabels((prev) => ({ ...prev, [k]: name }));
+      else setPadSampleLabels((prev) => {
+        const n = { ...prev };
+        delete n[k];
+        return n;
+      });
       const store = loadPadSampleStore();
       store[k] = stored;
+      writeSamplerOptsToStored(stored, defaultPadSamplerPlaybackOpts());
       savePadSampleStore(store);
+      padSamplePlaybackOptsRef.current[k] = defaultPadSamplerPlaybackOpts();
     } catch (err) {
       console.debug('Pad sample load failed:', err);
     }
-  }, [activeBank, getOrCreateAudioContext]);
+  }, [activeBank, bpm, getOrCreateAudioContext]);
+
+  const commitPadSamplerPlaybackOpts = useCallback((padIndex: number, o: PadSamplerPlaybackOpts) => {
+    const k = padSampleKey(activeBank, padIndex);
+    if (!padSampleBuffersRef.current.get(k)) return;
+    const store = loadPadSampleStore();
+    const row = store[k];
+    if (!row) return;
+    writeSamplerOptsToStored(row, o);
+    savePadSampleStore(store);
+    padSamplePlaybackOptsRef.current[k] = samplerOptsFromStored(row);
+  }, [activeBank]);
+
+  const getPadSamplerPlaybackOpts = useCallback((padIndex: number) => {
+    const k = padSampleKey(activeBank, padIndex);
+    return padSamplePlaybackOptsRef.current[k] ?? defaultPadSamplerPlaybackOpts();
+  }, [activeBank]);
+
+  /** Preview sample edit sliders without committing (restores saved opts after trigger). */
+  const previewSamplerFxDraft = useCallback((padIndex: number, o: PadSamplerPlaybackOpts) => {
+    const k = padSampleKey(activeBank, padIndex);
+    if (!padSampleBuffersRef.current.get(k)) return;
+    const saved = padSamplePlaybackOptsRef.current[k] ?? defaultPadSamplerPlaybackOpts();
+    padSamplePlaybackOptsRef.current[k] = { ...o };
+    playPadSoundRef.current(padIndex, PAD_VEL[padIndex] ?? 90);
+    padSamplePlaybackOptsRef.current[k] = saved;
+  }, [activeBank]);
+
+  /** Preview with the SRC BPM typed in the popover (restores committed root after trigger). */
+  const previewSamplerRootBpmDraft = useCallback((padIndex: number, raw: string) => {
+    const k = padSampleKey(activeBank, padIndex);
+    if (!padSampleBuffersRef.current.get(k)) return;
+    const prevRoot = padSampleRootBpmRef.current[k];
+    const t = raw.trim();
+    try {
+      if (t === '') {
+        delete padSampleRootBpmRef.current[k];
+      } else {
+        const parsed = parseFloat(t);
+        if (!Number.isFinite(parsed)) return;
+        padSampleRootBpmRef.current[k] = Math.round(Math.max(40, Math.min(320, parsed)));
+      }
+      playPadSoundRef.current(padIndex, PAD_VEL[padIndex] ?? 90);
+    } finally {
+      if (prevRoot !== undefined) padSampleRootBpmRef.current[k] = prevRoot;
+      else delete padSampleRootBpmRef.current[k];
+    }
+  }, [activeBank]);
+
+  const applyDrumKitGenSinglePad = useCallback(
+    async (padIndex: number) => {
+      const ctx = await ensureCtx();
+      setDrumKitGenBusy(true);
+      try {
+        const pi = Math.max(0, Math.min(15, Math.floor(padIndex)));
+        const sr = ctx.sampleRate;
+        const seed = (Date.now() ^ (activeBank * 31 + pi) * 0x85ebca6b) >>> 0;
+        const buf = synthesizeKitPadBuffer(sr, pi, drumKitGenStyle, seed);
+        const label = `${PAD_NAMES[pi]} (kit gen)`;
+        const stored = audioBufferToStoredKitSample(buf, label, bpm);
+        const ab = storedToArrayBuffer(stored);
+        const buffer = await ctx.decodeAudioData(ab.slice(0));
+        const k = padSampleKey(activeBank, pi);
+        padSampleBuffersRef.current.set(k, buffer);
+        setPadSamplePresence((prev) => ({ ...prev, [k]: true }));
+        setPadSampleRootBpms((prev) => ({ ...prev, [k]: bpm }));
+        setPadSampleLabels((prev) => ({ ...prev, [k]: label }));
+        const store = loadPadSampleStore();
+        store[k] = stored;
+        writeSamplerOptsToStored(stored, defaultPadSamplerPlaybackOpts());
+        savePadSampleStore(store);
+        padSamplePlaybackOptsRef.current[k] = defaultPadSamplerPlaybackOpts();
+      } catch (err) {
+        console.debug('Drum kit generator (single pad) failed:', err);
+      } finally {
+        setDrumKitGenBusy(false);
+      }
+    },
+    [activeBank, bpm, drumKitGenStyle, ensureCtx],
+  );
+
+  const applyDrumKitGenFullKit = useCallback(async () => {
+    const ctx = await ensureCtx();
+    setDrumKitGenBusy(true);
+    try {
+      const sr = ctx.sampleRate;
+      const seed = (Date.now() ^ (activeBank + 1) * 0x1a2b3c4d) >>> 0;
+      for (let pi = 0; pi < 16; pi++) {
+        const buf = synthesizeKitPadBuffer(sr, pi, drumKitGenStyle, seed);
+        const label = `${PAD_NAMES[pi]} (kit gen)`;
+        const stored = audioBufferToStoredKitSample(buf, label, bpm);
+        const ab = storedToArrayBuffer(stored);
+        const buffer = await ctx.decodeAudioData(ab.slice(0));
+        const k = padSampleKey(activeBank, pi);
+        padSampleBuffersRef.current.set(k, buffer);
+        setPadSamplePresence((prev) => ({ ...prev, [k]: true }));
+        setPadSampleRootBpms((prev) => ({ ...prev, [k]: bpm }));
+        setPadSampleLabels((prev) => ({ ...prev, [k]: label }));
+        const store = loadPadSampleStore();
+        store[k] = stored;
+        writeSamplerOptsToStored(stored, defaultPadSamplerPlaybackOpts());
+        savePadSampleStore(store);
+        padSamplePlaybackOptsRef.current[k] = defaultPadSamplerPlaybackOpts();
+      }
+    } catch (err) {
+      console.debug('Drum kit generator (full kit) failed:', err);
+    } finally {
+      setDrumKitGenBusy(false);
+    }
+  }, [activeBank, bpm, drumKitGenStyle, ensureCtx]);
+
+  const applyDrumKitGenPattern = useCallback(() => {
+    const seed = (Date.now() ^ (activeBank + 3) * 0x4d5e6f70) >>> 0;
+    const q = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
+    const pat = buildKitGroovePattern({
+      totalCols: TOTAL_COLS,
+      patternCols: patternColsDrums,
+      subdiv: drumStepSubdiv,
+      qpb: q,
+      style: drumKitGenStyle,
+      seed,
+    });
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank ? slots : { ...slots, [patternSlot]: pat.map((r) => r.slice()) },
+      ),
+    );
+    setTab('grid');
+  }, [activeBank, beatsPerBar, drumKitGenStyle, drumStepSubdiv, patternColsDrums, patternSlot]);
+
+  const applyDrumKitGenBoth = useCallback(async () => {
+    await applyDrumKitGenFullKit();
+    applyDrumKitGenPattern();
+    setDrumKitGenOpen(false);
+  }, [applyDrumKitGenFullKit, applyDrumKitGenPattern]);
+
+  const commitPadSampleRootBpm = useCallback(
+    (padIndex: number, raw: string) => {
+      const k = padSampleKey(activeBank, padIndex);
+      if (!padSamplePresence[k]) return;
+      const store = loadPadSampleStore();
+      const row = store[k];
+      if (!row) return;
+      const t = raw.trim();
+      if (t === '') {
+        delete row.rootBpm;
+        savePadSampleStore(store);
+        setPadSampleRootBpms((prev) => {
+          const n = { ...prev };
+          delete n[k];
+          return n;
+        });
+        return;
+      }
+      const parsed = parseFloat(t);
+      if (!Number.isFinite(parsed)) return;
+      const v = Math.round(Math.max(40, Math.min(320, parsed)));
+      row.rootBpm = v;
+      savePadSampleStore(store);
+      setPadSampleRootBpms((prev) => ({ ...prev, [k]: v }));
+    },
+    [activeBank, padSamplePresence],
+  );
 
   const hasPadSampleForActiveBank = useCallback(
-    (padIndex: number) => !!padSamplePresence[padSampleKey(activeBank, padIndex)],
+    (padIndex: number) => {
+      const k = padSampleKey(activeBank, padIndex);
+      return !!(padSamplePresence[k] || padSampleBuffersRef.current.get(k));
+    },
     [padSamplePresence, activeBank],
   );
 
   function toggleDrum(pad: number, col: number) {
-    setBanks(prev => prev.map((b, i) => i !== activeBank ? b : {
-      ...b, drums: b.drums.map((row, r) => row.map((v, c) => r === pad && c === col ? !v : v))
-    }));
+    const mutate = (drums: DrumPattern) =>
+      drums.map((row, r) => row.map((v, c) => (r === pad && c === col ? !v : v)));
+    setBanks(prev => prev.map((b, i) => i !== activeBank ? b : { ...b, drums: mutate(b.drums) }));
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank ? slots : { ...slots, [patternSlot]: mutate(slots[patternSlot]) },
+      ),
+    );
   }
+
+  function setDrumStep(pad: number, col: number, enabled: boolean, slot: PatternSlot = patternSlot) {
+    const mutate = (drums: DrumPattern) =>
+      drums.map((row, r) => row.map((v, c) => (r === pad && c === col ? enabled : v)));
+    setBanks((prev) => prev.map((b, i) => (i !== activeBank ? b : { ...b, drums: mutate(b.drums) })));
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank ? slots : { ...slots, [slot]: mutate(slots[slot]) },
+      ),
+    );
+  }
+
+  const auditionDrumLane = useCallback((padIndex: number) => {
+    setSelectedDrumPad(padIndex);
+    playPadSoundRef.current(padIndex, PAD_VEL[padIndex] ?? 90);
+  }, []);
+
+  const clearDrumLane = useCallback((padIndex: number) => {
+    const startCol = drumColOffset;
+    const span = Math.max(1, patternColsDrums);
+    const mutate = (drumsIn: DrumPattern) => {
+      const drums = drumsIn.map((row) => row.slice());
+      for (let c = startCol; c < startCol + span && c < TOTAL_COLS; c += 1) {
+        if (drums[padIndex]) drums[padIndex]![c] = false;
+      }
+      return drums;
+    };
+    setBanks((prev) =>
+      prev.map((b, i) => {
+        if (i !== activeBank) return b;
+        return { ...b, drums: mutate(b.drums) };
+      }),
+    );
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank ? slots : { ...slots, [patternSlot]: mutate(slots[patternSlot]) },
+      ),
+    );
+  }, [activeBank, drumColOffset, patternColsDrums, patternSlot]);
+
+  /** Genius-style “Clear”: wipe drum steps for current bank + A/B slot (structure unchanged). */
+  const clearCurrentPatternDrums = useCallback(() => {
+    if (!confirm(`Clear drum pattern for bank ${BANKS[activeBank]}, slot ${patternSlot}?`)) return;
+    const next = emptyDrums().map((r) => r.slice());
+    setBanks((prev) => prev.map((b, i) => (i === activeBank ? { ...b, drums: next.map((row) => row.slice()) } : b)));
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank ? slots : { ...slots, [patternSlot]: next.map((row) => row.slice()) },
+      ),
+    );
+    setActiveGeniusStarter(null);
+  }, [activeBank, patternSlot]);
+
+  const applyStarterPreset = useCallback((preset: CreationStarterPreset) => {
+    const next = emptyDrums();
+    const startCol = drumColOffset;
+    const span = Math.max(1, patternColsDrums);
+    const place = (row: number, relStep: number) => {
+      const c = startCol + (((relStep % span) + span) % span);
+      if (row >= 0 && row < next.length && c >= 0 && c < TOTAL_COLS) next[row]![c] = true;
+    };
+    const add16thHats = (row: number) => {
+      for (let s = 0; s < span; s += 1) place(row, s);
+    };
+    const add8thHats = (row: number) => {
+      for (let s = 0; s < span; s += 2) place(row, s);
+    };
+    switch (preset) {
+      case 'hiphopA':
+        add16thHats(0);
+        [0, 4, 8, 12].forEach((s) => place(2, s));
+        [4, 12].forEach((s) => place(1, s));
+        [7, 15].forEach((s) => place(4, s));
+        break;
+      case 'hiphopB':
+        add16thHats(0);
+        [0, 6, 8, 14].forEach((s) => place(2, s));
+        [4, 12].forEach((s) => place(1, s));
+        [3, 11].forEach((s) => place(3, s));
+        break;
+      case 'rnbA':
+        add8thHats(0);
+        [0, 7, 10, 14].forEach((s) => place(2, s));
+        [4, 12].forEach((s) => place(1, s));
+        [8].forEach((s) => place(5, s));
+        break;
+      case 'rnbB':
+        add8thHats(0);
+        [0, 5, 8, 11, 14].forEach((s) => place(2, s));
+        [4, 12].forEach((s) => place(1, s));
+        [2, 10].forEach((s) => place(4, s));
+        break;
+    }
+    setBanks((prev) => prev.map((b, i) => (i === activeBank ? { ...b, drums: next } : b)));
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) => (i === activeBank ? { ...slots, [patternSlot]: next.map((r) => r.slice()) } : slots)),
+    );
+    setActiveGeniusStarter(preset);
+  }, [activeBank, drumColOffset, patternColsDrums, patternSlot]);
+
+  const copyPatternAToB = useCallback(() => {
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank
+          ? slots
+          : {
+              ...slots,
+              B: slots.A.map((r) => r.slice()),
+            },
+      ),
+    );
+  }, [activeBank]);
+
+  const swapPatternAB = useCallback(() => {
+    setBankPatternSlots((prev) =>
+      prev.map((slots, i) =>
+        i !== activeBank
+          ? slots
+          : {
+              A: slots.B.map((r) => r.slice()),
+              B: slots.A.map((r) => r.slice()),
+            },
+      ),
+    );
+  }, [activeBank]);
   function toggleNote(row: number, col: number) {
     if (sharedNotes.some(n => n.row === row && n.col === col)) {
       removeSharedNote(row, col);
@@ -1861,121 +4196,11 @@ export default function CreationStationScreen({
     notesAtCol.forEach(note => playPianoNote(note.row, 0.3));
   }, [activeCol, isPlaying, sharedNotes, playPianoNote, tab, pianoMode, isScreenActive]);
 
-  // Mixer helpers
-  function getVolume(chId: number) { return channelVolumes[chId] ?? 80; }
-  function getRmsLevel(chId: number) {
-    const raw = Math.max(channelLevels[chId] ?? 0, localMeterBoost[chId] ?? 0);
-    return Math.min(1, raw * (getVolume(chId) / 100));
-  }
-  function getPeakLevel(chId: number) {
-    return Math.min(1, getRmsLevel(chId) * 1.25);
-  }
-  function setVolume(chId: number, v: number) { setChannelVolume(chId, v); }
-  function setPan(chId: number, v: number) { setDrumPans(prev => ({ ...prev, [chId]: v })); }
-  function addEffectToDrum(chId: number, type: string) {
-    const params =
-      type === 'EQ'
-        ? Array.from({ length: 12 }, (_, i) => ({ label: `Band ${i + 1} Gain`, value: 50 }))
-        : type === 'Reverb'
-          ? [
-              { label: 'Dry', value: 62 },
-              { label: 'Wet', value: 38 },
-              { label: 'Size', value: 62 },
-              { label: 'Shape', value: 48 },
-              { label: 'Pre-Delay', value: 18 },
-              { label: 'Diffusion', value: 70 },
-              { label: 'Output', value: 50 },
-            ]
-          : type === 'Delay'
-            ? [
-                { label: 'Dry', value: 66 },
-                { label: 'Wet', value: 34 },
-                { label: 'Time', value: 34 },
-                { label: 'Feedback', value: 28 },
-                { label: 'Width', value: 56 },
-                { label: 'Diffusion', value: 22 },
-                { label: 'Output', value: 50 },
-              ]
-            : type === 'Distortion'
-              ? [
-                  { label: 'Dry', value: 58 },
-                  { label: 'Wet', value: 42 },
-                  { label: 'Drive', value: 58 },
-                  { label: 'Tone', value: 54 },
-                  { label: 'Shape', value: 46 },
-                  { label: 'Output', value: 47 },
-                ]
-              : type === 'Filter'
-                ? [
-                    { label: 'Dry', value: 60 },
-                    { label: 'Wet', value: 40 },
-                    { label: 'Cutoff', value: 65 },
-                    { label: 'Resonance', value: 28 },
-                    { label: 'Drive', value: 20 },
-                    { label: 'Output', value: 50 },
-                  ]
-                : type === 'Compressor'
-                  ? [
-                      { label: 'Threshold', value: 55 },
-                      { label: 'Ratio', value: 35 },
-                      { label: 'Attack', value: 20 },
-                      { label: 'Release', value: 36 },
-                      { label: 'Dry', value: 64 },
-                      { label: 'Wet', value: 36 },
-                      { label: 'Output', value: 50 },
-                    ]
-                  : type === 'Chorus'
-                    ? [
-                        { label: 'Dry', value: 66 },
-                        { label: 'Wet', value: 34 },
-                        { label: 'Depth', value: 48 },
-                        { label: 'Rate', value: 28 },
-                        { label: 'Width', value: 64 },
-                        { label: 'Shape', value: 45 },
-                        { label: 'Output', value: 50 },
-                      ]
-                    : type === 'Phaser'
-                      ? [
-                          { label: 'Dry', value: 62 },
-                          { label: 'Wet', value: 38 },
-                          { label: 'Depth', value: 46 },
-                          { label: 'Rate', value: 33 },
-                          { label: 'Feedback', value: 30 },
-                          { label: 'Width', value: 54 },
-                          { label: 'Output', value: 50 },
-                        ]
-                      : [{ label: 'Mix', value: 50 }, { label: 'Amount', value: 40 }, { label: 'Time', value: 30 }];
-    setDrumEffects(prev => ({
-      ...prev,
-      [chId]: [...(prev[chId] || []), { type, enabled: true, params }]
-    }));
-    setAddEffectOpen(false);
-  }
-  function removeEffectFromDrum(chId: number, ei: number) {
-    setDrumEffects(prev => ({
-      ...prev,
-      [chId]: (prev[chId] || []).filter((_, i) => i !== ei)
-    }));
-  }
-  function toggleEffectOnDrum(chId: number, ei: number) {
-    setDrumEffects(prev => ({
-      ...prev,
-      [chId]: (prev[chId] || []).map((e, i) => i === ei ? { ...e, enabled: !e.enabled } : e)
-    }));
-  }
-  function setDrumEffectParam(chId: number, ei: number, pi: number, v: number) {
-    setDrumEffects(prev => ({
-      ...prev,
-      [chId]: (prev[chId] || []).map((e, i) => i !== ei ? e : { ...e, params: e.params.map((p, j) => j !== pi ? p : { ...p, value: v }) })
-    }));
-  }
-
   const hasDrums = (i: number) => banks[i].drums.some(r => r.some(Boolean));
   const hasNotes = (i: number) => banks[i].notes.length > 0;
   const drumGridColW = Math.max(colWidth, DRUM_GRID_MIN_CW);
   const pianoGridColW = Math.max(colWidth, PIANO_GRID_MIN_CW);
   const drumGridW = patternColsDrums * drumGridColW;
-  const selectedLoopLength = loopEndBar - loopStartBar + 1;
   const totalW   = TOTAL_COLS * pianoGridColW;
   const pianoLoopEndBar = loopStartBar + loopBars - 1;
   const pianoVisLoopStart = Math.max(1, loopStartBar);
@@ -1985,149 +4210,848 @@ export default function CreationStationScreen({
   const pianoLoopWidthPx = (pianoVisLoopEnd - pianoVisLoopStart + 1) * MEASURES_PER_BAR * pianoGridColW;
   const pianoRollLoopGridH =
     (pianoMode === 'notes' ? displayNotes.length : 1) * (pianoMode === 'drums' ? DRUM_GRID_ROW_H : ROW_H);
-  const selCh = padChannels[selectedMixerPad];
-  const selChEffects = drumEffects[selCh] || [];
-  // Visual sensitivity curve: emphasize active audio, keep idle motion calm.
-  const effectSignalRaw = Math.max(0, Math.min(1, getRmsLevel(selCh)));
-  const effectSignal = Math.min(1, Math.pow(effectSignalRaw, 0.75) * 1.25);
   const activeDrumPadIndex = selectedDrumPad ?? 0;
-  /** Sourced from {@link CreationTransportHud} via {@link publishCreationRulerBeat} — integer change only. */
+  /** Sourced from transport HUD (`CreationTransportHudMsr`) via {@link publishCreationRulerBeat} — integer change only. */
   const rulerCreationBeatHighlight = creationRulerBeatHighlight;
+
+  const persistCreationToStorage = useCallback(() => {
+    try {
+      localStorage.setItem('creationStation_banks', JSON.stringify(banks));
+      localStorage.setItem(
+        PIANO_SNAP_SUBDIV_STORAGE_KEY,
+        String(normalizePianoSnapSubdiv(pianoSnapSubdiv)),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [banks, pianoSnapSubdiv]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: '#050505', color: '#ccc', overflow: 'hidden' }}>
 
-      {/* ── Top bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', background: '#080808', borderBottom: '1px solid #1a1a1a', flexShrink: 0, flexWrap: 'wrap', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-
-          <CreationTransportHud
-            transportNotStopped={transportNotStopped}
-            qpb={qpb}
-            measureInBar={measureInBarHud}
-            displayBarNumber={displayBarNumberHud}
-            phraseEveryFourMeasures={phraseEveryFourMeasuresHud}
-            debugText={hudDebugText}
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 6px' }} title="Pads route to mixer CH1–CH17 — same rows as Studio when synced">
-            <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', letterSpacing: 0.5 }}>SESSION</span>
-            <span style={{ fontSize: 9, color: '#666', fontFamily: 'monospace', fontWeight: 700 }}>CH1–CH17</span>
+      {/* ── Top: Genius-style beat lab deck (transport + status) ── */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '4px 10px 6px',
+          background: 'linear-gradient(180deg, #0c0a10 0%, #07070a 100%)',
+          borderBottom: '1px solid rgba(139, 92, 246, 0.22)',
+          flexShrink: 0,
+          gap: 6,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            width: '100%',
+            gap: 8,
+            flexWrap: 'nowrap',
+            minWidth: 0,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', flexShrink: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: 1,
+              padding: '1px 10px 1px 2px',
+              borderRight: '1px solid rgba(139, 92, 246, 0.35)',
+              minWidth: 0,
+            }}
+            title="Elapsed musical time from playhead (m:ss). BAR / MEASURE readout is to the right."
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#f5f3ff', lineHeight: 1.1 }}>Creation</span>
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 900,
+                  color: '#f0d060',
+                  fontFamily: 'monospace',
+                  lineHeight: 1,
+                  letterSpacing: 0.5,
+                }}
+              >
+                <CreationGeniusElapsedDisplay
+                  displayBeatRef={displayBeatRef}
+                  bpmRef={bpmRef}
+                  isPlaybackOrRecord={isPlaybackOrRecord}
+                />
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 6, letterSpacing: 2, color: '#a78bfa', fontWeight: 800 }}>BEAT LAB</span>
+              <span style={{ fontSize: 5, color: '#555', fontWeight: 800, letterSpacing: 1 }}>TIME</span>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 4, overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' }}>
-              <Zap size={11} style={{ color: '#ffcc00' }} />
-              <input 
-                type="text"
-                inputMode="numeric"
-                value={bpmInput} 
-                onChange={e => setBpmInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    const num = Number(bpmInput);
-                    if (!isNaN(num) && num >= 20 && num <= 300) {
-                      setBpm(num);
+          <div
+            role="group"
+            aria-label={`Bar ${displayBarNumberHud}, beat ${measureInBarHud} of ${Math.max(2, Math.min(16, Math.round(qpb)))}`}
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              background: '#000',
+              border: `1px solid ${transportNotStopped ? '#00E5FF66' : '#222'}`,
+              borderRadius: 4,
+              overflow: 'hidden',
+              fontFamily: 'monospace',
+              minHeight: 0,
+            }}
+          >
+            {tab !== 'grid' ? (
+              <CreationTransportHudBar
+                transportNotStopped={transportNotStopped}
+                displayBarNumber={displayBarNumberHud}
+                measureInBar={measureInBarHud}
+                measureLedCount={Math.max(2, Math.min(16, Math.round(qpb)))}
+                paintHudFromRaf={isPlaybackOrRecord}
+                hudDomSlotsRef={creationHudDomRef}
+              />
+            ) : null}
+            <CreationTransportHudMsr
+              qpb={qpb}
+              measureInBar={measureInBarHud}
+              phraseEveryFourMeasures={phraseEveryFourMeasuresHud}
+              debugText={hudDebugText}
+              paintHudFromRaf={isPlaybackOrRecord}
+              hudDomSlotsRef={creationHudDomRef}
+            />
+          </div>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={CREATION_BACKEND_BLANK ? false : metronomeEnabled}
+            disabled={CREATION_BACKEND_BLANK}
+            title="Metronome"
+            onClick={() => {
+              if (CREATION_BACKEND_BLANK) return;
+              setMetronomeEnabled(!metronomeEnabled);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 36,
+              minWidth: 36,
+              flexShrink: 0,
+              padding: '0 8px',
+              borderRadius: 6,
+              border: '1px solid',
+              borderColor: CREATION_BACKEND_BLANK ? '#2a2a32' : metronomeEnabled ? '#2a4a3c' : '#2a2a32',
+              color: CREATION_BACKEND_BLANK ? '#5c5c68' : metronomeEnabled ? '#7cf4c6' : '#5c5c68',
+              background: CREATION_BACKEND_BLANK ? 'transparent' : metronomeEnabled ? '#14221c' : 'transparent',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+              opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+            }}
+          >
+            Met
+          </button>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignSelf: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' }}>
+                <Zap size={11} style={{ color: '#c4b5fd' }} />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  readOnly={CREATION_BACKEND_BLANK}
+                  value={bpmInput}
+                  onChange={(e) => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    setBpmInput(e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    } else if (e.key === 'Escape') {
+                      setBpmInput(String(bpm));
                       e.currentTarget.blur();
                     }
-                  } else if (e.key === 'Escape') {
-                    setBpmInput(String(bpm));
-                    e.currentTarget.blur();
-                  }
-                }}
-                onBlur={() => {
-                  const num = Number(bpmInput);
-                  if (isNaN(num) || num < 40 || num > 240) {
-                    setBpmInput(String(bpm));
-                  } else {
-                    setBpm(num);
-                  }
-                }}
-                onFocus={e => e.currentTarget.select()}
-                style={{ 
-                  width: 50, 
-                  background: 'transparent', 
-                  border: 'none', 
-                  color: '#ffcc00', 
-                  fontSize: 13, 
-                  fontFamily: 'monospace', 
-                  fontWeight: 'bold', 
-                  outline: 'none',
-                  textAlign: 'center'
-                }} 
-                title="Type tempo (40-240), press Enter"
-              />
-              <span style={{ fontSize: 9, color: '#666' }}>BPM</span>
+                  }}
+                  onBlur={() => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    const v = parseInt(bpmInput.trim(), 10);
+                    if (Number.isFinite(v)) {
+                      const clamped = Math.max(40, Math.min(240, v));
+                      setBpm(clamped);
+                      setBpmInput(String(clamped));
+                    } else {
+                      setBpmInput(String(bpm));
+                    }
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                  style={{
+                    width: 50,
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#c4b5fd',
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    fontWeight: 'bold',
+                    outline: 'none',
+                    textAlign: 'center',
+                    cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'text',
+                    opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+                  }}
+                  title={CREATION_BACKEND_BLANK ? 'Creation backend disabled' : 'Type tempo (40-240), press Enter'}
+                />
+                <span style={{ fontSize: 9, color: '#666' }}>BPM</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '1px solid #2a2a2a' }}>
+                <button
+                  type="button"
+                  disabled={CREATION_BACKEND_BLANK}
+                  onClick={() => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    const n = Math.min(240, bpm + 1);
+                    setBpm(n);
+                    setBpmInput(String(n));
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0 6px',
+                    border: 'none',
+                    background: '#111',
+                    color: '#c4b5fd',
+                    cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                    fontSize: 10,
+                    fontWeight: 'bold',
+                    transition: 'all 0.1s',
+                    opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+                  }}
+                >
+                  <ChevronUp size={13} />
+                </button>
+                <button
+                  type="button"
+                  disabled={CREATION_BACKEND_BLANK}
+                  onClick={() => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    const n = Math.max(40, bpm - 1);
+                    setBpm(n);
+                    setBpmInput(String(n));
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '0 6px',
+                    border: 'none',
+                    background: '#0a0a0a',
+                    color: '#c4b5fd',
+                    cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                    fontSize: 10,
+                    fontWeight: 'bold',
+                    transition: 'all 0.1s',
+                    borderTop: '1px solid #2a2a2a',
+                    opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+                  }}
+                >
+                  <ChevronDown size={13} />
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '1px solid #2a2a2a' }}>
-              <button onClick={() => setBpm(Math.min(240, bpm + 1))} style={{ flex: 1, padding: '0 6px', border: 'none', background: '#111', color: '#ffcc00', cursor: 'pointer', fontSize: 10, fontWeight: 'bold', transition: 'all 0.1s' }}><ChevronUp size={13} /></button>
-              <button onClick={() => setBpm(Math.max(40, bpm - 1))} style={{ flex: 1, padding: '0 6px', border: 'none', background: '#0a0a0a', color: '#ffcc00', cursor: 'pointer', fontSize: 10, fontWeight: 'bold', transition: 'all 0.1s', borderTop: '1px solid #2a2a2a' }}><ChevronDown size={13} /></button>
+            <input
+              type="range"
+              min={40}
+              max={240}
+              step={1}
+              disabled={CREATION_BACKEND_BLANK}
+              value={bpm}
+              onChange={(e) => {
+                if (CREATION_BACKEND_BLANK) return;
+                const n = Number(e.target.value);
+                setBpm(n);
+                setBpmInput(String(n));
+              }}
+              style={{
+                width: '100%',
+                minWidth: 132,
+                maxWidth: 200,
+                height: 6,
+                margin: 0,
+                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                accentColor: '#a78bfa',
+                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+              }}
+              title="Drag to set tempo — 40–240 BPM"
+            />
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              flexWrap: 'nowrap',
+              gap: 4,
+              padding: '4px 8px',
+              borderRadius: 4,
+              background: '#0a0a0a',
+              border: '1px solid #2a2a2a',
+            }}
+            title="Creation Station dedicated transport controls"
+          >
+            <button
+              type="button"
+              disabled={CREATION_BACKEND_BLANK}
+              onClick={() => {
+                seekBeats(0);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                flexShrink: 0,
+                border: 'none',
+                borderRadius: 6,
+                background: '#101010',
+                color: '#8aa0b5',
+                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+              }}
+              title="Return to start"
+            >
+              <SkipBack size={18} />
+            </button>
+            <button
+              type="button"
+              disabled={CREATION_BACKEND_BLANK}
+              onClick={() => {
+                stopTransport();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 36,
+                height: 36,
+                flexShrink: 0,
+                border: 'none',
+                borderRadius: 6,
+                background: '#101010',
+                color: '#8aa0b5',
+                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+              }}
+              title="Stop"
+            >
+              <Square size={18} />
+            </button>
+            <button
+              type="button"
+              disabled={CREATION_BACKEND_BLANK}
+              onClick={() => {
+                if (CREATION_BACKEND_BLANK) return;
+                if (transportNeedsPause) {
+                  void pauseTransport();
+                } else {
+                  void startTransport('play');
+                }
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 44,
+                height: 36,
+                flexShrink: 0,
+                border: 'none',
+                borderRadius: 6,
+                background: transportNeedsPause ? 'rgba(0, 229, 255, 0.18)' : 'linear-gradient(145deg, #1e3a5f, #122032)',
+                color: transportNeedsPause ? '#5eead4' : '#cffafe',
+                boxShadow: transportNeedsPause ? 'inset 0 0 0 1px rgba(94,234,212,0.35)' : '0 0 18px rgba(0,229,255,0.12)',
+                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+              }}
+              title={
+                transportNeedsPause
+                  ? (isRecording ? 'Pause recording' : isCounting ? 'Pause count-in' : 'Pause playback')
+                  : isPaused
+                    ? 'Resume'
+                    : 'Play'
+              }
+            >
+              {transportNeedsPause ? <Pause size={20} /> : <Play size={20} />}
+            </button>
+            <button
+              type="button"
+              disabled={CREATION_BACKEND_BLANK}
+              onClick={() => {
+                if (CREATION_BACKEND_BLANK) return;
+                void startTransport('record');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 38,
+                height: 36,
+                flexShrink: 0,
+                border: `1px solid ${isRecording ? '#f8717188' : '#7f1d1d'}`,
+                borderRadius: 6,
+                background: isRecording
+                  ? 'linear-gradient(180deg, #f87171, #dc2626)'
+                  : 'linear-gradient(180deg, #2a1518, #1a0f0f)',
+                color: isRecording ? '#fff' : '#fecaca',
+                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+              }}
+              title={isRecording ? 'Recording' : 'Record'}
+            >
+              <Circle size={18} />
+            </button>
+          </div>
+          </div>
+
+          <div
+            style={{
+              flex: '1 1 0%',
+              minWidth: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              flexWrap: 'nowrap',
+              overflowX: 'auto',
+              padding: '2px 0 2px 8px',
+              borderLeft: '1px solid #2a2a32',
+              scrollbarWidth: 'thin',
+            }}
+            title="Snap / loop / length / click timing / zoom — scroll horizontally if the window is narrow"
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <span style={{ fontSize: 8, color: '#6a6a78', fontWeight: 700 }}>SNAP</span>
+              <select
+                value={normalizePianoSnapSubdiv(pianoSnapSubdiv)}
+                title={`Snap — ${PPQ} PPQ; one column = ${Math.round(ticksPerPianoSnapCell(PPQ, normalizePianoSnapSubdiv(pianoSnapSubdiv)))} ticks at this grid; zoom changes pixel width`}
+                onChange={(e) => setPianoSnapSubdiv(Number(e.target.value))}
+                style={{
+                  height: 28,
+                  borderRadius: 4,
+                  border: '1px solid #2a2a32',
+                  background: '#0a0a0a',
+                  color: '#7cf4c6',
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  minWidth: 56,
+                }}
+              >
+                <option value={1}>{snapLabelFromPianoSnapSubdiv(1)}</option>
+                <option value={2}>{snapLabelFromPianoSnapSubdiv(2)}</option>
+                <option value={3}>{snapLabelFromPianoSnapSubdiv(3)}</option>
+                <option value={4}>{snapLabelFromPianoSnapSubdiv(4)}</option>
+                <option value={6}>{snapLabelFromPianoSnapSubdiv(6)}</option>
+                <option value={8}>{snapLabelFromPianoSnapSubdiv(8)}</option>
+                <option value={16}>{snapLabelFromPianoSnapSubdiv(16)}</option>
+                <option value={32}>{snapLabelFromPianoSnapSubdiv(32)}</option>
+              </select>
             </div>
+
+            <button
+              type="button"
+              aria-pressed={loopOn}
+              title={
+                loopOn
+                  ? `Loop on — ${loopBars} bar${loopBars !== 1 ? 's' : ''}`
+                  : 'Loop off — click to enable'
+              }
+              onClick={() => {
+                setLoopOn((v) => !v);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 36,
+                padding: '0 8px',
+                borderRadius: 6,
+                border: '1px solid',
+                borderColor: loopOn ? '#2a4a3c' : '#3a3a46',
+                background: loopOn ? '#14221c' : '#1c1c24',
+                color: loopOn ? '#7cf4c6' : '#6a6a78',
+                fontSize: 9,
+                fontWeight: 800,
+                fontFamily: 'monospace',
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              <Repeat size={12} strokeWidth={2.5} />
+              <span>Loop</span>
+            </button>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                flexShrink: 0,
+                minWidth: 0,
+              }}
+              title="Loop length (bars) — dropdown; 64 = full board"
+            >
+              <span style={{ fontSize: 8, color: '#6a6a78', fontWeight: 700 }}>LEN</span>
+              <select
+                value={loopBars}
+                title="Loop length (bars) — same preset set as Studio; 64 = full piano board span"
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (!Number.isFinite(n) || n < 1) return;
+                  setLoopBars(n);
+                  setLoopRangeBeats(
+                    loopStartBeatRef.current,
+                    loopStartBeatRef.current + n * beatsPerBarRef.current,
+                  );
+                }}
+                style={{
+                  height: 28,
+                  borderRadius: 4,
+                  border: '1px solid #2a2a32',
+                  background: '#0a0a0a',
+                  color: '#aeb7c6',
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  maxWidth: 108,
+                  flexShrink: 0,
+                }}
+              >
+                {Array.from(new Set([1, 2, 4, 8, 12, 16, 24, 32, 64, loopBars]))
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                  <option key={n} value={n}>
+                    {n} bar{n !== 1 ? 's' : ''}{n === 64 ? ' · full' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              title="Save banks + pad routing + snap to local storage"
+              onClick={persistCreationToStorage}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 36,
+                flexShrink: 0,
+                padding: '0 10px',
+                borderRadius: 6,
+                border: '1px solid #2a2a32',
+                background: '#111',
+                color: '#aeb7be',
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              <Save size={14} />
+              Save
+            </button>
+
+            <button
+              type="button"
+              title="Send session to Studio Editor 2 (pattern / MIDI handoff)"
+              disabled={CREATION_BACKEND_BLANK}
+              onClick={() => {
+                if (CREATION_BACKEND_BLANK) return;
+                onExport('studio-editor');
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 36,
+                flexShrink: 0,
+                padding: '0 10px',
+                borderRadius: 6,
+                border: '1px solid #00E5FF44',
+                background: '#1a1a2a',
+                color: '#00E5FF',
+                fontSize: 10,
+                fontWeight: 700,
+                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+              }}
+            >
+              <Cable size={14} />
+              MIDI
+            </button>
+          </div>
+
+        </div>
+
+        {/* Beat Lab: presets · record/upload · kit+clear+download strip · sampler pads — elevated so FX popover stacks above sequencer / modules */}
+        {tab === 'grid' && (
+          <div style={{ position: 'relative', zIndex: 200, overflow: 'visible' }}>
+          <BeatLabDeckToolbar
+            kit={kit}
+            setKit={setKit}
+            hasPadSample={hasPadSampleForActiveBank}
+            onLoadPadSample={beginLoadPadSample}
+            onClearPadSample={clearPadSample}
+            geniusStarterActive={activeGeniusStarter}
+            onGeniusStarter={(k) => {
+              applyStarterPreset(k);
+            }}
+            onGeniusRecord={() => {
+              if (CREATION_BACKEND_BLANK) return;
+              void startTransport('record');
+            }}
+            onGeniusUpload={() => beginLoadPadSample(geniusSamplerTargetPad)}
+            onGeniusMySoundPlay={(pi) => {
+              playPadSoundRef.current(pi, PAD_VEL[pi] ?? 90);
+            }}
+            onStopPadSamplePlayback={stopPadSamplePlayback}
+            geniusSamplerTargetPad={geniusSamplerTargetPad}
+            onGeniusSamplerTargetPadChange={setGeniusSamplerTargetPad}
+            padSampleRootBpmForPad={(pi) => padSampleRootBpms[padSampleKey(activeBank, pi)]}
+            onCommitPadSampleRootBpm={commitPadSampleRootBpm}
+            padSampleLabelForPad={(pi) => padSampleLabels[padSampleKey(activeBank, pi)]}
+            samplerUiBank={activeBank}
+            getPadSamplerOpts={getPadSamplerPlaybackOpts}
+            commitPadSamplerOpts={commitPadSamplerPlaybackOpts}
+            onPreviewSamplerFx={previewSamplerFxDraft}
+            onPreviewSamplerRootBpmDraft={previewSamplerRootBpmDraft}
+            getPadSampleAudioBuffer={(pi) => padSampleBuffersRef.current.get(padSampleKey(activeBank, pi))}
+            patternActionsDisabled={CREATION_BACKEND_BLANK}
+            onClearPattern={() => {
+              clearCurrentPatternDrums();
+            }}
+            onDownloadHandoff={() => {
+              onExport('studio-editor');
+            }}
+          />
+          </div>
+        )}
+
+        {/* Pattern bank + sound families + session / click timing / zoom — tempo lives in top transport row */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'stretch',
+            gap: 10,
+            flexWrap: 'wrap',
+            padding: '4px 2px 0',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              flex: '1.2 1 320px',
+              minWidth: 280,
+              padding: '8px 10px',
+              borderRadius: 10,
+              border: '1px solid rgba(139, 92, 246, 0.22)',
+              background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ fontSize: 10, color: '#c4b5fd', fontWeight: 800, letterSpacing: 0.8 }}>PATTERN BANK</span>
+              <span style={{ fontSize: 9, color: '#6b5a8f', fontFamily: 'monospace' }}>A/B · chain · starters · length</span>
+            </div>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+              title="Starter patterns and arrangement length shortcuts"
+            >
+            <span style={{ fontSize: 8, color: '#7d87a2', fontWeight: 700 }}>SLOTS</span>
+            {(['A', 'B'] as const).map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => setPatternSlot(slot)}
+                style={{
+                  height: 24,
+                  minWidth: 24,
+                  borderRadius: 4,
+                  border: `1px solid ${patternSlot === slot ? '#7cf4c688' : '#2b3754'}`,
+                  background: patternSlot === slot ? '#153126' : '#111629',
+                  color: patternSlot === slot ? '#7cf4c6' : '#9dc6ff',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {slot}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={copyPatternAToB}
+              style={{
+                height: 24,
+                padding: '0 6px',
+                borderRadius: 4,
+                border: '1px solid #2b3754',
+                background: '#111629',
+                color: '#9dc6ff',
+                fontSize: 8,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Copy Pattern A into Pattern B"
+            >
+              A→B
+            </button>
+            <button
+              type="button"
+              onClick={swapPatternAB}
+              style={{
+                height: 24,
+                padding: '0 6px',
+                borderRadius: 4,
+                border: '1px solid #2b3754',
+                background: '#111629',
+                color: '#9dc6ff',
+                fontSize: 8,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Swap Pattern A and Pattern B"
+            >
+              A↔B
+            </button>
+            <button
+              type="button"
+              onClick={() => setPatternPlayMode((m) => (m === 'single' ? 'chainAB' : 'single'))}
+              style={{
+                height: 24,
+                padding: '0 8px',
+                borderRadius: 4,
+                border: `1px solid ${patternPlayMode === 'chainAB' ? '#7cf4c688' : '#2b3754'}`,
+                background: patternPlayMode === 'chainAB' ? '#153126' : '#111629',
+                color: patternPlayMode === 'chainAB' ? '#7cf4c6' : '#9dc6ff',
+                fontSize: 8,
+                fontWeight: 800,
+                cursor: 'pointer',
+              }}
+              title="Pattern playback mode"
+            >
+              {patternPlayMode === 'chainAB' ? 'A+B Chain' : 'Single'}
+            </button>
+            <span style={{ fontSize: 8, color: '#7d87a2', fontWeight: 700 }}>STARTERS</span>
+            {([
+              ['Hip-Hop A', 'hiphopA'],
+              ['Hip-Hop B', 'hiphopB'],
+              ['R&B A', 'rnbA'],
+              ['R&B B', 'rnbB'],
+            ] as const).map(([label, key]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => applyStarterPreset(key)}
+                style={{
+                  height: 24,
+                  padding: '0 8px',
+                  borderRadius: 4,
+                  border: '1px solid #2b3754',
+                  background: '#111629',
+                  color: '#9dc6ff',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <span style={{ marginLeft: 4, fontSize: 8, color: '#7d87a2', fontWeight: 700 }}>LEN</span>
+            {[16, 32].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => {
+                  setLoopBars(n);
+                  setLoopRangeBeats(
+                    loopStartBeatRef.current,
+                    loopStartBeatRef.current + n * beatsPerBarRef.current,
+                  );
+                }}
+                style={{
+                  height: 24,
+                  minWidth: 36,
+                  padding: '0 6px',
+                  borderRadius: 4,
+                  border: `1px solid ${loopBars === n ? '#00E5FF66' : '#2b3754'}`,
+                  background: loopBars === n ? '#11202a' : '#111629',
+                  color: loopBars === n ? '#00E5FF' : '#9dc6ff',
+                  fontSize: 9,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
           </div>
 
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 2,
-              minWidth: 140,
-              padding: '2px 6px',
-              background: '#0a0a0a',
-              border: '1px solid #2a2a2a',
-              borderRadius: 4,
+              gap: 6,
+              flex: '1 1 220px',
+              minWidth: 200,
+              padding: '8px 10px',
+              borderRadius: 10,
+              border: '1px solid rgba(52, 211, 153, 0.18)',
+              background: 'linear-gradient(165deg, rgba(6, 40, 32, 0.35) 0%, rgba(8, 8, 10, 0.95) 100%)',
             }}
-            title="Metronome click scheduling only (+ = later). Transport & grid use the true audio clock."
+            title="Sound families — match pads to kick, hats, 808, etc."
           >
-            <label style={{ fontSize: 8, color: '#666', fontFamily: 'monospace' }}>
-              CLICK ms{' '}
-              <span style={{ color: metronomeClickLatencyMs !== 0 ? '#a78bfa' : '#555' }}>
-                {metronomeClickLatencyMs > 0 ? `+${metronomeClickLatencyMs}` : metronomeClickLatencyMs}
-              </span>
-            </label>
-            <input
-              type="range"
-              min={-500}
-              max={500}
-              step={1}
-              value={metronomeClickLatencyMs}
-              onChange={(e) => setMetronomeClickLatencyMs(Number(e.target.value))}
-              style={{ width: '100%', height: 28, cursor: 'pointer' }}
-            />
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                type="button"
-                onClick={syncMetronomeClickLatencyFromOutput}
-                style={{
-                  flex: 1,
-                  padding: '3px 6px',
-                  fontSize: 9,
-                  fontFamily: 'monospace',
-                  border: '1px solid #333',
-                  borderRadius: 3,
-                  background: '#111',
-                  color: '#aaa',
-                  cursor: 'pointer',
-                }}
-              >
-                Auto out
-              </button>
-              <button
-                type="button"
-                onClick={() => setMetronomeClickLatencyMs(0)}
+            <span style={{ fontSize: 10, color: '#6ee7b7', fontWeight: 800, letterSpacing: 0.6 }}>SOUND FAMILIES</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 8, color: '#666', fontWeight: 700 }}>TAGS</span>
+            {[
+              'Kick',
+              'Snare/Clap',
+              'Hi-Hat',
+              'Open Hat',
+              '808/Sub',
+              'Perc',
+              'Riser/FX',
+            ].map((label) => (
+              <span
+                key={label}
                 style={{
                   padding: '3px 8px',
-                  fontSize: 9,
+                  borderRadius: 999,
+                  border: '1px solid rgba(45, 212, 191, 0.22)',
+                  background: 'rgba(15, 30, 28, 0.6)',
+                  fontSize: 8,
+                  color: '#a7f3d0',
                   fontFamily: 'monospace',
-                  border: '1px solid #333',
-                  borderRadius: 3,
-                  background: '#111',
-                  color: '#888',
-                  cursor: 'pointer',
                 }}
               >
-                0
-              </button>
+                {label}
+              </span>
+            ))}
             </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 6px', borderRadius: 8, border: '1px solid #2a2a2a', background: '#090909' }} title="Creation patterns sync to the DAW session when you arrange or open Studio">
+            <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', letterSpacing: 0.5 }}>SESSION</span>
+            <span style={{ fontSize: 9, color: '#666', fontFamily: 'monospace', fontWeight: 700 }}>LINKED</span>
           </div>
 
           {/* Zoom */}
@@ -2146,6 +5070,13 @@ export default function CreationStationScreen({
             />
             <button onClick={zoomIn} style={{ padding: '3px 7px', background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><ZoomIn size={11} /></button>
             <button onClick={zoomReset} style={{ padding: '3px 7px', background: 'none', border: 'none', color: '#666', cursor: 'pointer', borderLeft: '1px solid #2a2a2a' }}><Maximize2 size={11} /></button>
+            <button
+              onClick={fitDrumGridToLoop}
+              style={{ padding: '3px 8px', background: 'none', border: 'none', color: '#7aa2b8', cursor: 'pointer', borderLeft: '1px solid #2a2a2a', fontSize: 10, fontFamily: 'monospace', fontWeight: 700 }}
+              title={`Fit ${loopBars} bar${loopBars !== 1 ? 's' : ''} to screen`}
+            >
+              FIT
+            </button>
           </div>
 
           {/* Follow */}
@@ -2153,419 +5084,613 @@ export default function CreationStationScreen({
             ⊳ FOLLOW
           </button>
 
-          {/* Drum loop selector (shared by Drums + 16-BAR GRID sequencer views) */}
-          {(tab === 'drums' || tab === 'grid') && (
-            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <span style={{ fontSize: 9, color: '#666', fontWeight: 700 }}>
-                {tab === 'grid' ? 'DRUM LOOP' : 'LOOP'}
-              </span>
-              {[4, 8, 12, 16].map(bars => (
-                <button
-                  key={bars}
-                  onClick={() =>
-                    setLoopRange(loopStartBar, loopStartBar + bars - 1, loopSection ?? undefined)
-                  }
-                  style={{
-                    width: 28,
-                    height: 24,
-                    borderRadius: 4,
-                    fontSize: 9,
-                    fontWeight: 900,
-                    background: selectedLoopLength === bars ? '#00ff88' : '#111',
-                    color: selectedLoopLength === bars ? '#000' : '#555',
-                    border: `1px solid ${selectedLoopLength === bars ? '#00ff88' : '#333'}`,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {bars}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Banks */}
           <BankButtons activeBank={activeBank} setActiveBank={setActiveBank} hasDrums={hasDrums} hasNotes={hasNotes} />
 
-          <select value={kit} onChange={e => setKit(e.target.value)} style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, background: '#111', color: '#888', border: '1px solid #333', outline: 'none' }}>
-            {KITS.map(k => <option key={k}>{k}</option>)}
-          </select>
-        </div>
-
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => onExport('studio-editor')} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a2a', color: '#00E5FF', border: '1px solid #00E5FF44', cursor: 'pointer' }}>
-            <Send size={9} /> Studio
-          </button>
-          <button onClick={() => onExport('master-arranger')} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944', cursor: 'pointer' }}>
+          <button type="button" disabled={CREATION_BACKEND_BLANK} onClick={() => {
+            if (CREATION_BACKEND_BLANK) return;
+            onExport('master-arranger');
+          }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944', cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer', opacity: CREATION_BACKEND_BLANK ? 0.45 : 1 }}>
             <Send size={9} /> Arrange
           </button>
         </div>
       </div>
 
-      {/* ── Tab bar ── */}
-      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808' }}>
-        {(['drums','grid','piano','mixer'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 16px', fontSize: 11, fontWeight: 700, background: tab === t ? '#111' : 'transparent', color: tab === t ? (t === 'mixer' ? '#00E5FF' : t === 'grid' ? '#00ff88' : '#D500F9') : '#444', borderBottom: tab === t ? `2px solid ${t === 'mixer' ? '#00E5FF' : t === 'grid' ? '#00ff88' : '#D500F9'}` : '2px solid transparent', border: 'none', cursor: 'pointer' }}>
-            {t === 'drums' ? '🥁 DRUMS' : t === 'grid' ? '⊞ 16-BAR GRID' : t === 'piano' ? '🎹 PIANO ROLL' : '🎚️ MIXER'}
+      <input
+        ref={padSampleFileInputRef}
+        type="file"
+        accept="audio/*"
+        style={{ display: 'none' }}
+        onChange={handlePadSampleFile}
+      />
+
+      {/* ── Tab bar (Beat Lab = main drum + sampler + sequence workspace) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid rgba(139, 92, 246, 0.15)', flexShrink: 0, background: '#070708' }}>
+        {(['grid', 'piano', 'drums'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            style={{
+              padding: '8px 18px',
+              fontSize: 11,
+              fontWeight: 700,
+              background: tab === t ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
+              color: tab === t ? '#e9d5ff' : '#555',
+              borderBottom: tab === t ? `2px solid ${t === 'grid' ? '#c4b5fd' : '#a78bfa'}` : '2px solid transparent',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {t === 'grid' ? '🎛 BEAT LAB' : t === 'piano' ? '🎹 PIANO ROLL' : '✦ MORE'}
           </button>
         ))}
+        <div style={{ width: 1, alignSelf: 'stretch', margin: '6px 4px', background: 'rgba(139, 92, 246, 0.2)', flexShrink: 0 }} aria-hidden />
+        <button
+          type="button"
+          onClick={() => setDrumKitGenOpen(true)}
+          disabled={CREATION_BACKEND_BLANK}
+          title="Drum kit generator — single pads or full kit + pattern for Beat Lab"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            marginLeft: 2,
+            borderRadius: 6,
+            border: '1px solid rgba(139, 92, 246, 0.35)',
+            background: 'rgba(139, 92, 246, 0.1)',
+            color: '#c4b5fd',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: 0.3,
+            cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+            opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+          }}
+        >
+          <Zap size={12} aria-hidden />
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+            <span>DRUM KIT</span>
+            <span style={{ fontSize: 8, fontWeight: 800, opacity: 0.9 }}>GENERATOR</span>
+          </span>
+        </button>
       </div>
 
-      {/* ── DRUMS TAB ── */}
+      {/* ── MORE (placeholder — former Drums tab; primary workflow is Beat Lab) ── */}
       {tab === 'drums' && (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-          <input
-            ref={padSampleFileInputRef}
-            type="file"
-            accept="audio/*"
-            style={{ display: 'none' }}
-            onChange={handlePadSampleFile}
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '4px 8px',
-                  background: '#0a0a0a',
-                  borderBottom: '1px solid #1a1a1a',
-                }}
-              >
-                <span style={{ fontSize: 10, fontWeight: 800, color: '#00ff88' }}>
-                  DRUM LOOP
-                </span>
-                <span style={{ fontSize: 9, fontFamily: 'monospace', color: '#666' }}>
-                  {selectedLoopLength} BARS
-                </span>
-              </div>
-              <PadSection
-                padChannels={padChannels}
-                padFlashTicks={padFlashTicks}
-                subFlashTick={subFlashTick}
-                subOn={subOn}
-                onHitPad={i => {
-                  const chId = padChannels[i];
-                  const velNorm = Math.min(1, (PAD_VEL[i] ?? 90) / 127);
-                  // Trigger audio first on pointer-down path; UI updates can follow.
-                  playPadSoundRef.current(i, PAD_VEL[i] ?? 90);
-                  flushSync(() => {
-                    setLocalMeterBoost(prev => ({ ...prev, [chId]: Math.max(prev[chId] ?? 0, velNorm) }));
-                  });
-                  // Keep manual tap path local-only for immediate UI feedback.
-                }}
-                onChannelChange={(i, ch) => setPadChannels(prev => prev.map((c, idx) => idx === i ? ch : c))}
-                onSubToggle={() => {
-                  triggerChannel(SUB_CHANNEL, 127);
-                  setSubOn(p => !p);
-                  flushSync(() => {
-                    setLocalMeterBoost(prev => ({ ...prev, [SUB_CHANNEL]: Math.max(prev[SUB_CHANNEL] ?? 0, 1) }));
-                  });
-                  setSubFlashTick((n) => n + 1);
-                }}
-                hasPadSample={hasPadSampleForActiveBank}
-                onLoadPadSample={beginLoadPadSample}
-                onClearPadSample={clearPadSample}
-              />
-
-              {/* Grid editor for selected drum pad */}
-              {selectedDrumPad !== null && (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '2px solid #1a1a1a' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', background: '#0a0a0a', borderBottom: '1px solid #1a1a1a', gap: 8 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: PAD_COLORS[selectedDrumPad] }}>
-                      {PAD_NAMES[selectedDrumPad]} — Grid Editor
-                    </span>
-                    <button
-                      onClick={() => setSelectedDrumPad(null)}
-                      style={{ marginLeft: 'auto', padding: '2px 6px', borderRadius: 3, fontSize: 9, background: '#1a1a1a', color: '#666', border: '1px solid #333', cursor: 'pointer' }}
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <div ref={gridScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'auto' }}>
-                    <div style={{ width: drumGridW + LABEL_W, minWidth: drumGridW + LABEL_W }}>
-                      <div style={{ display: 'flex', paddingLeft: LABEL_W }}>
-                        <div style={{ position: 'relative', width: drumGridW, flexShrink: 0 }}>
-                          <Ruler
-                            activeCol={activeCol}
-                            colWidth={drumGridColW}
-                            barNumberStart={loopStartBar}
-                            stepsPerBar={MEASURES_PER_BAR}
-                            barStepCounts={creationDrumRulerCounts}
-                            segmentHeaderLabels={creationDrumRulerHeaderLabels}
-                            patternColToDawBar={drumPatternColToDawBar}
-                            creationBeatHighlight={rulerCreationBeatHighlight}
-                            onRangeCommit={(s, e) =>
-                              setLoopRange(s, e, loopSection ?? undefined)
-                            }
-                          />
-                          <LoopMarkersBrace
-                            visible={loopEnabled}
-                            leftPx={0}
-                            widthPx={drumGridW}
-                            height={28}
-                            variant="dark"
-                          />
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', height: DRUM_GRID_ROW_H }}>
-                        <div style={{ width: LABEL_W, flexShrink: 0, color: PAD_COLORS[selectedDrumPad], fontSize: 11, fontWeight: 800, paddingRight: 4, textAlign: 'right', fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-                          {PAD_NAMES[selectedDrumPad]}
-                        </div>
-                        <div style={{ position: 'relative', display: 'flex', width: drumGridW, height: DRUM_GRID_ROW_H }}>
-                          {Array.from({ length: patternColsDrums }, (_, ci) => {
-                            const bankCol = ci + drumColOffset;
-                            const color = barColor(Math.floor(ci / MEASURES_PER_BAR));
-                            const on = currentDrums[selectedDrumPad]?.[bankCol] ?? false;
-                            const isHead = activeCol === ci;
-                            return (
-                              <button
-                                key={ci}
-                                onClick={() => toggleDrum(selectedDrumPad, bankCol)}
-                                style={{
-                                  width: drumGridColW,
-                                  flexShrink: 0,
-                                  height: DRUM_GRID_ROW_H,
-                                  background: on ? PAD_COLORS[selectedDrumPad] : isHead ? `${color}33` : ci % (MEASURES_PER_BAR * 4) === 0 ? '#111' : ci % MEASURES_PER_BAR === 0 ? '#101010' : '#0e0e0e',
-                                  borderLeft: `1px solid ${ci % (MEASURES_PER_BAR * 4) === 0 ? '#2a2a2a' : ci % MEASURES_PER_BAR === 0 ? '#1e1e1e' : '#141414'}`,
-                                  borderTop: 'none',
-                                  borderRight: 'none',
-                                  borderBottom: 'none',
-                                  boxShadow: isHead && on ? `0 0 6px ${PAD_COLORS[selectedDrumPad]}` : 'none',
-                                  cursor: 'pointer',
-                                  position: 'relative',
-                                  zIndex: 1,
-                                  // No transition on playhead column — must snap with measure counter (same transport beat).
-                                  transition: isHead ? 'none' : 'background 0.04s',
-                                }}
-                              />
-                            );
-                          })}
-                          <LoopVerticalGuides
-                            visible={loopEnabled}
-                            leftPx={0}
-                            widthPx={drumGridW}
-                            height={DRUM_GRID_ROW_H}
-                            zIndex={12}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Mixer panel anchored at bottom */}
-          <div style={{ borderTop: '1px solid #1a1a1a', background: '#080808', flexShrink: 0, display: 'flex', flexDirection: 'column', height: '340px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', background: '#0a0a0a', borderBottom: '1px solid #1a1a1a' }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF' }}>🎚️ MIXER — Live Metering</span>
-            </div>
-            <div style={{ display: 'flex', overflowX: 'auto', height: 320, background: '#050505' }}>
-              {PAD_NAMES.map((padName, pi) => {
-                const chId = padChannels[pi];
-                const vol = channelVolumes[chId] ?? 80;
-                const rawLevel = Math.max(channelLevels[chId] ?? 0, localMeterBoost[chId] ?? 0);
-                const rmsLevel = Math.min(1, rawLevel * (vol / 100));
-                const peakLevel = Math.min(1, rmsLevel * 1.25);
-                const pan = drumPans[chId] ?? 0;
-                const panNorm = Math.max(-1, Math.min(1, pan / 100));
-                const stereoMode = padStereoModes[pi] ?? 'stereo';
-                const leftLevel = Math.min(1, rmsLevel * (panNorm > 0 ? 1 - panNorm : 1));
-                const rightLevel = Math.min(1, rmsLevel * (panNorm < 0 ? 1 + panNorm : 1));
-                const dbLevel = rmsLevel > 0 ? (20 * Math.log10(rmsLevel)) : -60;
-                const clipping = dbLevel > 0;
-
-                return (
-                  <div key={pi} style={{ display: 'flex', flexDirection: 'column', width: 80, flexShrink: 0, padding: '8px', borderRight: '1px solid #1a1a1a', gap: '6px' }}>
-                    {/* Pad name */}
-                    <div style={{ fontSize: 8, fontWeight: 700, color: PAD_COLORS[pi], textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {padName}
-                    </div>
-
-                    {/* LED Meter */}
-                    <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 4, minHeight: 80, background: '#000', borderRadius: 3, padding: '4px 3px', border: '1px solid #1a1a1a' }}>
-                      {(stereoMode === 'stereo' ? [leftLevel, rightLevel] : [rmsLevel]).map((level, meterIdx) => (
-                        <div key={meterIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'flex-end', gap: '1px' }}>
-                          {Array.from({ length: 12 }, (_, i) => {
-                            const threshold = i / 12;
-                            const isLit = level > threshold;
-                            const ledColor = clipping && i > 10 ? '#ff3333' : isLit ? (i > 9 ? '#ffaa00' : i > 6 ? '#00ff88' : PAD_COLORS[pi]) : '#0a0a0a';
-                            return (
-                              <div
-                                key={i}
-                                style={{
-                                  height: '100%',
-                                  borderRadius: 2,
-                                  background: ledColor,
-                                  boxShadow: isLit ? `0 0 4px ${ledColor}` : 'none',
-                              transition: 'none'
-                                }}
-                              />
-                            );
-                          })}
-                          <div style={{ fontSize: 7, textAlign: 'center', color: '#666', fontFamily: 'monospace', marginTop: 2 }}>
-                            {stereoMode === 'stereo' ? (meterIdx === 0 ? 'L' : 'R') : 'M'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* dB display */}
-                    <div style={{ fontSize: 7, textAlign: 'center', color: clipping ? '#ff3333' : '#888', fontFamily: 'monospace', fontWeight: 700 }}>
-                      {dbLevel.toFixed(1)} dB
-                    </div>
-
-                    {/* Stereo / Mono */}
-                    <button
-                      type="button"
-                      onClick={() => setPadStereoModes(prev => ({ ...prev, [pi]: (prev[pi] ?? 'stereo') === 'stereo' ? 'mono' : 'stereo' }))}
-                      style={{ width: '100%', padding: '3px 0', borderRadius: 3, background: stereoMode === 'stereo' ? '#1a1a1a' : '#111', color: stereoMode === 'stereo' ? '#00E5FF' : '#ffcc00', border: `1px solid ${stereoMode === 'stereo' ? '#00E5FF44' : '#ffcc0044'}`, cursor: 'pointer', fontSize: 7, fontWeight: 800, fontFamily: 'monospace' }}
-                      title="Toggle stereo/mono meter mode"
-                    >
-                      {stereoMode === 'stereo' ? 'STEREO' : 'MONO'}
-                    </button>
-
-                    {/* Volume fader */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={vol}
-                        onChange={e => setChannelVolume(chId, Number(e.target.value))}
-                        style={{ width: '100%', height: 3, accentColor: PAD_COLORS[pi], cursor: 'pointer' }}
-                      />
-                      <div style={{ fontSize: 7, textAlign: 'center', color: '#666', fontFamily: 'monospace' }}>
-                        {vol}%
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* SUB BASS */}
-              <div style={{ display: 'flex', flexDirection: 'column', width: 80, flexShrink: 0, padding: '8px', borderRight: '1px solid #1a1a1a', gap: '6px' }}>
-                {(() => {
-                  const subLevel = Math.min(1, Math.max(channelLevels[SUB_CHANNEL] ?? 0, localMeterBoost[SUB_CHANNEL] ?? 0) * 0.8);
-                  const subPan = drumPans[SUB_CHANNEL] ?? 0;
-                  const subPanNorm = Math.max(-1, Math.min(1, subPan / 100));
-                  const subLeft = Math.min(1, subLevel * (subPanNorm > 0 ? 1 - subPanNorm : 1));
-                  const subRight = Math.min(1, subLevel * (subPanNorm < 0 ? 1 + subPanNorm : 1));
-                  return (
-                    <>
-                <div style={{ fontSize: 8, fontWeight: 700, color: '#D500F9', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                  SUB BASS
-                </div>
-                <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 4, minHeight: 80, background: '#000', borderRadius: 3, padding: '4px 3px', border: '1px solid #1a1a1a' }}>
-                  {(subStereoMode === 'stereo' ? [subLeft, subRight] : [subLevel]).map((level, meterIdx) => (
-                    <div key={meterIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'flex-end', gap: '1px' }}>
-                      {Array.from({ length: 12 }, (_, i) => {
-                        const threshold = i / 12;
-                        const isLit = level > threshold;
-                        return (
-                          <div
-                            key={i}
-                            style={{
-                              height: '100%',
-                              borderRadius: 2,
-                              background: isLit ? (i > 9 ? '#ffaa00' : '#D500F9') : '#0a0a0a',
-                              boxShadow: isLit ? `0 0 4px ${i > 9 ? '#ffaa00' : '#D500F9'}` : 'none',
-                          transition: 'none'
-                            }}
-                          />
-                        );
-                      })}
-                      <div style={{ fontSize: 7, textAlign: 'center', color: '#666', fontFamily: 'monospace', marginTop: 2 }}>
-                        {subStereoMode === 'stereo' ? (meterIdx === 0 ? 'L' : 'R') : 'M'}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 7, textAlign: 'center', color: '#888', fontFamily: 'monospace', fontWeight: 700 }}>
-                  {subLevel.toFixed(2)}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSubStereoMode((m) => (m === 'stereo' ? 'mono' : 'stereo'))}
-                  style={{ width: '100%', padding: '3px 0', borderRadius: 3, background: subStereoMode === 'stereo' ? '#1a1a1a' : '#111', color: subStereoMode === 'stereo' ? '#00E5FF' : '#ffcc00', border: `1px solid ${subStereoMode === 'stereo' ? '#00E5FF44' : '#ffcc0044'}`, cursor: 'pointer', fontSize: 7, fontWeight: 800, fontFamily: 'monospace' }}
-                  title="Toggle stereo/mono meter mode"
-                >
-                  {subStereoMode === 'stereo' ? 'STEREO' : 'MONO'}
-                </button>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={channelVolumes[SUB_CHANNEL] ?? 80}
-                    onChange={e => setChannelVolume(SUB_CHANNEL, Number(e.target.value))}
-                    style={{ width: '100%', height: 3, accentColor: '#D500F9', cursor: 'pointer' }}
-                  />
-                  <div style={{ fontSize: 7, textAlign: 'center', color: '#666', fontFamily: 'monospace' }}>
-                    {channelVolumes[SUB_CHANNEL] ?? 80}%
-                  </div>
-                </div>
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 32,
+            background: '#08080c',
+            color: '#8a8a9a',
+            textAlign: 'center',
+            gap: 12,
+          }}
+        >
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#c4b5fd', letterSpacing: 2 }}>MORE</span>
+          <span style={{ fontSize: 12, maxWidth: 420, lineHeight: 1.6 }}>
+            This area is reserved for a future module. Drum programming, kit, and sampler live under{' '}
+            <strong style={{ color: '#c4b5fd' }}>Beat Lab</strong>.
+          </span>
+          <button
+            type="button"
+            onClick={() => setTab('grid')}
+            style={{
+              marginTop: 8,
+              padding: '8px 20px',
+              borderRadius: 8,
+              border: '1px solid rgba(139, 92, 246, 0.45)',
+              background: 'rgba(139, 92, 246, 0.12)',
+              color: '#c4b5fd',
+              fontSize: 12,
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Open Beat Lab
+          </button>
         </div>
       )}
 
-      {/* ── 16-BAR GRID TAB (16 BARS ONLY WITH TRACK ALIGNMENT) ── */}
+      {/* ── Beat Lab sequencer (sampler deck is under transport · BeatLabDeckToolbar) ── */}
       {tab === 'grid' && (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0, background: '#050505' }}>
-          {/* LEFT: Track labels (sync with grid rows) */}
-          <div style={{ width: LABEL_W, flexShrink: 0, background: '#0a0a0a', borderRight: '1px solid #1e1e1e', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-            <div style={{ height: 28, flexShrink: 0, borderBottom: '1px solid #1e1e1e', background: '#050505', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#666' }}>
-              TRACKS
+          {/* Sequence + lane rail only — sampler / uploads live under transport (BeatLabDeckToolbar) */}
+          <div
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+              background: '#070708',
+              boxShadow: 'inset 0 1px 0 rgba(139, 92, 246, 0.08)',
+            }}
+          >
+            <div
+              style={{
+                flexShrink: 0,
+                padding: '6px 10px',
+                borderBottom: '1px solid rgba(139, 92, 246, 0.12)',
+                background: 'linear-gradient(180deg, rgba(22, 18, 34, 0.95) 0%, rgba(10, 9, 16, 0.98) 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 900, color: '#c4b5fd', letterSpacing: 3 }}>SEQUENCE</span>
+                <span style={{ fontSize: 9, color: '#6b5a8f', fontWeight: 700 }}>
+                  Lanes 1–16 = sampler pads 1–16 · paint steps
+                </span>
+              </div>
+              {/* Studio Editor 2 transport chips — same Bars / Time readouts as `StudioEditor2Screen` (~7902–7931). */}
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 12,
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    height: 32,
+                    borderRadius: 4,
+                    border: '1px solid #1e1e26',
+                    padding: '0 8px',
+                    boxSizing: 'border-box',
+                    background: 'rgba(0,0,0,0.45)',
+                    minWidth: 132,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 7,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      lineHeight: 1,
+                      color: '#6a6a78',
+                    }}
+                  >
+                    Bars
+                  </span>
+                  <span
+                    ref={creationSe2BarsReadoutRef}
+                    style={{
+                      fontSize: 12,
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontWeight: 700,
+                      fontVariantNumeric: 'tabular-nums',
+                      lineHeight: 1,
+                      marginTop: 2,
+                      color: '#fff',
+                      textAlign: 'center',
+                      whiteSpace: 'nowrap',
+                      width: '100%',
+                    }}
+                  >
+                    1.1.00
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 32,
+                    borderRadius: 4,
+                    border: '1px solid #1e1e26',
+                    padding: '0 6px',
+                    boxSizing: 'border-box',
+                    background: 'rgba(0,0,0,0.45)',
+                    minWidth: 56,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 7,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                      lineHeight: 1,
+                      color: '#6a6a78',
+                    }}
+                  >
+                    Time
+                  </span>
+                  <span
+                    ref={creationSe2TimeReadoutRef}
+                    style={{
+                      fontSize: 12,
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      fontWeight: 700,
+                      fontVariantNumeric: 'tabular-nums',
+                      lineHeight: 1,
+                      marginTop: 2,
+                      color: '#9dc6ff',
+                    }}
+                  >
+                    00:00:00
+                  </span>
+                </div>
+              </div>
+              <CreationTransportHudBar
+                compact
+                transportNotStopped={transportNotStopped}
+                displayBarNumber={displayBarNumberHud}
+                measureInBar={measureInBarHud}
+                measureLedCount={Math.max(2, Math.min(16, Math.round(qpb)))}
+                paintHudFromRaf={isPlaybackOrRecord}
+                hudDomSlotsRef={creationHudDomRef}
+              />
             </div>
-            {PAD_NAMES.map((name, pi) => (
+            <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+          {/* Track labels (sync with grid rows) */}
+          <div
+            ref={geniusLaneScrollRef}
+            onScroll={onGeniusLaneRailScroll}
+            style={{
+              width: LABEL_W,
+              flexShrink: 0,
+              background: 'linear-gradient(180deg, rgba(16, 12, 28, 0.98) 0%, rgba(8, 8, 14, 0.99) 100%)',
+              borderRight: '1px solid rgba(139, 92, 246, 0.18)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+            }}
+          >
+            <div
+              aria-hidden
+              style={{
+                height: 20,
+                flexShrink: 0,
+                borderBottom: '1px solid #1e1e1e',
+                background: '#080808',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <span style={{ fontSize: 10, fontWeight: 900, color: '#c4b5fd', letterSpacing: 1.4 }}>MEASURES</span>
+            </div>
+            <div
+              style={{
+                height: 28,
+                flexShrink: 0,
+                borderBottom: '1px solid #1e1e1e',
+                background: '#050505',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                justifyContent: 'flex-start',
+              }}
+            >
+              <div
+                style={{
+                  height: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  fontWeight: 900,
+                  color: '#9ec7d4',
+                  letterSpacing: 1.2,
+                  borderBottom: '1px solid #1e1e1e',
+                }}
+              >
+                BARS
+              </div>
+              <div
+                style={{
+                  height: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 9,
+                  fontWeight: 900,
+                  color: '#c8d2dd',
+                  letterSpacing: 0.8,
+                }}
+              >
+                Q {snapLabelFromPianoSnapSubdiv(drumStepSubdiv)}
+              </div>
+            </div>
+            {PAD_NAMES.map((_, pi) => {
+              const laneText =
+                padSampleLabels[padSampleKey(activeBank, pi)]?.trim() || GENIUS_LANE_LABELS[pi];
+              return (
               <div
                 key={pi}
-                onClick={() => setSelectedDrumPad(pi)}
                 style={{
                   height: DRUM_GRID_ROW_H,
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  paddingRight: 6,
-                  textAlign: 'right',
+                  paddingRight: 0,
+                  paddingLeft: 0,
+                  textAlign: 'left',
                   borderTop: '1px solid #000',
-                  borderBottom: '1px solid #1f3a4a',
-                  background: pi === selectedDrumPad ? `${PAD_COLORS[pi]}28` : drumLaneBg(pi),
-                  borderLeft: pi === selectedDrumPad ? `3px solid ${PAD_COLORS[pi]}` : '3px solid transparent',
-                  boxShadow: pi === selectedDrumPad ? `inset 0 0 0 1px ${PAD_COLORS[pi]}99` : 'none',
-                  cursor: 'pointer',
+                  borderBottom: '1px solid #30384a',
+                  background: pi === selectedDrumPad ? '#1a2130' : '#131a28',
+                  borderLeft: pi === selectedDrumPad ? '3px solid #c4b5fd' : '3px solid transparent',
+                  boxShadow: pi === selectedDrumPad ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.45)' : 'none',
+                  borderRadius: 10,
+                  overflow: 'hidden',
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 800, color: PAD_COLORS[pi], fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
-                  {name}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => auditionDrumLane(pi)}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: 10,
+                    border: `2px solid ${pi === selectedDrumPad ? 'rgba(196, 181, 253, 0.85)' : 'rgba(255,255,255,0.14)'}`,
+                    background: `linear-gradient(155deg, ${PAD_COLORS[pi]} 0%, #141b2a 120%)`,
+                    color: '#ffffff',
+                    fontSize: 14,
+                    fontWeight: 900,
+                    fontFamily: 'monospace',
+                    cursor: 'pointer',
+                    padding: '0 12px',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    boxShadow: pi === selectedDrumPad
+                      ? `0 0 14px ${PAD_COLORS[pi]}88, inset 0 0 12px rgba(255,255,255,0.16)`
+                      : `inset 0 0 10px ${PAD_COLORS[pi]}55`,
+                  }}
+                  title={`Beat Lab lane ${pi + 1} = sampler pad ${pi + 1} — ${laneText}`}
+                >
+                  {laneText}
+                </button>
               </div>
-            ))}
+            );
+            })}
           </div>
 
-          {/* RIGHT: drum grid aligned with tracks — width/loop from shared MasterClock loop state */}
-          <div ref={drumScrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', background: '#050505' }}>
-            <div style={{ width: drumGridW, minWidth: drumGridW, position: 'relative' }}>
-              <div style={{ position: 'relative', display: 'flex', height: 28, borderBottom: '1px solid #1e1e1e', background: '#0a0a0a' }}>
+          {/* RIGHT: drum grid — horizontal = timeline, vertical synced with lane rail */}
+          <div
+            ref={drumScrollRef}
+            onScroll={onGeniusPatternScroll}
+            onWheel={(e) => {
+              if (!(e.ctrlKey || e.metaKey)) return;
+              e.preventDefault();
+              if (e.deltaY < 0) zoomIn();
+              else if (e.deltaY > 0) zoomOut();
+            }}
+            style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', background: '#050505', minWidth: 0 }}
+          >
+            <div ref={drumGridContentRef} style={{ width: drumGridW, minWidth: drumGridW, position: 'relative' }}>
+              <div
+                ref={drumPlaylineRef}
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  /** Match `CREATION_DRUM_PLAYLINE_CENTER_X` in `creationPlaylineWapi` so column hit-tests align with motion. */
+                  width: 2,
+                  height: 48 + PAD_NAMES.length * DRUM_GRID_ROW_H,
+                  background: 'transparent',
+                  pointerEvents: 'none',
+                  /** Above sticky quant row (`zIndex` 20) so the playhead arrow can meet the number boxes. */
+                  zIndex: 22,
+                  /** Stopped: dimmed so column 0 / count “1” anchor is still visible; playing/recording full opacity. */
+                  opacity: transportNotStopped ? 1 : 0.42,
+                }}
+              >
+                {/** Tip at y=0, base at y=20 — flush with bottom of sticky quant strip (same `height: 20` as measure row). */}
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: '50%',
+                    top: 0,
+                    width: 10,
+                    height: 20,
+                    marginLeft: -5,
+                    clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
+                    background: '#c4b5fd',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 20,
+                    width: 2,
+                    height: 28 + PAD_NAMES.length * DRUM_GRID_ROW_H,
+                    background: 'rgba(196, 181, 253, 0.4)',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
+              <div
+                aria-hidden
+                title="Live measure and metronome counters"
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 20,
+                  height: 20,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  justifyContent: 'flex-start',
+                  gap: 0,
+                  padding: 0,
+                  borderBottom: '1px solid #1e1e1e',
+                  background: '#080808',
+                  pointerEvents: 'none',
+                }}
+              >
+                <div
+                  style={{
+                    position: 'relative',
+                    height: 20,
+                    flexShrink: 0,
+                    width: '100%',
+                  }}
+                >
+                  <div
+                    data-drum-measure-cells-row
+                    style={{
+                      position: 'relative',
+                      /** Above WAAPI glow undertint so playhead-lit digit + border read clearly. */
+                      zIndex: 2,
+                      height: 20,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                  {Array.from({ length: patternColsDrums }, (_, i) => {
+                    const colsPB = Math.max(1, qpbHud * subdivHud);
+                    const bankCol = i + drumColOffset;
+                    /** Fixed step-in-bar label per column (1…colsPB); only the playhead arrow moves during play. */
+                    const mod = ((bankCol % colsPB) + colsPB) % colsPB;
+                    const quantStepInBar = mod + 1;
+                    const qFont =
+                      colsPB <= 8 ? 10 : colsPB <= 16 ? 8 : colsPB <= 32 ? 7 : 6;
+                    const isPlayheadCol = i === visualSyncCol;
+                    const litQuantPausedOnly = isPlayheadCol && isPaused;
+                    const litQuantStoppedOnly = isPlayheadCol && !transportNotStopped;
+                    const quantCellBg = litQuantPausedOnly
+                      ? 'rgba(139, 92, 246, 0.2)'
+                      : litQuantStoppedOnly
+                        ? 'rgba(139, 92, 246, 0.1)'
+                        : '#121212';
+                    const quantBorderBlend = isPlaying ? '#121212' : quantCellBg;
+                    return (
+                      <div
+                        key={`grid-measure-${i}`}
+                        data-drum-pattern-col={i}
+                        data-drum-quant-playhead-lit={isPlayheadCol && !isPlaying ? '1' : undefined}
+                        onClick={
+                          CREATION_BACKEND_BLANK
+                            ? undefined
+                            : () => {
+                                seekTransportToPatternColumn(i);
+                              }
+                        }
+                        title={CREATION_BACKEND_BLANK ? undefined : 'Move playhead to this column'}
+                        ref={(el) => {
+                          if (quantMeasureCellElsRef.current.length !== patternColsDrums) {
+                            quantMeasureCellElsRef.current = Array.from(
+                              { length: patternColsDrums },
+                              () => null,
+                            );
+                          }
+                          quantMeasureCellElsRef.current[i] = el;
+                        }}
+                        style={{
+                          width: drumGridColW,
+                          height: 16,
+                          boxSizing: 'border-box',
+                          borderRadius: 0,
+                          border: 'none',
+                          borderTop: 'none',
+                          borderRight: 'none',
+                          pointerEvents: 'auto',
+                          /** Same left-edge model as pad cells — full box border was stealing horizontal space and drifting labels vs playhead. */
+                          borderLeft: `1px solid ${creationDrumGridVerticalLineColor({
+                            colWidthPx: drumGridColW,
+                            bankCol,
+                            qpb: qpbHud,
+                            subdiv: subdivHud,
+                            blendTo: quantBorderBlend,
+                          })}`,
+                          borderBottom: '1px solid #474747',
+                          fontFamily: 'monospace',
+                          fontSize: qFont,
+                          lineHeight: '14px',
+                          fontWeight: 900,
+                          textAlign: 'center',
+                          overflow: 'hidden',
+                          whiteSpace: 'nowrap',
+                          position: 'relative' as const,
+                          cursor: CREATION_BACKEND_BLANK ? undefined : 'pointer',
+                          ...(isPlaying
+                            ? {
+                                background: '#121212',
+                                color: '#b98ab9',
+                              }
+                            : {
+                                background: quantCellBg,
+                                color: litQuantPausedOnly
+                                  ? '#e9d5ff'
+                                  : litQuantStoppedOnly
+                                    ? '#9b8ab8'
+                                    : '#b98ab9',
+                                ...(litQuantPausedOnly
+                                  ? { boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.45)' }
+                                  : litQuantStoppedOnly
+                                    ? { boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.22)' }
+                                    : {}),
+                              }),
+                        }}
+                      >
+                        {quantStepInBar}
+                      </div>
+                    );
+                  })}
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  position: 'sticky',
+                  top: 20,
+                  zIndex: 20,
+                  display: 'flex',
+                  height: 28,
+                  borderBottom: '1px solid #1e1e1e',
+                  background: '#0a0a0a',
+                }}
+              >
                 <Ruler
-                  activeCol={activeCol}
+                  activeCol={-1}
                   colWidth={drumGridColW}
                   barNumberStart={loopStartBar}
-                  onRangeCommit={(s, e) =>
-                    setLoopRange(s, e, loopSection ?? undefined)
-                  }
-                  stepsPerBar={MEASURES_PER_BAR}
+                  onRangeCommit={(s, e) => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    setLoopRange(s, e);
+                  }}
+                  stepsPerBar={qpbHud * subdivHud}
                   barStepCounts={creationDrumRulerCounts}
                   segmentHeaderLabels={creationDrumRulerHeaderLabels}
                   patternColToDawBar={drumPatternColToDawBar}
-                  creationBeatHighlight={rulerCreationBeatHighlight}
+                  creationBeatHighlight={null}
+                  creationBeatsPerBar={qpbHud}
+                  creationStepSubdiv={subdivHud}
+                  disablePlayheadHighlight
+                  drumGridBeatBorders={{
+                    bankColOffset: drumColOffset,
+                    qpb: qpbHud,
+                    subdiv: subdivHud,
+                  }}
+                  onSeekPatternCol={CREATION_BACKEND_BLANK ? undefined : seekTransportToPatternColumn}
                 />
                 <LoopMarkersBrace
                   visible={loopEnabled}
@@ -2583,50 +5708,70 @@ export default function CreationStationScreen({
                     height: DRUM_GRID_ROW_H,
                     alignItems: 'stretch',
                     borderTop: '1px solid #000',
-                    borderBottom: '1px solid #1f3a4a',
-                    background: pi === selectedDrumPad ? `${PAD_COLORS[pi]}16` : drumLaneBg(pi),
+                    borderBottom: `1px solid rgba(48, 56, 74, ${drumGridColW < 6 ? 0.3 : drumGridColW < 10 ? 0.55 : 1})`,
+                    background: pi === selectedDrumPad ? '#1a2130' : '#131a28',
                     cursor: 'pointer',
-                    boxShadow: pi === selectedDrumPad ? `inset 0 0 0 1px ${PAD_COLORS[pi]}99` : 'none',
+                    boxShadow: pi === selectedDrumPad ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.4)' : 'none',
                     position: 'relative',
                     zIndex: 1,
                   }}
-                  onClick={() => setSelectedDrumPad(pi)}
+                  onClick={() => auditionDrumLane(pi)}
                 >
                   {Array.from({ length: patternColsDrums }, (_, ci) => {
                     const bankCol = ci + drumColOffset;
                     const on     = currentDrums[pi]?.[bankCol] ?? false;
-                    const isHead = activeCol === ci;
+                    const isHead = false;
+                    const padStepBg = on
+                      ? '#161616'
+                      : (bankCol % subdivHud === 0 ? '#121212' : '#0f0f0f');
                     return (
                       <button
                         key={ci}
-                        onClick={(e) => { e.stopPropagation(); toggleDrum(pi, bankCol); }}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!CREATION_BACKEND_BLANK && (e.ctrlKey || e.metaKey)) {
+                            seekTransportToPatternColumn(ci);
+                            return;
+                          }
+                          toggleDrum(pi, bankCol);
+                        }}
                         style={{
                           width: drumGridColW,
+                          boxSizing: 'border-box',
                           flexShrink: 0,
                           height: DRUM_GRID_ROW_H,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          background: drumStepBg(ci, pi, isHead),
-                          borderLeft: `1px solid ${ci % (MEASURES_PER_BAR * 4) === 0 ? '#7ba5bf' : ci % MEASURES_PER_BAR === 0 ? '#5e88a3' : '#3f6278'}`,
+                          background: padStepBg,
+                          borderLeft: `1px solid ${creationDrumGridVerticalLineColor({
+                            colWidthPx: drumGridColW,
+                            bankCol,
+                            qpb: qpbHud,
+                            subdiv: subdivHud,
+                            blendTo: padStepBg,
+                          })}`,
                           borderTop: 'none',
                           borderRight: 'none',
-                          borderBottom: '1px solid #000',
-                          boxShadow: isHead && on ? '0 0 10px #b8f5c599' : 'none',
+                          borderBottom: `1px solid ${creationDrumGridStepBottomBorder(drumGridColW)}`,
+                          boxShadow: 'none',
                           cursor: 'pointer',
                           transition: isHead ? 'none' : 'background 0.04s',
                           padding: 0,
+                          borderRadius: 0,
                         }}
+                        title={CREATION_BACKEND_BLANK ? undefined : 'Ctrl+click: move playhead · click: toggle step'}
                       >
                         {on && (
                           <div
                             style={{
-                              width: Math.max(12, Math.floor(drumGridColW * 0.78)),
-                              height: Math.floor(DRUM_GRID_ROW_H * 0.84),
-                              borderRadius: 1,
-                              background: '#b8f5c5',
-                              border: '1px solid #dbffe2',
-                              boxShadow: '0 0 8px #b8f5c5aa',
+                              width: Math.max(12, Math.floor(drumGridColW * 0.72)),
+                              height: Math.floor(DRUM_GRID_ROW_H * 0.72),
+                              borderRadius: 4,
+                              background: 'linear-gradient(180deg, #4a4a4a, #343434)',
+                              border: '1px solid rgba(18, 18, 18, 0.65)',
+                              boxShadow: '0 0 8px rgba(80, 80, 80, 0.45)',
                             }}
                           />
                         )}
@@ -2635,14 +5780,8 @@ export default function CreationStationScreen({
                   })}
                 </div>
               ))}
-              <LoopVerticalGuides
-                visible={loopEnabled}
-                leftPx={0}
-                widthPx={drumGridW}
-                height={PAD_NAMES.length * DRUM_GRID_ROW_H}
-                topPx={28}
-                zIndex={12}
-              />
+            </div>
+          </div>
             </div>
           </div>
         </div>
@@ -2771,9 +5910,12 @@ export default function CreationStationScreen({
                     activeCol={activeCol}
                     colWidth={pianoGridColW}
                     maxBars={CREATION_PIANO_BARS}
-                    stepsPerBar={MEASURES_PER_BAR}
+                    stepsPerBar={pianoMode === 'drums' ? qpbHud * subdivHud : MEASURES_PER_BAR}
                     barStepCounts={PIANO_RULER_BAR_STEP_COUNTS}
                     creationBeatHighlight={rulerCreationBeatHighlight}
+                    creationBeatsPerBar={pianoMode === 'drums' ? qpbHud : MEASURES_PER_BAR}
+                    creationStepSubdiv={pianoMode === 'drums' ? subdivHud : 1}
+                    disablePlayheadHighlight
                   />
                   <LoopMarkersBrace
                     visible={pianoLoopRegionOk}
@@ -2783,6 +5925,21 @@ export default function CreationStationScreen({
                     variant="dark"
                   />
                 </div>
+              <div
+                ref={pianoPlaylineRef}
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 28,
+                  width: 1,
+                  height: pianoRollLoopGridH,
+                  background: '#00e5ff',
+                  pointerEvents: 'none',
+                  zIndex: 16,
+                  visibility: transportNotStopped ? 'visible' : 'hidden',
+                }}
+              />
                 {(pianoMode === 'notes' ? displayNotes : [PAD_NAMES[activeDrumPadIndex]]).map((note, ri) => {
                   const padIndex = pianoMode === 'drums' ? activeDrumPadIndex : ri;
                   return (
@@ -2800,7 +5957,7 @@ export default function CreationStationScreen({
                         const on = pianoMode === 'drums'
                           ? (currentDrums[padIndex]?.[ci] ?? false)
                           : sharedNotes.some(n => n.row === ri && n.col === ci);
-                        const isHead = activeCol === ci;
+                        const isHead = false;
                         return (
                           <button
                             key={ci}
@@ -2815,6 +5972,7 @@ export default function CreationStationScreen({
                             }}
                             style={{
                               width: pianoGridColW,
+                              boxSizing: 'border-box',
                               flexShrink: 0,
                               height: pianoMode === 'drums' ? DRUM_GRID_ROW_H : ROW_H,
                               display: 'flex',
@@ -2863,235 +6021,17 @@ export default function CreationStationScreen({
         </div>
       )}
 
-      {/* ── MIXER TAB ── */}
-      {tab === 'mixer' && (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
-          {/* Pad list */}
-          <div style={{ width: 140, flexShrink: 0, background: '#080808', borderRight: '1px solid #1a1a1a', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ textAlign: 'center', fontSize: 9, fontWeight: 700, color: '#444', padding: '6px 0', borderBottom: '1px solid #1a1a1a', background: '#050505' }}>PADS</div>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '4px', padding: '6px' }}>
-              {PAD_NAMES.map((name, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSelectedMixerPad(i)}
-                  style={{
-                    padding: '6px 4px',
-                    borderRadius: 4,
-                    fontSize: 9,
-                    fontWeight: 700,
-                    background: selectedMixerPad === i ? PAD_COLORS[i] : '#0a0a0a',
-                    color: selectedMixerPad === i ? '#000' : PAD_COLORS[i],
-                    border: `1px solid ${PAD_COLORS[i]}${selectedMixerPad === i ? '' : '44'}`,
-                    cursor: 'pointer',
-                    textAlign: 'center'
-                  }}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Mixer controls */}
-          <div style={{ flex: 1, overflowY: 'auto', background: '#0a0a0a' }}>
-            <div style={{ padding: '12px', borderBottom: '1px solid #1a1a1a' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: PAD_COLORS[selectedMixerPad] }}>{PAD_NAMES[selectedMixerPad]}</div>
-              <div style={{ fontSize: 10, color: '#888' }}>Channel {selCh}</div>
-            </div>
-
-            {/* Volume */}
-            <div style={{ padding: '12px', borderBottom: '1px solid #1a1a1a' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, marginBottom: '8px' }}>VOLUME: {getVolume(selCh)}</div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={getVolume(selCh)}
-                onChange={e => setVolume(selCh, Number(e.target.value))}
-                style={{ width: '100%', accentColor: PAD_COLORS[selectedMixerPad] }}
-              />
-              <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                <ProMeter level={getRmsLevel(selCh)} peakLevel={getPeakLevel(selCh)} />
-              </div>
-            </div>
-
-            {/* Pan */}
-            <div style={{ padding: '12px', borderBottom: '1px solid #1a1a1a' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, marginBottom: '8px' }}>PAN: {drumPans[selCh] > 0 ? '+' : ''}{drumPans[selCh]}</div>
-              <input
-                type="range"
-                min={-100}
-                max={100}
-                value={drumPans[selCh]}
-                onChange={e => setPan(selCh, Number(e.target.value))}
-                style={{ width: '100%', accentColor: PAD_COLORS[selectedMixerPad] }}
-              />
-            </div>
-
-            {/* Effects */}
-            <div style={{ padding: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: 10, fontWeight: 700 }}>PAD EFFECTS</span>
-                <button
-                  onClick={() => setAddEffectOpen(v => !v)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '3px 8px',
-                    borderRadius: 4,
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: PAD_COLORS[selectedMixerPad],
-                    background: '#1a1a2a',
-                    border: `1px solid ${PAD_COLORS[selectedMixerPad]}66`,
-                    cursor: 'pointer'
-                  }}
-                >
-                  <Plus size={10} /> Add
-                </button>
-              </div>
-
-              {addEffectOpen && (
-                <div style={{ marginBottom: '8px', padding: '8px', borderRadius: 4, background: '#1a1a2a', border: `1px solid ${PAD_COLORS[selectedMixerPad]}` }}>
-                  {EFFECTS.map(e => (
-                    <button
-                      key={e}
-                      onClick={() => addEffectToDrum(selCh, e)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        fontSize: 9,
-                        padding: '6px',
-                        marginBottom: '4px',
-                        borderRadius: 4,
-                        color: PAD_COLORS[selectedMixerPad],
-                        background: '#0f0f0f',
-                        border: `1px solid ${PAD_COLORS[selectedMixerPad]}44`,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {selChEffects.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '12px', color: '#333' }}>
-                  <p style={{ fontSize: 9 }}>No effects. Click "Add" to insert.</p>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {selChEffects.map((fx, fi) => (
-                  <div
-                    key={fi}
-                    style={{
-                      fontSize: 9,
-                      padding: '8px',
-                      borderRadius: 4,
-                      background: fx.enabled ? '#1a1a2a' : '#0f0f0f',
-                      borderLeft: `2px solid ${fx.enabled ? PAD_COLORS[selectedMixerPad] : '#333'}`
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontWeight: 700 }}>{fx.type}</span>
-                      <button
-                        onClick={() => removeEffectFromDrum(selCh, fi)}
-                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0 }}
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => toggleEffectOnDrum(selCh, fi)}
-                      style={{
-                        width: '100%',
-                        fontSize: 9,
-                        padding: '4px',
-                        borderRadius: 4,
-                        marginBottom: '6px',
-                        background: fx.enabled ? PAD_COLORS[selectedMixerPad] + '33' : '#111',
-                        color: fx.enabled ? PAD_COLORS[selectedMixerPad] : '#666',
-                        border: `1px solid ${fx.enabled ? PAD_COLORS[selectedMixerPad] : '#333'}`,
-                        cursor: 'pointer',
-                        fontWeight: 700
-                      }}
-                    >
-                      {fx.enabled ? '✓ ON' : '○ OFF'}
-                    </button>
-                    {fx.type === 'EQ' && (
-                      <>
-                        <GraphicEQ
-                          params={fx.params}
-                          color={PAD_COLORS[selectedMixerPad]}
-                          signal={fx.enabled ? effectSignal : 0}
-                          onBandGainChange={(bandIndex, value) => {
-                            const gainLabel = `Band ${bandIndex + 1} Gain`;
-                            const idx = fx.params.findIndex((p) => p.label === gainLabel);
-                            if (idx >= 0) setDrumEffectParam(selCh, fi, idx, value);
-                          }}
-                        />
-                      </>
-                    )}
-                    {fx.type !== 'EQ' && (
-                      <div
-                        style={{
-                          marginTop: 6,
-                          padding: 8,
-                          borderRadius: 4,
-                          border: '1px solid #243646',
-                          background: 'linear-gradient(180deg, #0b1218 0%, #0b151d 100%)',
-                        }}
-                      >
-                        <EffectVisualizer type={fx.type} params={fx.params} signal={fx.enabled ? effectSignal : 0} />
-                        <div style={{ display: 'flex', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-                          {fx.params.map((p, pi) => (
-                            <FxKnob
-                              key={`${p.label}-${pi}`}
-                              label={p.label}
-                              value={p.value}
-                              color={PAD_COLORS[selectedMixerPad]}
-                              onChange={(v) => setDrumEffectParam(selCh, fi, pi, v)}
-                            />
-                          ))}
-                        </div>
-                        <div
-                          style={{
-                            height: 66,
-                            borderRadius: 3,
-                            border: '1px solid #1b2d3a',
-                            background: '#07111a',
-                            display: 'flex',
-                            alignItems: 'flex-end',
-                            gap: 3,
-                            padding: '4px 6px',
-                          }}
-                        >
-                          {fx.params.map((p, i) => (
-                            <div
-                              key={`mini-${i}`}
-                              style={{
-                                flex: 1,
-                                height: `${Math.max(6, Math.round((p.value / 100) * (34 + effectSignal * 92)))}px`,
-                                borderRadius: 2,
-                                background: PAD_COLORS[selectedMixerPad],
-                                boxShadow: `0 0 ${6 + effectSignal * 18}px ${PAD_COLORS[selectedMixerPad]}66`,
-                                opacity: 0.5 + effectSignal * 0.5,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <DrumKitGeneratorModal
+        open={drumKitGenOpen}
+        onClose={() => !drumKitGenBusy && setDrumKitGenOpen(false)}
+        style={drumKitGenStyle}
+        onStyleChange={setDrumKitGenStyle}
+        busy={drumKitGenBusy}
+        onApplySinglePad={applyDrumKitGenSinglePad}
+        onApplyFullKit={applyDrumKitGenFullKit}
+        onApplyPattern={applyDrumKitGenPattern}
+        onApplyBoth={applyDrumKitGenBoth}
+      />
     </div>
   );
 }

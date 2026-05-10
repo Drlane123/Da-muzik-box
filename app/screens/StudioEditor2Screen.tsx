@@ -76,6 +76,14 @@ import {
   Youtube,
 } from 'lucide-react';
 
+import { PPQ } from '@/app/context/MasterClockContext';
+import {
+  normalizePianoSnapSubdiv,
+  readPianoSnapSubdivFromStorage,
+  snapLabelFromPianoSnapSubdiv,
+  ticksPerPianoSnapCell,
+} from '@/app/lib/sharedPianoSnapSubdiv';
+
 const REF_MUSIO_CREATE_REPO = 'https://github.com/mpatti/musio-create';
 const REF_MUSIO_CREATE_VIDEO = 'https://youtu.be/qW4rIXft0Bg?si=x7uoMOWxiuT1eJln';
 
@@ -270,6 +278,7 @@ const PIANO_KEY_W_PX = 64;
 const PIANO_RULER_H_PX = 24;
 const PIANO_VELOCITY_LANE_H_PX = 46;
 /** `AdvancedPianoRollView` default-ish row height. */
+/** One horizontal band = one MIDI pitch (semitone); vertical zoom is separate from horizontal snap. */
 const PIANO_NOTE_ROW_H_PX = 14;
 /** `visibleOctaveRange` 2â€¦7 â†’ 72 rows; `pitchOffset` = 7*12+11 (see `AdvancedNoteView` in Musio). */
 const PIANO_PITCH_HI = 95;
@@ -466,18 +475,10 @@ function isDroppedAudioFile(f: File): boolean {
   return /\.(wav|mp3|ogg|aac|m4a|flac|opus|webm)$/i.test(f.name);
 }
 
-/** `subdivisionsPerBeat` 1 = whole beats, 2 = eighths, 4 = sixteenths, 8 = 32nds, 16 = 64ths (beat = quarter). */
+/** `subdivisionsPerBeat` — cells per quarter (1/4 … 1/128 straight + triplet 3 / 6); see `sharedPianoSnapSubdiv`. */
 function snapBeatToSubdivision(b: number, subdivisionsPerBeat: number, totalBeats: number): number {
   const s = Math.max(1, Math.min(64, Math.round(subdivisionsPerBeat)));
   return Math.max(0, Math.min(totalBeats, Math.round(b * s) / s));
-}
-
-function snapLabelFromSubdivisions(s: number): string {
-  if (s <= 1) return '1/4';
-  if (s === 2) return '1/8';
-  if (s === 4) return '1/16';
-  if (s === 8) return '1/32';
-  return '1/64';
 }
 
 /** Duration in beats for one cell at the given snap value (same unit as startBeat). */
@@ -1978,7 +1979,7 @@ function MusioPianoRollPanel({
 
   const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
   const totalBeats = totalBeatsForSig(bpb);
-  const snapS = [1, 2, 4, 8, 16].includes(snapSubdivisions) ? snapSubdivisions : 2;
+  const snapS = normalizePianoSnapSubdiv(snapSubdivisions);
   const stripW = TOTAL_WIDTH_PX * zoom;
   const ppb = ppbAtZoom(zoom, bpb);
   const ghostNotes = showGhostNotes
@@ -2842,7 +2843,7 @@ function MusioPianoRollPanel({
             {toolBtn(
               'pencil',
               <Pencil size={11} strokeWidth={2} />,
-              `Pencil â€” add note on grid (${snapLabelFromSubdivisions(snapS)}); on velocity lane paint bar height = velocity`,
+              `Pencil â€” add note on grid (${snapLabelFromPianoSnapSubdiv(snapS)}); on velocity lane paint bar height = velocity`,
               'Pencil',
             )}
             {toolBtn(
@@ -2855,17 +2856,20 @@ function MusioPianoRollPanel({
           <div className="flex items-center gap-2 px-1.5 py-1">
             <DawMiniMenu
               label="Snap"
-              displayText={snapLabelFromSubdivisions(snapS)}
+              displayText={snapLabelFromPianoSnapSubdiv(snapS)}
               value={snapS}
               options={[
-                { value: 1, label: '1/4' },
-                { value: 2, label: '1/8' },
-                { value: 4, label: '1/16' },
-                { value: 8, label: '1/32' },
-                { value: 16, label: '1/64' },
+                { value: 1, label: snapLabelFromPianoSnapSubdiv(1) },
+                { value: 2, label: snapLabelFromPianoSnapSubdiv(2) },
+                { value: 3, label: snapLabelFromPianoSnapSubdiv(3) },
+                { value: 4, label: snapLabelFromPianoSnapSubdiv(4) },
+                { value: 6, label: snapLabelFromPianoSnapSubdiv(6) },
+                { value: 8, label: snapLabelFromPianoSnapSubdiv(8) },
+                { value: 16, label: snapLabelFromPianoSnapSubdiv(16) },
+                { value: 32, label: snapLabelFromPianoSnapSubdiv(32) },
               ]}
               onChange={onSnapSubdivisionsChange}
-              title="Grid snap â€” quantize resolution for new notes and dragging"
+              title={`Grid snap — ${PPQ} PPQ; one cell = ${Math.round(ticksPerPianoSnapCell(PPQ, snapS))} ticks; zoom = pixel width`}
               compact
             />
             <DawMiniMenu
@@ -3551,8 +3555,16 @@ export default function StudioEditor2Screen({
   const [contextMenuHasNoteTarget, setContextMenuHasNoteTarget] = useState(false);
   /** Time signature numerator (denominator fixed 4 in UI â€” `n/4`). Drives timeline + piano ruler width. */
   const [beatsPerBar, setBeatsPerBar] = useState(4);
-  /** Piano edit snap: subdivisions per beat (`1`=quarters, `2`=1/8, `4`=1/16, …). Default 1/8 grid. */
-  const [pianoSnapSubdivisions, setPianoSnapSubdivisions] = useState(2);
+  /** Piano edit snap: cells per quarter (`4` = 1/16 default, 960 PPQ → 240 ticks/cell). */
+  const [pianoSnapSubdivisions, setPianoSnapSubdivisions] = useState(readPianoSnapSubdivFromStorage);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('dmb_shared_piano_snap_subdiv', String(pianoSnapSubdivisions));
+    } catch {
+      /* ignore */
+    }
+  }, [pianoSnapSubdivisions]);
 
   useEffect(() => {
     if (selectedPianoNoteIndex === null) {
@@ -3839,7 +3851,7 @@ export default function StudioEditor2Screen({
   const selectedPianoIdxSetRef = useRef<Set<number>>(new Set());
   selectedPianoIdxSetRef.current = selectedPianoNoteIndexes;
   const pianoSnapEffRef = useRef(pianoSnapSubdivisions);
-  pianoSnapEffRef.current = [1, 2, 4, 8, 16].includes(pianoSnapSubdivisions) ? pianoSnapSubdivisions : 2;
+  pianoSnapEffRef.current = normalizePianoSnapSubdiv(pianoSnapSubdivisions);
   const pianoToolRef = useRef<PianoRollTool>('select');
   pianoToolRef.current = pianoTool;
 

@@ -3,6 +3,8 @@
  * Supports loading individual sounds and entire drum packs into pads
  */
 
+import type { StoredPadSample } from './padSampleStorage';
+
 export const SOUND_LIBRARY_KEY = 'soundLibrary_v1';
 export const DRUM_PACKS_KEY = 'drumPacks_v1';
 
@@ -178,9 +180,10 @@ export function fileToBase64(file: File): Promise<string> {
   });
 }
 
-export function soundToStoredPadSample(sound: Sound) {
+export function soundToStoredPadSample(sound: Sound): StoredPadSample {
   return {
     mime: sound.mime,
     data: sound.data,
+    label: sound.name.trim() || 'Sample',
   };
 }

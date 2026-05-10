@@ -21,6 +21,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   Mic2, Music, Cpu, Layers, Radio,
   FolderOpen, AlignLeft, Piano, Download, GripVertical,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 
 
@@ -45,6 +46,8 @@ interface NavItem {
   groupId?: string; // items with same groupId move together
 }
 
+
+const NAV_SIDEBAR_COLLAPSED_KEY = 'navModulesCollapsed';
 
 const DEFAULT_ITEMS: NavItem[] = [
   { id: 'vocal-lab',       label: 'AI Vocal Lab',       icon: <Mic2 size={15} />,       badge: 'NEW' },
@@ -140,6 +143,23 @@ interface NavigationSidebarProps {
 
 
 export default function NavigationSidebar({ activeScreen, onScreenChange }: NavigationSidebarProps) {
+  const [modulesCollapsed, setModulesCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(NAV_SIDEBAR_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_SIDEBAR_COLLAPSED_KEY, modulesCollapsed ? '1' : '0');
+    } catch {
+      /* ignore quota */
+    }
+  }, [modulesCollapsed]);
+
   const [items, setItems] = useState<NavItem[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('navItemOrder');
@@ -200,45 +220,89 @@ export default function NavigationSidebar({ activeScreen, onScreenChange }: Navi
 
   return (
     <aside
-      className="flex flex-col gap-1 px-2 py-3 shrink-0 overflow-y-auto"
+      className="flex flex-col shrink-0 overflow-y-auto overflow-x-hidden"
       style={{
-        width: 188,
+        width: modulesCollapsed ? 44 : 188,
+        paddingLeft: modulesCollapsed ? 6 : 8,
+        paddingRight: modulesCollapsed ? 6 : 8,
+        paddingTop: 12,
+        paddingBottom: 12,
+        gap: modulesCollapsed ? 8 : 4,
         background: '#080808',
         borderRight: '1px solid #1a1a1a',
         minHeight: 0,
+        transition: 'width 0.18s ease',
       }}
     >
-      {/* Section label */}
-      <div className="px-2 mb-1">
-        <span className="text-xs font-bold tracking-widest uppercase" style={{ color: '#333' }}>
-          Modules
-        </span>
-      </div>
+      {modulesCollapsed ? (
+        <button
+          type="button"
+          onClick={() => setModulesCollapsed(false)}
+          className="flex items-center justify-center rounded-lg shrink-0"
+          style={{
+            width: '100%',
+            minHeight: 36,
+            border: '1px solid #2a2a2a',
+            background: '#121212',
+            color: '#D500F9',
+            cursor: 'pointer',
+          }}
+          title="Show modules — expand navigation"
+        >
+          <ChevronRight size={18} strokeWidth={2.25} />
+        </button>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-1 mb-1 px-0 min-w-0">
+            <span
+              className="text-xs font-bold tracking-widest uppercase truncate"
+              style={{ color: '#333' }}
+            >
+              Modules
+            </span>
+            <button
+              type="button"
+              onClick={() => setModulesCollapsed(true)}
+              className="flex items-center justify-center rounded-md shrink-0"
+              style={{
+                width: 28,
+                height: 28,
+                border: '1px solid #2a2a2a',
+                background: '#121212',
+                color: '#888',
+                cursor: 'pointer',
+              }}
+              title="Hide modules — full width for the current screen"
+            >
+              <ChevronLeft size={16} strokeWidth={2.25} />
+            </button>
+          </div>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-          {items.map(item => (
-            <SortableItem
-              key={item.id}
-              item={item}
-              isActive={activeScreen === item.id}
-              isGrouped={!!item.groupId}
-              onClick={() => onScreenChange(item.id)}
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+              {items.map(item => (
+                <SortableItem
+                  key={item.id}
+                  item={item}
+                  isActive={activeScreen === item.id}
+                  isGrouped={!!item.groupId}
+                  onClick={() => onScreenChange(item.id)}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
 
-      {/* Group legend */}
-      <div className="mt-auto pt-4 px-2">
-        <div className="flex items-center gap-1 text-xs" style={{ color: '#333' }}>
-          <div className="w-2 h-2 rounded-full" style={{ background: '#D500F9' }} />
-          Linked group
-        </div>
-        <p className="text-xs mt-1 leading-tight" style={{ color: '#2a2a2a' }}>
-          Drag to reorder. Grouped items move together.
-        </p>
-      </div>
+          <div className="mt-auto pt-4 px-0">
+            <div className="flex items-center gap-1 text-xs" style={{ color: '#333' }}>
+              <div className="w-2 h-2 rounded-full" style={{ background: '#D500F9' }} />
+              Linked group
+            </div>
+            <p className="text-xs mt-1 leading-tight" style={{ color: '#2a2a2a' }}>
+              Drag to reorder. Grouped items move together.
+            </p>
+          </div>
+        </>
+      )}
     </aside>
   );
 }

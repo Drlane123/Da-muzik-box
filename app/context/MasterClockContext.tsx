@@ -736,6 +736,11 @@ export interface MasterClockContextValue {
   getPlayheadBeatAtAudioNow: (audioNowSec: number) => number;
   /** Single shared graph: always use this instead of `new AudioContext()` from screens. */
   getOrCreateAudioContext: () => AudioContext;
+  /**
+   * Studio / count-in metronome output bus (`metroBus → master → destination`).
+   * Creation Station local clicks should connect here so level and path match pad mix, not a raw bypass to `destination`.
+   */
+  getMetronomeBusGain: () => GainNode | null;
   /** Post–master-gain analyser (for master output metering). Null until graph built. */
   masterMeterAnalyserRef: React.MutableRefObject<AnalyserNode | null>;
   audioCtxRef: React.MutableRefObject<AudioContext | null>;
@@ -1093,6 +1098,13 @@ export function MasterClockProvider({
       metronomeBusGainRef.current = metroBus;
     }
     return ctx;
+  }, []);
+
+  const getMetronomeBusGain = useCallback((): GainNode | null => {
+    const ctx = audioCtxRef.current;
+    const bus = metronomeBusGainRef.current;
+    if (!ctx || ctx.state === 'closed' || !bus || bus.context !== ctx) return null;
+    return bus;
   }, []);
 
   const syncMetronomeClickLatencyFromOutput = useCallback(() => {
@@ -3723,6 +3735,7 @@ export function MasterClockProvider({
         masterOutputLinear,
         setMasterOutputLinear,
         getOrCreateAudioContext,
+        getMetronomeBusGain,
         getTickIntAtAudioNow,
         tickCounterRef,
         mapGlobalTickToAudioTime,

@@ -149,8 +149,17 @@ function AppContent() {
     const w = window as unknown as {
       __daMusicStudioTransportAuthority?: boolean;
     };
-    /** Studio Editor 2 uses its own AudioContext — only Studio 1 holds master transport authority. */
-    w.__daMusicStudioTransportAuthority = activeScreen === 'studio-editor';
+    /**
+     * When false, {@link MasterClockContext} `play` / `record` no-op (avoids other modules starting transport).
+     * Studio Editor (v1) and Creation Station share `MasterClockProvider` transport — both may start/stop.
+     * Studio Editor 2 uses its own Web Audio transport; it does not call master `play`, so leaving authority
+     * false there is fine. Creation Station must be allowed or Play does nothing. Export’s demo preview calls
+     * the same `play` / `pause` — include it or the preview strip never receives transport.
+     */
+    w.__daMusicStudioTransportAuthority =
+      activeScreen === 'studio-editor' ||
+      activeScreen === 'creation-station' ||
+      activeScreen === 'export';
     return () => {
       delete w.__daMusicStudioTransportAuthority;
     };

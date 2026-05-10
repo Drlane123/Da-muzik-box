@@ -80,11 +80,13 @@ export default function TitleBar({
     'my-projects',
     'export',
     'studio-editor-2',
+    'creation-station',
   ];
   const loopDisabledForScreen = !!activeScreen && loopDisabledScreens.includes(activeScreen);
   const topLoopDisabled = loopDisabledForScreen;
-  /** Studio Editor 2 drives its own Web Audio transport; master clock controls are inert here. */
-  const disableMasterTransport = activeScreen === 'studio-editor-2';
+  /** Studio Editor 2 and Creation Station use in-screen transport; top master controls stay inert. */
+  const disableMasterTransport =
+    activeScreen === 'studio-editor-2' || activeScreen === 'creation-station';
 
   const selectedLoopLength = loopEndBar - loopStartBar + 1;
   const loopLengthSelectOptions = useMemo(() => {

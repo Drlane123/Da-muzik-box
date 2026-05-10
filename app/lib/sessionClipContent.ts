@@ -32,16 +32,22 @@ export interface MasterArrangerClipPayload {
   blocks: { id: number; trackId: number; bar: number; len: number; label: string }[];
 }
 
-/** Active bank drum grid: columns sliced to visible loop (drumLoopBars × measuresPerBar). */
+/**
+ * Active bank drum grid: columns are **sequencer steps** (same indices as Creation `fireStepAt`),
+ * sliced to the visible loop: `drumLoopBars × measuresPerBar × drumStepSubdiv` (capped in Creation).
+ */
 export interface CreationStationClipPayload {
   bpm: number;
   drumLoopBars: number;
+  /** Beats (quarters) per bar — same as Creation `qpb` / transport beats per bar. */
   measuresPerBar: number;
+  /** Steps per quarter (1 = quarters, 4 = 16ths, …) — matches Creation drum grid snap. */
+  drumStepSubdiv?: number;
   padChannels: number[];
   activeBank: number;
   /** SUB BASS line on CH17 (matches Creation Station scheduler). */
   subOn?: boolean;
-  /** drums[pad][col] for 16 pads, cols 0..maxCols */
+  /** drums[pad][step] for 16 pads */
   drums: boolean[][];
 }
 
@@ -96,6 +102,46 @@ function buildSubBassStepPattern(maxCols: number): boolean[] {
   return Array.from({ length: maxCols }, (_, i) => i % period === period - 1);
 }
 
+function creationClipBeatsInLoop(p: CreationStationClipPayload): number {
+  const lb =
+    p.drumLoopBars && Number.isFinite(p.drumLoopBars) && p.drumLoopBars > 0 ? p.drumLoopBars : 16;
+  const mpb =
+    p.measuresPerBar && Number.isFinite(p.measuresPerBar) && p.measuresPerBar > 0
+      ? p.measuresPerBar
+      : 4;
+  return Math.max(1, lb * mpb);
+}
+
+function creationClipMaxRowCols(drums: boolean[][] | undefined): number {
+  if (!drums?.length) return 0;
+  return drums.reduce((m, r) => Math.max(m, r?.length ?? 0), 0);
+}
+
+/**
+ * Resolves step count + steps-per-beat for [CS] buffers so Studio matches Creation’s
+ * quarter × subdiv scheduler (`subSpb = spb / drumStepSubdiv`).
+ */
+export function getCreationSequencerStepLayout(p: CreationStationClipPayload): {
+  beatsInLoop: number;
+  stepsPerBeat: number;
+  stepCount: number;
+} {
+  const beatsInLoop = creationClipBeatsInLoop(p);
+  const colMax = creationClipMaxRowCols(p.drums);
+  let stepsPerBeat = 4;
+  const ex = p.drumStepSubdiv;
+  if (ex != null && Number.isFinite(ex)) {
+    const r = Math.round(ex);
+    if (r >= 1 && r <= 64) stepsPerBeat = r;
+  } else if (colMax >= beatsInLoop && colMax % beatsInLoop === 0) {
+    const q = Math.round(colMax / beatsInLoop);
+    if (q >= 1 && q <= 64) stepsPerBeat = q;
+  }
+  const nominalSteps = beatsInLoop * stepsPerBeat;
+  const stepCount = Math.max(1, colMax, nominalSteps);
+  return { beatsInLoop, stepsPerBeat, stepCount };
+}
+
 /**
  * For each mixer channel id, build rows + pad indices (sequencer lanes → same session track).
  * CH17 can include an extra SUB BASS row when subOn is true.
@@ -103,7 +149,7 @@ function buildSubBassStepPattern(maxCols: number): boolean[] {
 export function buildCreationChannelRowPatterns(
   payload: CreationStationClipPayload,
 ): Map<number, CreationChannelPattern> {
-  const maxCols = Math.max(1, payload.drumLoopBars * payload.measuresPerBar);
+  const { stepCount: maxCols } = getCreationSequencerStepLayout(payload);
   const out = new Map<number, CreationChannelPattern>();
   const { padChannels, drums } = payload;
   const subOn = !!payload.subOn;
@@ -162,10 +208,11 @@ export function renderCreationChannelToAudioBuffer(
   spec: CreationChannelPattern,
   padSamples: Map<string, AudioBuffer>,
   bpm: number,
-  totalSteps: number,
 ): AudioBuffer {
   const sampleRate = ctx.sampleRate;
-  const stepSec = 60 / Math.max(40, bpm) / 4;
+  const spb = 60 / Math.max(40, bpm);
+  const { stepsPerBeat, stepCount: totalSteps } = getCreationSequencerStepLayout(payload);
+  const stepSec = spb / Math.max(1, stepsPerBeat);
   const durationSec = Math.max(0.08, totalSteps * stepSec);
   const nFrames = Math.ceil(durationSec * sampleRate);
   const buf = ctx.createBuffer(1, nFrames, sampleRate);
@@ -376,11 +423,6 @@ export async function applySessionModuleClips(
       cs.drumLoopBars && Number.isFinite(cs.drumLoopBars) && cs.drumLoopBars > 0
         ? cs.drumLoopBars
         : 16;
-    const measuresPerBar =
-      cs.measuresPerBar && Number.isFinite(cs.measuresPerBar) && cs.measuresPerBar > 0
-        ? cs.measuresPerBar
-        : 4;
-    const totalSteps = loopBars * measuresPerBar;
     const byChannel = buildCreationChannelRowPatterns(cs);
 
     for (const [channelId, spec] of byChannel) {
@@ -388,14 +430,7 @@ export async function applySessionModuleClips(
       const tr = out.find((t) => t.audioTrack === channelId);
       if (!tr) continue;
 
-      const buf = renderCreationChannelToAudioBuffer(
-        ctx,
-        cs,
-        spec,
-        padSamplesDecoded,
-        bpmCs,
-        totalSteps,
-      );
+      const buf = renderCreationChannelToAudioBuffer(ctx, cs, spec, padSamplesDecoded, bpmCs);
       const label = creationChannelLabel(channelId, cs.padChannels);
       tr.clips.push({
         id: nextClipId(),
