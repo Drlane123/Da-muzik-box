@@ -23,26 +23,26 @@ export function creationDrumGridVerticalLineColor(args: {
   const { blendTo } = args;
 
   if (isBar) {
-    if (cw < 5) return '#3d3d4a';
-    if (cw < 10) return '#454552';
-    return '#5a5a6c';
+    if (cw < 5) return '#4d4d5c';
+    if (cw < 10) return '#585866';
+    return '#6f6f82';
   }
   if (isBeat) {
     if (cw < 5) return blendTo;
-    if (cw < 8) return '#24242a';
-    if (cw < 12) return '#2a2a32';
-    return '#36363f';
+    if (cw < 8) return '#2e2e36';
+    if (cw < 12) return '#363640';
+    return '#42424c';
   }
   if (cw < 7) return blendTo;
-  if (cw < 10) return '#1a1a20';
-  if (cw < 14) return '#202026';
-  return '#2a2a2e';
+  if (cw < 10) return '#222229';
+  if (cw < 14) return '#2a2a32';
+  return '#34343c';
 }
 
 /** Bottom edge of each pad step — fades when columns are crushed so rows don’t turn into hash. */
 export function creationDrumGridStepBottomBorder(colWidthPx: number): string {
   const cw = Math.max(1, colWidthPx);
-  if (cw < 6) return 'rgba(29, 29, 29, 0.22)';
-  if (cw < 10) return 'rgba(29, 29, 29, 0.45)';
-  return '#1d1d1d';
+  if (cw < 6) return 'rgba(46, 46, 54, 0.30)';
+  if (cw < 10) return 'rgba(46, 46, 54, 0.55)';
+  return '#2a2a32';
 }

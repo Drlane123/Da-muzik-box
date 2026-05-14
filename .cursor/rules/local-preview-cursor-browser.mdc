@@ -1,0 +1,26 @@
+---
+description: Open local app preview in Cursor’s built-in Browser, not only an external browser
+alwaysApply: true
+---
+
+# Local preview (Cursor Browser)
+
+When the user asks to **open preview**, **open the app**, or load **localhost** **inside Cursor**, treat **Cursor’s built-in Agent Browser** as the primary target (inline pane or browser window, `@browser` / browser MCP tools per [Cursor Browser docs](https://cursor.com/docs/agent/browser)).
+
+## Do
+
+- Prefer **`@browser`** (Agent) with an explicit URL after a dev or preview server is running.
+- Use **`http://localhost:5173/`** when they use **`bun run dev`** (Vite dev server).
+- Use **`http://localhost:4173/`** when they use **`bun run preview`** (Vite production preview).
+
+## Avoid as the only answer
+
+- Do not rely solely on **`Start-Process`** / the **system default browser** when they asked for preview **in Cursor**.
+
+## If this chat has no browser tools
+
+- Say clearly that **Agent + `@browser`** (with approval for navigate) opens the built-in pane, and give the exact URL and which script to run first.
+
+## Optional fallback
+
+- Workspace task **“Open in Simple Browser (…)”** in `.vscode/tasks.json` is a VS Code–style fallback only if the user wants the Simple Browser instead.

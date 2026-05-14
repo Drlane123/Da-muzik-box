@@ -3,12 +3,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 
-import { Cpu, RefreshCw, Sparkles, Send, AlertCircle, Info, Check, Download, Play, Pause, SkipBack, SkipForward, FastForward, Rewind, ChevronUp, ChevronDown, Plus } from 'lucide-react';
+import { Cpu, RefreshCw, Sparkles, Send, AlertCircle, Info, Check, Download, Play, Pause, SkipBack, SkipForward, FastForward, Rewind, ChevronUp, ChevronDown, Plus, X } from 'lucide-react';
+
+import { renderAiPatternToWav, scheduleAiPatternHit, getAiPatternSampleBankKey } from '@/app/lib/aiPatternRender';
+import { ensureBankLoaded, getBankLoadStatus } from '@/app/lib/aiPatternSampleBank';
 
 import { useMasterClock } from '@/app/context/MasterClockContext';
 import TransportPulseWorker from '../workers/transportPulse.worker?worker';
 
 import { generateDrumPattern, generateMelodyPattern, generateRandomPattern, generateArpeggioPattern } from '@/app/lib/magentaPatternGenerator';
+import { filterPresets, instrumentToPresetRole, PRESET_GENRES } from '@/app/lib/patternPresets';
+import type { PatternPreset } from '@/app/lib/patternPresets';
 import { prefetchMagentaPatternModels } from '@/app/lib/magentaRnnPatterns';
 
 import {
@@ -28,10 +33,16 @@ const INSTRUMENTS = ['Drums','Piano','Bass','Lead Synth','Pads','Brass','Strings
 
 const STYLES = ['Trap','Boom Bap','Lo-Fi','House','Techno','Jazz','Soul','Cinematic','Arpeggio','Dark','Disco','Southern Soul','Country','R&B','Blues','Doo Wap'];
 
-const LOOP_LENGTHS = [4, 8, 12];
+/** Available pattern lengths in bars. Each bar = 16 sixteenth-note
+ *  steps. At 120 BPM: 1 bar = 2 s, 2 bars = 4 s, 4 bars = 8 s. */
+const LOOP_LENGTHS = [1, 2, 4, 8];
+
+/** Sixteenth-note steps per bar. The step grid uses 1/16 resolution so
+ *  drum patterns, basslines, and melodies all play at the correct speed.
+ *  At 120 BPM each step = 60/120/4 = 0.125 s. */
+const STEPS_PER_BAR = 16;
 
 const TOTAL_STEPS = 16;
-const AI_PREVIEW_CHANNEL_BASE = 101;
 /** Same class as Creation Station lookahead — worker wakes main; times are AudioContext seconds. */
 const AI_LOCAL_SCHEDULER_PULSE_MS = 8;
 const AI_LOCAL_SCHEDULE_AHEAD_SEC = 0.16;
@@ -39,7 +50,19 @@ const AI_LOCAL_SCHEDULE_AHEAD_SEC = 0.16;
 /** Magenta RNN can be slow on first load; abort UI lock and fall back after this. */
 const MAGENTA_GENERATION_TIMEOUT_MS = 120_000;
 
-const NOTE_NAMES = ['Kick','Snare','Clap','Hi-Hat','Open HH','Tom Hi','Tom Lo','Rim'];
+const DRUM_ROW_NAMES  = ['Kick','Snare','Clap','Hi-Hat','Open HH','Tom Hi','Tom Lo','Rim'];
+const MELODY_ROW_NAMES = ['Root','2nd','3rd','4th','5th','6th','7th','Oct'];
+const BASS_ROW_NAMES   = ['Root','2nd','b3/3','4th','5th','b6/6','b7/7','Oct'];
+
+/** Row labels shown in the step-grid sidebar. For bass/melody, shows
+ *  the scale degree so the user knows which pitch each row plays.
+ *  For drums, shows the hit type (Kick, Snare, etc.). */
+function getRowNames(instrument: string): string[] {
+  const i = instrument.toLowerCase();
+  if (i.includes('drum') || i.includes('percussion')) return DRUM_ROW_NAMES;
+  if (i.includes('bass')) return BASS_ROW_NAMES;
+  return MELODY_ROW_NAMES;
+}
 
 const NOTE_COLORS = ['#D500F9','#00E5FF','#ff6b35','#00ff88','#ffcc00','#a78bfa','#f472b6','#60a5fa'];
 
@@ -112,14 +135,29 @@ export default function AiPatternScreen({
   onExport,
   onBack,
   isScreenActive = true,
+  embedded = false,
+  onExportToPad,
 }: {
   onExport: (dest: string) => void;
   onBack?: () => void;
   isScreenActive?: boolean;
+  /** When true the screen is being mounted inside Creation Station as a
+   *  tab (vs. being navigated to as a standalone module). Hides the
+   *  standalone-only chrome and unlocks the "→ PAD" export button. */
+  embedded?: boolean;
+  /** Set by Creation Station when this screen is embedded as a tab.
+   *  Receives a complete RIFF/WAVE byte buffer the parent persists as a
+   *  Beat Lab sampler-pad sample (same surface as Chord Builder's
+   *  export-to-pad). Hidden in the standalone module. */
+  onExportToPad?: (args: {
+    padIndex: number;
+    wavBytes: Uint8Array;
+    label: string;
+    rootBpm: number;
+  }) => void;
 }) {
   const {
     bpm,
-    triggerChannel,
     getOrCreateAudioContext,
     transport,
     stop,
@@ -137,21 +175,42 @@ export default function AiPatternScreen({
   const [instrument, setInstrument] = useState('Drums');
   const [style, setStyle] = useState('Trap');
   const [description, setDescription] = useState('');
-  const [loopLength, setLoopLength] = useState(8);
+  const [loopLength, setLoopLength] = useState(2); // default 2 bars = 32 steps
   const [temperature, setTemperature] = useState(1.0);
   const [variation, setVariation] = useState('balanced');
   const [generationTempo, setGenerationTempo] = useState(bpm);
   const [displayTempo, setDisplayTempo] = useState(bpm);
+  /** Song key — C…B as a 12-note index. Drives bass + melody pitch
+   *  picks via `rowToMidi`. Default C minor (hip-hop / trap default). */
+  const [songKey, setSongKey] = useState<number>(0);
+  /** Song mode — 'minor' or 'major'. Bass + melody use this to choose
+   *  the right scale intervals (b3/b6/b7 in minor, 3/6/7 in major). */
+  const [songMode, setSongMode] = useState<'major' | 'minor'>('minor');
+  /** When true, generating a bass or melody track uses the FIRST
+   *  drum-loaded track's kick pattern as the rhythmic anchor — so the
+   *  bass hits on every kick. When false, generation is independent. */
+  const [lockToDrums, setLockToDrums] = useState(true);
   const [showModelInfo, setShowModelInfo] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [modelLoading, setModelLoading] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
+  /** Whether the Presets browser panel is open. */
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  /** Genre filter inside the presets browser. */
+  const [presetGenreFilter, setPresetGenreFilter] = useState<string>('All');
+  /** "→ PAD" pad-picker state — only used when `embedded && onExportToPad`. */
+  const [padPickerOpen, setPadPickerOpen] = useState(false);
+  /** Busy flag during the offline WAV bounce so we can disable the button. */
+  const [padExportBusy, setPadExportBusy] = useState(false);
+  /** Transient status string under the pad picker (success / error toast). */
+  const [padExportStatus, setPadExportStatus] = useState<string | null>(null);
+  const padExportStatusTimerRef = useRef<number | null>(null);
 
   // Shared DAW session: contiguous lanes from CH18 + pattern payload → Studio clips (same `audioTrack` as mixer).
   useEffect(() => {
     const meta = computeAiPatternSessionMeta(tracks);
     writeAiPatternSessionManifestToStorage(meta);
-    const totalSteps = loopLength * 4;
+    const totalSteps = loopLength * STEPS_PER_BAR;
     const payload = {
       bpm: patternTempo,
       loopLength,
@@ -181,7 +240,7 @@ export default function AiPatternScreen({
   const currentTrack = tracks[currentTrackIdx];
   const selectedPattern = currentTrack.selectedVersionId ? currentTrack.versions.find(v => v.id === currentTrack.selectedVersionId)?.pattern : undefined;
 
-  const activeBeat = patternPosition % (loopLength * 4);
+  const activeBeat = patternPosition % (loopLength * STEPS_PER_BAR);
 
   const patternRef = useRef<boolean[][]>([]);
   /** Phase at play / after FF&RW: step = (localStartStepRef + quarterIndex) % totalSteps */
@@ -200,6 +259,52 @@ export default function AiPatternScreen({
     patternRef.current = selectedPattern || []; 
   }, [selectedPattern]);
 
+  /** Live preview reads the instrument via ref so changing the dropdown
+   *  (Piano → Bass → Pad …) doesn't restart the schedule loop. The next
+   *  scheduled hit will fire on the new voice immediately. */
+  const instrumentRef = useRef(instrument);
+  useEffect(() => { instrumentRef.current = instrument; }, [instrument]);
+  /** Same trick for the song key + mode. Changing the Key/Mode dropdown
+   *  mid-playback shifts the next note to the new key without restarting
+   *  the scheduler — feels instant to the user. */
+  const songKeyRef = useRef(songKey);
+  useEffect(() => { songKeyRef.current = songKey; }, [songKey]);
+  const songModeRef = useRef(songMode);
+  useEffect(() => { songModeRef.current = songMode; }, [songMode]);
+
+  /** Real-sample bank load status — drives the "Loading sounds…" badge
+   *  next to the instrument dropdown. `idle` / `loading` / `ready` /
+   *  `failed`. Polled briefly while a load is in flight so the UI can
+   *  flip to "Ready" without a full state-machine. */
+  const [sampleBankStatus, setSampleBankStatus] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+
+  /** Whenever the user switches instruments, kick off the sample-bank
+   *  preload for that voice. Fetches happen in the background — the
+   *  live preview falls back to synth voices until samples are decoded,
+   *  then automatically upgrades on the next hit. */
+  useEffect(() => {
+    if (!isScreenActive) return;
+    const key = getAiPatternSampleBankKey(instrument);
+    if (!key) {
+      setSampleBankStatus('idle');
+      return;
+    }
+    const status = getBankLoadStatus(key);
+    if (status === 'ready' || status === 'failed') {
+      setSampleBankStatus(status);
+      return;
+    }
+    const ctx = getOrCreateAudioContext();
+    const bank = ensureBankLoaded(key, ctx);
+    setSampleBankStatus('loading');
+    let cancelled = false;
+    bank.readyPromise.then(() => {
+      if (cancelled) return;
+      setSampleBankStatus(getBankLoadStatus(key));
+    });
+    return () => { cancelled = true; };
+  }, [instrument, isScreenActive, getOrCreateAudioContext]);
+
   localTempoRef.current = patternTempo;
 
   const stopPatternStateOnly = useCallback(() => {
@@ -214,54 +319,76 @@ export default function AiPatternScreen({
     setPatternPosition(0);
   }, [patternTempo]);
 
-  /** Preserve next scheduled quarter time when BPM changes (ladder math only). */
+  /** Preserve grid origin when BPM changes mid-playback (ladder math). */
   useEffect(() => {
     if (!isScreenActive || !patternPlaying) return;
     const oldBpm = Math.max(1, aiTempoForRealignRef.current);
     const newBpm = Math.max(1, patternTempo);
     if (oldBpm === newBpm) return;
-    const oldSec = 60 / oldBpm;
-    const newSec = 60 / newBpm;
+    // Each step = 1/16th note, so secPerStep = 60/bpm/4
+    const oldSec = 60 / oldBpm / 4;
+    const newSec = 60 / newBpm / 4;
     const idx = aiNextQuarterIndexRef.current;
     aiGridOriginAudioRef.current += idx * (oldSec - newSec);
     aiTempoForRealignRef.current = patternTempo;
   }, [patternTempo, patternPlaying]);
 
   /**
-   * Lookahead sequencer: next event time = origin + index * secPerBeat (Creation Station pattern).
-   * Advancing index only inside the schedule loop guarantees each quarter triggers at most once.
+   * Lookahead sequencer — 16th-note step grid.
+   * Each step = 1/16th note: secPerStep = 60/bpm/4.
+   * At 120 BPM: 0.125 s/step → 16-step loop = 2 s = 1 bar. ✓
    */
   useEffect(() => {
     if (!isScreenActive || !patternPlaying) return;
-    const totalSteps = Math.max(1, loopLength * 4);
+    const totalSteps = Math.max(1, loopLength * STEPS_PER_BAR);
     const runId = ++localClockRunIdRef.current;
 
     const scheduleLoop = () => {
       if (localClockRunIdRef.current !== runId) return;
       const ctx = getOrCreateAudioContext();
       const now = ctx.currentTime;
-      const secPerBeat = 60 / Math.max(1, localTempoRef.current);
+      // 16th-note step duration: 60/bpm/4
+      const secPerStep = 60 / Math.max(1, localTempoRef.current) / 4;
       const horizon = now + AI_LOCAL_SCHEDULE_AHEAD_SEC;
       const pat = patternRef.current;
       const origin = aiGridOriginAudioRef.current;
       let idx = aiNextQuarterIndexRef.current;
 
-      while (origin + idx * secPerBeat < horizon) {
-        const t = origin + idx * secPerBeat;
+      while (origin + idx * secPerStep < horizon) {
+        const t = origin + idx * secPerStep;
         const step =
           (localStartStepRef.current + idx) % totalSteps;
         if (pat.length > 0) {
-          const hit = pat.some((row) => !!row[step]);
-          if (hit) {
-            const whenSafe = Math.max(t, now + 0.0015);
-            triggerChannel(AI_PREVIEW_CHANNEL_BASE + currentTrackIdx, 100, whenSafe);
+          const whenSafe = Math.max(t, now + 0.0015);
+          const inst = instrumentRef.current;
+          // Fire all active rows at this step. Each row's voice is
+          // dispatched by scheduleAiPatternHit → kick, snare, hat, or
+          // the scale-degree pitch for melody/bass.
+          const isDrumInst = inst.toLowerCase().includes('drum') ||
+                            inst.toLowerCase().includes('percussion');
+          for (let r = 0; r < pat.length; r++) {
+            if (!pat[r]?.[step]) continue;
+            // Drums: very short (0.04 s) so each hit stays crisp and punchy.
+            // Melody/bass: 1 full step + overlap (2 steps) so notes sustain
+            // naturally into the next hit for a legato, musical feel.
+            const sustainSec = isDrumInst ? 0.04 : secPerStep * 2;
+            scheduleAiPatternHit({
+              ctx,
+              destination: ctx.destination,
+              instrument: inst,
+              row: r,
+              startTime: whenSafe,
+              sustainSec,
+              keyRoot: songKeyRef.current,
+              mode: songModeRef.current,
+            });
           }
         }
         idx += 1;
         aiNextQuarterIndexRef.current = idx;
       }
 
-      const qNow = Math.max(0, Math.floor((now - origin) / secPerBeat + 1e-9));
+      const qNow = Math.max(0, Math.floor((now - origin) / secPerStep + 1e-9));
       const transportStep = (localStartStepRef.current + qNow) % totalSteps;
       patternStepRef.current = transportStep;
 
@@ -300,7 +427,6 @@ export default function AiPatternScreen({
     patternPlaying,
     loopLength,
     currentTrackIdx,
-    triggerChannel,
     getOrCreateAudioContext,
   ]);
 
@@ -312,6 +438,37 @@ export default function AiPatternScreen({
     if (isScreenActive) return;
     stopPatternStateOnly();
   }, [isScreenActive, stopPatternStateOnly]);
+
+  /** Load a pre-built pattern preset into the current track. Follows
+   *  the same version-history path as `generatePattern` so the user
+   *  can still swap back via the "v1 / v2 / v3" version buttons. */
+  function loadPreset(preset: PatternPreset) {
+    const trackIdx = currentTrackIdx;
+    // Extend to the current loop length by tiling
+    const baseLen = preset.pattern[0]?.length ?? 16;
+    const targetSteps = loopLength * STEPS_PER_BAR;
+    const tiledPattern = preset.pattern.map((row) => {
+      const out: boolean[] = [];
+      for (let i = 0; i < targetSteps; i++) out[i] = row[i % baseLen] ?? false;
+      return out;
+    });
+    const newVersion = {
+      id: `preset-${Date.now()}`,
+      pattern: tiledPattern,
+      timestamp: Date.now(),
+      temperature: 1.0,
+    };
+    setTracks((prev) => {
+      const updated = [...prev];
+      updated[trackIdx] = {
+        ...updated[trackIdx]!,
+        versions: [newVersion, ...updated[trackIdx]!.versions].slice(0, 3),
+        selectedVersionId: newVersion.id,
+      };
+      return updated;
+    });
+    setPresetsOpen(false);
+  }
 
   async function generatePattern() {
     const session = ++generateSessionRef.current;
@@ -339,7 +496,7 @@ export default function AiPatternScreen({
 
     try {
       let newPattern: boolean[][] = [];
-      const steps = loopLength * 4;
+      const steps = loopLength * STEPS_PER_BAR;
       
       // Set the tempo for this generation (AI pattern local tempo only)
       setPatternTempo(generationTempo);
@@ -350,7 +507,29 @@ export default function AiPatternScreen({
       } else if (instrument === 'Drums') {
         newPattern = await generateDrumPattern(style, temperature);
       } else {
-        newPattern = await generateMelodyPattern(instrument, style, temperature);
+        // "Lock to drums" — find a drum-loaded track (excluding the
+        // current one) to feed the bass / melody generator. Bass uses
+        // it to lock every note to a kick hit; other instruments
+        // currently ignore it but plumbed here for future use.
+        const drumPatternForLock: boolean[][] | null = (() => {
+          if (!lockToDrums) return null;
+          for (let i = 0; i < tracks.length; i++) {
+            if (i === trackIdx) continue;
+            const t = tracks[i];
+            if (!t || !t.selectedVersionId) continue;
+            const v = t.versions.find((vv) => vv.id === t.selectedVersionId);
+            const p = v?.pattern;
+            if (p && p.length > 0 && p[0]?.some((b) => b)) return p;
+          }
+          return null;
+        })();
+        newPattern = await generateMelodyPattern(
+          instrument,
+          style,
+          temperature,
+          undefined,
+          drumPatternForLock,
+        );
       }
 
       if (generateSessionRef.current !== session) {
@@ -398,7 +577,7 @@ export default function AiPatternScreen({
       setModelError('Using fallback pattern');
       
       const fallbackPattern = generateRandomPattern();
-      const steps = loopLength * 4;
+      const steps = loopLength * STEPS_PER_BAR;
       const baseLength = fallbackPattern[0]?.length || 16;
       
       const adjustedPattern = fallbackPattern.map(row => {
@@ -438,6 +617,79 @@ export default function AiPatternScreen({
 
   const selectedTracksForExport = tracks.filter(t => t.selected && t.selectedVersionId);
 
+  // ── Export currently-focused track to a Beat Lab sampler pad ──────────
+  // Only used when this screen is embedded in Creation Station. The flow:
+  //   1. Render the focused track's selected pattern + style into a
+  //      mono 16-bit WAV via `renderAiPatternToWav`.
+  //   2. Hand the bytes to the parent (`onExportToPad` — same surface
+  //      Chord Builder uses), which decodes them into the pad sample
+  //      buffer map and updates pad label / rootBPM / presence state.
+  //   3. Surface a brief success-or-error toast under the picker.
+  const exportFocusedTrackToPad = useCallback(
+    async (padIndex: number) => {
+      if (!onExportToPad) return;
+      if (padExportBusy) return;
+      if (padIndex < 0 || padIndex > 15) return;
+      const track = tracks[currentTrackIdx];
+      const version = track?.selectedVersionId
+        ? track.versions.find((v) => v.id === track.selectedVersionId)
+        : null;
+      const pattern = version?.pattern;
+      if (!track || !pattern || pattern.length === 0) {
+        setPadExportStatus('No pattern on this track — generate one first.');
+        return;
+      }
+      setPadExportBusy(true);
+      setPadExportStatus(null);
+      try {
+        const { wavBytes } = await renderAiPatternToWav({
+          pattern,
+          loopLength,
+          stepsPerBar: STEPS_PER_BAR, // 16 steps per bar (16th notes)
+          instrument,
+          bpm: patternTempo,
+          // Pass the live AudioContext so the renderer can fetch +
+          // decode real samples before the offline bounce runs (Safari
+          // can't decode in an OfflineAudioContext reliably).
+          audioContext: getOrCreateAudioContext(),
+          // Honor the user-selected song key + mode so the bounced WAV
+          // is in the same key as what they hear during preview.
+          keyRoot: songKey,
+          mode: songMode,
+        });
+        const label = `${instrument} · ${style}`;
+        onExportToPad({ padIndex, wavBytes, label, rootBpm: patternTempo });
+        setPadPickerOpen(false);
+        setPadExportStatus(`✓ Pad ${padIndex + 1} ← ${label}`);
+      } catch (err) {
+        setPadExportStatus(
+          err instanceof Error ? err.message : 'Export failed — try regenerating the pattern.',
+        );
+      } finally {
+        setPadExportBusy(false);
+        if (padExportStatusTimerRef.current != null) {
+          window.clearTimeout(padExportStatusTimerRef.current);
+        }
+        padExportStatusTimerRef.current = window.setTimeout(() => {
+          setPadExportStatus(null);
+          padExportStatusTimerRef.current = null;
+        }, 3000);
+      }
+    },
+    [onExportToPad, padExportBusy, tracks, currentTrackIdx, loopLength, instrument, patternTempo, style, getOrCreateAudioContext, songKey, songMode],
+  );
+
+  // Clean up the toast timer on unmount so we don't leak setState calls
+  // into a tree that no longer exists.
+  useEffect(() => {
+    return () => {
+      if (padExportStatusTimerRef.current != null) {
+        window.clearTimeout(padExportStatusTimerRef.current);
+        padExportStatusTimerRef.current = null;
+      }
+    };
+  }, []);
+
   function addPatternLane() {
     setTracks((prev) => {
       if (prev.length >= MAX_AI_PATTERN_LANES) return prev;
@@ -462,7 +714,7 @@ export default function AiPatternScreen({
     if (transport === 'playing' || transport === 'recording') {
       void stop();
     }
-    const totalSteps = Math.max(1, loopLength * 4);
+    const totalSteps = Math.max(1, loopLength * STEPS_PER_BAR);
     const startStep = Math.max(0, patternStepRef.current % totalSteps);
     const ctx = getOrCreateAudioContext();
     const now = ctx.currentTime;
@@ -484,7 +736,7 @@ export default function AiPatternScreen({
   }, [patternPlaying, transport, stop]);
 
   function fastForwardPattern() {
-    const newStep = Math.min(patternStepRef.current + 1, (loopLength * 4) - 1);
+    const newStep = Math.min(patternStepRef.current + 1, (loopLength * STEPS_PER_BAR) - 1);
     patternStepRef.current = newStep;
     if (patternPlaying) {
       const ctx = getOrCreateAudioContext();
@@ -538,7 +790,7 @@ export default function AiPatternScreen({
             <p className="text-xs" style={{ color: '#555' }}>
               {tracks.length} lane{tracks.length !== 1 ? 's' : ''} · CH{AI_PATTERN_SESSION_BASE}–CH{AI_PATTERN_SESSION_BASE + tracks.length - 1} · AI Local {patternTempo} BPM
               {patternPlaying && 
-                <span style={{ color: '#ff6b35' }}> · Step {(patternPosition % (loopLength * 4)) + 1}</span>
+                <span style={{ color: '#ff6b35' }}> · Step {(patternPosition % (loopLength * STEPS_PER_BAR)) + 1}</span>
               }
             </p>
           </div>
@@ -600,6 +852,106 @@ export default function AiPatternScreen({
               <ChevronUp size={22} strokeWidth={3} />
             </button>
           </div>
+
+          {/* → PAD: bounce the *focused* track's pattern into a Beat Lab
+              sampler pad. Only available when this screen is embedded
+              inside Creation Station (the standalone module has no pads
+              to send to). Uses `currentTrackIdx` instead of the export
+              checkboxes because a single pad maps to a single track. */}
+          {embedded && onExportToPad && (
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                onClick={() => setPadPickerOpen((v) => !v)}
+                disabled={padExportBusy}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
+                style={{
+                  background: padExportBusy ? '#1a1a1a' : 'linear-gradient(135deg, #7cf4c6, #00E5FF)',
+                  color: padExportBusy ? '#555' : '#000',
+                  border: `1px solid ${padExportBusy ? '#222' : 'transparent'}`,
+                  cursor: padExportBusy ? 'not-allowed' : 'pointer',
+                }}
+                title="Send the focused track's pattern to a Beat Lab sampler pad as a WAV"
+              >
+                <Send size={11} /> → PAD
+              </button>
+              {padPickerOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    zIndex: 50,
+                    background: '#0a0a0e',
+                    border: '1px solid rgba(124, 244, 198, 0.4)',
+                    borderRadius: 8,
+                    padding: 10,
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.55)',
+                    minWidth: 220,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 0.4, color: '#7cf4c6' }}>
+                      SEND TO BEAT LAB PAD
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPadPickerOpen(false)}
+                      style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: 2, display: 'inline-flex' }}
+                      aria-label="Close pad picker"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: 4,
+                    }}
+                  >
+                    {Array.from({ length: 16 }, (_, i) => i).map((padIndex) => (
+                      <button
+                        key={padIndex}
+                        type="button"
+                        onClick={() => { void exportFocusedTrackToPad(padIndex); }}
+                        disabled={padExportBusy}
+                        style={{
+                          padding: '10px 0',
+                          borderRadius: 4,
+                          background: 'rgba(124, 244, 198, 0.08)',
+                          border: '1px solid rgba(124, 244, 198, 0.25)',
+                          color: '#7cf4c6',
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: padExportBusy ? 'wait' : 'pointer',
+                          opacity: padExportBusy ? 0.5 : 1,
+                        }}
+                        title={`Replace pad ${padIndex + 1} with this pattern`}
+                      >
+                        {padIndex + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 9, color: '#666', lineHeight: 1.4 }}>
+                    Bounces the focused track (<strong style={{ color: '#aaa' }}>{instrument}</strong>) at{' '}
+                    <strong style={{ color: '#aaa' }}>{patternTempo} BPM</strong>, replacing that pad's sample.
+                  </div>
+                  {padExportStatus && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 10,
+                        color: padExportStatus.startsWith('✓') ? '#7cf4c6' : '#ff8888',
+                      }}
+                    >
+                      {padExportStatus}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Export Button */}
           <button onClick={() => setShowExportModal(true)} disabled={selectedTracksForExport.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold" 
@@ -775,14 +1127,25 @@ export default function AiPatternScreen({
             ))}
           </div>
           <p className="text-10px" style={{ color: '#666' }}>
-            {currentTrack.sequenceMode === 'steps' ? `Generate patterns of ${loopLength * 4} steps` : `Generate ${loopLength} bar${loopLength > 1 ? 's' : ''} of notes`}
+            {`${loopLength * STEPS_PER_BAR} steps · ${loopLength} bar${loopLength !== 1 ? 's' : ''} · 16th-note grid`}
           </p>
         </div>
 
         {/* Section 3: Instrument & Style */}
         <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>Instrument</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>Instrument</span>
+              {sampleBankStatus === 'loading' && (
+                <span className="text-10px font-semibold" style={{ color: '#FFA500' }}>● Loading sounds…</span>
+              )}
+              {sampleBankStatus === 'ready' && (
+                <span className="text-10px font-semibold" style={{ color: '#7cf4c6' }}>● Real samples</span>
+              )}
+              {sampleBankStatus === 'failed' && (
+                <span className="text-10px font-semibold" style={{ color: '#888' }}>● Synth (offline)</span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-2">
               {INSTRUMENTS.map(i => (
                 <button key={i} onClick={() => setInstrument(i)} className="px-2 py-1 rounded text-10px font-semibold"
@@ -847,6 +1210,81 @@ export default function AiPatternScreen({
           <p className="text-10px" style={{ color: '#666' }}>Updates AI local playback tempo for this screen/export metadata</p>
         </div>
 
+        {/* Section 3d: Song Key + Mode + Lock — drives the scale-aware
+            bass/melody pitch mapping (rowToMidi). Bass + melody tracks
+            generate notes from this key's diatonic scale and resolve to
+            its tonic, so all tracks sound like the same song. */}
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffcc00' }}>Song Key</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Key root buttons (C…B). Compact 12-button row so the user
+                can flip keys without a dropdown menu. */}
+            {['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'].map((k, i) => (
+              <button
+                key={k}
+                onClick={() => setSongKey(i)}
+                className="px-2 py-1 rounded text-10px font-bold"
+                style={{
+                  background: songKey === i ? '#ffcc0022' : '#111',
+                  color: songKey === i ? '#ffcc00' : '#666',
+                  border: `1px solid ${songKey === i ? '#ffcc0066' : '#222'}`,
+                  cursor: 'pointer',
+                  minWidth: 28,
+                }}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-10px" style={{ color: '#666' }}>Mode:</span>
+            <button
+              onClick={() => setSongMode('minor')}
+              className="px-3 py-1 rounded text-10px font-bold"
+              style={{
+                background: songMode === 'minor' ? '#7cf4c622' : '#111',
+                color: songMode === 'minor' ? '#7cf4c6' : '#666',
+                border: `1px solid ${songMode === 'minor' ? '#7cf4c666' : '#222'}`,
+                cursor: 'pointer',
+              }}
+            >
+              Minor
+            </button>
+            <button
+              onClick={() => setSongMode('major')}
+              className="px-3 py-1 rounded text-10px font-bold"
+              style={{
+                background: songMode === 'major' ? '#7cf4c622' : '#111',
+                color: songMode === 'major' ? '#7cf4c6' : '#666',
+                border: `1px solid ${songMode === 'major' ? '#7cf4c666' : '#222'}`,
+                cursor: 'pointer',
+              }}
+            >
+              Major
+            </button>
+
+            <div className="flex-1" />
+
+            {/* "Lock to drums" — when on, generating a bass or melody
+                track uses the first populated drum track's kick pattern
+                as the rhythmic anchor. Off = generate independently. */}
+            <button
+              onClick={() => setLockToDrums((v) => !v)}
+              className="px-3 py-1 rounded text-10px font-bold"
+              style={{
+                background: lockToDrums ? '#D500F922' : '#111',
+                color: lockToDrums ? '#D500F9' : '#666',
+                border: `1px solid ${lockToDrums ? '#D500F966' : '#222'}`,
+                cursor: 'pointer',
+              }}
+              title="When on, bass + melody snap to the drum track's kick hits"
+            >
+              {lockToDrums ? '🔒 Lock to drums' : '🔓 Lock off'}
+            </button>
+          </div>
+          <p className="text-10px" style={{ color: '#666' }}>Bass + melody tracks pitch into <strong style={{ color: '#aaa' }}>{['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][songKey]} {songMode}</strong>{lockToDrums ? ' • Bass locks to the drum kick' : ''}</p>
+        </div>
+
         {/* Section 4: Variation */}
         <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
           <div className="flex items-center justify-between">
@@ -887,17 +1325,135 @@ export default function AiPatternScreen({
           ) : null}
         </div>
 
-        {/* Section 6: Generate Button */}
-        <button onClick={generatePattern} disabled={currentTrack.generating || modelLoading} className="py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-          style={{ background: currentTrack.generating || modelLoading ? '#1a1a1a' : 'linear-gradient(135deg, #00E5FF, #D500F9)', color: currentTrack.generating || modelLoading ? '#444' : '#000', cursor: currentTrack.generating || modelLoading ? 'not-allowed' : 'pointer' }}>
-          {currentTrack.generating ? (
-            <><RefreshCw size={14} className="animate-spin" /> Generating…</>
-          ) : modelLoading ? (
-            <><RefreshCw size={14} className="animate-spin" /> Loading…</>
-          ) : (
-            <><Sparkles size={14} /> Generate {style} {instrument} Pattern</>
-          )}
-        </button>
+        {/* Section 6: Generate Button + Presets toggle */}
+        <div className="flex gap-2">
+          <button onClick={generatePattern} disabled={currentTrack.generating || modelLoading} className="flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+            style={{ background: currentTrack.generating || modelLoading ? '#1a1a1a' : 'linear-gradient(135deg, #00E5FF, #D500F9)', color: currentTrack.generating || modelLoading ? '#444' : '#000', cursor: currentTrack.generating || modelLoading ? 'not-allowed' : 'pointer' }}>
+            {currentTrack.generating ? (
+              <><RefreshCw size={14} className="animate-spin" /> Generating…</>
+            ) : modelLoading ? (
+              <><RefreshCw size={14} className="animate-spin" /> Loading…</>
+            ) : (
+              <><Sparkles size={14} /> Generate {style} {instrument}</>
+            )}
+          </button>
+          {/* Presets — opens the curated loop library. Shows presets
+              relevant to the current instrument's role (drums / bass /
+              melody / pad) filtered by genre. */}
+          <button
+            onClick={() => setPresetsOpen((v) => !v)}
+            className="px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-1"
+            style={{
+              background: presetsOpen ? '#00ff8833' : '#111',
+              color: presetsOpen ? '#00ff88' : '#888',
+              border: `1px solid ${presetsOpen ? '#00ff8866' : '#333'}`,
+              cursor: 'pointer',
+            }}
+            title="Browse curated musical pattern presets"
+          >
+            🎵 Presets
+          </button>
+        </div>
+
+        {/* Section 6b: Presets Browser
+            A scrollable panel of hand-crafted patterns. Genre filter at
+            the top narrows the list. Each card shows the name, genre
+            tag, and a one-line description. Clicking loads the pattern
+            into the current track (tiled to the loop length). */}
+        {presetsOpen && (() => {
+          const role = instrumentToPresetRole(instrument);
+          const visiblePresets = filterPresets(role, presetGenreFilter);
+          return (
+            <div
+              className="rounded-xl flex flex-col gap-3"
+              style={{ background: '#060606', border: '1px solid #00ff8844', padding: 12 }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00ff88' }}>
+                  🎵 Pattern Presets — {role.charAt(0).toUpperCase() + role.slice(1)}
+                </span>
+                <button onClick={() => setPresetsOpen(false)} style={{ color: '#555', cursor: 'pointer', background: 'none', border: 'none', fontSize: 16 }}>✕</button>
+              </div>
+
+              {/* Genre filter chips */}
+              <div className="flex gap-1 flex-wrap">
+                {PRESET_GENRES.map((g) => (
+                  <button
+                    key={g}
+                    onClick={() => setPresetGenreFilter(g)}
+                    className="px-2 py-0.5 rounded text-10px font-bold"
+                    style={{
+                      background: presetGenreFilter === g ? '#00ff8822' : '#111',
+                      color: presetGenreFilter === g ? '#00ff88' : '#555',
+                      border: `1px solid ${presetGenreFilter === g ? '#00ff8855' : '#222'}`,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+
+              {/* Preset cards */}
+              <div
+                className="flex flex-col gap-2"
+                style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}
+              >
+                {visiblePresets.length === 0 ? (
+                  <p className="text-10px" style={{ color: '#444', textAlign: 'center', padding: 16 }}>
+                    No presets for {presetGenreFilter} {role}. Try "All" or a different genre.
+                  </p>
+                ) : (
+                  visiblePresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => loadPreset(preset)}
+                      className="text-left rounded-lg p-3 flex flex-col gap-1"
+                      style={{
+                        background: '#0d0d0d',
+                        border: '1px solid #1a1a1a',
+                        cursor: 'pointer',
+                        transition: 'border-color 0.15s',
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00ff8855'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a1a1a'; }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold" style={{ color: '#e0e0e0' }}>{preset.name}</span>
+                        <span
+                          className="px-1.5 py-0.5 rounded text-10px font-bold"
+                          style={{ background: '#00ff8811', color: '#00ff8899', border: '1px solid #00ff8822' }}
+                        >
+                          {preset.genre}
+                        </span>
+                      </div>
+                      <span className="text-10px" style={{ color: '#555' }}>{preset.desc}</span>
+                      {/* Mini step-grid preview — shows which rows have ANY note */}
+                      <div className="flex gap-px mt-1" style={{ height: 8 }}>
+                        {Array.from({ length: 16 }, (_, s) => {
+                          const hit = preset.pattern.some((row) => row[s]);
+                          return (
+                            <div
+                              key={s}
+                              style={{
+                                flex: 1,
+                                background: hit ? '#00ff8866' : '#1a1a1a',
+                                borderRadius: 1,
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+              <p className="text-10px" style={{ color: '#444' }}>
+                {visiblePresets.length} preset{visiblePresets.length !== 1 ? 's' : ''} shown · click any to load into the current track
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Section 7: Version History */}
         {currentTrack.versions.length > 0 && (
@@ -945,7 +1501,7 @@ export default function AiPatternScreen({
                 </div>
 
                 <div className="flex" style={{ paddingLeft: 72 }}>
-                  {Array.from({ length: loopLength * 4 }, (_, i) => (
+                  {Array.from({ length: loopLength * STEPS_PER_BAR }, (_, i) => (
                     <div key={i} className="flex-1 text-center font-mono text-6xs" style={{ color: activeBeat === i ? '#D500F9' : '#2a2a2a', fontWeight: activeBeat === i ? 'bold' : 'normal', fontSize: 7 }}>
                       {(i % 4) + 1}
                     </div>
@@ -955,7 +1511,7 @@ export default function AiPatternScreen({
                 {selectedPattern.map((row, ri) => (
                   <div key={ri} className="flex items-center">
                     <div className="shrink-0 pr-2" style={{ width: 72, color: NOTE_COLORS[ri], fontSize: 10, fontWeight: 700, textAlign: 'right' }}>
-                      {NOTE_NAMES[ri]}
+                      {getRowNames(instrument)[ri]}
                     </div>
                     <div className="flex flex-1 gap-0.5">
                       {row.map((on, bi) => (
@@ -979,7 +1535,7 @@ export default function AiPatternScreen({
                 ))}
 
                 <div className="flex" style={{ paddingLeft: 72, marginTop: 2 }}>
-                  {Array.from({ length: loopLength * 4 }, (_, i) => (
+                  {Array.from({ length: loopLength * STEPS_PER_BAR }, (_, i) => (
                     <div key={i} className="flex-1 h-0.5 rounded-full transition-all" style={{ background: activeBeat === i ? '#D500F9' : 'transparent', boxShadow: activeBeat === i ? '0 0 6px #D500F9' : 'none' }} />
                   ))}
                 </div>
@@ -997,7 +1553,7 @@ export default function AiPatternScreen({
                 {selectedPattern.slice(0, 4).map((row, ri) => (
                   <div key={ri} className="flex items-center">
                     <div className="shrink-0 pr-2" style={{ width: 72, color: NOTE_COLORS[ri], fontSize: 10, fontWeight: 700, textAlign: 'right' }}>
-                      Note {ri + 1}
+                      {getRowNames(instrument)[ri]}
                     </div>
                     <div className="flex flex-1 gap-2">
                       {Array.from({ length: loopLength }, (_, bi) => (
@@ -1071,3 +1627,4 @@ export default function AiPatternScreen({
     </div>
   );
 }
+

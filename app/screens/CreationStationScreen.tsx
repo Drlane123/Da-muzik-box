@@ -10,7 +10,7 @@ import {
 } from 'react';
 import type { MutableRefObject } from 'react';
 import { flushSync, createPortal } from 'react-dom';
-import { Send, ZoomIn, ZoomOut, Maximize2, Zap, ChevronUp, ChevronDown, Volume2, Play, Pause, Square, Circle, SkipBack, Repeat, Save, Cable, Mic, Upload, X, Download, Plus, SlidersHorizontal } from 'lucide-react';
+import { Send, ZoomIn, ZoomOut, Maximize2, Zap, ChevronUp, ChevronDown, Volume2, Play, Pause, Square, Circle, SkipBack, Repeat, Save, Cable, Mic, Upload, X, Download, Plus, SlidersHorizontal, Music2, Cpu } from 'lucide-react';
 
 import {
   useMasterClock,
@@ -79,6 +79,10 @@ import {
   synthesizeKitPadBuffer,
   type DrumKitGeneratorStyle,
 } from '@/app/lib/creationStation/drumKitGenerator';
+import { ChordBuilderTab } from '@/app/components/creation/ChordBuilderTab';
+import AiPatternScreen from '@/app/screens/AiPatternScreen';
+import ChordSequencerScreen from '@/app/screens/ChordSequencerScreen';
+import { uint8ArrayToBase64 } from '@/app/lib/creationStation/chordRender';
 
 import {
   normalizePianoSnapSubdiv,
@@ -163,7 +167,7 @@ const DEF_CW           = 64;
 const ZOOM_STEP        = 4;
 
 // Keep drum programming grid comfortably large for faster step entry.
-const DRUM_GRID_ROW_H  = 60;
+const DRUM_GRID_ROW_H  = 48;
 const DRUM_GRID_MIN_CW = MIN_CW;
 const PIANO_GRID_MIN_CW = 24;
 
@@ -454,7 +458,7 @@ function paintCreationHudQuarterIntoDom(
   const bEl = slots.barDigits;
   if (bEl) {
     bEl.textContent = String(bar).padStart(3, '0');
-    bEl.style.color = active ? '#00E5FF' : '#444';
+    bEl.style.color = active ? '#00E5FF' : '#4a4a58';
   }
   const msrEl = slots.msrFrac;
   if (msrEl) {
@@ -507,7 +511,7 @@ function CreationTransportHudBar({
         padding: compact ? '0 2px' : undefined,
       }}
     >
-      <span style={{ fontSize: compact ? 4 : 5, color: '#444', letterSpacing: 1.2, lineHeight: 1 }}>BAR</span>
+      <span style={{ fontSize: compact ? 4 : 5, color: '#4a4a58', letterSpacing: 1.2, lineHeight: 1 }}>BAR</span>
       <span
         ref={(el) => {
           if (hudDomSlotsRef) hudDomSlotsRef.current.barDigits = el;
@@ -515,7 +519,7 @@ function CreationTransportHudBar({
         style={{
           fontSize: compact ? 12 : 14,
           fontWeight: 900,
-          color: paintHudFromRaf ? '#00E5FF' : transportNotStopped ? '#00E5FF' : '#444',
+          color: paintHudFromRaf ? '#00E5FF' : transportNotStopped ? '#00E5FF' : '#4a4a58',
           lineHeight: 1,
         }}
       >
@@ -578,7 +582,7 @@ function CreationTransportHudMsr({
           ref={(el) => {
             if (hudDomSlotsRef) hudDomSlotsRef.current.phrase = el;
           }}
-          style={{ color: '#555', fontSize: 6 }}
+          style={{ color: '#6a6a78', fontSize: 6 }}
         >
           {showReactHudText ? `PH${phraseEveryFourMeasures}` : '\u2007\u2007\u2007\u2007'}
         </span>
@@ -830,16 +834,35 @@ function formatBeatLabSampleTime(seconds: number): string {
 
 const PAD_TRIM_WAVE_CSS_H = 56;
 
+/** Keep trim window valid (same constraints as the % sliders under the waveform). */
+function clampBeatLabTrimPair(t0: number, t1: number): { trim0: number; trim1: number } {
+  let trim0 = Math.max(0, Math.min(0.95, t0));
+  let trim1 = Math.max(0.05, Math.min(1, t1));
+  if (trim1 <= trim0 + 0.02) {
+    trim1 = Math.min(1, trim0 + 0.08);
+  }
+  if (trim1 <= trim0 + 0.02) {
+    trim0 = Math.max(0, trim1 - 0.08);
+  }
+  return { trim0, trim1 };
+}
+
 const PadSampleTrimWaveform = memo(function PadSampleTrimWaveform({
   peaks,
   trim0,
   trim1,
+  onTrimChange,
 }: {
   peaks: number[] | null;
   trim0: number;
   trim1: number;
+  /** When set, drag the yellow start/end lines on the waveform (same as the % sliders). */
+  onTrimChange?: (trim0: number, trim1: number) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const latestTrimRef = useRef({ trim0, trim1 });
+  latestTrimRef.current = { trim0, trim1 };
+  const dragWhichRef = useRef<0 | 1 | null>(null);
 
   useLayoutEffect(() => {
     const canvas = ref.current;
@@ -856,13 +879,13 @@ const PadSampleTrimWaveform = memo(function PadSampleTrimWaveform({
       ctx2.clearRect(0, 0, cssW, cssH);
       ctx2.fillStyle = '#060b0a';
       ctx2.fillRect(0, 0, cssW, cssH);
-      const n = peaks?.length ?? 0;
-      if (n < 1) {
+      if (!peaks || peaks.length < 1) {
         ctx2.fillStyle = '#4b5563';
         ctx2.font = '10px ui-monospace, system-ui, sans-serif';
         ctx2.fillText('No waveform', 8, cssH / 2 + 3);
         return;
       }
+      const n = peaks.length;
       let peakMax = 1e-6;
       for (let i = 0; i < n; i++) peakMax = Math.max(peakMax, peaks[i]!);
       const scale = Math.min((cssH * 0.46) / peakMax, cssH * 4);
@@ -898,10 +921,76 @@ const PadSampleTrimWaveform = memo(function PadSampleTrimWaveform({
     return () => ro.disconnect();
   }, [peaks, trim0, trim1]);
 
+  const applyPointerTrim = useCallback(
+    (clientX: number, canvas: HTMLCanvasElement, which: 0 | 1) => {
+      if (!onTrimChange) return;
+      const rect = canvas.getBoundingClientRect();
+      const u = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+      const { trim0: cur0, trim1: cur1 } = latestTrimRef.current;
+      const next = which === 0 ? clampBeatLabTrimPair(u, cur1) : clampBeatLabTrimPair(cur0, u);
+      onTrimChange(next.trim0, next.trim1);
+    },
+    [onTrimChange],
+  );
+
+  const onWavePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!onTrimChange) return;
+      const canvas = e.currentTarget;
+      const rect = canvas.getBoundingClientRect();
+      const px = e.clientX - rect.left;
+      const w = Math.max(1, rect.width);
+      const x0 = trim0 * w;
+      const x1 = trim1 * w;
+      const hit = 12;
+      const near0 = Math.abs(px - x0) <= hit;
+      const near1 = Math.abs(px - x1) <= hit;
+      let which: 0 | 1;
+      if (near0 && near1) which = Math.abs(px - x0) <= Math.abs(px - x1) ? 0 : 1;
+      else if (near0) which = 0;
+      else if (near1) which = 1;
+      else which = px / w < (trim0 + trim1) / 2 ? 0 : 1;
+      dragWhichRef.current = which;
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {
+        /* */
+      }
+      applyPointerTrim(e.clientX, canvas, which);
+      e.preventDefault();
+    },
+    [onTrimChange, trim0, trim1, applyPointerTrim],
+  );
+
+  const onWavePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (dragWhichRef.current === null || !onTrimChange) return;
+      applyPointerTrim(e.clientX, e.currentTarget, dragWhichRef.current);
+    },
+    [onTrimChange, applyPointerTrim],
+  );
+
+  const endWaveDrag = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (dragWhichRef.current === null) return;
+    dragWhichRef.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* */
+    }
+  }, []);
+
   return (
     <canvas
       ref={ref}
       aria-hidden
+      onPointerDown={onWavePointerDown}
+      onPointerMove={onWavePointerMove}
+      onPointerUp={endWaveDrag}
+      onPointerCancel={endWaveDrag}
+      onLostPointerCapture={() => {
+        dragWhichRef.current = null;
+      }}
       style={{
         width: '100%',
         height: PAD_TRIM_WAVE_CSS_H,
@@ -909,6 +998,8 @@ const PadSampleTrimWaveform = memo(function PadSampleTrimWaveform({
         borderRadius: 4,
         border: '1px solid #1a2824',
         background: '#060b0a',
+        cursor: onTrimChange ? 'ew-resize' : 'default',
+        touchAction: onTrimChange ? 'none' : undefined,
       }}
     />
   );
@@ -1060,7 +1151,7 @@ function Ruler({
             : {
                 width: colWidth * stepsThisBar,
                 flexShrink: 0 as const,
-                borderLeft: `1px solid ${bi % 4 === 0 ? '#333' : '#1e1e1e'}`,
+                borderLeft: `1px solid ${bi % 4 === 0 ? '#2a2a32' : '#1c1c24'}`,
                 display: 'flex' as const,
                 flexDirection: 'column' as const,
               };
@@ -1083,11 +1174,11 @@ function Ruler({
                 fontSize: 8,
                 fontFamily: 'monospace',
                 fontWeight: 700,
-                color: isActiveBar ? color : '#444',
+                color: isActiveBar ? color : '#4a4a58',
                 textAlign: 'center',
                 lineHeight: '14px',
                 background: isActiveBar ? `${color}15` : 'transparent',
-                borderBottom: `2px solid ${isActiveBar ? color : '#1a1a1a'}`,
+                borderBottom: `2px solid ${isActiveBar ? color : '#1a1a24'}`,
                 cursor: onRangeCommit ? 'ew-resize' : 'default',
                 touchAction: 'none',
               }}
@@ -1124,7 +1215,7 @@ function Ruler({
                         bankCol,
                         qpb: drumGridBeatBorders.qpb,
                         subdiv: drumGridBeatBorders.subdiv,
-                        blendTo: '#0a0a0a',
+                        blendTo: '#0a0a0e',
                       })}`
                     : mi > 0
                       ? '1px solid #181818'
@@ -1156,14 +1247,14 @@ function Ruler({
                       ...beatCellSizing,
                       fontSize: 7,
                       textAlign: 'center',
-                      color: drumBeatPlayline ? '#e9d5ff' : isHead ? color : '#2a2a2a',
+                      color: drumBeatPlayline ? '#7cf4c6' : isHead ? color : '#2a2a32',
                       fontWeight: drumBeatPlayline ? 900 : isHead ? 700 : 400,
                       background: drumBeatPlayline
-                        ? 'rgba(139, 92, 246, 0.18)'
+                        ? 'rgba(124, 244, 198, 0.18)'
                         : isHead
                           ? `${color}20`
                           : 'transparent',
-                      boxShadow: drumBeatPlayline ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.45)' : undefined,
+                      boxShadow: drumBeatPlayline ? 'inset 0 0 0 1px rgba(124, 244, 198, 0.45)' : undefined,
                       borderLeft: beatBorderLeft,
                       fontFamily: 'monospace',
                       lineHeight: '13px',
@@ -1198,7 +1289,7 @@ interface BankButtonsProps {
 const BankButtons = memo(({ activeBank, setActiveBank, hasDrums, hasNotes }: BankButtonsProps) => (
   <div style={{ display: 'flex', gap: 3 }}>
     {BANKS.map((b, i) => (
-      <button key={b} onClick={() => setActiveBank(i)} style={{ position: 'relative', width: 24, height: 24, borderRadius: 4, fontSize: 10, fontWeight: 900, background: activeBank === i ? '#D500F9' : '#111', color: activeBank === i ? '#000' : '#555', border: `1px solid ${activeBank === i ? '#D500F9' : '#333'}`, cursor: 'pointer' }}>
+      <button key={b} onClick={() => setActiveBank(i)} style={{ position: 'relative', width: 24, height: 24, borderRadius: 4, fontSize: 10, fontWeight: 900, background: activeBank === i ? '#193025' : '#1a1a24', color: activeBank === i ? '#7cf4c6' : '#6a6a78', border: `1px solid ${activeBank === i ? 'rgba(124,244,198,0.45)' : '#2a2a32'}`, cursor: 'pointer' }}>
         {b}
         {hasDrums(i) && <div style={{ position: 'absolute', top: 1, right: 1, width: 4, height: 4, borderRadius: '50%', background: '#ff6b35' }} />}
         {hasNotes(i) && <div style={{ position: 'absolute', bottom: 1, right: 1, width: 4, height: 4, borderRadius: '50%', background: '#00E5FF' }} />}
@@ -1233,6 +1324,8 @@ interface BeatLabDeckToolbarProps {
   onCommitPadSampleRootBpm?: (padIndex: number, raw: string) => void;
   /** Loaded sample display name (matches sequencer lane when set). */
   padSampleLabelForPad?: (padIndex: number) => string | undefined;
+  /** Persist display name for this pad’s sample (localStorage + lane label). */
+  onCommitPadSampleLabel?: (padIndex: number, label: string) => void;
   /** Bump local numeric field when bank / stored root changes */
   samplerUiBank?: number;
   /** Per-pad HPF/LPF/trim/fine (stored with sample). */
@@ -1267,6 +1360,7 @@ function BeatLabDeckToolbar({
   padSampleRootBpmForPad,
   onCommitPadSampleRootBpm,
   padSampleLabelForPad,
+  onCommitPadSampleLabel,
   samplerUiBank = 0,
   getPadSamplerOpts,
   commitPadSamplerOpts,
@@ -1284,11 +1378,29 @@ function BeatLabDeckToolbar({
   srcBpmDraftRef.current = srcBpmDraft;
   const srcBpmOpenPadRef = useRef<number | null>(null);
   srcBpmOpenPadRef.current = srcBpmOpenPad;
+  /** Stable ref — parent recreates `onCommitPadSampleRootBpm` when `padSamplePresence` changes; must not re-run bank-switch FX close. */
+  const onCommitPadSampleRootBpmRef = useRef(onCommitPadSampleRootBpm);
+  onCommitPadSampleRootBpmRef.current = onCommitPadSampleRootBpm;
 
   const [fxOpenPad, setFxOpenPad] = useState<number | null>(null);
   const [fxDraft, setFxDraft] = useState<PadSamplerPlaybackOpts>(() => defaultPadSamplerPlaybackOpts());
   const fxDraftRef = useRef(fxDraft);
   fxDraftRef.current = fxDraft;
+  /** Lane / pad name while SAMPLE EDIT is open — kept in ref for document dismiss + pad switch commits. */
+  const [fxLabelDraft, setFxLabelDraft] = useState('');
+  const fxLabelDraftRef = useRef('');
+  fxLabelDraftRef.current = fxLabelDraft;
+  const onCommitPadSampleLabelRef = useRef(onCommitPadSampleLabel);
+  onCommitPadSampleLabelRef.current = onCommitPadSampleLabel;
+
+  useEffect(() => {
+    if (fxOpenPad === null) {
+      setFxLabelDraft('');
+      return;
+    }
+    setFxLabelDraft((padSampleLabelForPad?.(fxOpenPad) ?? '').trim());
+    // Only when opening a pad or switching bank — not when `padSampleLabelForPad` identity changes (parent inline fn).
+  }, [fxOpenPad, samplerUiBank]);
 
   const fxOpenTrimBuffer =
     fxOpenPad !== null ? getPadSampleAudioBuffer?.(fxOpenPad) : undefined;
@@ -1305,6 +1417,7 @@ function BeatLabDeckToolbar({
         return;
       }
       if (fxOpenPad !== null) {
+        onCommitPadSampleLabelRef.current?.(fxOpenPad, fxLabelDraftRef.current.trim());
         commitPadSamplerOpts?.(fxOpenPad, fxDraftRef.current);
         setFxOpenPad(null);
       }
@@ -1322,6 +1435,7 @@ function BeatLabDeckToolbar({
     (padIndex: number) => {
       if (!commitPadSamplerOpts || !getPadSamplerOpts) return;
       if (fxOpenPad === padIndex) {
+        onCommitPadSampleLabelRef.current?.(padIndex, fxLabelDraftRef.current.trim());
         commitPadSamplerOpts(padIndex, fxDraftRef.current);
         setFxOpenPad(null);
         return;
@@ -1331,6 +1445,7 @@ function BeatLabDeckToolbar({
         setSrcBpmOpenPad(null);
       }
       if (fxOpenPad !== null && fxOpenPad !== padIndex) {
+        onCommitPadSampleLabelRef.current?.(fxOpenPad, fxLabelDraftRef.current.trim());
         commitPadSamplerOpts(fxOpenPad, fxDraftRef.current);
       }
       setFxOpenPad(padIndex);
@@ -1342,12 +1457,12 @@ function BeatLabDeckToolbar({
   useEffect(() => {
     const pad = srcBpmOpenPadRef.current;
     if (pad !== null) {
-      onCommitPadSampleRootBpm?.(pad, srcBpmDraftRef.current);
+      onCommitPadSampleRootBpmRef.current?.(pad, srcBpmDraftRef.current);
       setSrcBpmOpenPad(null);
     }
     /** Bank switch: close FX panel without auto-commit (avoids writing to wrong bank index). */
     setFxOpenPad(null);
-  }, [samplerUiBank, onCommitPadSampleRootBpm]);
+  }, [samplerUiBank]);
 
   useEffect(() => {
     if (srcBpmOpenPad === null) return;
@@ -1356,12 +1471,12 @@ function BeatLabDeckToolbar({
       if (t?.closest?.('[data-src-bpm-root]')) return;
       if (t?.closest?.('[data-fx-root]')) return;
       if (t?.closest?.('[data-beatlab-portal-popover]')) return;
-      onCommitPadSampleRootBpm?.(srcBpmOpenPad, srcBpmDraftRef.current);
+      onCommitPadSampleRootBpmRef.current?.(srcBpmOpenPad, srcBpmDraftRef.current);
       setSrcBpmOpenPad(null);
     };
     document.addEventListener('mousedown', onDocMouseDown, true);
     return () => document.removeEventListener('mousedown', onDocMouseDown, true);
-  }, [srcBpmOpenPad, onCommitPadSampleRootBpm]);
+  }, [srcBpmOpenPad]);
 
   useEffect(() => {
     if (fxOpenPad === null) return;
@@ -1370,6 +1485,7 @@ function BeatLabDeckToolbar({
       if (t?.closest?.('[data-fx-root]')) return;
       if (t?.closest?.('[data-src-bpm-root]')) return;
       if (t?.closest?.('[data-beatlab-portal-popover]')) return;
+      onCommitPadSampleLabelRef.current?.(fxOpenPad, fxLabelDraftRef.current.trim());
       commitPadSamplerOpts?.(fxOpenPad, fxDraftRef.current);
       setFxOpenPad(null);
     };
@@ -1477,8 +1593,8 @@ function BeatLabDeckToolbar({
     gap: 5,
     padding: '5px 10px',
     borderRadius: 6,
-    border: '1px solid #2b3754',
-    background: '#111629',
+    border: '1px solid #2a2a32',
+    background: '#0c0c12',
     color: '#9dc6ff',
     cursor: 'pointer',
     fontSize: 10,
@@ -1494,8 +1610,8 @@ function BeatLabDeckToolbar({
         maxWidth: '100%',
         padding: '5px 7px 6px',
         borderRadius: 10,
-        border: '1px solid rgba(139, 92, 246, 0.22)',
-        background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
+        border: '1px solid rgba(124, 244, 198, 0.22)',
+        background: 'linear-gradient(165deg, rgba(11, 11, 16, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
         display: 'flex',
         flexDirection: 'column',
@@ -1523,8 +1639,8 @@ function BeatLabDeckToolbar({
                 height: 44,
                 borderRadius: '50%',
                 flexShrink: 0,
-                border: '2px solid rgba(196, 181, 253, 0.75)',
-                background: 'radial-gradient(circle at 35% 30%, #1e1830 0%, #0a0812 70%)',
+                border: '2px solid rgba(124, 244, 198, 0.45)',
+                background: 'radial-gradient(circle at 35% 30%, #1c1c24 0%, #0a0a0e 70%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1538,7 +1654,7 @@ function BeatLabDeckToolbar({
               </span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 8, color: '#555', fontWeight: 900, letterSpacing: 1 }}>STYLE</span>
+              <span style={{ fontSize: 8, color: '#6a6a78', fontWeight: 900, letterSpacing: 1 }}>STYLE</span>
               {starterPresets.map(([label, key]) => {
                 const on = geniusStarterActive === key;
                 return (
@@ -1549,9 +1665,9 @@ function BeatLabDeckToolbar({
                     style={{
                       padding: '4px 8px',
                       borderRadius: 4,
-                      border: `1px solid ${on ? 'rgba(139, 92, 246, 0.55)' : '#2b3754'}`,
-                      background: on ? 'rgba(139, 92, 246, 0.16)' : '#111629',
-                      color: on ? '#c4b5fd' : '#ccc',
+                      border: `1px solid ${on ? 'rgba(124, 244, 198, 0.55)' : '#2a2a32'}`,
+                      background: on ? 'rgba(124, 244, 198, 0.16)' : '#0c0c12',
+                      color: on ? '#7cf4c6' : '#ccc',
                       fontSize: 9,
                       fontWeight: 800,
                       cursor: 'pointer',
@@ -1572,7 +1688,7 @@ function BeatLabDeckToolbar({
               Upload
             </button>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 140, maxWidth: 220 }}>
-              <label style={{ fontSize: 7, color: '#555', fontWeight: 800 }}>Upload → pad</label>
+              <label style={{ fontSize: 7, color: '#6a6a78', fontWeight: 800 }}>Upload → pad</label>
               <select
                 value={geniusSamplerTargetPad}
                 title="File from Upload assigns here"
@@ -1580,8 +1696,8 @@ function BeatLabDeckToolbar({
                 style={{
                   padding: '4px 8px',
                   borderRadius: 4,
-                  border: '1px solid #333',
-                  background: '#151515',
+                  border: '1px solid #2a2a32',
+                  background: '#1a1a24',
                   color: '#ccc',
                   fontSize: 10,
                   fontWeight: 700,
@@ -1595,7 +1711,7 @@ function BeatLabDeckToolbar({
                 ))}
               </select>
             </div>
-            <div style={{ width: 1, height: 32, background: 'rgba(139, 92, 246, 0.2)', flexShrink: 0 }} aria-hidden />
+            <div style={{ width: 1, height: 32, background: 'rgba(124, 244, 198, 0.2)', flexShrink: 0 }} aria-hidden />
           </>
         ) : null}
 
@@ -1611,7 +1727,7 @@ function BeatLabDeckToolbar({
             padding: '4px 6px 4px 8px',
             borderRadius: 8,
             border: '1px solid rgba(167, 139, 250, 0.4)',
-            background: '#0a0812',
+            background: '#0a0a0e',
             boxSizing: 'border-box',
           }}
           title="Kit (e.g. Default) · Clear pattern · Download to Studio"
@@ -1624,8 +1740,8 @@ function BeatLabDeckToolbar({
               padding: '5px 8px',
               borderRadius: 4,
               border: '1px solid rgba(167, 139, 250, 0.35)',
-              background: '#120e1c',
-              color: '#f5f3ff',
+              background: '#0c0c12',
+              color: '#e8e8f0',
               fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
@@ -1658,7 +1774,7 @@ function BeatLabDeckToolbar({
                 padding: '0 8px',
                 borderRadius: 4,
                 border: '1px solid #633',
-                background: '#1a1414',
+                background: '#1a1a24',
                 color: '#f6a9a9',
                 fontSize: 10,
                 fontWeight: 800,
@@ -1688,9 +1804,9 @@ function BeatLabDeckToolbar({
                 height: 28,
                 padding: '0 8px',
                 borderRadius: 4,
-                border: '1px solid rgba(139, 92, 246, 0.35)',
-                background: 'rgba(24, 18, 42, 0.65)',
-                color: '#c4b5fd',
+                border: '1px solid rgba(124, 244, 198, 0.35)',
+                background: 'rgba(11, 11, 16, 0.65)',
+                color: '#7cf4c6',
                 fontSize: 10,
                 fontWeight: 800,
                 cursor: patternActionsDisabled ? 'not-allowed' : 'pointer',
@@ -1708,7 +1824,7 @@ function BeatLabDeckToolbar({
 
         <div
           style={{
-            borderTop: '1px solid rgba(139, 92, 246, 0.15)',
+            borderTop: '1px solid rgba(124, 244, 198, 0.15)',
             paddingTop: 4,
             overflow: 'visible',
             position: 'relative',
@@ -1716,7 +1832,7 @@ function BeatLabDeckToolbar({
           }}
         >
         <div
-          style={{ fontSize: 8, color: '#c4b5fd', fontWeight: 800, marginBottom: 3, letterSpacing: 0.5 }}
+          style={{ fontSize: 8, color: '#7cf4c6', fontWeight: 800, marginBottom: 3, letterSpacing: 0.5 }}
           title={
             'Sampler pad 1–16 is the same pad as Beat Lab lane 1–16: a sound loaded here is that lane’s sample. 8×2 MPC layout. FX/SRC BPM per pad; Apply FX before switching bank.'
           }
@@ -1744,6 +1860,7 @@ function BeatLabDeckToolbar({
             return (
               <div
                 key={padIndex}
+                className="cs-pad-hit"
                 title={`Sampler pad ${padIndex + 1} = Beat Lab lane ${padIndex + 1} · ${PAD_NAMES[padIndex]} — ${GENIUS_LANE_LABELS[padIndex]} — ${rowTag}${has ? ' · SAMPLE' : ''}${uploadHere ? ' · UPLOAD → this pad' : ''}`}
                 style={{
                   display: 'flex',
@@ -1756,22 +1873,22 @@ function BeatLabDeckToolbar({
                   borderRadius: 6,
                   border: `1px solid ${
                     uploadHere
-                      ? 'rgba(196, 181, 253, 0.65)'
+                      ? 'rgba(255, 255, 255, 0.22)'
                       : has
-                        ? 'rgba(139, 92, 246, 0.35)'
-                        : '#2b3754'
+                        ? 'rgba(255, 255, 255, 0.12)'
+                        : '#2a2a32'
                   }`,
-                  background: uploadHere
-                    ? 'linear-gradient(165deg, rgba(36, 28, 58, 0.92) 0%, rgba(12, 10, 20, 0.98) 100%)'
+                  background: 'linear-gradient(165deg, rgba(28, 30, 36, 0.78) 0%, rgba(12, 14, 18, 0.88) 100%)',
+                  boxShadow: uploadHere
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.40)'
                     : has
-                      ? 'linear-gradient(165deg, rgba(24, 18, 42, 0.65) 0%, rgba(8, 8, 14, 0.96) 100%)'
-                      : '#111629',
-                  boxShadow: uploadHere ? '0 0 0 1px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255,255,255,0.04)' : undefined,
+                      ? 'inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.40)'
+                      : 'inset 0 1px 0 rgba(255,255,255,0.03), inset 0 -1px 0 rgba(0,0,0,0.40)',
                   position: 'relative',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
-                  <span style={{ fontSize: 11, fontWeight: 900, color: '#c4b5fd', flexShrink: 0, width: 14, textAlign: 'center' }}>
+                  <span style={{ fontSize: 11, fontWeight: 900, color: '#7cf4c6', flexShrink: 0, width: 14, textAlign: 'center' }}>
                     {padIndex + 1}
                   </span>
                   {getPadSamplerOpts && commitPadSamplerOpts ? (
@@ -1799,14 +1916,14 @@ function BeatLabDeckToolbar({
                           justifyContent: 'center',
                           borderRadius: 4,
                           border: `1px solid ${
-                            !has ? '#2b3754' : fxOpenPad === padIndex ? 'rgba(139, 92, 246, 0.55)' : '#2b3754'
+                            !has ? '#2a2a32' : fxOpenPad === padIndex ? 'rgba(255, 255, 255, 0.28)' : '#2a2a32'
                           }`,
                           background: !has
-                            ? '#0a0a0a'
+                            ? '#0a0a0e'
                             : fxOpenPad === padIndex
-                              ? 'rgba(139, 92, 246, 0.14)'
-                              : '#101010',
-                          color: !has ? '#4b5563' : fxOpenPad === padIndex ? '#c4b5fd' : '#9dc6ff',
+                              ? 'rgba(255, 255, 255, 0.08)'
+                              : '#101014',
+                          color: !has ? '#4b5563' : fxOpenPad === padIndex ? '#e8e8f0' : '#9dc6ff',
                           cursor: !has ? 'not-allowed' : 'pointer',
                           padding: 0,
                           opacity: has ? 1 : 0.75,
@@ -1820,7 +1937,7 @@ function BeatLabDeckToolbar({
                     style={{
                       fontSize: 7,
                       fontWeight: 800,
-                      color: has && sampleName ? '#d4c4f0' : '#6b5a8f',
+                      color: has && sampleName ? '#d0d0de' : '#6a6a78',
                       flex: 1,
                       minWidth: 0,
                       overflow: 'hidden',
@@ -1895,12 +2012,12 @@ function BeatLabDeckToolbar({
                         padding: '3px 6px',
                         borderRadius: 4,
                         border: `1px solid ${
-                          srcBpmOpenPad === padIndex ? 'rgba(139, 92, 246, 0.5)' : '#2b3754'
+                          srcBpmOpenPad === padIndex ? 'rgba(124, 244, 198, 0.5)' : '#2a2a32'
                         }`,
                         background:
                           srcBpmOpenPad === padIndex
-                            ? 'linear-gradient(165deg, rgba(24, 18, 42, 0.75) 0%, rgba(10, 9, 16, 0.95) 100%)'
-                            : '#101010',
+                            ? 'linear-gradient(165deg, rgba(11, 11, 16, 0.75) 0%, rgba(10, 9, 16, 0.95) 100%)'
+                            : '#101014',
                         color: '#7d87a2',
                         cursor: 'pointer',
                         fontSize: 6,
@@ -1910,7 +2027,7 @@ function BeatLabDeckToolbar({
                       }}
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                        <span style={{ color: '#6b5a8f', letterSpacing: 0.4 }}>SRC BPM</span>
+                        <span style={{ color: '#6a6a78', letterSpacing: 0.4 }}>SRC BPM</span>
                         {root != null && root > 0 ? (
                           <span style={{ color: '#9dc6ff', fontFamily: 'monospace', fontSize: 9, fontWeight: 700 }}>{root}</span>
                         ) : (
@@ -1921,7 +2038,7 @@ function BeatLabDeckToolbar({
                         size={11}
                         style={{
                           flexShrink: 0,
-                          color: srcBpmOpenPad === padIndex ? '#c4b5fd' : '#6b5a8f',
+                          color: srcBpmOpenPad === padIndex ? '#7cf4c6' : '#6a6a78',
                           transform: srcBpmOpenPad === padIndex ? 'rotate(180deg)' : 'none',
                           transition: 'transform 0.12s',
                         }}
@@ -1943,6 +2060,7 @@ function BeatLabDeckToolbar({
           data-beatlab-portal-popover=""
           ref={srcBpmPopoverMeasureRef}
           onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
           style={{
             position: 'fixed',
             left: srcBpmPopRect.left,
@@ -1951,8 +2069,8 @@ function BeatLabDeckToolbar({
             zIndex: 50000,
             padding: 8,
             borderRadius: 6,
-            border: '1px solid rgba(139, 92, 246, 0.35)',
-            background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.75) 0%, rgba(8, 8, 12, 0.96) 100%)',
+            border: '1px solid rgba(124, 244, 198, 0.35)',
+            background: 'linear-gradient(165deg, rgba(11, 11, 16, 0.75) 0%, rgba(8, 8, 12, 0.96) 100%)',
             boxShadow: '0 10px 28px rgba(0,0,0,0.65)',
             boxSizing: 'border-box',
             maxHeight: 'min(280px, calc(100vh - 16px))',
@@ -1984,8 +2102,8 @@ function BeatLabDeckToolbar({
                   width: 28,
                   height: 26,
                   borderRadius: 4,
-                  border: '1px solid rgba(139, 92, 246, 0.35)',
-                  background: 'rgba(24, 18, 42, 0.75)',
+                  border: '1px solid rgba(124, 244, 198, 0.35)',
+                  background: 'rgba(11, 11, 16, 0.75)',
                   color: '#9dc6ff',
                   cursor: 'pointer',
                   padding: 0,
@@ -2008,7 +2126,7 @@ function BeatLabDeckToolbar({
                   height: 26,
                   borderRadius: 4,
                   border: '1px solid #444',
-                  background: '#141414',
+                  background: '#141418',
                   color: '#9ca3af',
                   cursor: 'pointer',
                   padding: 0,
@@ -2019,17 +2137,24 @@ function BeatLabDeckToolbar({
             </div>
           </div>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
-            min={40}
-            max={320}
+            autoComplete="off"
             autoFocus
+            placeholder="40–320 or clear"
             value={srcBpmDraft}
             onChange={(e) => setSrcBpmDraft(e.target.value)}
+            onBlur={(e) => {
+              if (srcBpmOpenPad === null) return;
+              const rel = e.relatedTarget as HTMLElement | null;
+              if (rel?.closest?.('[data-beatlab-portal-popover]')) return;
+              onCommitPadSampleRootBpmRef.current?.(srcBpmOpenPad, srcBpmDraftRef.current);
+              setSrcBpmOpenPad(null);
+            }}
             onKeyDown={(e) => {
               if (srcBpmOpenPad === null) return;
               if (e.key === 'Enter') {
-                onCommitPadSampleRootBpm?.(srcBpmOpenPad, srcBpmDraft);
+                onCommitPadSampleRootBpmRef.current?.(srcBpmOpenPad, srcBpmDraft);
                 setSrcBpmOpenPad(null);
               } else if (e.key === 'Escape') {
                 const r = padSampleRootBpmForPad?.(srcBpmOpenPad);
@@ -2042,7 +2167,7 @@ function BeatLabDeckToolbar({
               padding: '8px 10px',
               borderRadius: 4,
               border: '1px solid #444',
-              background: '#0a0a0a',
+              background: '#0a0a0e',
               color: '#e8eef5',
               fontSize: 13,
               fontFamily: 'monospace',
@@ -2063,6 +2188,7 @@ function BeatLabDeckToolbar({
           data-beatlab-portal-popover=""
           ref={fxPopoverMeasureRef}
           onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
           style={{
             position: 'fixed',
             left: fxPopRect.left,
@@ -2072,8 +2198,8 @@ function BeatLabDeckToolbar({
             boxSizing: 'border-box',
             padding: 10,
             borderRadius: 6,
-            border: '1px solid rgba(139, 92, 246, 0.35)',
-            background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.92) 0%, rgba(8, 8, 12, 0.98) 100%)',
+            border: '1px solid rgba(124, 244, 198, 0.35)',
+            background: 'linear-gradient(165deg, rgba(11, 11, 16, 0.92) 0%, rgba(8, 8, 12, 0.98) 100%)',
             boxShadow: '0 12px 36px rgba(0,0,0,0.75)',
             overflow: 'hidden',
             maxHeight: 'min(420px, calc(100vh - 16px))',
@@ -2102,7 +2228,7 @@ function BeatLabDeckToolbar({
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                 <button
                   type="button"
-                  title="Preview — hear current slider settings (not saved until Apply)"
+                  title="Preview — hear current slider settings (saved with Apply or when you close this panel)"
                   onClick={() => {
                     if (fxOpenPad === null) return;
                     onPreviewSamplerFx?.(fxOpenPad, { ...fxDraft });
@@ -2114,9 +2240,9 @@ function BeatLabDeckToolbar({
                     width: 28,
                     height: 26,
                     borderRadius: 4,
-                    border: '1px solid rgba(139, 92, 246, 0.45)',
-                    background: 'rgba(139, 92, 246, 0.12)',
-                    color: '#c4b5fd',
+                    border: '1px solid rgba(124, 244, 198, 0.45)',
+                    background: 'rgba(124, 244, 198, 0.12)',
+                    color: '#7cf4c6',
                     cursor: 'pointer',
                     padding: 0,
                   }}
@@ -2138,7 +2264,7 @@ function BeatLabDeckToolbar({
                     height: 26,
                     borderRadius: 4,
                     border: '1px solid #444',
-                    background: '#141414',
+                    background: '#141418',
                     color: '#9ca3af',
                     cursor: 'pointer',
                     padding: 0,
@@ -2148,6 +2274,41 @@ function BeatLabDeckToolbar({
                 </button>
               </div>
             </div>
+            {onCommitPadSampleLabel ? (
+              <>
+                <label
+                  htmlFor={`creation-fx-label-${fxOpenPad}`}
+                  style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 3 }}
+                >
+                  Pad / lane name
+                </label>
+                <input
+                  id={`creation-fx-label-${fxOpenPad}`}
+                  type="text"
+                  autoComplete="off"
+                  value={fxLabelDraft}
+                  onChange={(e) => setFxLabelDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && fxOpenPad !== null) {
+                      onCommitPadSampleLabel?.(fxOpenPad, fxLabelDraft.trim());
+                    }
+                  }}
+                  placeholder="Shown on pad + sequencer lane"
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    marginBottom: 10,
+                    padding: '6px 8px',
+                    borderRadius: 4,
+                    border: '1px solid #444',
+                    background: '#0a0a0e',
+                    color: '#e8eef5',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                />
+              </>
+            ) : null}
             <label style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 2 }}>High-pass (0 = off)</label>
             <input
               type="range"
@@ -2165,7 +2326,7 @@ function BeatLabDeckToolbar({
                 boxSizing: 'border-box',
                 display: 'block',
                 margin: '6px 0',
-                accentColor: '#a78bfa',
+                accentColor: '#7cf4c6',
               }}
             />
             <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 6 }}>
@@ -2188,7 +2349,7 @@ function BeatLabDeckToolbar({
                 boxSizing: 'border-box',
                 display: 'block',
                 margin: '6px 0',
-                accentColor: '#a78bfa',
+                accentColor: '#7cf4c6',
               }}
             />
             <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 6 }}>
@@ -2227,7 +2388,12 @@ function BeatLabDeckToolbar({
             >
               Trim · wave + time (start / end)
             </label>
-            <PadSampleTrimWaveform peaks={fxTrimWavePeaks} trim0={fxDraft.trim0} trim1={fxDraft.trim1} />
+            <PadSampleTrimWaveform
+              peaks={fxTrimWavePeaks}
+              trim0={fxDraft.trim0}
+              trim1={fxDraft.trim1}
+              onTrimChange={(t0, t1) => setFxDraft((d) => ({ ...d, trim0: t0, trim1: t1 }))}
+            />
             {(() => {
               const dur = fxOpenPad !== null ? getPadSampleAudioBuffer?.(fxOpenPad)?.duration ?? 0 : 0;
               const t0s = fxDraft.trim0 * dur;
@@ -2327,7 +2493,7 @@ function BeatLabDeckToolbar({
                 boxSizing: 'border-box',
                 display: 'block',
                 margin: '6px 0',
-                accentColor: '#a78bfa',
+                accentColor: '#7cf4c6',
               }}
             />
             <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 8 }}>
@@ -2342,7 +2508,7 @@ function BeatLabDeckToolbar({
                   padding: '4px 8px',
                   borderRadius: 4,
                   border: '1px solid #444',
-                  background: '#151515',
+                  background: '#1a1a24',
                   color: '#888',
                   fontSize: 9,
                   fontWeight: 700,
@@ -2355,15 +2521,16 @@ function BeatLabDeckToolbar({
                 type="button"
                 onClick={() => {
                   if (fxOpenPad === null) return;
+                  onCommitPadSampleLabel?.(fxOpenPad, fxLabelDraft.trim());
                   commitPadSamplerOpts(fxOpenPad, fxDraft);
                   setFxOpenPad(null);
                 }}
                 style={{
                   padding: '4px 10px',
                   borderRadius: 4,
-                  border: '1px solid rgba(139, 92, 246, 0.45)',
-                  background: 'rgba(139, 92, 246, 0.14)',
-                  color: '#c4b5fd',
+                  border: '1px solid rgba(124, 244, 198, 0.45)',
+                  background: 'rgba(124, 244, 198, 0.14)',
+                  color: '#7cf4c6',
                   fontSize: 9,
                   fontWeight: 800,
                   cursor: 'pointer',
@@ -3032,7 +3199,7 @@ export default function CreationStationScreen({
   const { notes: sharedNotes, addNote: addSharedNote, removeNote: removeSharedNote } = usePianoNotes();
 
   /** Land on Genius Home Studio layout (sounds rail + sequence) — drums / piano remain one click away. */
-  const [tab, setTab]               = useState<'drums' | 'grid' | 'piano'>('grid');
+  const [tab, setTab]               = useState<'drums' | 'grid' | 'piano' | 'chord' | 'ai-pattern' | 'chord-seq'>('grid');
   const [drumKitGenOpen, setDrumKitGenOpen] = useState(false);
   const [drumKitGenStyle, setDrumKitGenStyle] = useState<DrumKitGeneratorStyle>('house');
   const [drumKitGenBusy, setDrumKitGenBusy] = useState(false);
@@ -3704,11 +3871,12 @@ export default function CreationStationScreen({
         }
         return;
       }
-      // Tab switch: Ctrl+T drums, Ctrl+G grid, Ctrl+P piano
+      // Tab switch: Ctrl+T more (placeholder), Ctrl+G Beat Lab, Ctrl+H chord builder
       if (e.ctrlKey) {
         if (e.key === 't') { e.preventDefault(); setTab('drums'); /* More (placeholder) */ }
         else if (e.key === 'g') { e.preventDefault(); setTab('grid'); /* Beat Lab */ }
-        else if (e.key === 'p') { e.preventDefault(); setTab('piano'); }
+        else if (e.key === 'h') { e.preventDefault(); setTab('chord'); /* Chord Builder */ }
+        else if (e.key === 'a') { e.preventDefault(); setTab('ai-pattern'); /* AI Pattern Generator */ }
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -3861,6 +4029,39 @@ export default function CreationStationScreen({
     }
   }, [activeBank]);
 
+  /** Persist a Chord Builder / AI Pattern bounce into a Beat Lab sampler
+   *  pad. Shared by both embedded modules so the on-pad behavior is
+   *  identical (decode, label, root-BPM, persistence). Pattern mirrors
+   *  `handlePadSampleFile` (uploads) and `applyDrumKitGenSinglePad`
+   *  (kit gen). Stable identity via useCallback so the embedded screens
+   *  don't see their `onExportToPad` prop change every parent render. */
+  const onPadBounceExport = useCallback(
+    async (args: { padIndex: number; wavBytes: Uint8Array; label: string; rootBpm: number }) => {
+      const { padIndex, wavBytes, label, rootBpm } = args;
+      if (padIndex < 0 || padIndex > 15) return;
+      try {
+        const data = uint8ArrayToBase64(wavBytes);
+        const stored = { mime: 'audio/wav', data, label, rootBpm };
+        const ctx = getOrCreateAudioContext();
+        const ab = storedToArrayBuffer(stored);
+        const buffer = await ctx.decodeAudioData(ab.slice(0));
+        const k = padSampleKey(activeBank, padIndex);
+        padSampleBuffersRef.current.set(k, buffer);
+        setPadSamplePresence((prev) => ({ ...prev, [k]: true }));
+        setPadSampleRootBpms((prev) => ({ ...prev, [k]: rootBpm }));
+        setPadSampleLabels((prev) => ({ ...prev, [k]: label }));
+        const store = loadPadSampleStore();
+        store[k] = stored;
+        writeSamplerOptsToStored(stored, defaultPadSamplerPlaybackOpts());
+        savePadSampleStore(store);
+        padSamplePlaybackOptsRef.current[k] = defaultPadSamplerPlaybackOpts();
+      } catch (err) {
+        console.debug('Pad bounce export failed:', err);
+      }
+    },
+    [activeBank, getOrCreateAudioContext],
+  );
+
   const applyDrumKitGenSinglePad = useCallback(
     async (padIndex: number) => {
       const ctx = await ensureCtx();
@@ -3947,6 +4148,26 @@ export default function CreationStationScreen({
     applyDrumKitGenPattern();
     setDrumKitGenOpen(false);
   }, [applyDrumKitGenFullKit, applyDrumKitGenPattern]);
+
+  const commitPadSampleLabel = useCallback((padIndex: number, raw: string) => {
+    const k = padSampleKey(activeBank, padIndex);
+    if (!padSampleBuffersRef.current.get(k)) return;
+    const store = loadPadSampleStore();
+    const row = store[k];
+    if (!row) return;
+    const t = raw.trim();
+    if (t) row.label = t;
+    else delete row.label;
+    savePadSampleStore(store);
+    if (t) setPadSampleLabels((prev) => ({ ...prev, [k]: t }));
+    else {
+      setPadSampleLabels((prev) => {
+        const n = { ...prev };
+        delete n[k];
+        return n;
+      });
+    }
+  }, [activeBank]);
 
   const commitPadSampleRootBpm = useCallback(
     (padIndex: number, raw: string) => {
@@ -4227,7 +4448,14 @@ export default function CreationStationScreen({
   }, [banks, pianoSnapSubdiv]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: '#050505', color: '#ccc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', background: '#060607', color: '#c8c8d0', overflow: 'hidden', position: 'relative' }}>
+      <style>{`
+        .cs-pad-hit { transition: filter 0.14s ease-out; }
+        .cs-pad-hit:active,
+        .cs-pad-hit:has(*:active) {
+          filter: brightness(1.7) saturate(0.95);
+        }
+      `}</style>
 
       {/* ── Top: Genius-style beat lab deck (transport + status) ── */}
       <div
@@ -4235,8 +4463,8 @@ export default function CreationStationScreen({
           display: 'flex',
           flexDirection: 'column',
           padding: '4px 10px 6px',
-          background: 'linear-gradient(180deg, #0c0a10 0%, #07070a 100%)',
-          borderBottom: '1px solid rgba(139, 92, 246, 0.22)',
+          background: 'linear-gradient(180deg, #0b0b10 0%, #09090d 100%)',
+          borderBottom: '1px solid #141418',
           flexShrink: 0,
           gap: 6,
           boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
@@ -4260,13 +4488,13 @@ export default function CreationStationScreen({
               justifyContent: 'center',
               gap: 1,
               padding: '1px 10px 1px 2px',
-              borderRight: '1px solid rgba(139, 92, 246, 0.35)',
+              borderRight: '1px solid rgba(124, 244, 198, 0.35)',
               minWidth: 0,
             }}
             title="Elapsed musical time from playhead (m:ss). BAR / MEASURE readout is to the right."
           >
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#f5f3ff', lineHeight: 1.1 }}>Creation</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#e8e8f0', lineHeight: 1.1 }}>Creation</span>
               <span
                 style={{
                   fontSize: 12,
@@ -4285,8 +4513,8 @@ export default function CreationStationScreen({
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontSize: 6, letterSpacing: 2, color: '#a78bfa', fontWeight: 800 }}>BEAT LAB</span>
-              <span style={{ fontSize: 5, color: '#555', fontWeight: 800, letterSpacing: 1 }}>TIME</span>
+              <span style={{ fontSize: 6, letterSpacing: 2, color: '#7cf4c6', fontWeight: 800 }}>BEAT LAB</span>
+              <span style={{ fontSize: 5, color: '#6a6a78', fontWeight: 800, letterSpacing: 1 }}>TIME</span>
             </div>
           </div>
 
@@ -4298,7 +4526,7 @@ export default function CreationStationScreen({
               flexDirection: 'row',
               alignItems: 'center',
               background: '#000',
-              border: `1px solid ${transportNotStopped ? '#00E5FF66' : '#222'}`,
+              border: `1px solid ${transportNotStopped ? '#00E5FF66' : '#2a2a32'}`,
               borderRadius: 4,
               overflow: 'hidden',
               fontFamily: 'monospace',
@@ -4358,9 +4586,9 @@ export default function CreationStationScreen({
           </button>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignSelf: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: '#0a0a0e', border: '1px solid #2a2a32', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px' }}>
-                <Zap size={11} style={{ color: '#c4b5fd' }} />
+                <Zap size={11} style={{ color: '#7cf4c6' }} />
                 <input
                   type="text"
                   inputMode="numeric"
@@ -4395,7 +4623,7 @@ export default function CreationStationScreen({
                     width: 50,
                     background: 'transparent',
                     border: 'none',
-                    color: '#c4b5fd',
+                    color: '#7cf4c6',
                     fontSize: 13,
                     fontFamily: 'monospace',
                     fontWeight: 'bold',
@@ -4408,7 +4636,7 @@ export default function CreationStationScreen({
                 />
                 <span style={{ fontSize: 9, color: '#666' }}>BPM</span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '1px solid #2a2a2a' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '1px solid #2a2a32' }}>
                 <button
                   type="button"
                   disabled={CREATION_BACKEND_BLANK}
@@ -4422,8 +4650,8 @@ export default function CreationStationScreen({
                     flex: 1,
                     padding: '0 6px',
                     border: 'none',
-                    background: '#111',
-                    color: '#c4b5fd',
+                    background: '#1a1a24',
+                    color: '#7cf4c6',
                     cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
                     fontSize: 10,
                     fontWeight: 'bold',
@@ -4446,13 +4674,13 @@ export default function CreationStationScreen({
                     flex: 1,
                     padding: '0 6px',
                     border: 'none',
-                    background: '#0a0a0a',
-                    color: '#c4b5fd',
+                    background: '#0a0a0e',
+                    color: '#7cf4c6',
                     cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
                     fontSize: 10,
                     fontWeight: 'bold',
                     transition: 'all 0.1s',
-                    borderTop: '1px solid #2a2a2a',
+                    borderTop: '1px solid #2a2a32',
                     opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
                   }}
                 >
@@ -4480,7 +4708,7 @@ export default function CreationStationScreen({
                 height: 6,
                 margin: 0,
                 cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
-                accentColor: '#a78bfa',
+                accentColor: '#7cf4c6',
                 opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
               }}
               title="Drag to set tempo — 40–240 BPM"
@@ -4496,8 +4724,8 @@ export default function CreationStationScreen({
               gap: 4,
               padding: '4px 8px',
               borderRadius: 4,
-              background: '#0a0a0a',
-              border: '1px solid #2a2a2a',
+              background: '#0a0a0e',
+              border: '1px solid #2a2a32',
             }}
             title="Creation Station dedicated transport controls"
           >
@@ -4516,7 +4744,7 @@ export default function CreationStationScreen({
                 flexShrink: 0,
                 border: 'none',
                 borderRadius: 6,
-                background: '#101010',
+                background: '#101014',
                 color: '#8aa0b5',
                 cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
                 opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
@@ -4540,7 +4768,7 @@ export default function CreationStationScreen({
                 flexShrink: 0,
                 border: 'none',
                 borderRadius: 6,
-                background: '#101010',
+                background: '#101014',
                 color: '#8aa0b5',
                 cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
                 opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
@@ -4640,7 +4868,7 @@ export default function CreationStationScreen({
                   height: 28,
                   borderRadius: 4,
                   border: '1px solid #2a2a32',
-                  background: '#0a0a0a',
+                  background: '#0a0a0e',
                   color: '#7cf4c6',
                   fontSize: 11,
                   fontFamily: 'monospace',
@@ -4721,7 +4949,7 @@ export default function CreationStationScreen({
                   height: 28,
                   borderRadius: 4,
                   border: '1px solid #2a2a32',
-                  background: '#0a0a0a',
+                  background: '#0a0a0e',
                   color: '#aeb7c6',
                   fontSize: 10,
                   fontFamily: 'monospace',
@@ -4754,7 +4982,7 @@ export default function CreationStationScreen({
                 padding: '0 10px',
                 borderRadius: 6,
                 border: '1px solid #2a2a32',
-                background: '#111',
+                background: '#1a1a24',
                 color: '#aeb7be',
                 fontSize: 10,
                 fontWeight: 700,
@@ -4782,7 +5010,7 @@ export default function CreationStationScreen({
                 padding: '0 10px',
                 borderRadius: 6,
                 border: '1px solid #00E5FF44',
-                background: '#1a1a2a',
+                background: '#1a1a24',
                 color: '#00E5FF',
                 fontSize: 10,
                 fontWeight: 700,
@@ -4824,6 +5052,7 @@ export default function CreationStationScreen({
             padSampleRootBpmForPad={(pi) => padSampleRootBpms[padSampleKey(activeBank, pi)]}
             onCommitPadSampleRootBpm={commitPadSampleRootBpm}
             padSampleLabelForPad={(pi) => padSampleLabels[padSampleKey(activeBank, pi)]}
+            onCommitPadSampleLabel={commitPadSampleLabel}
             samplerUiBank={activeBank}
             getPadSamplerOpts={getPadSamplerPlaybackOpts}
             commitPadSamplerOpts={commitPadSamplerPlaybackOpts}
@@ -4860,14 +5089,14 @@ export default function CreationStationScreen({
               minWidth: 280,
               padding: '8px 10px',
               borderRadius: 10,
-              border: '1px solid rgba(139, 92, 246, 0.22)',
-              background: 'linear-gradient(165deg, rgba(24, 18, 42, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
+              border: '1px solid rgba(124, 244, 198, 0.22)',
+              background: 'linear-gradient(165deg, rgba(11, 11, 16, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
               boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ fontSize: 10, color: '#c4b5fd', fontWeight: 800, letterSpacing: 0.8 }}>PATTERN BANK</span>
-              <span style={{ fontSize: 9, color: '#6b5a8f', fontFamily: 'monospace' }}>A/B · chain · starters · length</span>
+              <span style={{ fontSize: 10, color: '#7cf4c6', fontWeight: 800, letterSpacing: 0.8 }}>PATTERN BANK</span>
+              <span style={{ fontSize: 9, color: '#6a6a78', fontFamily: 'monospace' }}>A/B · chain · starters · length</span>
             </div>
             <div
               style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
@@ -4883,8 +5112,8 @@ export default function CreationStationScreen({
                   height: 24,
                   minWidth: 24,
                   borderRadius: 4,
-                  border: `1px solid ${patternSlot === slot ? '#7cf4c688' : '#2b3754'}`,
-                  background: patternSlot === slot ? '#153126' : '#111629',
+                  border: `1px solid ${patternSlot === slot ? '#7cf4c688' : '#2a2a32'}`,
+                  background: patternSlot === slot ? '#153126' : '#0c0c12',
                   color: patternSlot === slot ? '#7cf4c6' : '#9dc6ff',
                   fontSize: 10,
                   fontWeight: 800,
@@ -4901,8 +5130,8 @@ export default function CreationStationScreen({
                 height: 24,
                 padding: '0 6px',
                 borderRadius: 4,
-                border: '1px solid #2b3754',
-                background: '#111629',
+                border: '1px solid #2a2a32',
+                background: '#0c0c12',
                 color: '#9dc6ff',
                 fontSize: 8,
                 fontWeight: 700,
@@ -4919,8 +5148,8 @@ export default function CreationStationScreen({
                 height: 24,
                 padding: '0 6px',
                 borderRadius: 4,
-                border: '1px solid #2b3754',
-                background: '#111629',
+                border: '1px solid #2a2a32',
+                background: '#0c0c12',
                 color: '#9dc6ff',
                 fontSize: 8,
                 fontWeight: 700,
@@ -4937,8 +5166,8 @@ export default function CreationStationScreen({
                 height: 24,
                 padding: '0 8px',
                 borderRadius: 4,
-                border: `1px solid ${patternPlayMode === 'chainAB' ? '#7cf4c688' : '#2b3754'}`,
-                background: patternPlayMode === 'chainAB' ? '#153126' : '#111629',
+                border: `1px solid ${patternPlayMode === 'chainAB' ? '#7cf4c688' : '#2a2a32'}`,
+                background: patternPlayMode === 'chainAB' ? '#153126' : '#0c0c12',
                 color: patternPlayMode === 'chainAB' ? '#7cf4c6' : '#9dc6ff',
                 fontSize: 8,
                 fontWeight: 800,
@@ -4963,8 +5192,8 @@ export default function CreationStationScreen({
                   height: 24,
                   padding: '0 8px',
                   borderRadius: 4,
-                  border: '1px solid #2b3754',
-                  background: '#111629',
+                  border: '1px solid #2a2a32',
+                  background: '#0c0c12',
                   color: '#9dc6ff',
                   fontSize: 9,
                   fontWeight: 700,
@@ -4991,8 +5220,8 @@ export default function CreationStationScreen({
                   minWidth: 36,
                   padding: '0 6px',
                   borderRadius: 4,
-                  border: `1px solid ${loopBars === n ? '#00E5FF66' : '#2b3754'}`,
-                  background: loopBars === n ? '#11202a' : '#111629',
+                  border: `1px solid ${loopBars === n ? '#00E5FF66' : '#2a2a32'}`,
+                  background: loopBars === n ? '#11202a' : '#0c0c12',
                   color: loopBars === n ? '#00E5FF' : '#9dc6ff',
                   fontSize: 9,
                   fontWeight: 800,
@@ -5049,15 +5278,15 @@ export default function CreationStationScreen({
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 6px', borderRadius: 8, border: '1px solid #2a2a2a', background: '#090909' }} title="Creation patterns sync to the DAW session when you arrange or open Studio">
-            <span style={{ fontSize: 8, color: '#555', fontFamily: 'monospace', letterSpacing: 0.5 }}>SESSION</span>
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '8px 6px', borderRadius: 8, border: '1px solid #2a2a32', background: '#090909' }} title="Creation patterns sync to the DAW session when you arrange or open Studio">
+            <span style={{ fontSize: 8, color: '#6a6a78', fontFamily: 'monospace', letterSpacing: 0.5 }}>SESSION</span>
             <span style={{ fontSize: 9, color: '#666', fontFamily: 'monospace', fontWeight: 700 }}>LINKED</span>
           </div>
 
           {/* Zoom */}
-          <div style={{ display: 'flex', alignItems: 'center', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', background: '#0a0a0e', border: '1px solid #2a2a32', borderRadius: 4, overflow: 'hidden' }}>
             <button onClick={zoomOut} style={{ padding: '3px 7px', background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><ZoomOut size={11} /></button>
-            <span style={{ padding: '0 6px', fontFamily: 'monospace', fontSize: 10, color: '#444', borderLeft: '1px solid #2a2a2a', borderRight: '1px solid #2a2a2a' }}>{colWidth}px</span>
+            <span style={{ padding: '0 6px', fontFamily: 'monospace', fontSize: 10, color: '#4a4a58', borderLeft: '1px solid #2a2a32', borderRight: '1px solid #2a2a32' }}>{colWidth}px</span>
             <input
               type="range"
               min={MIN_CW}
@@ -5069,10 +5298,10 @@ export default function CreationStationScreen({
               title="Drag to zoom grid in/out"
             />
             <button onClick={zoomIn} style={{ padding: '3px 7px', background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><ZoomIn size={11} /></button>
-            <button onClick={zoomReset} style={{ padding: '3px 7px', background: 'none', border: 'none', color: '#666', cursor: 'pointer', borderLeft: '1px solid #2a2a2a' }}><Maximize2 size={11} /></button>
+            <button onClick={zoomReset} style={{ padding: '3px 7px', background: 'none', border: 'none', color: '#666', cursor: 'pointer', borderLeft: '1px solid #2a2a32' }}><Maximize2 size={11} /></button>
             <button
               onClick={fitDrumGridToLoop}
-              style={{ padding: '3px 8px', background: 'none', border: 'none', color: '#7aa2b8', cursor: 'pointer', borderLeft: '1px solid #2a2a2a', fontSize: 10, fontFamily: 'monospace', fontWeight: 700 }}
+              style={{ padding: '3px 8px', background: 'none', border: 'none', color: '#7aa2b8', cursor: 'pointer', borderLeft: '1px solid #2a2a32', fontSize: 10, fontFamily: 'monospace', fontWeight: 700 }}
               title={`Fit ${loopBars} bar${loopBars !== 1 ? 's' : ''} to screen`}
             >
               FIT
@@ -5080,7 +5309,7 @@ export default function CreationStationScreen({
           </div>
 
           {/* Follow */}
-          <button onClick={() => setFollow(p => !p)} style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', background: follow ? '#00E5FF18' : '#111', color: follow ? '#00E5FF' : '#444', border: `1px solid ${follow ? '#00E5FF44' : '#2a2a2a'}`, cursor: 'pointer' }}>
+          <button onClick={() => setFollow(p => !p)} style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', background: follow ? '#00E5FF18' : '#1a1a24', color: follow ? '#00E5FF' : '#4a4a58', border: `1px solid ${follow ? '#00E5FF44' : '#2a2a32'}`, cursor: 'pointer' }}>
             ⊳ FOLLOW
           </button>
 
@@ -5090,7 +5319,7 @@ export default function CreationStationScreen({
           <button type="button" disabled={CREATION_BACKEND_BLANK} onClick={() => {
             if (CREATION_BACKEND_BLANK) return;
             onExport('master-arranger');
-          }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944', cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer', opacity: CREATION_BACKEND_BLANK ? 0.45 : 1 }}>
+          }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a24', color: '#7cf4c6', border: '1px solid rgba(124,244,198,0.27)', cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer', opacity: CREATION_BACKEND_BLANK ? 0.45 : 1 }}>
             <Send size={9} /> Arrange
           </button>
         </div>
@@ -5105,8 +5334,8 @@ export default function CreationStationScreen({
       />
 
       {/* ── Tab bar (Beat Lab = main drum + sampler + sequence workspace) ── */}
-      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid rgba(139, 92, 246, 0.15)', flexShrink: 0, background: '#070708' }}>
-        {(['grid', 'piano', 'drums'] as const).map((t) => (
+      <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #141418', flexShrink: 0, background: '#09090c' }}>
+        {(['grid', 'chord', 'drums'] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -5115,17 +5344,21 @@ export default function CreationStationScreen({
               padding: '8px 18px',
               fontSize: 11,
               fontWeight: 700,
-              background: tab === t ? 'rgba(139, 92, 246, 0.12)' : 'transparent',
-              color: tab === t ? '#e9d5ff' : '#555',
-              borderBottom: tab === t ? `2px solid ${t === 'grid' ? '#c4b5fd' : '#a78bfa'}` : '2px solid transparent',
+              background: tab === t ? 'rgba(124, 244, 198, 0.12)' : 'transparent',
+              color: tab === t ? '#7cf4c6' : '#6a6a78',
+              borderBottom: tab === t ? `2px solid ${t === 'grid' ? '#a8e8d0' : '#7cf4c6'}` : '2px solid transparent',
               border: 'none',
               cursor: 'pointer',
             }}
           >
-            {t === 'grid' ? '🎛 BEAT LAB' : t === 'piano' ? '🎹 PIANO ROLL' : '✦ MORE'}
+            {t === 'grid'
+              ? '🎛 BEAT LAB'
+              : t === 'chord'
+                ? '🎼 CHORD BUILDER'
+                : '✦ MORE'}
           </button>
         ))}
-        <div style={{ width: 1, alignSelf: 'stretch', margin: '6px 4px', background: 'rgba(139, 92, 246, 0.2)', flexShrink: 0 }} aria-hidden />
+        <div style={{ width: 1, alignSelf: 'stretch', margin: '6px 4px', background: 'rgba(124, 244, 198, 0.2)', flexShrink: 0 }} aria-hidden />
         <button
           type="button"
           onClick={() => setDrumKitGenOpen(true)}
@@ -5138,9 +5371,9 @@ export default function CreationStationScreen({
             padding: '6px 12px',
             marginLeft: 2,
             borderRadius: 6,
-            border: '1px solid rgba(139, 92, 246, 0.35)',
-            background: 'rgba(139, 92, 246, 0.1)',
-            color: '#c4b5fd',
+            border: '1px solid rgba(124, 244, 198, 0.35)',
+            background: 'rgba(124, 244, 198, 0.1)',
+            color: '#7cf4c6',
             fontSize: 10,
             fontWeight: 800,
             letterSpacing: 0.3,
@@ -5152,6 +5385,84 @@ export default function CreationStationScreen({
           <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
             <span>DRUM KIT</span>
             <span style={{ fontSize: 8, fontWeight: 800, opacity: 0.9 }}>GENERATOR</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('chord')}
+          title="Chord Builder — genre packs, suggest-next, writes MIDI to the Piano Roll"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            marginLeft: 4,
+            borderRadius: 6,
+            border: '1px solid rgba(124, 244, 198, 0.35)',
+            background: 'rgba(124, 244, 198, 0.1)',
+            color: '#7cf4c6',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: 0.3,
+            cursor: 'pointer',
+          }}
+        >
+          <Music2 size={12} aria-hidden />
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+            <span>CHORD</span>
+            <span style={{ fontSize: 8, fontWeight: 800, opacity: 0.9 }}>BUILDER</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('ai-pattern')}
+          title="AI Pattern Generator — drum/melody patterns with Magenta RNN, export to a sampler pad"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            marginLeft: 4,
+            borderRadius: 6,
+            border: '1px solid rgba(0, 229, 255, 0.4)',
+            background: 'rgba(0, 229, 255, 0.1)',
+            color: '#00E5FF',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: 0.3,
+            cursor: 'pointer',
+          }}
+        >
+          <Cpu size={12} aria-hidden />
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+            <span>AI</span>
+            <span style={{ fontSize: 8, fontWeight: 800, opacity: 0.9 }}>PATTERN</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('chord-seq')}
+          title="Chord/Bass Sequencer — 16 chord pads with suitability lighting, step sequencer, painted bass line, MIDI out + WAV/MIDI export"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            marginLeft: 4,
+            borderRadius: 6,
+            border: `1px solid ${tab === 'chord-seq' ? 'rgba(34,197,94,0.6)' : 'rgba(34,197,94,0.25)'}`,
+            background: tab === 'chord-seq' ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.06)',
+            color: '#22c55e',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: 0.3,
+            cursor: 'pointer',
+          }}
+        >
+          🎹
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+            <span>CHORD/BASS</span>
+            <span style={{ fontSize: 8, fontWeight: 800, opacity: 0.9 }}>SEQUENCER</span>
           </span>
         </button>
       </div>
@@ -5173,10 +5484,10 @@ export default function CreationStationScreen({
             gap: 12,
           }}
         >
-          <span style={{ fontSize: 14, fontWeight: 800, color: '#c4b5fd', letterSpacing: 2 }}>MORE</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#7cf4c6', letterSpacing: 2 }}>MORE</span>
           <span style={{ fontSize: 12, maxWidth: 420, lineHeight: 1.6 }}>
             This area is reserved for a future module. Drum programming, kit, and sampler live under{' '}
-            <strong style={{ color: '#c4b5fd' }}>Beat Lab</strong>.
+            <strong style={{ color: '#7cf4c6' }}>Beat Lab</strong>.
           </span>
           <button
             type="button"
@@ -5185,9 +5496,9 @@ export default function CreationStationScreen({
               marginTop: 8,
               padding: '8px 20px',
               borderRadius: 8,
-              border: '1px solid rgba(139, 92, 246, 0.45)',
-              background: 'rgba(139, 92, 246, 0.12)',
-              color: '#c4b5fd',
+              border: '1px solid rgba(124, 244, 198, 0.45)',
+              background: 'rgba(124, 244, 198, 0.12)',
+              color: '#7cf4c6',
               fontSize: 12,
               fontWeight: 800,
               cursor: 'pointer',
@@ -5195,6 +5506,69 @@ export default function CreationStationScreen({
           >
             Open Beat Lab
           </button>
+        </div>
+      )}
+
+      {/* ── Chord Builder (SongEngine-style chord-pad rail + bar timeline) ── */}
+      <ChordBuilderTab
+        active={tab === 'chord'}
+        bpm={bpm}
+        colsPerBar={MEASURES_PER_BAR}
+        getAudioContext={() => {
+          try {
+            return getOrCreateAudioContext();
+          } catch {
+            return null;
+          }
+        }}
+        onClose={() => setTab('grid')}
+        onExportToPad={onPadBounceExport}
+      />
+
+      {/* ── AI Pattern Generator (embedded as a Creation Station tab) ──
+          Mounted only when active so its Magenta prefetch, transport-pulse
+          worker, and session-sync effects don't run while the user is in
+          Beat Lab. State (generated patterns + lane names) persists
+          across tab switches via localStorage. Independent BPM — does NOT
+          drive or follow Beat Lab transport.
+
+          Renders as a full-viewport overlay (`position: absolute, inset:
+          0, zIndex: 3500`) just like Chord Builder so the AI Pattern UI
+          fills the whole Creation Station area instead of being squeezed
+          into the remaining flex slot between Beat Lab's chrome. */}
+      {tab === 'ai-pattern' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3500,
+            background: '#050505',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <AiPatternScreen
+            embedded
+            isScreenActive={tab === 'ai-pattern'}
+            onBack={() => setTab('grid')}
+            onExport={() => { /* Embedded mode uses → PAD button; classic export modal still works. */ }}
+            onExportToPad={onPadBounceExport}
+          />
+        </div>
+      )}
+
+      {/* ── Chord Sequencer overlay ── */}
+      {tab === 'chord-seq' && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 3500, background: '#030303', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <ChordSequencerScreen
+            embedded
+            isScreenActive={tab === 'chord-seq'}
+            onBack={() => setTab('grid')}
+            onExportToPad={onPadBounceExport}
+            bpm={bpm}
+            getAudioContext={getOrCreateAudioContext}
+          />
         </div>
       )}
 
@@ -5210,15 +5584,15 @@ export default function CreationStationScreen({
               flexDirection: 'column',
               minHeight: 0,
               background: '#070708',
-              boxShadow: 'inset 0 1px 0 rgba(139, 92, 246, 0.08)',
+              boxShadow: 'inset 0 1px 0 rgba(124, 244, 198, 0.08)',
             }}
           >
             <div
               style={{
                 flexShrink: 0,
                 padding: '6px 10px',
-                borderBottom: '1px solid rgba(139, 92, 246, 0.12)',
-                background: 'linear-gradient(180deg, rgba(22, 18, 34, 0.95) 0%, rgba(10, 9, 16, 0.98) 100%)',
+                borderBottom: '1px solid rgba(124, 244, 198, 0.12)',
+                background: 'linear-gradient(180deg, rgba(20, 20, 26, 0.95) 0%, rgba(10, 10, 14, 0.98) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -5227,8 +5601,8 @@ export default function CreationStationScreen({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 900, color: '#c4b5fd', letterSpacing: 3 }}>SEQUENCE</span>
-                <span style={{ fontSize: 9, color: '#6b5a8f', fontWeight: 700 }}>
+                <span style={{ fontSize: 11, fontWeight: 900, color: '#7cf4c6', letterSpacing: 3 }}>SEQUENCE</span>
+                <span style={{ fontSize: 9, color: '#6a6a78', fontWeight: 700 }}>
                   Lanes 1–16 = sampler pads 1–16 · paint steps
                 </span>
               </div>
@@ -5247,7 +5621,7 @@ export default function CreationStationScreen({
                   style={{
                     height: 32,
                     borderRadius: 4,
-                    border: '1px solid #1e1e26',
+                    border: '1px solid #2a2a32',
                     padding: '0 8px',
                     boxSizing: 'border-box',
                     background: 'rgba(0,0,0,0.45)',
@@ -5292,7 +5666,7 @@ export default function CreationStationScreen({
                   style={{
                     height: 32,
                     borderRadius: 4,
-                    border: '1px solid #1e1e26',
+                    border: '1px solid #2a2a32',
                     padding: '0 6px',
                     boxSizing: 'border-box',
                     background: 'rgba(0,0,0,0.45)',
@@ -5349,8 +5723,8 @@ export default function CreationStationScreen({
             style={{
               width: LABEL_W,
               flexShrink: 0,
-              background: 'linear-gradient(180deg, rgba(16, 12, 28, 0.98) 0%, rgba(8, 8, 14, 0.99) 100%)',
-              borderRight: '1px solid rgba(139, 92, 246, 0.18)',
+              background: 'linear-gradient(180deg, rgba(12, 12, 18, 0.98) 0%, rgba(8, 8, 12, 0.99) 100%)',
+              borderRight: '1px solid rgba(124, 244, 198, 0.18)',
               display: 'flex',
               flexDirection: 'column',
               overflowY: 'auto',
@@ -5369,7 +5743,7 @@ export default function CreationStationScreen({
                 justifyContent: 'center',
               }}
             >
-              <span style={{ fontSize: 10, fontWeight: 900, color: '#c4b5fd', letterSpacing: 1.4 }}>MEASURES</span>
+              <span style={{ fontSize: 10, fontWeight: 900, color: '#7cf4c6', letterSpacing: 1.4 }}>MEASURES</span>
             </div>
             <div
               style={{
@@ -5424,43 +5798,76 @@ export default function CreationStationScreen({
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
-                  paddingRight: 0,
-                  paddingLeft: 0,
+                  padding: '3px 6px',
                   textAlign: 'left',
-                  borderTop: '1px solid #000',
-                  borderBottom: '1px solid #30384a',
-                  background: pi === selectedDrumPad ? '#1a2130' : '#131a28',
-                  borderLeft: pi === selectedDrumPad ? '3px solid #c4b5fd' : '3px solid transparent',
-                  boxShadow: pi === selectedDrumPad ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.45)' : 'none',
-                  borderRadius: 10,
-                  overflow: 'hidden',
+                  borderTop: '1px solid #1c1c20',
+                  borderBottom: '1px solid #2a2a32',
+                  background: pi === selectedDrumPad ? '#1c1c24' : '#0c0c12',
+                  borderLeft: pi === selectedDrumPad ? '3px solid rgba(255, 255, 255, 0.40)' : '3px solid transparent',
+                  boxShadow: pi === selectedDrumPad ? 'inset 0 0 0 1px rgba(255, 255, 255, 0.20)' : 'none',
+                  borderRadius: 0,
+                  overflow: 'visible',
+                  boxSizing: 'border-box',
                 }}
               >
                 <button
                   type="button"
+                  className="cs-pad-hit"
                   onClick={() => auditionDrumLane(pi)}
                   style={{
                     width: '100%',
                     height: '100%',
                     borderRadius: 10,
-                    border: `2px solid ${pi === selectedDrumPad ? 'rgba(196, 181, 253, 0.85)' : 'rgba(255,255,255,0.14)'}`,
-                    background: `linear-gradient(155deg, ${PAD_COLORS[pi]} 0%, #141b2a 120%)`,
-                    color: '#ffffff',
-                    fontSize: 14,
-                    fontWeight: 900,
+                    border: `1px solid ${pi === selectedDrumPad ? 'rgba(255, 255, 255, 0.28)' : 'rgba(255,255,255,0.12)'}`,
+                    backgroundColor: 'rgba(4, 5, 6, 0.95)',
+                    backgroundImage: [
+                      'radial-gradient(ellipse 75% 55% at 26% 12%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 38%, transparent 70%)',
+                      'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 45%, rgba(0,0,0,0.30) 100%)',
+                    ].join(', '),
+                    backdropFilter: 'blur(8px)',
+                    WebkitBackdropFilter: 'blur(8px)',
+                    color: '#e8e8f0',
+                    fontSize: 13,
+                    fontWeight: 800,
                     fontFamily: 'monospace',
                     cursor: 'pointer',
-                    padding: '0 12px',
+                    padding: '0 12px 0 30px',
                     textAlign: 'left',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
-                    boxShadow: pi === selectedDrumPad
-                      ? `0 0 14px ${PAD_COLORS[pi]}88, inset 0 0 12px rgba(255,255,255,0.16)`
-                      : `inset 0 0 10px ${PAD_COLORS[pi]}55`,
+                    position: 'relative',
+                    textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+                    boxShadow: [
+                      '0 2px 4px rgba(0,0,0,0.55)',
+                      '0 1px 0 rgba(0,0,0,0.40)',
+                      `inset 0 1px 0 rgba(255,255,255,${pi === selectedDrumPad ? '0.28' : '0.20'})`,
+                      'inset 0 2px 5px rgba(255,255,255,0.04)',
+                      'inset 0 -2px 8px rgba(0,0,0,0.55)',
+                      'inset 0 -1px 0 rgba(0,0,0,0.65)',
+                      'inset 0 0 0 1px rgba(255,255,255,0.03)',
+                    ].join(', '),
                   }}
                   title={`Beat Lab lane ${pi + 1} = sampler pad ${pi + 1} — ${laneText}`}
                 >
+                  <span
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      top: 3,
+                      left: 8,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      color: 'rgba(255, 255, 255, 0.70)',
+                      letterSpacing: 0.6,
+                      fontFamily: 'monospace',
+                      lineHeight: 1,
+                      pointerEvents: 'none',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.7)',
+                    }}
+                  >
+                    {pi + 1}
+                  </span>
                   {laneText}
                 </button>
               </div>
@@ -5510,7 +5917,7 @@ export default function CreationStationScreen({
                     height: 20,
                     marginLeft: -5,
                     clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-                    background: '#c4b5fd',
+                    background: '#7cf4c6',
                     pointerEvents: 'none',
                   }}
                 />
@@ -5522,7 +5929,7 @@ export default function CreationStationScreen({
                     top: 20,
                     width: 2,
                     height: 28 + PAD_NAMES.length * DRUM_GRID_ROW_H,
-                    background: 'rgba(196, 181, 253, 0.4)',
+                    background: 'rgba(124, 244, 198, 0.4)',
                     pointerEvents: 'none',
                   }}
                 />
@@ -5577,9 +5984,9 @@ export default function CreationStationScreen({
                     const litQuantPausedOnly = isPlayheadCol && isPaused;
                     const litQuantStoppedOnly = isPlayheadCol && !transportNotStopped;
                     const quantCellBg = litQuantPausedOnly
-                      ? 'rgba(139, 92, 246, 0.2)'
+                      ? 'rgba(124, 244, 198, 0.2)'
                       : litQuantStoppedOnly
-                        ? 'rgba(139, 92, 246, 0.1)'
+                        ? 'rgba(124, 244, 198, 0.1)'
                         : '#121212';
                     const quantBorderBlend = isPlaying ? '#121212' : quantCellBg;
                     return (
@@ -5639,14 +6046,14 @@ export default function CreationStationScreen({
                             : {
                                 background: quantCellBg,
                                 color: litQuantPausedOnly
-                                  ? '#e9d5ff'
+                                  ? '#7cf4c6'
                                   : litQuantStoppedOnly
                                     ? '#9b8ab8'
                                     : '#b98ab9',
                                 ...(litQuantPausedOnly
-                                  ? { boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.45)' }
+                                  ? { boxShadow: 'inset 0 0 0 1px rgba(124, 244, 198, 0.45)' }
                                   : litQuantStoppedOnly
-                                    ? { boxShadow: 'inset 0 0 0 1px rgba(139, 92, 246, 0.22)' }
+                                    ? { boxShadow: 'inset 0 0 0 1px rgba(124, 244, 198, 0.22)' }
                                     : {}),
                               }),
                         }}
@@ -5666,7 +6073,7 @@ export default function CreationStationScreen({
                   display: 'flex',
                   height: 28,
                   borderBottom: '1px solid #1e1e1e',
-                  background: '#0a0a0a',
+                  background: '#0a0a0e',
                 }}
               >
                 <Ruler
@@ -5703,15 +6110,16 @@ export default function CreationStationScreen({
               {PAD_NAMES.map((name, pi) => (
                 <div
                   key={pi}
+                  className="cs-pad-hit"
                   style={{
                     display: 'flex',
                     height: DRUM_GRID_ROW_H,
                     alignItems: 'stretch',
-                    borderTop: '1px solid #000',
-                    borderBottom: `1px solid rgba(48, 56, 74, ${drumGridColW < 6 ? 0.3 : drumGridColW < 10 ? 0.55 : 1})`,
-                    background: pi === selectedDrumPad ? '#1a2130' : '#131a28',
+                    borderTop: '1px solid #1c1c20',
+                    borderBottom: `1px solid rgba(42, 42, 50, ${drumGridColW < 6 ? 0.3 : drumGridColW < 10 ? 0.55 : 1})`,
+                    background: pi === selectedDrumPad ? '#1c1c24' : '#0c0c12',
                     cursor: 'pointer',
-                    boxShadow: pi === selectedDrumPad ? 'inset 0 0 0 1px rgba(139, 92, 246, 0.4)' : 'none',
+                    boxShadow: pi === selectedDrumPad ? 'inset 0 0 0 1px rgba(255, 255, 255, 0.18)' : 'none',
                     position: 'relative',
                     zIndex: 1,
                   }}
@@ -5722,8 +6130,8 @@ export default function CreationStationScreen({
                     const on     = currentDrums[pi]?.[bankCol] ?? false;
                     const isHead = false;
                     const padStepBg = on
-                      ? '#161616'
-                      : (bankCol % subdivHud === 0 ? '#121212' : '#0f0f0f');
+                      ? '#0e0e10'
+                      : (bankCol % subdivHud === 0 ? '#08080a' : '#050506');
                     return (
                       <button
                         key={ci}
@@ -5793,7 +6201,7 @@ export default function CreationStationScreen({
           {/* Sub-tab + instruments */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', flexShrink: 0, background: '#080808', borderBottom: '1px solid #1a1a1a' }}>
             {(['notes','drums'] as const).map(st => (
-              <button key={st} onClick={() => setPianoMode(st)} style={{ padding: '3px 10px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: pianoMode===st ? '#D500F9' : '#111', color: pianoMode===st ? '#000' : '#555', border: 'none', cursor: 'pointer' }}>
+              <button key={st} onClick={() => setPianoMode(st)} style={{ padding: '3px 10px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: pianoMode===st ? '#193025' : '#1a1a24', color: pianoMode===st ? '#7cf4c6' : '#6a6a78', border: `1px solid ${pianoMode===st ? 'rgba(124,244,198,0.45)' : '#2a2a32'}`, cursor: 'pointer' }}>
                 {st === 'notes' ? '🎵 Notes' : '🥁 Drums'}
               </button>
             ))}
@@ -5802,7 +6210,7 @@ export default function CreationStationScreen({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginRight: 6 }}>
                   <button
                     onClick={() => setPianoRegisterShift((v) => Math.max(-2, v - 1))}
-                    style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#111', color: '#aaa', border: '1px solid #333', cursor: 'pointer' }}
+                    style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a24', color: '#b8b8ca', border: '1px solid #2a2a32', cursor: 'pointer' }}
                   >
                     OCT-
                   </button>
@@ -5811,13 +6219,13 @@ export default function CreationStationScreen({
                   </span>
                   <button
                     onClick={() => setPianoRegisterShift((v) => Math.min(2, v + 1))}
-                    style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#111', color: '#aaa', border: '1px solid #333', cursor: 'pointer' }}
+                    style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a24', color: '#b8b8ca', border: '1px solid #2a2a32', cursor: 'pointer' }}
                   >
                     OCT+
                   </button>
                 </div>
                 {INSTRUMENTS.map((ins, i) => (
-                  <button key={ins} onClick={() => setRollInstr(i)} style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: rollInstr===i ? '#00E5FF' : '#111', color: rollInstr===i ? '#000' : '#555', border: `1px solid ${rollInstr===i ? '#00E5FF' : '#333'}`, cursor: 'pointer' }}>
+                  <button key={ins} onClick={() => setRollInstr(i)} style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: rollInstr===i ? '#00E5FF' : '#1a1a24', color: rollInstr===i ? '#000' : '#6a6a78', border: `1px solid ${rollInstr===i ? '#00E5FF' : '#2a2a32'}`, cursor: 'pointer' }}>
                     {ins}
                   </button>
                 ))}
@@ -5948,7 +6356,7 @@ export default function CreationStationScreen({
                       style={{
                         display: 'flex',
                         height: pianoMode === 'drums' ? DRUM_GRID_ROW_H : ROW_H,
-                        borderTop: '1px solid #000',
+                        borderTop: '1px solid #1c1c20',
                         borderBottom: '1px solid #35566e',
                         background: pianoMode === 'drums' ? drumLaneBg(padIndex) : pianoLaneBg(ri),
                       }}
@@ -6032,6 +6440,7 @@ export default function CreationStationScreen({
         onApplyPattern={applyDrumKitGenPattern}
         onApplyBoth={applyDrumKitGenBoth}
       />
+
     </div>
   );
 }
