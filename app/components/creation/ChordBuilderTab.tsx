@@ -1600,7 +1600,7 @@ export function ChordBuilderTab({
         // Re-derive the lit-cell set the same way `onSaveMidiClick` does
         // for a single section, but reusing the per-section pattern +
         // barsPerChord so each section keeps its own feel.
-        const sectionPattern = getPattern(prog.patternId);
+        const sectionPattern = getPattern(prog.patternId) ?? PATTERNS[0]!;
         const previewEvents = progChords.length > 0
           ? buildChordEvents({
               progression: progChords,

@@ -82,6 +82,7 @@ import {
 import { ChordBuilderTab } from '@/app/components/creation/ChordBuilderTab';
 import AiPatternScreen from '@/app/screens/AiPatternScreen';
 import ChordSequencerScreen from '@/app/screens/ChordSequencerScreen';
+import EightZeroEightTab from '@/app/screens/EightZeroEightTab';
 import { uint8ArrayToBase64 } from '@/app/lib/creationStation/chordRender';
 
 import {
@@ -3199,7 +3200,15 @@ export default function CreationStationScreen({
   const { notes: sharedNotes, addNote: addSharedNote, removeNote: removeSharedNote } = usePianoNotes();
 
   /** Land on Genius Home Studio layout (sounds rail + sequence) — drums / piano remain one click away. */
-  const [tab, setTab]               = useState<'drums' | 'grid' | 'piano' | 'chord' | 'ai-pattern' | 'chord-seq'>('grid');
+  const [tab, setTab]               = useState<'drums' | 'grid' | 'piano' | 'chord' | 'ai-pattern' | 'chord-seq' | '808-lab'>('grid');
+
+  /** Master transport UI only exists on Beat Lab — pause if the user leaves while playing so audio is not stuck with no controls. */
+  useEffect(() => {
+    if (tab === 'grid') return;
+    if (!runningRef.current) return;
+    void pauseTransport();
+  }, [tab, pauseTransport]);
+
   const [drumKitGenOpen, setDrumKitGenOpen] = useState(false);
   const [drumKitGenStyle, setDrumKitGenStyle] = useState<DrumKitGeneratorStyle>('house');
   const [drumKitGenBusy, setDrumKitGenBusy] = useState(false);
@@ -3871,12 +3880,13 @@ export default function CreationStationScreen({
         }
         return;
       }
-      // Tab switch: Ctrl+T more (placeholder), Ctrl+G Beat Lab, Ctrl+H chord builder
+      // Tab switch: Ctrl+T more, Ctrl+G Beat Lab, Ctrl+H chord builder, Ctrl+A AI pattern, Ctrl+8 808 Lab
       if (e.ctrlKey) {
         if (e.key === 't') { e.preventDefault(); setTab('drums'); /* More (placeholder) */ }
         else if (e.key === 'g') { e.preventDefault(); setTab('grid'); /* Beat Lab */ }
         else if (e.key === 'h') { e.preventDefault(); setTab('chord'); /* Chord Builder */ }
         else if (e.key === 'a') { e.preventDefault(); setTab('ai-pattern'); /* AI Pattern Generator */ }
+        else if (e.key === '8') { e.preventDefault(); setTab('808-lab'); /* 808 Lab */ }
       }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -4457,7 +4467,7 @@ export default function CreationStationScreen({
         }
       `}</style>
 
-      {/* ── Top: Genius-style beat lab deck (transport + status) ── */}
+      {tab === 'grid' && (
       <div
         style={{
           display: 'flex',
@@ -4470,6 +4480,7 @@ export default function CreationStationScreen({
           boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
         }}
       >
+        {/* ── Top: Genius-style beat lab deck (transport + status) — Beat Lab only; other tabs ship their own transport. ── */}
         <div
           style={{
             display: 'flex',
@@ -4533,16 +4544,6 @@ export default function CreationStationScreen({
               minHeight: 0,
             }}
           >
-            {tab !== 'grid' ? (
-              <CreationTransportHudBar
-                transportNotStopped={transportNotStopped}
-                displayBarNumber={displayBarNumberHud}
-                measureInBar={measureInBarHud}
-                measureLedCount={Math.max(2, Math.min(16, Math.round(qpb)))}
-                paintHudFromRaf={isPlaybackOrRecord}
-                hudDomSlotsRef={creationHudDomRef}
-              />
-            ) : null}
             <CreationTransportHudMsr
               qpb={qpb}
               measureInBar={measureInBarHud}
@@ -5026,7 +5027,6 @@ export default function CreationStationScreen({
         </div>
 
         {/* Beat Lab: presets · record/upload · kit+clear+download strip · sampler pads — elevated so FX popover stacks above sequencer / modules */}
-        {tab === 'grid' && (
           <div style={{ position: 'relative', zIndex: 200, overflow: 'visible' }}>
           <BeatLabDeckToolbar
             kit={kit}
@@ -5068,7 +5068,6 @@ export default function CreationStationScreen({
             }}
           />
           </div>
-        )}
 
         {/* Pattern bank + sound families + session / click timing / zoom — tempo lives in top transport row */}
         <div
@@ -5324,6 +5323,7 @@ export default function CreationStationScreen({
           </button>
         </div>
       </div>
+      )}
 
       <input
         ref={padSampleFileInputRef}
@@ -5333,7 +5333,8 @@ export default function CreationStationScreen({
         onChange={handlePadSampleFile}
       />
 
-      {/* ── Tab bar (Beat Lab = main drum + sampler + sequence workspace) ── */}
+      {/* ── Tab bar — Beat Lab home only; sub-tools use their own back/close UI. ── */}
+      {tab === 'grid' && (
       <div style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid #141418', flexShrink: 0, background: '#09090c' }}>
         {(['grid', 'chord', 'drums'] as const).map((t) => (
           <button
@@ -5359,6 +5360,32 @@ export default function CreationStationScreen({
           </button>
         ))}
         <div style={{ width: 1, alignSelf: 'stretch', margin: '6px 4px', background: 'rgba(124, 244, 198, 0.2)', flexShrink: 0 }} aria-hidden />
+        <button
+          type="button"
+          onClick={() => setTab('808-lab')}
+          title="808 Lab — pitched 808 kicks & subs that follow chord tones (Chord Builder / Chord·Bass Sequencer sync). Shortcut: Ctrl+8"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 12px',
+            marginLeft: 2,
+            borderRadius: 6,
+            border: '1px solid rgba(251, 191, 36, 0.35)',
+            background: 'rgba(251, 191, 36, 0.08)',
+            color: '#fde68a',
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: 0.3,
+            cursor: 'pointer',
+          }}
+        >
+          <span style={{ fontSize: 14, lineHeight: 1 }} aria-hidden>◆</span>
+          <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+            <span>808</span>
+            <span style={{ fontSize: 8, fontWeight: 800, opacity: 0.9 }}>LAB</span>
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => setDrumKitGenOpen(true)}
@@ -5450,8 +5477,8 @@ export default function CreationStationScreen({
             padding: '6px 12px',
             marginLeft: 4,
             borderRadius: 6,
-            border: `1px solid ${tab === 'chord-seq' ? 'rgba(34,197,94,0.6)' : 'rgba(34,197,94,0.25)'}`,
-            background: tab === 'chord-seq' ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.06)',
+            border: '1px solid rgba(34,197,94,0.25)',
+            background: 'rgba(34,197,94,0.06)',
             color: '#22c55e',
             fontSize: 10,
             fontWeight: 800,
@@ -5466,7 +5493,20 @@ export default function CreationStationScreen({
           </span>
         </button>
       </div>
+      )}
 
+      {/* Full-height shell for tab bodies (Beat Lab, Piano, overlays).
+          Ensures a flex:1 region below the tab bar when Chord Builder is
+          unmounted (returns null) so module tabs still get real height. */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
       {/* ── MORE (placeholder — former Drums tab; primary workflow is Beat Lab) ── */}
       {tab === 'drums' && (
         <div
@@ -5532,16 +5572,14 @@ export default function CreationStationScreen({
           across tab switches via localStorage. Independent BPM — does NOT
           drive or follow Beat Lab transport.
 
-          Renders as a full-viewport overlay (`position: absolute, inset:
-          0, zIndex: 3500`) just like Chord Builder so the AI Pattern UI
-          fills the whole Creation Station area instead of being squeezed
-          into the remaining flex slot between Beat Lab's chrome. */}
+          In-flow flex (not position:absolute) so this tab always receives a
+          real height from the tab-body shell — absolute overlays could
+          collapse to 0px in some flex chains. */}
       {tab === 'ai-pattern' && (
         <div
           style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 3500,
+            flex: 1,
+            minHeight: 0,
             background: '#050505',
             display: 'flex',
             flexDirection: 'column',
@@ -5558,9 +5596,18 @@ export default function CreationStationScreen({
         </div>
       )}
 
-      {/* ── Chord Sequencer overlay ── */}
+      {/* ── Chord Sequencer (full tab body) ── */}
       {tab === 'chord-seq' && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 3500, background: '#030303', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            background: '#030303',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
           <ChordSequencerScreen
             embedded
             isScreenActive={tab === 'chord-seq'}
@@ -5568,6 +5615,27 @@ export default function CreationStationScreen({
             onExportToPad={onPadBounceExport}
             bpm={bpm}
             getAudioContext={getOrCreateAudioContext}
+          />
+        </div>
+      )}
+
+      {tab === '808-lab' && (
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            background: '#07070a',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          <EightZeroEightTab
+            embedded
+            isScreenActive={tab === '808-lab'}
+            onBack={() => setTab('grid')}
+            getAudioContext={getOrCreateAudioContext}
+            fallbackBpm={bpm}
           />
         </div>
       )}
@@ -6428,6 +6496,8 @@ export default function CreationStationScreen({
           </div>
         </div>
       )}
+
+      </div>
 
       <DrumKitGeneratorModal
         open={drumKitGenOpen}
