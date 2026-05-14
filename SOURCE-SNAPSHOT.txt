@@ -1,0 +1,19 @@
+Da Music Box — source snapshot (timestamped)
+============================================
+
+Saved (local machine time): 2026-05-13  19:12:16  (America/Chicago, -0500)
+Snapshot git commit (full source):  9c4f2dd9c296d20f7136f929d4ed77690ad17241
+Git tag (points at that commit):    snapshot-2026-05-13_191216
+
+This folder IS your full source tree. To open in Cursor:
+  File → Open Folder… → select this folder:
+  Da-Music-Box-v4-SOURCE-COMPLETE
+
+To return to exactly this snapshot later (same PC, same repo):
+  git checkout snapshot-2026-05-13_191216
+  or
+  git reset --hard 9c4f2dd
+
+Push the tag to a remote (GitHub/GitLab) for off-machine backup:
+  git push origin main
+  git push origin snapshot-2026-05-13_191216
