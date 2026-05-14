@@ -17,3 +17,5 @@ To return to exactly this snapshot later (same PC, same repo):
 Push the tag to a remote (GitHub/GitLab) for off-machine backup:
   git push origin main
   git push origin snapshot-2026-05-13_191216
+
+Tip: `SOURCE-SNAPSHOT.txt` is tracked in git; the tag still marks the big code snapshot (9c4f2dd). HEAD includes this file.
