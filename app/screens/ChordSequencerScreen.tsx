@@ -27,6 +27,20 @@ import {
   type MidiNoteEvent,
 } from '@/app/lib/creationStation/midiExport';
 import { writeChordSync } from '@/app/lib/chordBuilderSync';
+import {
+  CB_PIANO_MINT,
+  CB_PIANO_MINT_BORDER,
+  cbPianoIsBlackKey,
+  cbPianoIsCRow,
+  cbPianoKeyFaceStyle,
+  cbPianoKeyLabel,
+  cbPianoMidiToNoteName,
+  type PianoRollMetrics,
+} from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
+import {
+  cancelCreationPlaylineWapi,
+  launchCreationPlaylineWapi,
+} from '@/app/lib/creationStation/creationPlaylineWapi';
 import TransportPulseWorker from '../workers/transportPulse.worker?worker';
 
 const KEY_LABELS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
@@ -36,6 +50,15 @@ const TARGET_PAD_COUNT = 96;
 const PADS_PER_PAGE = 16;
 const LOOK_AHEAD_SEC = 0.25;
 const SCHED_MS = 25;
+/** Same base lead as Creation Station / 808 Lab piano WAPI playline before output DAC latency. */
+const CHORD_SEQ_PLAYLINE_WAPI_LEAD_SEC = 0.052;
+
+function chordSeqPlaylineOutputDacLeadSec(ctx: AudioContext | null): number {
+  if (!ctx || ctx.state === 'closed') return 0;
+  const ol = typeof ctx.outputLatency === 'number' && ctx.outputLatency > 0 ? ctx.outputLatency : 0;
+  const bl = typeof ctx.baseLatency === 'number' && ctx.baseLatency > 0 ? ctx.baseLatency : 0;
+  return Math.min(0.12, ol + bl);
+}
 
 type VoicingComplexity = 'simple' | 'rich' | 'pro';
 type PanelOptionMode = 'strict' | 'open';
@@ -1550,6 +1573,57 @@ function scheduleBassStep(
   }
 }
 
+/** Sustain clamp for piano-roll CustomBassHit (must fit in one 8-slot step). */
+function clampCustomBassSustain(slot: number, sus: number): number {
+  return Math.max(1, Math.min(8 - slot, Math.round(sus)));
+}
+
+/**
+ * Same BassHit pipeline as audio (generate + optional fills), without custom
+ * hits or slide merging — used to stamp chord-smart notes into the piano roll.
+ */
+function buildAutomatedBassHitsForStep(args: {
+  pad: ChordPad;
+  nextPad: ChordPad | null;
+  stepIdx: number;
+  totalSteps: number;
+  pattern: BassPatternDef;
+  fillsLevel: number;
+  rand: () => number;
+}): BassHit[] {
+  const patternCtx: BassPatternContext = {
+    pad: args.pad,
+    nextPad: args.nextPad,
+    stepIdx: args.stepIdx,
+    totalSteps: args.totalSteps,
+    rand: args.rand,
+  };
+  let hits = args.pattern.generate(patternCtx);
+  if (args.fillsLevel > 0.01) hits = addFills(hits, patternCtx, args.fillsLevel);
+  return [...hits].sort((a, b) => a.slot - b.slot);
+}
+
+/** Convert scheduled bass hits to root-relative custom hits (piano roll range). */
+function bassHitsToCustomPattern(
+  hits: BassHit[],
+  pad: ChordPad,
+  nextPad: ChordPad | null,
+  octaveShift: number,
+): CustomBassHit[] {
+  const bassRoot = computeBassRoot(pad, octaveShift);
+  return hits.map((h) => {
+    const slot = Math.max(0, Math.min(7, Math.round(h.slot)));
+    const midi = resolveBassMidi(h, pad, nextPad, octaveShift);
+    const rawOffset = midi - bassRoot;
+    return {
+      slot,
+      sustainSlots: clampCustomBassSustain(slot, h.sustainSlots),
+      midiOffset: Math.max(-12, Math.min(12, rawOffset)),
+      vel: Math.max(0.05, Math.min(1, h.vel)),
+    };
+  });
+}
+
 // ── BUILD A STANDARD MIDI FILE FROM THE FULL SEQUENCE ─────────────────────
 // Captures BOTH the chord blocks (channel 0) and the bass line (channel 1) so
 // the exported .mid opens in any DAW with two playable, separable parts.
@@ -1943,6 +2017,8 @@ export default function ChordSequencerScreen({
   // generated pattern for that step. Other steps still play the global pattern.
   const [bassCustomPatterns, setBassCustomPatterns] = useState<Record<number, CustomBassHit[]>>({});
   const [pianoRollStepIdx, setPianoRollStepIdx] = useState<number | null>(null);
+  /** When true, bass piano roll uses a near-fullscreen fixed overlay so the grid is readable. */
+  const [pianoRollImmersive, setPianoRollImmersive] = useState(true);
   // New-note duration the user clicks-to-add into the piano roll (sub-slots).
   const [pianoRollNoteLength, setPianoRollNoteLength] = useState<number>(1);
   // Clipboard for COPY/PASTE between piano-roll steps.
@@ -2042,6 +2118,12 @@ export default function ChordSequencerScreen({
   // we cap the wrapper at ~280 px with internal scrolling and auto-scroll to
   // wherever the active notes are when the user opens the editor.
   const pianoRollScrollRef = useRef<HTMLDivElement | null>(null);
+  /** Full piano-roll timeline (headers + rows) — width matches the bass grid for mint playline X. */
+  const chordSeqBassTimelineWrapRef = useRef<HTMLDivElement | null>(null);
+  const chordSeqBassPlaylineRef = useRef<HTMLDivElement | null>(null);
+  const chordSeqPlaylineDrumAnimRef = useRef<Animation | null>(null);
+  const chordSeqPlaylinePianoAnimRef = useRef<Animation | null>(null);
+  const chordSeqPlaylineGlowAnimRef = useRef<Animation | null>(null);
   // Centers the scroll viewport on the median row of whatever notes are
   // currently visible — falls back to the bass-root row if nothing is playing
   // (which shouldn't happen for any pattern but we cover the edge case).
@@ -2177,9 +2259,15 @@ export default function ChordSequencerScreen({
     });
   }, [stepCount]);
 
+  // Creation Station / embedded: mirror the host BPM only (same number as Beat Lab).
+  // No shared session clock — chord transport stays its own scheduling so it cannot fight 808.
   useEffect(() => {
+    if (embedded) {
+      if (masterBpm > 0) setLocalBpm(Math.round(masterBpm));
+      return;
+    }
     if (masterBpm > 0 && !autoGenreTempo) setLocalBpm(masterBpm);
-  }, [masterBpm, autoGenreTempo]);
+  }, [embedded, masterBpm, autoGenreTempo]);
 
   const pads = useMemo(() => buildPadsFromGenre(keyRoot, mode, genreProfile, voicingComplexity), [keyRoot, mode, genreProfile, voicingComplexity]);
   const pageCount = Math.max(1, Math.ceil(pads.length / PADS_PER_PAGE));
@@ -2640,6 +2728,72 @@ export default function ChordSequencerScreen({
     setPresetFlash('🎲 Randomized bass');
   }, [setPresetFlash]);
 
+  /** Stamp the current chord-smart pattern into painted bass on every step — no piano required. */
+  const handleMaterializeChordSmartBassLine = useCallback(() => {
+    const chordSteps = steps.filter((p) => p != null).length;
+    if (chordSteps === 0) {
+      setPresetFlash('No chord steps — assign chords first.');
+      return;
+    }
+    if (
+      Object.keys(bassCustomPatterns).length > 0
+      && !window.confirm(
+        'Replace all hand-painted bass notes?\n\n'
+        + 'This writes your current pattern (and FILLS) for each chord step into the bass line, '
+        + 'using each chord’s roots, 3rds, 5ths, 7ths, and walk approach tones. '
+        + 'You don’t need the piano roll — open it only if you want to tweak by hand.',
+      )
+    ) {
+      return;
+    }
+    const next: Record<number, CustomBassHit[]> = {};
+    for (let step = 0; step < stepCount; step++) {
+      const padIdx = steps[step];
+      if (padIdx == null) continue;
+      const pad = pads[padIdx];
+      if (!pad) continue;
+      const nextStep = (step + 1) % stepCount;
+      const nextPadIdx = steps[nextStep];
+      const nextPad = nextPadIdx != null ? pads[nextPadIdx] ?? null : null;
+      const slotId = bassStepSlots[step];
+      const slot = slotId ? bassSlots[slotId] ?? null : null;
+      const usePatternId = slot?.pattern ?? bassPattern;
+      const useOctave = slot?.octave ?? bassOctaveShift;
+      const useFills = slot?.fills ?? bassFillsLevel;
+      const pattern = BASS_PATTERN_MAP[usePatternId];
+      const hits = buildAutomatedBassHitsForStep({
+        pad,
+        nextPad,
+        stepIdx: step,
+        totalSteps: stepCount,
+        pattern,
+        fillsLevel: useFills,
+        rand: Math.random,
+      });
+      next[step] = bassHitsToCustomPattern(hits, pad, nextPad, useOctave);
+    }
+    setBassCustomPatterns(next);
+    const n = Object.keys(next).length;
+    if (n === 0) {
+      setPresetFlash('No bass written — assign chords to steps first.');
+      return;
+    }
+    setPresetFlash(
+      `Chord-smart bass written to ${n} step(s) — same degrees roots/3/5/7 you hear. Piano roll optional.`,
+    );
+  }, [
+    stepCount,
+    steps,
+    pads,
+    bassStepSlots,
+    bassSlots,
+    bassPattern,
+    bassOctaveShift,
+    bassFillsLevel,
+    bassCustomPatterns,
+    setPresetFlash,
+  ]);
+
   // ── PATTERN SLOT HANDLERS ──
   // Capture the current global bass settings into a single slot snapshot.
   // We also snapshot the painted bass line (bassCustomPatterns) so the slot
@@ -2988,6 +3142,28 @@ export default function ChordSequencerScreen({
     if (pianoRollStepIdx == null) setSelectedNote(null);
   }, [pianoRollStepIdx]);
 
+  // Immersive piano roll: lock page scroll and use Esc to dock (not close).
+  useEffect(() => {
+    if (pianoRollStepIdx == null || !pianoRollImmersive) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [pianoRollStepIdx, pianoRollImmersive]);
+
+  useEffect(() => {
+    if (pianoRollStepIdx == null || !pianoRollImmersive) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setPianoRollImmersive(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pianoRollStepIdx, pianoRollImmersive]);
+
   // Auto-scroll the piano-roll grid when the editor opens, in BOTH axes:
   //  · Vertically — center on the median row of whatever notes are visible
   //    so the bass actually shows up (row 13 of 25 is dead-center off-screen
@@ -3057,11 +3233,69 @@ export default function ChordSequencerScreen({
   const rafIdRef = useRef(0);
   const originRef = useRef(0);
   const nextIdxRef = useRef(0);
+  /** Last step pushed to React — avoid setState every rAF (was fighting the smooth mint playline). */
+  const chordSeqUiStepRef = useRef(-1);
+
+  const launchChordSeqBassPianoPlaylineWapi = useCallback(
+    (play: boolean) => {
+      const pel = chordSeqBassPlaylineRef.current;
+      if (!pel) return;
+      const ctx = getCtx();
+      const bpm = Math.max(1, bpmRef.current);
+      const nSteps = Math.max(1, stepCountRef.current);
+      const pc = nSteps * 8;
+      /** 8 sub-slots per chord step (2 quarter-note beats); WAPI period = pc/sub = 2×steps quarters. */
+      const sub = 4;
+      const wrap = chordSeqBassTimelineWrapRef.current;
+      const gridEl = wrap?.querySelector<HTMLElement>('[data-chord-seq-timeline-grid]');
+      const gridW = gridEl?.offsetWidth ?? 0;
+      if (gridW < 2 || pc < 2) return;
+      const pcw = gridW / Math.max(1, pc - 1);
+
+      const loopQ = 2 * nSteps;
+      let beatNow = 0;
+      if (ctx && originRef.current > 0) {
+        const elapsed = Math.max(0, ctx.currentTime - originRef.current);
+        const q = (elapsed * bpm) / 60;
+        beatNow = loopQ > 0 ? ((q % loopQ) + loopQ) % loopQ : 0;
+      }
+
+      const leadSec = CHORD_SEQ_PLAYLINE_WAPI_LEAD_SEC + chordSeqPlaylineOutputDacLeadSec(ctx);
+      const beatForWapi = play ? beatNow + leadSec * (bpm / 60) : beatNow;
+
+      launchCreationPlaylineWapi(
+        {
+          drumAnimRef: chordSeqPlaylineDrumAnimRef,
+          pianoAnimRef: chordSeqPlaylinePianoAnimRef,
+          drumQuantGlowAnimRef: chordSeqPlaylineGlowAnimRef,
+        },
+        {
+          drumEl: null,
+          pianoEl: pel,
+          drumQuantGlowEl: null,
+          beatNow: beatForWapi,
+          play,
+          bpm,
+          subdiv: sub,
+          pcols: pc,
+          drumColW: 1,
+          pianoColW: pcw,
+          loopOn: false,
+          loopStartBeat: 0,
+          loopEndBeat: 0,
+          playMode: 'chainAB',
+        },
+      );
+      if (play) pel.style.opacity = '1';
+    },
+    [getCtx],
+  );
 
   const startPlayback = useCallback(() => {
     const ctx = getCtx();
     originRef.current = ctx.currentTime + 0.05;
     nextIdxRef.current = 0;
+    chordSeqUiStepRef.current = -1;
     const runId = ++runIdRef.current;
     setPlaying(true);
 
@@ -3146,7 +3380,11 @@ export default function ChordSequencerScreen({
       const now = ctx2.currentTime;
       const secPerStep = (60 / Math.max(1, bpmRef.current)) * 2;
       const step = now < originRef.current ? -1 : Math.floor((now - originRef.current) / secPerStep) % stepCountRef.current;
-      setCurrentStep(step);
+      if (step !== chordSeqUiStepRef.current) {
+        chordSeqUiStepRef.current = step;
+        setCurrentStep(step);
+      }
+
       rafIdRef.current = requestAnimationFrame(tick);
     };
     rafIdRef.current = requestAnimationFrame(tick);
@@ -3159,8 +3397,52 @@ export default function ChordSequencerScreen({
     workerRef.current?.terminate();
     workerRef.current = null;
     setPlaying(false);
+    chordSeqUiStepRef.current = -1;
     setCurrentStep(-1);
+    cancelCreationPlaylineWapi(
+      {
+        drumAnimRef: chordSeqPlaylineDrumAnimRef,
+        pianoAnimRef: chordSeqPlaylinePianoAnimRef,
+        drumQuantGlowAnimRef: chordSeqPlaylineGlowAnimRef,
+      },
+      null,
+      chordSeqBassPlaylineRef.current,
+      null,
+    );
+    const pl = chordSeqBassPlaylineRef.current;
+    if (pl) {
+      pl.style.opacity = '0';
+      pl.style.transform = 'translate3d(0, 0, 0)';
+      pl.style.removeProperty('will-change');
+    }
   }, []);
+
+  // Bass piano roll: same compositor playline as 808 Lab / Creation Station (WAPI @ BPM).
+  useEffect(() => {
+    if (!playing || pianoRollStepIdx == null) return undefined;
+    let cancelled = false;
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => {
+        if (!cancelled) launchChordSeqBassPianoPlaylineWapi(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(r1);
+      if (r2) cancelAnimationFrame(r2);
+      cancelCreationPlaylineWapi(
+        {
+          drumAnimRef: chordSeqPlaylineDrumAnimRef,
+          pianoAnimRef: chordSeqPlaylinePianoAnimRef,
+          drumQuantGlowAnimRef: chordSeqPlaylineGlowAnimRef,
+        },
+        null,
+        chordSeqBassPlaylineRef.current,
+        null,
+      );
+    };
+  }, [playing, pianoRollStepIdx, stepCount, localBpm, launchChordSeqBassPianoPlaylineWapi]);
 
   useEffect(() => {
     if (!isScreenActive && playing) stopPlayback();
@@ -4376,7 +4658,12 @@ export default function ChordSequencerScreen({
       <div style={{ borderTop: '1px solid #1a1a1a', padding: '3px 12px 5px', background: '#070608' }}>
         {/* Header strip — voice / pattern / octave / volume / preview / sync */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10, color: '#c4b5fd', fontWeight: 900, letterSpacing: 0.6 }}>BASS LINE</span>
+          <span
+            style={{ fontSize: 10, color: '#c4b5fd', fontWeight: 900, letterSpacing: 0.6 }}
+            title="Patterns = chord-smart grooves (roots, 3rds, 5ths, walk to next chord). You only need the piano roll to hand-draw. Use AUTO-WRITE TO STEPS to paint the line without opening it."
+          >
+            BASS LINE
+          </span>
           <button
             onClick={() => setBassEnabled((v) => !v)}
             title={bassEnabled ? 'Bass is playing along with chords. Click to mute the whole bass line.' : 'Bass is muted. Click to enable.'}
@@ -4621,6 +4908,23 @@ export default function ChordSequencerScreen({
           <span style={{ fontSize: 9, color: '#c4b5fd', fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{Math.round(bassVolume * 100)}%</span>
 
           <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+
+          <button
+            onClick={handleMaterializeChordSmartBassLine}
+            title="Writes the current pattern into every chord step using each chord’s scale tones (no piano required). Uses global pattern or each step’s A–H slot. Respects FILLS. Overwrites hand-painted notes after confirm."
+            style={{
+              background: '#052e1c',
+              color: '#86efac',
+              border: '1px solid #15803d',
+              borderRadius: 5,
+              padding: '3px 9px',
+              fontSize: 9,
+              fontWeight: 900,
+              cursor: 'pointer',
+            }}
+          >
+            ♪ AUTO-WRITE (CHORDS)
+          </button>
 
           {/* 🎲 RANDOMIZE — re-rolls voice, pattern, octave, fills, swing,
               note length, slide. Doesn't touch chord steps. Inspired by the
@@ -5469,8 +5773,71 @@ export default function ChordSequencerScreen({
             });
           }
 
+          /** Matches pitch-row / key-rail geometry in this roll (slightly taller than Chord Builder). */
+          const CHORD_SEQ_BASS_ROLL_METRICS: PianoRollMetrics = { rowH: 21, labelW: 52, rulerH: 18 };
+          /** Per-row velocity lane height (aligned under each piano row). */
+          const VEL_SUBROW_H = 12;
+          type VelEntry = { stepIdx: number; note: CustomBassHit; isGhost: boolean };
+          const allVelBars: VelEntry[] = [];
+          for (let s = 0; s < stepCount; s++) {
+            const d = stepDataArray[s];
+            if (!d) continue;
+            for (const n of d.customHits) {
+              allVelBars.push({ stepIdx: s, note: n, isGhost: false });
+            }
+            if (d.isFollowing) {
+              for (const g of d.ghostHits) {
+                allVelBars.push({ stepIdx: s, note: g, isGhost: true });
+              }
+            }
+          }
+
           return (
-            <div style={{ marginTop: 6, padding: '8px 10px', background: '#070a12', border: '1px solid #1a2438', borderRadius: 6 }}>
+            <>
+              {pianoRollImmersive && (
+                <div
+                  role="presentation"
+                  aria-hidden
+                  onClick={() => setPianoRollImmersive(false)}
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 9990,
+                    background: 'rgba(2,5,12,0.82)',
+                    backdropFilter: 'blur(3px)',
+                  }}
+                />
+              )}
+              <div
+                onMouseDown={(e) => e.stopPropagation()}
+                style={{
+                  ...(pianoRollImmersive
+                    ? {
+                        position: 'fixed',
+                        top: 14,
+                        left: 14,
+                        right: 14,
+                        bottom: 14,
+                        zIndex: 9991,
+                        marginTop: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: 0,
+                        overflow: 'hidden',
+                        boxShadow: '0 28px 120px rgba(0,0,0,0.8)',
+                      }
+                    : {
+                        marginTop: 6,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: 0,
+                      }),
+                  padding: '8px 10px',
+                  background: '#070a12',
+                  border: pianoRollImmersive ? '2px solid rgba(34,211,238,0.4)' : '1px solid #1a2438',
+                  borderRadius: pianoRollImmersive ? 12 : 6,
+                }}
+              >
               {/* Header banner — multi-step timeline editor. The piano
                   roll now shows the ENTIRE bass line across all steps so
                   the user can see and edit every note in context (real
@@ -5478,8 +5845,11 @@ export default function ChordSequencerScreen({
                   toolbar (AUDITION / CLEAR / TAKE OVER / COPY / PASTE)
                   operates on it; clicking another step's header in the
                   grid moves focus there. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6, flexShrink: 0 }}>
                 <span style={{ fontSize: 10, fontWeight: 900, color: '#fde68a' }}>🎹 PIANO ROLL</span>
+                {pianoRollImmersive ? (
+                  <span style={{ fontSize: 8, color: '#5eead4', fontWeight: 900, letterSpacing: 0.5 }}>NEAR-FULLSCREEN</span>
+                ) : null}
                 <span style={{ fontSize: 9, color: '#67e8f9', fontWeight: 800 }}>
                   FULL BASS LINE · {totalBars} bar{totalBars === 1 ? '' : 's'} · {stepCount} steps · {editedSteps} edited
                 </span>
@@ -5641,6 +6011,28 @@ export default function ChordSequencerScreen({
                     CLEAR
                   </button>
                   <button
+                    type="button"
+                    onClick={() => setPianoRollImmersive((v) => !v)}
+                    title={
+                      pianoRollImmersive
+                        ? 'Dock the piano roll inline (smaller panel). Esc or click the dimmed backdrop also docks.'
+                        : 'Expand piano roll to use almost the full window.'
+                    }
+                    style={{
+                      background: pianoRollImmersive ? '#052e2e' : '#0a0e16',
+                      color: pianoRollImmersive ? '#5eead4' : '#67e8f9',
+                      border: `1px solid ${pianoRollImmersive ? '#14b8a6' : '#155e75'}`,
+                      borderRadius: 4,
+                      padding: '2px 10px',
+                      fontSize: 9,
+                      fontWeight: 900,
+                      cursor: 'pointer',
+                      boxShadow: pianoRollImmersive ? '0 0 10px rgba(20,184,166,0.25)' : undefined,
+                    }}
+                  >
+                    {pianoRollImmersive ? '⊟ DOCK' : '⛶ FULL VIEW'}
+                  </button>
+                  <button
                     onClick={() => setPianoRollStepIdx(null)}
                     title="Close the piano-roll editor"
                     style={{ background: '#0a0e16', color: '#fde68a', border: '1px solid #4a3c1a', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: 'pointer' }}
@@ -5676,6 +6068,7 @@ export default function ChordSequencerScreen({
                     gap: 8,
                     flexWrap: 'wrap',
                     marginBottom: 6,
+                    flexShrink: 0,
                     padding: '4px 6px',
                     background: '#04060a',
                     border: '1px solid #1a2438',
@@ -6090,6 +6483,7 @@ export default function ChordSequencerScreen({
                     alignItems: 'center',
                     gap: 8,
                     marginBottom: 6,
+                    flexShrink: 0,
                     padding: '5px 8px',
                     background: hasSel ? '#0a1822' : '#0a0e16',
                     border: `1px solid ${hasSel ? '#22d3ee66' : '#1a2438'}`,
@@ -6289,13 +6683,12 @@ export default function ChordSequencerScreen({
               })()}
 
               {/* The grid: 25 pitch rows × 8 sub-slot columns. Each row's
-                  left-side label shows the degree relative to the chord
-                  (R / 3 / 5 / 7 / OCT / etc.). Chord-tone rows are tinted.
-                  The bass-root row gets a stronger highlight so you always
-                  know where “home” is.
-                  Scrolls internally — 25 rows × 21 px ≈ 525 px would overflow
-                  the screen, so we cap the viewport at ~280 px and auto-scroll
-                  to the active notes whenever the editor opens. */}
+                  left-side key rail shows the interval map for the FOCUSED
+                  step; each CELL uses that step column's bass root so
+                  absolute pitch changes bar-to-bar. Step headers spell every
+                  note in the chord voicing so progressions don't all “read”
+                  as the same key. Tall viewport — collapse song builder or
+                  close the roll if you need more room elsewhere. */}
               <div
                 ref={pianoRollScrollRef}
                 data-drag-tick={dragTick}
@@ -6304,7 +6697,9 @@ export default function ChordSequencerScreen({
                   flexDirection: 'column',
                   position: 'relative',
                   userSelect: 'none',
-                  maxHeight: songBuilderCollapsed ? 480 : 320,
+                  flex: pianoRollImmersive ? 1 : undefined,
+                  minHeight: pianoRollImmersive ? 0 : undefined,
+                  maxHeight: pianoRollImmersive ? 'none' : (songBuilderCollapsed ? 'min(88vh, 920px)' : 'min(62vh, 720px)'),
                   overflowY: 'auto',
                   // Horizontal scroll so the whole bass line fits even
                   // when stepCount is large (16 or 32). The label column
@@ -6321,6 +6716,16 @@ export default function ChordSequencerScreen({
                   e.preventDefault();
                 }}
               >
+                <div
+                  ref={chordSeqBassTimelineWrapRef}
+                  style={{
+                    position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flexShrink: 0,
+                    minHeight: 0,
+                  }}
+                >
                 {/* ─── STEP + BEAT HEADER (sticky top) ──────────────────
                     Two stacked rows that stick to the top edge while the
                     user scrolls the pitch range vertically. Row 1 = step
@@ -6356,17 +6761,19 @@ export default function ChordSequencerScreen({
                     {Array.from({ length: stepCount }).map((_, sIdx) => {
                       const data = stepDataArray[sIdx];
                       const isFocus = sIdx === si;
-                      // The sequencer is actively sounding this step
-                      // right now — green tint overrides everything else
-                      // so the user can see the playhead even when the
-                      // focused step is elsewhere.
-                      const isPlayingStep = playing && currentStep === sIdx;
+                      // Mint playline = continuous playhead (808-style); no per-step header flash.
+                      const isPlayingStep = false;
                       const padName = data?.pad.name ?? '—';
+                      const chordSpell = data?.pad.notes?.length
+                        ? data.pad.notes.map((m) => cbPianoMidiToNoteName(m)).join(' · ')
+                        : '';
                       return (
                         <div
                           key={`step-h-${sIdx}`}
                           onClick={() => setPianoRollStepIdx(sIdx)}
-                          title={`STEP ${sIdx + 1} · ${padName}${isPlayingStep ? ' · ▶ PLAYING NOW' : ''} · click to focus this step in the toolbar`}
+                          title={chordSpell
+                            ? `STEP ${sIdx + 1} · ${padName}\nVoicing: ${chordSpell}\nClick to focus — grid columns use this step’s bass root + row interval.`
+                            : `STEP ${sIdx + 1} · ${padName}${isPlayingStep ? ' · ▶ PLAYING NOW' : ''} · click to focus this step in the toolbar`}
                           style={{
                             cursor: 'pointer',
                             fontSize: 9,
@@ -6409,6 +6816,28 @@ export default function ChordSequencerScreen({
                           }}>
                             {padName}
                           </span>
+                          {chordSpell ? (
+                            <span
+                              style={{
+                                fontSize: 7,
+                                color: isFocus ? '#a5f3fc' : '#6b7d8f',
+                                fontWeight: 800,
+                                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                                letterSpacing: 0.2,
+                                paddingLeft: 4,
+                                paddingRight: 4,
+                                marginTop: 2,
+                                lineHeight: 1.15,
+                                maxWidth: '100%',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={chordSpell}
+                            >
+                              ♫ {chordSpell}
+                            </span>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -6419,7 +6848,7 @@ export default function ChordSequencerScreen({
                   display: 'flex',
                   flexShrink: 0,
                   position: 'sticky',
-                  top: 36,
+                  top: 52,
                   zIndex: 9,
                   background: '#04060a',
                   borderBottom: '1px solid #1a1a1a',
@@ -6512,16 +6941,17 @@ export default function ChordSequencerScreen({
                   const resizeHere = !!rz && rz.midiOffset === row.offset;
                   const rzLeftPct = rz ? (rz.step * 8 + rz.startSlot) * colPct : 0;
                   const rzWidthPct = rz ? (rz.endSlot - rz.startSlot + 1) * colPct : 0;
+                  const rowVelBars = allVelBars.filter((e) => e.note.midiOffset === row.offset);
+                  const railMidi = bassRootMidi + row.offset;
                   return (
+                    <Fragment key={`pr-row-${row.offset}`}>
                     <div
-                      key={`pr-row-${row.offset}`}
                       data-row-offset={row.offset}
                       data-has-note={rowHasAnyNote ? 'true' : undefined}
                       style={{ display: 'flex', flexShrink: 0 }}
                     >
-                      {/* Sticky pitch label (interval / degree). Stays
-                          pinned to the left edge of the viewport while
-                          the timeline scrolls horizontally. */}
+                      {/* Sticky piano key rail — note name is for the FOCUSED step's
+                          bass root + row offset (same readout as toolbar / selected note). */}
                       <div
                         style={{
                           width: 52,
@@ -6529,25 +6959,34 @@ export default function ChordSequencerScreen({
                           position: 'sticky',
                           left: 0,
                           zIndex: 6,
-                          fontSize: 9,
-                          color: row.isRoot ? '#fde68a' : row.isChordTone ? '#67e8f9' : row.isOctave ? '#9ca3af' : '#4b5563',
-                          fontWeight: row.isRoot || row.isOctave ? 900 : 700,
-                          textAlign: 'right',
-                          paddingRight: 5,
-                          paddingTop: 3,
-                          paddingBottom: 3,
-                          background: row.isRoot ? '#1a1130' : '#040406',
-                          borderRight: '1px solid #1a2438',
                           boxSizing: 'border-box',
+                          alignSelf: 'stretch',
+                          display: 'flex',
+                          alignItems: 'stretch',
+                          background: '#050507',
+                          borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`,
                         }}
+                        title={`Key rail (FOCUS step ${si + 1}): ${cbPianoMidiToNoteName(railMidi)} · ${row.label} vs root ${bassRootName}.\nEach timeline column uses THAT step’s bass root — hover any cell for the note in that bar.`}
                       >
-                        {row.label}
+                        <div
+                          style={{
+                            ...cbPianoKeyFaceStyle(railMidi, false, CHORD_SEQ_BASS_ROLL_METRICS),
+                            flex: 1,
+                            height: 21,
+                            minHeight: 21,
+                            maxHeight: 21,
+                          }}
+                        >
+                          {cbPianoKeyLabel(railMidi)}
+                        </div>
                       </div>
                       {/* ── Cell strip — the WHOLE timeline for this pitch row.
                           One grid column per sub-slot across all steps.
                           Cells are pure background tinting plus data-* anchors
                           for hit-testing during drag/resize. */}
-                      <div style={{
+                      <div
+                        data-chord-seq-timeline-grid
+                        style={{
                         flex: '0 0 auto',
                         position: 'relative',
                         display: 'grid',
@@ -6564,19 +7003,28 @@ export default function ChordSequencerScreen({
                           const isChordToneHere = stepData?.chordTones.has(
                             ((row.offset % 12) + 12) % 12,
                           ) ?? false;
-                          const isPlayingCell = playing && currentStep === stepIdx;
-                          // Playing step's column gets a faint green tint
-                          // so the user can spot the playhead at a glance
-                          // even before they notice the individual note
-                          // glows. Tint is gentle so it doesn't drown out
-                          // the chord-tone / on-beat cues underneath.
-                          const baseBg = isPlayingCell
-                            ? (isOnBeat ? '#0a2418' : '#081d14')
-                            : row.isRoot
-                            ? (isOnBeat ? '#181024' : '#120a1c')
-                            : isChordToneHere
-                            ? (isOnBeat ? '#0c1820' : '#081218')
-                            : (isOnBeat ? '#0a0a0c' : '#070708');
+                          const isPlayingCell = false;
+                          const cellMidi = stepData
+                            ? stepData.bassRootMidi + row.offset
+                            : bassRootMidi + row.offset;
+                          const noteName = cbPianoMidiToNoteName(cellMidi);
+                          const isBlackKeyRow = cbPianoIsBlackKey(cellMidi);
+                          const isCRow = cbPianoIsCRow(cellMidi);
+                          const pianoBase = isBlackKeyRow ? '#08080c' : '#0c0c10';
+                          let bgStack = pianoBase;
+                          if (!isOnBeat) {
+                            bgStack = `linear-gradient(0deg, rgba(0,0,0,0.20), rgba(0,0,0,0.20)), ${bgStack}`;
+                          }
+                          if (isChordToneHere && stepData) {
+                            bgStack = `linear-gradient(0deg, rgba(124,244,198,0.10), rgba(124,244,198,0.10)), ${bgStack}`;
+                          }
+                          if (row.isRoot && stepData) {
+                            bgStack = `linear-gradient(0deg, rgba(253,230,138,0.08), rgba(253,230,138,0.08)), ${bgStack}`;
+                          }
+                          if (isPlayingCell) {
+                            bgStack = `linear-gradient(0deg, rgba(34,197,94,0.12), rgba(34,197,94,0.12)), ${bgStack}`;
+                          }
+                          const baseBg = bgStack;
                           const isFocusStep = stepIdx === si;
                           return (
                             <div
@@ -6600,7 +7048,7 @@ export default function ChordSequencerScreen({
                               onContextMenu={(e) => { e.preventDefault(); }}
                               title={pianoRollTool === 'erase'
                                 ? `ERASE mode — click on a note to delete it. (Empty cells are inert.)`
-                                : `STEP ${stepIdx + 1} · ${row.label} · sub-slot ${slotInStep + 1} — LEFT-click to add a note (length from ADD AS picker)`}
+                                : `STEP ${stepIdx + 1} · ${noteName} (${row.label}) · sub-slot ${slotInStep + 1} — LEFT-click to add a note (length from ADD AS picker)`}
                               style={{
                                 height: 20,
                                 background: isFocusStep ? baseBg : `${baseBg}`,
@@ -6610,7 +7058,9 @@ export default function ChordSequencerScreen({
                                   ? '1px solid #2a2418'
                                   : '1px solid #0a0a0a',
                                 borderTop: '1px solid #0a0a0a',
-                                borderBottom: '1px solid #0a0a0a',
+                                borderBottom: isCRow
+                                  ? '1px solid rgba(124,244,198,0.14)'
+                                  : '1px solid #0a0a0a',
                                 borderRight: c === totalCols - 1 ? '1px solid #1a2438' : 'none',
                                 cursor: pianoRollTool === 'erase' ? 'default' : 'cell',
                                 boxSizing: 'border-box',
@@ -6637,7 +7087,7 @@ export default function ChordSequencerScreen({
                           // the pattern-defined ones that haven't been
                           // "taken over". Dashed border = "preview, not
                           // editable" — fix this by clicking ▼ TAKE OVER.
-                          const ghostIsPlayingNow = playing && currentStep === stepIdx;
+                          const ghostIsPlayingNow = false;
                           return (
                             <div
                               key={`g-${row.offset}-${stepIdx}-${gi}`}
@@ -6687,7 +7137,7 @@ export default function ChordSequencerScreen({
                           // sounding right now — light it up green so the
                           // user can see which note is being heard at
                           // exactly the moment they hear it.
-                          const isPlayingNow = playing && currentStep === stepIdx;
+                          const isPlayingNow = false;
                           if (isBeingResized) return null;
                           return (
                             <div
@@ -6714,7 +7164,7 @@ export default function ChordSequencerScreen({
                               }}
                               title={pianoRollTool === 'erase'
                                 ? `ERASE — click to delete this note`
-                                : `STEP ${stepIdx + 1} · ${row.label} · sub-slot ${note.slot + 1} — LEFT-drag = move (across steps too) · drag GOLDEN BAR = resize · RIGHT-click = delete`}
+                                : `STEP ${stepIdx + 1} · ${cbPianoMidiToNoteName((stepDataArray[stepIdx]?.bassRootMidi ?? bassRootMidi) + row.offset)} (${row.label}) · sub-slot ${note.slot + 1} — LEFT-drag = move (across steps too) · drag GOLDEN BAR = resize · RIGHT-click = delete`}
                               style={{
                                 position: 'absolute',
                                 top: 1,
@@ -6860,94 +7310,48 @@ export default function ChordSequencerScreen({
                         )}
                       </div>
                     </div>
-                  );
-                })}
-
-                {/* ════════════════════════════════════════════════════
-                    VELOCITY LANE — sticky bottom strip showing one
-                    vertical bar per custom note, height = vel × lane
-                    height. Drag a bar up/down to adjust how hard that
-                    note plays. Same layout as the pitch grid: sticky
-                    left label gutter, then a wide grid that scrolls
-                    horizontally with the rest of the roll. Ghost notes
-                    show their pattern-defined velocity faintly so the
-                    user can see what they'd be overriding.
-                    ════════════════════════════════════════════════════ */}
-                {(() => {
-                  const VEL_LANE_HEIGHT = 56;
-                  // Same aggregation pattern the pitch rows use: collect
-                  // every note across every step so each bar can be
-                  // positioned absolutely at (step·8 + slot).
-                  type VelEntry = { stepIdx: number; note: CustomBassHit; isGhost: boolean };
-                  const allBars: VelEntry[] = [];
-                  for (let s = 0; s < stepCount; s++) {
-                    const d = stepDataArray[s];
-                    if (!d) continue;
-                    for (const n of d.customHits) {
-                      allBars.push({ stepIdx: s, note: n, isGhost: false });
-                    }
-                    if (d.isFollowing) {
-                      for (const g of d.ghostHits) {
-                        allBars.push({ stepIdx: s, note: g, isGhost: true });
-                      }
-                    }
-                  }
-                  return (
-                    <div style={{
-                      display: 'flex',
-                      flexShrink: 0,
-                      position: 'sticky',
-                      bottom: 0,
-                      zIndex: 10,
-                      background: '#04060a',
-                      borderTop: '2px solid #1a2438',
-                    }}>
-                      {/* Sticky-left label gutter */}
-                      <div style={{
-                        width: 52,
-                        flexShrink: 0,
-                        position: 'sticky',
-                        left: 0,
-                        zIndex: 11,
-                        background: '#04060a',
-                        borderRight: '1px solid #1a2438',
-                        height: VEL_LANE_HEIGHT,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-end',
-                        justifyContent: 'center',
-                        paddingRight: 5,
-                        fontSize: 9,
-                        color: '#9ca3af',
-                        fontWeight: 900,
-                        lineHeight: 1.1,
-                      }}>
-                        <span>VEL</span>
-                        <span style={{ fontSize: 7, color: '#4b5563', fontWeight: 700 }}>0-127</span>
+                    <div style={{ display: 'flex', flexShrink: 0 }}>
+                      <div
+                        style={{
+                          width: 52,
+                          flexShrink: 0,
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 6,
+                          height: VEL_SUBROW_H,
+                          background: '#050507',
+                          borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`,
+                          boxSizing: 'border-box',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          paddingRight: 4,
+                        }}
+                        title={`Velocity — ${cbPianoMidiToNoteName(railMidi)} · ${row.label}`}
+                      >
+                        {row.offset === 12 ? (
+                          <span style={{ fontSize: 7, color: '#6b7280', fontWeight: 900, lineHeight: 1 }}>VEL</span>
+                        ) : null}
                       </div>
-                      {/* Lane body — bars positioned absolutely on a
-                          shared timeline matching the pitch grid above. */}
                       <div
                         data-velocity-lane
                         style={{
                           flex: '0 0 auto',
                           position: 'relative',
                           display: 'grid',
-                          gridTemplateColumns: `repeat(${stepCount * 8}, minmax(22px, 1fr))`,
+                          gridTemplateColumns: `repeat(${totalCols}, minmax(22px, 1fr))`,
                           gap: 0,
-                          height: VEL_LANE_HEIGHT,
+                          height: VEL_SUBROW_H,
                         }}
                       >
-                        {/* Background beat / step grid (matches pitch
-                            cells so the user can visually align). */}
-                        {Array.from({ length: stepCount * 8 }).map((_, c) => {
+                        {Array.from({ length: totalCols }).map((_, c) => {
                           const slotInStep = c % 8;
                           const stepIdx = Math.floor(c / 8);
                           const isOnBeat = slotInStep % 2 === 0;
                           const isStepStart = slotInStep === 0;
                           return (
                             <div
-                              key={`vel-bg-${c}`}
+                              key={`vel-bg-${row.offset}-${c}`}
                               style={{
                                 background: isOnBeat ? '#080a10' : '#06070a',
                                 borderLeft: isStepStart && stepIdx > 0
@@ -6955,13 +7359,11 @@ export default function ChordSequencerScreen({
                                   : isOnBeat
                                   ? '1px solid #1a1812'
                                   : '1px solid #0a0a0a',
-                                borderRight: c === stepCount * 8 - 1 ? '1px solid #1a2438' : 'none',
+                                borderRight: c === totalCols - 1 ? '1px solid #1a2438' : 'none',
                               }}
                             />
                           );
                         })}
-                        {/* 50% / 100% reference rules so the user can
-                            eyeball typical bass dynamics quickly. */}
                         <div style={{
                           position: 'absolute',
                           left: 0,
@@ -6971,36 +7373,27 @@ export default function ChordSequencerScreen({
                           background: 'rgba(107, 114, 128, 0.2)',
                           pointerEvents: 'none',
                         }} />
-                        <div style={{
-                          position: 'absolute',
-                          left: 0,
-                          right: 0,
-                          top: 1,
-                          height: 1,
-                          background: 'rgba(107, 114, 128, 0.12)',
-                          pointerEvents: 'none',
-                        }} />
-                        {/* Velocity bars */}
-                        {allBars.map(({ stepIdx, note, isGhost }, bi) => {
-                          const leftPct = (stepIdx * 8 + note.slot) * (100 / (stepCount * 8));
-                          const widthPct = note.sustainSlots * (100 / (stepCount * 8));
-                          const heightPct = Math.max(2, Math.min(100, note.vel * 100));
+                        {rowVelBars.map(({ stepIdx, note, isGhost }, bi) => {
+                          const leftPct = (stepIdx * 8 + note.slot) * colPct;
+                          const widthPct = note.sustainSlots * colPct;
+                          const heightPct = Math.max(28, Math.min(100, note.vel * 100));
                           const isErase = pianoRollTool === 'erase' && !isGhost;
-                          const isBarPlaying = playing && currentStep === stepIdx;
+                          const isBarPlaying = false;
+                          const velNoteName = cbPianoMidiToNoteName(
+                            (stepDataArray[stepIdx]?.bassRootMidi ?? bassRootMidi) + note.midiOffset,
+                          );
                           return (
                             <div
-                              key={`vel-bar-${stepIdx}-${bi}-${isGhost ? 'g' : 'n'}`}
+                              key={`vel-bar-${row.offset}-${stepIdx}-${bi}-${isGhost ? 'g' : 'n'}`}
                               onMouseDown={(e) => {
                                 if (e.button !== 0) return;
-                                if (isGhost) return; // ghosts are read-only
+                                if (isGhost) return;
                                 e.stopPropagation();
                                 e.preventDefault();
-                                // ERASE mode delete still works in the lane.
                                 if (pianoRollTool === 'erase') {
                                   deleteNote(stepIdx, note);
                                   return;
                                 }
-                                // Start a velocity drag pinned to this note.
                                 velocityDragRef.current = {
                                   step: stepIdx,
                                   slot: note.slot,
@@ -7009,10 +7402,6 @@ export default function ChordSequencerScreen({
                                 bumpDragTick();
                                 const laneEl = (e.currentTarget as HTMLElement).parentElement as HTMLElement | null;
                                 if (!laneEl) return;
-                                // Immediate set on the click position so a
-                                // single click also bumps the velocity to
-                                // wherever the user clicked (matches FL
-                                // Studio's velocity-lane behaviour).
                                 const applyFromY = (clientY: number) => {
                                   const rect = laneEl.getBoundingClientRect();
                                   const y = clientY - rect.top;
@@ -7054,8 +7443,8 @@ export default function ChordSequencerScreen({
                                 if (!isGhost) deleteNote(stepIdx, note);
                               }}
                               title={isGhost
-                                ? `Ghost note · vel ${Math.round(note.vel * 127)} — pattern-defined (not editable until you TAKE OVER PATTERN)`
-                                : `STEP ${stepIdx + 1} · sub-slot ${note.slot + 1} · vel ${Math.round(note.vel * 127)} — drag up/down to change velocity · right-click = delete`}
+                                ? `${velNoteName} · ghost vel ${Math.round(note.vel * 127)} — TAKE OVER to edit`
+                                : `${velNoteName} · STEP ${stepIdx + 1} · vel ${Math.round(note.vel * 127)} — drag up/down · right-click = delete`}
                               style={{
                                 position: 'absolute',
                                 bottom: 0,
@@ -7093,9 +7482,6 @@ export default function ChordSequencerScreen({
                                 pointerEvents: 'auto',
                               }}
                             >
-                              {/* Tiny top-of-bar tick so the user can see
-                                  exactly where the velocity reads as,
-                                  even when the bar's background is muted. */}
                               {!isGhost && (
                                 <div style={{
                                   position: 'absolute',
@@ -7112,11 +7498,40 @@ export default function ChordSequencerScreen({
                         })}
                       </div>
                     </div>
+                    </Fragment>
                   );
-                })()}
+                })}
+
+                <div
+                  ref={chordSeqBassPlaylineRef}
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 52,
+                    width: 2,
+                    height: '100%',
+                    marginLeft: -1,
+                    borderRadius: 1,
+                    background: CB_PIANO_MINT,
+                    boxShadow: '0 0 8px rgba(124,244,198,0.55)',
+                    zIndex: 15,
+                    pointerEvents: 'none',
+                    opacity: 0,
+                    willChange: 'transform',
+                  }}
+                />
+              </div>
               </div>
 
-              <div style={{ marginTop: 6, fontSize: 9, color: '#9ca3af', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ marginTop: 6, fontSize: 9, color: '#9ca3af', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ display: 'inline-block', width: 14, height: 12, background: '#0c1820', border: '1px solid #22d3ee44', borderRadius: 2 }} />
+                  <span style={{ color: '#a5f3fc', fontWeight: 700 }}>STEP HEADER</span>
+                  <span style={{ color: '#6b7280' }}>
+                    third line = full chord voicing (every note). Columns use each step’s own bass root — left keys match the <strong style={{ color: '#fde68a' }}>focused</strong> step; hover cells for pitch per bar.
+                  </span>
+                </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                   <span style={{ display: 'inline-block', width: 14, height: 12, background: '#4ade80', border: '2px solid #16a34a', borderRadius: 2, boxShadow: 'inset 3px 0 0 #14532d' }} />
                   <span style={{ color: '#4ade80', fontWeight: 700 }}>YOUR NOTE</span>
@@ -7151,7 +7566,7 @@ export default function ChordSequencerScreen({
                   }} />
                   <span style={{ color: '#22c55e', fontWeight: 700 }}>PLAYING NOW</span>
                   <span style={{ color: '#6b7280' }}>
-                    (green glow · whatever step the sequencer is sounding right now turns green so you can see what you hear)
+                    (green glow · whatever step the sequencer is sounding right now turns green so you can see what you hear · <strong style={{ color: CB_PIANO_MINT }}>mint line</strong> = smooth playhead, same idea as 808 Lab roll)
                   </span>
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -7240,6 +7655,7 @@ export default function ChordSequencerScreen({
                 <span style={{ color: '#4b5563', fontSize: 8 }}>Yellow row = chord root · Cyan rows = chord tones · CLEAR returns step to following the pattern.</span>
               </div>
             </div>
+            </>
           );
         })()}
       </div>

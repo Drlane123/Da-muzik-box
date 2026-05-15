@@ -5014,6 +5014,7 @@ function PianoRoll({
           >
             <div
               style={{
+                boxSizing: 'border-box',
                 width: PIANO_LABEL_W,
                 flexShrink: 0,
                 background: '#08080c',
@@ -5037,6 +5038,7 @@ function PianoRoll({
               <div
                 key={i}
                 style={{
+                  boxSizing: 'border-box',
                   width: barW,
                   flexShrink: 0,
                   position: 'relative',
@@ -5072,6 +5074,7 @@ function PianoRoll({
           >
             <div
               style={{
+                boxSizing: 'border-box',
                 width: PIANO_LABEL_W,
                 flexShrink: 0,
                 background: '#0a0a10',
@@ -5111,6 +5114,7 @@ function PianoRoll({
                   }}
                   onClick={() => onBarLabelClick(i)}
                   style={{
+                    boxSizing: 'border-box',
                     width: barW,
                     flexShrink: 0,
                     borderRight: '1px solid rgba(124, 244, 198, 0.10)',
@@ -5243,6 +5247,7 @@ function PianoRoll({
                   }}
                   title={`${noteName} · click to audition`}
                   style={{
+                    boxSizing: 'border-box',
                     width: PIANO_LABEL_W,
                     flexShrink: 0,
                     position: 'sticky',
@@ -5325,6 +5330,7 @@ function PianoRoll({
                           if (sym) onBarDrop(bi, sym as ChordSymbol);
                         }}
                         style={{
+                          boxSizing: 'border-box',
                           width: barW,
                           flexShrink: 0,
                           display: 'flex',

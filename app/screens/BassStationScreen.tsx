@@ -1,7 +1,7 @@
 /**
- * Bass Dragon — professional bassline generator.
+ * Bass Low — professional bassline generator.
  *
- * Inspired by Unison Bass Dragon's quality standard:
+ * Trap / hip-hop bassline quality standard:
  *   • 8-row velocity step sequencer (each cell shows a velocity bar —
  *     click to toggle, drag vertically to set velocity level)
  *   • 20 genre presets with genre-accurate patterns
@@ -875,7 +875,7 @@ export default function BassStationScreen({
     setPadExportBusy(true);
     try {
       const wav = await renderToWav(grid, loopLength, localBpm, keyRoot, mode, voice);
-      onExportToPad({ padIndex, wavBytes: wav, label: `Bass Dragon · ${genre}`, rootBpm: localBpm });
+      onExportToPad({ padIndex, wavBytes: wav, label: `Bass Low · ${genre}`, rootBpm: localBpm });
       setPadExportStatus(`✓ Exported to Pad ${padIndex + 1}`);
     } catch {
       setPadExportStatus('Export failed — try again');
@@ -913,7 +913,7 @@ export default function BassStationScreen({
           <span style={{ fontSize: 20 }}>🐉</span>
           <div>
             <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: '-0.02em', color: '#f0f0f0', lineHeight: 1 }}>
-              BASS DRAGON
+              BASS LOW
             </div>
             <div style={{ fontSize: 9, fontWeight: 700, color: '#555', letterSpacing: '0.1em' }}>
               BASSLINE GENERATOR
@@ -1112,7 +1112,7 @@ export default function BassStationScreen({
           style={{ background: '#040404', borderBottom: '1px solid #0d0d0d' }}>
           <div className="flex items-center gap-3 mb-2">
             <span style={{ fontSize: 10, fontWeight: 800, color: '#a855f7', letterSpacing: '0.06em' }}>FOLLOW CHORD CHANGES</span>
-            <span style={{ fontSize: 9, color: '#2a2a2a' }}>Enter your chord roots — Bass Dragon follows them on Generate</span>
+            <span style={{ fontSize: 9, color: '#2a2a2a' }}>Enter your chord roots — Bass Low follows them on Generate</span>
             <div style={{ flex: 1 }} />
             {/* Toggle */}
             <div onClick={() => setFollowEnabled((v) => !v)} style={{
@@ -1169,7 +1169,7 @@ export default function BassStationScreen({
             {/* IMPORT FROM CHORD SEQ — reads the latest chord progression
                 from localStorage (written by Chord Sequencer Screen) and
                 converts each chord into a ChordChange (root pitch class +
-                major/minor flavor) that Bass Dragon can follow. Two chord
+                major/minor flavor) that Bass Low can follow. Two chord
                 steps in the Chord Sequencer (= 1 bar at 4/4) collapse into
                 one ChordChange aligned to a bar boundary. */}
             <button
@@ -1208,7 +1208,7 @@ export default function BassStationScreen({
                 setChordChanges(ch);
                 setFollowEnabled(true);
               }}
-              title="Read the latest chord progression from Chord Sequencer and convert it into chord changes Bass Dragon will follow."
+              title="Read the latest chord progression from Chord Sequencer and convert it into chord changes Bass Low will follow."
               style={{ background: '#0d0d0d', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 6, padding: '4px 12px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
             >
               ↘ IMPORT FROM CHORD SEQ
@@ -1300,7 +1300,7 @@ export default function BassStationScreen({
       {/* Status bar */}
       <div style={{ borderTop: '1px solid #0d0d0d', padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 12, background: '#030303' }}>
         <span style={{ fontSize: 9, color: '#1e1e1e', fontWeight: 700, letterSpacing: '0.06em' }}>
-          🐉 BASS DRAGON · {KEY_LABELS[keyRoot]} {mode.toUpperCase()} · {voice.toUpperCase()} · {loopLength * STEPS_PER_BAR} STEPS · {localBpm} BPM
+          BASS LOW · {KEY_LABELS[keyRoot]} {mode.toUpperCase()} · {voice.toUpperCase()} · {loopLength * STEPS_PER_BAR} STEPS · {localBpm} BPM
         </span>
         {playing && (
           <span style={{ fontSize: 9, color: '#a855f7', fontWeight: 800, letterSpacing: '0.08em' }}>
