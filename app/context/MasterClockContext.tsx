@@ -103,6 +103,7 @@ import {
   displayAudioNowForStudio,
   pulseStudioPlayheadFrame,
 } from '@/app/lib/studioPlayheadSharedFrame';
+import { isCreationBeatLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
 
 export const PPQ = 960 as const;
 
@@ -175,7 +176,7 @@ export function debugTransportSyncTruth(opts: {
   });
 }
 
-export const DEFAULT_BPM = 120;
+export const DEFAULT_BPM = 102;
 export const DEFAULT_SR = 48000;
 export const BUFFER_SIZE = 128;
 export const SCHEDULER_AHEAD_SECS = 0.12;
@@ -643,14 +644,6 @@ export interface MasterClockContextValue {
   snapEnabled: boolean;
   setSnapEnabled: (v: boolean) => void;
   snapTick: (tick: number) => number;
-  syncDrums: boolean;
-  setSyncDrums: (v: boolean) => void;
-  syncPiano: boolean;
-  setSyncPiano: (v: boolean) => void;
-  syncArr: boolean;
-  setSyncArr: (v: boolean) => void;
-  syncMix: boolean;
-  setSyncMix: (v: boolean) => void;
   metronomeEnabled: boolean;
   setMetronomeEnabled: (v: boolean) => void;
   /**
@@ -811,10 +804,6 @@ export function MasterClockProvider({
   const [quantizeStrength, setQuantizeStrength] = useState(1.0);
   const [snapEnabled, setSnapEnabled] = useState(true);
 
-  const [syncDrums, setSyncDrums] = useState(true);
-  const [syncPiano, setSyncPiano] = useState(true);
-  const [syncArr, setSyncArr] = useState(true);
-  const [syncMix, setSyncMix] = useState(true);
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
   const [metronomeClickLatencyMs, setMetronomeClickLatencyMsState] =
     useState(0);
@@ -1124,6 +1113,8 @@ export function MasterClockProvider({
    * clicks (double metronome until they drained).
    */
   const attachNewMetronomeBus = useCallback(() => {
+    /** Beat Lab schedules buffer clicks on the metro bus — swapping it mid-take mutes them until refill. */
+    if (isCreationBeatLabTransportRunning()) return;
     const ctx = getOrCreateAudioContext();
     if (ctx.state === 'closed') return;
     const master = masterGainRef.current;
@@ -2745,7 +2736,13 @@ export function MasterClockProvider({
     if (midiClockEnabledRef.current && midiOutputRef.current) {
       sendMidiRealtimeRef.current(0xfc);
     }
-    if (ac && ac.state !== 'closed') void ac.suspend().catch(() => {});
+    if (
+      ac &&
+      ac.state === 'running' &&
+      !isCreationBeatLabTransportRunning()
+    ) {
+      void ac.suspend().catch(() => {});
+    }
   }, [
     stopTimer,
     wrapGlobalBeatsToDisplayFloat,
@@ -2790,7 +2787,13 @@ export function MasterClockProvider({
       sendMidiRealtimeRef.current(0xfc);
     }
     const ac = audioCtxRef.current;
-    if (ac && ac.state !== 'closed') void ac.suspend().catch(() => {});
+    if (
+      ac &&
+      ac.state === 'running' &&
+      !isCreationBeatLabTransportRunning()
+    ) {
+      void ac.suspend().catch(() => {});
+    }
   }, [stopTimer]);
 
   const seekToTick = useCallback((tick: number) => {
@@ -3153,18 +3156,26 @@ export function MasterClockProvider({
   const playDrumSound = useCallback((chId: number, velocity: number, baseTimeSec?: number) => {
     try {
       const ctx = getOrCreateAudioContext();
+      const scheduledAhead =
+        baseTimeSec != null &&
+        Number.isFinite(baseTimeSec) &&
+        baseTimeSec > ctx.currentTime + 0.002;
       if (ctx.state === 'suspended') {
-        void ctx
-          .resume()
-          .then(() => {
-            playDrumSound(chId, velocity, baseTimeSec);
-          })
-          .catch(() => {
-            /* ignore resume failure */
-          });
-        return;
+        void ctx.resume().catch(() => {});
+        if (!scheduledAhead) {
+          void ctx
+            .resume()
+            .then(() => {
+              playDrumSound(chId, velocity, baseTimeSec);
+            })
+            .catch(() => {
+              /* ignore resume failure */
+            });
+          return;
+        }
       }
-      const tStart = baseTimeSec ?? (ctx.currentTime + 0.001);
+      const tRaw = baseTimeSec ?? ctx.currentTime + 0.001;
+      const tStart = Math.max(tRaw, ctx.currentTime + 0.001);
       const vol = (velocity / 127) * 0.4;
       const rawPan =
         ((window as any).__daMusicChannelPans?.[chId] ?? 0) / 100;
@@ -3701,14 +3712,6 @@ export function MasterClockProvider({
         snapEnabled,
         setSnapEnabled,
         snapTick: snapTickLocal,
-        syncDrums,
-        setSyncDrums,
-        syncPiano,
-        setSyncPiano,
-        syncArr,
-        setSyncArr,
-        syncMix,
-        setSyncMix,
         metronomeEnabled,
         setMetronomeEnabled,
         metronomeClickLatencyMs,

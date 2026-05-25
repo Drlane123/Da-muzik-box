@@ -1,0 +1,89 @@
+---
+description: Beat Lab has its own transport — mirror proven DAW patterns (see SE2 for reference only); never couple editors.
+globs: app/screens/CreationStationScreen.tsx,app/lib/creationStation/**,app/hooks/useCreationTransportPump.ts,app/lib/studio/se2TransportClock.ts
+alwaysApply: true
+---
+
+# Beat Lab transport — independent, mirror-only (LOCKED)
+
+Beat Lab is **not connected** to Studio Editor 2’s transport or sync. It has its **own** play/pause/stop, BPM, metronome lookahead, and playhead in `CreationStationScreen` + `app/lib/creationStation/*`.
+
+**SE2 is reference only** — read `StudioEditor2Screen.tsx` to see what works; **never edit SE2** and **never import/link** it from Beat Lab. See `se2-read-only-reference.mdc`.
+
+**User-verified (locked):** playhead locks to metronome; audio/metro/drums stay on time. Do not reintroduce PPQ rescheduling, per-frame imperative playline paint, or `creationPlaylineBeatForWapi` (52 ms lead).
+
+## Three-clock contract (Beat Lab’s own clocks)
+
+| What | Clock |
+|------|-------|
+| Playline arrow | WAAPI (`creationPlaylineWapi` — pause → seek → play) |
+| Metronome + drum steps | Beat Lab `AudioContext` lookahead (`refillCreationMetronome` / `refillCreationTransportLookahead`) |
+| BAR / MSR / time | `smoothSchedNow` → `bDisplay` in `creationTransportOnFrame` |
+
+Never drive BAR/MSR/time from `wapiAnim.currentTime`.
+
+## Constants (copied values, not shared transport)
+
+- `SE2_AUDIO_START_FLOOR_SEC` = **0.008** (from `se2TransportClock.ts` — name is historical; **not** SE2 state)
+- `CREATION_SCHEDULE_AHEAD_SEC` = **3.0**
+- Chain: `chain = ctSnap + floor` — never re-read `ctx.currentTime` inside refill for chain init
+
+## `startTransport` order (LOCKED — verified sync)
+
+```typescript
+// 1) Compositor starts on the click — do NOT wait for ensureCtx() (playhead hesitate)
+launchCreationPlaylineWapiNow(origin, true, { immediateCompositorStart: true });
+
+// 2) Audio session + lookahead (unchanged metronome contract)
+const ctx = await ensureCtx();
+stopAllScheduledPadVoices();
+sessionStartRef.current = tNow + SE2_AUDIO_START_FLOOR_SEC;
+// ... seed nextStepBeat / nextMetroK / sched anchors ...
+runningRef.current = true;
+refillCreationSchedule(ctx, tNow, { skipOverdueCatchUp: true });
+
+// 3) Re-lock WAAPI to cursor at session anchor (pause → seek → play, no cancel)
+seekRunningCreationPlaylineWapi(creationPlaylineWapiRefs, origin, bpm);
+
+// 4) Top-up lookahead after resume (avoids beat-0 dry gap)
+queueMicrotask(() => refillCreationSchedule(ctx, ctx.currentTime, { skipOverdueCatchUp: true }));
+
+setTransport('playing'); // no flushSync
+```
+
+## Playline (LOCKED)
+
+- `immediateCompositorStart: true` on first launch — **no** 8 ms WAAPI delay on Play click (audio still uses `SE2_AUDIO_START_FLOOR_SEC`).
+- After audio anchor: `seekRunningCreationPlaylineWapi` only — **never** cancel/rebuild WAAPI for drift; **never** rAF `setCreationPlaylineTransformStatic` while playing (causes ticking).
+- Open-pattern compositor beat: `b = animMs/1000 × bpm/60` capped at `periodBeats` (SE2 linear, not modulo wrap).
+- `creationPlaylineBeatForWapi` / 52 ms Chord Builder lead: **forbidden** on Beat Lab transport.
+
+## Step scheduler (LOCKED)
+
+- Beat 0 at `sessionStart`: use **`while (tGrid < scheduleFloor)`** — strict `<`; `<=` skips beat-0 → silence then burst.
+- Advance grid with `tGrid = sessionStart + (k - origin) * spb`, not `tGrid += spb` drift.
+- `refillCreationMetronome` is separate from drum `fireStep` — never cancel metro on loop wrap.
+- Lookahead pump: **always** refill while `runningRef` (even if `suspended`); do not skip refill waiting for resume.
+
+## Loop wrap
+
+- Refill with `{ loopContinuation: true }` only
+- Never `cancelScheduledCreationMetroNodes()` on loop wrap
+- Ignore loop-wrap detection for first **150 ms** after Play (`creationTransportPlayStartMsRef`)
+
+## Shared audio graph (output only — not BPM sync)
+
+- `useMasterClock()` for **routing** (`getOrCreateAudioContext`, drums, master volume) — **not** global transport play/pause for Beat Lab
+- `__daMusicCreationBeatLabRunning` prevents master `suspend` / metro-bus swap from muting Beat Lab mid-play
+- Beat Lab metronome → master gain while Beat Lab is running
+
+## Forbidden
+
+- Importing or changing `StudioEditor2Screen.tsx`
+- Subscribing Beat Lab to SE2 ticks / slave clock / global transport position
+- Changing SE2 when Beat Lab timing is wrong — fix Beat Lab only
+- `Date.now()` / `setTimeout` in **audio** metronome/step timing paths (except `queueMicrotask` refill top-up on Play)
+- `creationPlaylineBeatForWapi` / PPQ rescheduling / sample-grid transport rewrites that touch metro + playline together
+- Per-frame imperative playline paint while playing (ticking playhead)
+- `flushSync` on Play
+- `seekCreationPlaylineWapiToBeat` / rAF compositor seeks every frame

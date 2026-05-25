@@ -1,10 +1,18 @@
 import { useEffect } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
 
-import { beatAtSessionTime } from '@/app/lib/creationStation/creationTransportSync';
+import { resolveBeatLabAudioContext } from '@/app/lib/creationStation/beatLabStepScheduler';
+import {
+  beatAtSessionTime,
+  setCreationBeatLabTransportRunning,
+} from '@/app/lib/creationStation/creationTransportSync';
+import { smoothSchedNow, updateSchedAnchor } from '@/app/lib/studio/se2TransportClock';
 
 /** Must match `creationTransportSystem` lookahead cadence (DAW sync rules). */
 const CREATION_LOOKAHEAD_INTERVAL_MS = 25;
+
+const fallbackSchedAnchorTimeRef = { current: 0 };
+const fallbackSchedAnchorPerfRef = { current: 0 };
 
 /**
  * **Single** Creation Station transport pump: one `requestAnimationFrame` loop + one `setInterval` for lookahead.
@@ -19,6 +27,9 @@ export type CreationTransportPumpRefs = {
   displayBeatRef: MutableRefObject<number>;
   bpmRef: MutableRefObject<number>;
   lastScheduledQuarterRef: MutableRefObject<number>;
+  /** Optional — Beat Lab passes these for `smoothSchedNow`; other screens omit. */
+  schedAnchorTimeRef?: MutableRefObject<number>;
+  schedAnchorPerfRef?: MutableRefObject<number>;
 };
 
 export type CreationTransportPumpOptions = {
@@ -29,6 +40,8 @@ export type CreationTransportPumpOptions = {
   refillRef: MutableRefObject<(ctx: AudioContext, ctSnap: number) => void>;
   /** Invoked every rAF while audio is running; playline + HUD + React churn live here only. */
   onFrameRef: MutableRefObject<(bDisplay: number) => void>;
+  /** When the shared graph is rebuilt after `closed`, re-anchor transport + refill lookahead. */
+  onAudioContextRebuiltRef?: MutableRefObject<((ctx: AudioContext) => void) | undefined>;
 };
 
 export function useCreationTransportPump(
@@ -43,50 +56,104 @@ export function useCreationTransportPump(
     displayBeatRef,
     bpmRef,
     lastScheduledQuarterRef,
+    schedAnchorTimeRef,
+    schedAnchorPerfRef,
   } = refs;
-  const { isScreenActive, isPlaying, getOrCreateAudioContext, refillRef, onFrameRef } = options;
+  const { isScreenActive, getOrCreateAudioContext, refillRef, onFrameRef, onAudioContextRebuiltRef } =
+    options;
 
   useEffect(() => {
     if (!isScreenActive) return;
     let raf = 0;
     const tick = () => {
-      const ctx = ctxRef.current;
-      if (runningRef.current && ctx && ctx.state === 'running') {
-        const t = Math.max(0, ctx.currentTime);
+      const ctx =
+        ctxRef.current && ctxRef.current.state !== 'closed'
+          ? ctxRef.current
+          : null;
+      if (runningRef.current && ctx && ctx.state !== 'closed') {
+        setCreationBeatLabTransportRunning(true);
+        if (ctx.state === 'suspended') {
+          void ctx.resume().catch(() => {});
+        }
+        const sat = schedAnchorTimeRef ?? fallbackSchedAnchorTimeRef;
+        const sap = schedAnchorPerfRef ?? fallbackSchedAnchorPerfRef;
+        if (schedAnchorTimeRef && schedAnchorPerfRef) {
+          updateSchedAnchor(ctx, sat, sap);
+        }
+        const t =
+          schedAnchorTimeRef && sat.current > 0
+            ? smoothSchedNow(sat, sap, ctx)
+            : Math.max(0, ctx.currentTime);
         const b = beatAtSessionTime(t, sessionStartRef.current, originBeatRef.current, bpmRef.current);
-        displayBeatRef.current = b;
         onFrameRef.current(b);
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [isScreenActive, ctxRef, runningRef, sessionStartRef, originBeatRef, displayBeatRef, bpmRef, onFrameRef]);
+  }, [
+    isScreenActive,
+    ctxRef,
+    runningRef,
+    sessionStartRef,
+    originBeatRef,
+    displayBeatRef,
+    bpmRef,
+    onFrameRef,
+    schedAnchorTimeRef,
+    schedAnchorPerfRef,
+  ]);
 
+  /**
+   * Lookahead refill while `runningRef` is true — do not gate on React `isPlaying` alone;
+   * `startTransport` sets `runningRef` before `setTransport('playing')`, and a stale
+   * `isPlaying` effect teardown clears the interval and leaves ~3s of audio then silence.
+   */
   useEffect(() => {
-    if (!isScreenActive || !isPlaying) {
+    if (!isScreenActive) {
       lastScheduledQuarterRef.current = Number.NEGATIVE_INFINITY;
       return;
     }
     const tick = () => {
-      const ctx = ctxRef.current ?? getOrCreateAudioContext();
-      if (!ctx || ctx.state === 'closed') return;
-      if (ctx.state === 'suspended') {
-        void ctx.resume().catch(() => {});
-        return;
+      if (!runningRef.current) return;
+      setCreationBeatLabTransportRunning(true);
+      const prevCtx = ctxRef.current;
+      const ctx = resolveBeatLabAudioContext(ctxRef, getOrCreateAudioContext);
+      if (ctx.state === 'closed') return;
+      if (
+        prevCtx &&
+        prevCtx !== ctx &&
+        prevCtx.state === 'closed' &&
+        onAudioContextRebuiltRef?.current
+      ) {
+        onAudioContextRebuiltRef.current(ctx);
       }
       const t = Math.max(0, ctx.currentTime);
-      refillRef.current(ctx, t);
+      if (schedAnchorTimeRef && schedAnchorPerfRef) {
+        schedAnchorTimeRef.current = t;
+        schedAnchorPerfRef.current = performance.now();
+      }
+      const runRefill = () => {
+        if (!runningRef.current || ctx.state === 'closed') return;
+        /** Schedule ahead even while suspended — events queue and play on resume (skipping refill caused ~3s gaps). */
+        refillRef.current(ctx, Math.max(0, ctx.currentTime));
+      };
+      if (ctx.state === 'suspended') {
+        void ctx.resume().catch(() => {});
+      }
+      runRefill();
     };
     tick();
     const id = window.setInterval(tick, CREATION_LOOKAHEAD_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [
     isScreenActive,
-    isPlaying,
     ctxRef,
+    runningRef,
     getOrCreateAudioContext,
     refillRef,
     lastScheduledQuarterRef,
+    onAudioContextRebuiltRef,
   ]);
+
 }
