@@ -1,0 +1,79 @@
+---
+description: NEW SYNTH (synth2) — chord piano roll + bass GENERATOR + transport alignment (USER-VERIFIED — do not regress)
+globs: app/screens/CreationStationScreen.tsx,app/lib/creationStation/beatLabMelodicSoundfont.ts,app/lib/creationStation/beatLabMelodicSynthV2Engine.ts,app/lib/creationStation/beatLabSynthV2BasslineGenerator.ts,app/lib/creationStation/beatLabSynthV2BassNoteEdit.ts,app/lib/creationStation/beatLabChordPianoRollAdapter.ts,app/lib/creationStation/chordBuilderBeatLabImport.ts,app/lib/creationStation/creationPlaylineWapi.ts,app/lib/creationStation/beatLabSynthV2LaneRoles.ts,app/components/creation/BeatLabSynthPianoRoll.tsx,app/components/creation/BeatLabSynthV2BassGenerator.tsx,app/components/creation/BeatLabSynthV2Panel.tsx
+alwaysApply: false
+---
+
+# Beat Lab NEW SYNTH — chord + bass GENERATOR lock (verified)
+
+User spent 1+ week locking transport, GM chords, and bass GENERATOR together. **Do not break** when adding synth features.
+
+## Lanes (synth2 deck)
+
+| Lane | Role | Engine |
+|------|------|--------|
+| `harmonyLane` (CH ~18) | Bar chords from roll / Chord Builder | GM soundfont (`scheduleBeatLabMelodicNote`) |
+| `bassLane` (CH ~17) | Monophonic generated bass | Web Audio V2 (`scheduleBeatLabSynthV2Note`) |
+
+Separate mixer CHs. Never route harmony through bass V2 presets or bass through GM piano bank.
+
+## Grid — one source of truth
+
+- **Step columns per bar:** `beatLabStepsPerBar(subdiv, beatsPerBar, colsPerBar)` from `chordBuilderBeatLabImport.ts`
+- **Never** use raw `subdiv * beatsPerBar` in one place and `beatLabStepsPerBar` in another.
+- Harmony notes: `snapBeatLabChordNotesToBarDownbeats` on patch (`headCol = bar * stepsPerBar`).
+- Piano roll UI uses quarter columns; storage is **step columns** (`beatLabChordPianoRollAdapter`).
+
+## Bass GENERATOR (`beatLabSynthV2GenerateBassRollNotes`)
+
+**Critical bug that broke GENERATOR (do not reintroduce):** after computing local `stepsPerBar`, the loop must use **`stepsPerBar`**, not `opts.stepsPerBar` (undefined → NaN cols → zero notes).
+
+```typescript
+const stepsPerBar =
+  opts.stepsPerBar ??
+  beatLabStepsPerBar(opts.subdiv ?? 4, opts.beatsPerBar ?? 4, opts.colsPerBar ?? 4);
+// ✅ barStart = bar * stepsPerBar
+// ❌ barStart = bar * opts.stepsPerBar
+```
+
+- Bar-root hits (`hit.start < 0.02`): place on harmony downbeat column in that bar, else `bar * stepsPerBar`.
+- Pass `subdiv`, `beatsPerBar`, `colsPerBar` from `BeatLabSynthV2BassGenerator` (not only `stepsPerBar`).
+- GENERATOR button requires `hasChords` (chord rail, chord stacks, or harmony lane notes).
+
+## Transport scheduling (`fireStepAt` in CreationStationScreen)
+
+- `stepsPerBar` / `colInBar`: `beatLabStepsPerBar(subdiv, beatsPerBarRef.current, MEASURES_PER_BAR)`.
+- **Harmony:** only `colInBar === 0`; `whenChord = whenSub`; `whenLocked = max(whenChord - BEAT_LAB_PIANO_TRANSPORT_ONSET_LEAD_SEC, ctx.currentTime + 0.001)`.
+- **Bass downbeats:** same `whenLocked` lead as chords (`colInBar === 0`); off-beat bass uses `scheduleTime` via engine default.
+- **Bass:** `scheduleBeatLabSynthV2Note` respects `opts.whenLocked ?? scheduleTime(ctx, opts.when)`.
+
+## GM soundfont / smplr (`beatLabMelodicSoundfont.ts`)
+
+- Preload on Play: `await ensureBeatLabMelodicInstrumentsReady` **before** `runningRef.current = true`.
+- **Scheduler:** `Scheduler(ctx, { lookaheadMs: ceil(CREATION_SCHEDULE_AHEAD_SEC * 1000) + 250, intervalMs: 16 })` on every `Soundfont()` — default smplr 200ms lookahead breaks 3s transport refill (late chords).
+- `BEAT_LAB_PIANO_TRANSPORT_ONSET_LEAD_SEC = 0.022` — single lead for chord downbeats + bass downbeats.
+- Async `scheduleBeatLabMelodicNote` fallback: skip if `whenLocked < ctx.currentTime - 0.04`.
+
+## Playline (WAAPI)
+
+- Synth roll X: `creationPatternColFFromBeat` (pattern columns), not bank/loop-offset columns.
+- Beat Lab transport lock still applies (`beat-lab-se2-transport-lock.mdc`); do not drive BAR/MSR from WAAPI time.
+
+## Play / Stop
+
+- **Play:** compositor first, then `ensureCtx`, preload GM, `refillCreationSchedule`, `seekRunningCreationPlaylineWapi` — see `beat-lab-se2-transport-lock.mdc`.
+- **Stop:** must silence both engines (pads + melodic + synth v2); do not leave smplr tails or suspended context without resume on next Play.
+
+## Forbidden
+
+- `opts.stepsPerBar` in generator loop when `opts.stepsPerBar` is optional
+- smplr default 200ms scheduler only for transport-scheduled chords
+- Different `stepsPerBar` formulas for chords vs bass vs `colInBar`
+- Harmony on every sub-step column (breaks bar chord model)
+- Modifying `StudioEditor2Screen.tsx` to “fix” NEW SYNTH (`se2-read-only-reference.mdc`)
+
+## If GENERATOR returns no notes
+
+1. Check `stepsPerBar` is defined in `beatLabSynthV2GenerateBassRollNotes` loop.
+2. Check `hasChords` / chord rail / harmony lane data.
+3. Check `patternCols` vs `layoutBars * stepsPerBar`.

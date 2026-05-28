@@ -31,6 +31,7 @@ import {
 } from '@/app/lib/sessionChannelTracks';
 
 import { CREATION_STATION_CLIP_DATA_KEY } from '@/app/lib/sessionClipContent';
+import { KEY_ROOTS, MODE_LABELS } from '@/app/lib/creationStation/chordBuilder';
 
 /* Beat Lab: **own** transport (CreationStation + creationStation/*). Mirrors proven DAW patterns
  * that also exist in Studio Editor 2 — SE2 is read-only reference; never import/link/edit SE2 here.
@@ -44,6 +45,15 @@ import {
   reanchorNextStepWhileStopped,
   seedCreationTransportOnPlay,
 } from '@/app/lib/creationStation/creationTransportSystem';
+import {
+  tickBeatLabChannelMeters,
+} from '@/app/lib/creationStation/beatLabChannelMeters';
+import {
+  applyBeatLabSeamlessLoopSplice,
+  beatLabAudioNow,
+  beatLabVisualBeatFromWapi,
+} from '@/app/lib/creationStation/beatLabSe2TransportEngine';
+import { resolveBeatLabAudioContext } from '@/app/lib/creationStation/beatLabStepScheduler';
 import { useCreationTransportPump } from '@/app/hooks/useCreationTransportPump';
 import {
   getCreationTransportBeatEpoch,
@@ -108,12 +118,20 @@ import {
   type PadSamplerFxRack,
 } from '@/app/lib/creationStation/padSamplerFxRack';
 import { DrumKitGeneratorModal } from '@/app/components/creation/DrumKitGeneratorModal';
+import { BeatLabMixerPanel } from '@/app/components/creation/BeatLabMixerPanel';
 import { TrapKitBrowserPanel } from '@/app/components/creation/TrapKitBrowserPanel';
 import { SoundFamiliesBar } from '@/app/components/creation/SoundFamiliesBar';
 import { PatternBankPanel } from '@/app/components/creation/PatternBankPanel';
-import { presetToBeatLabDrums } from '@/app/lib/creationStation/beatLabPatternBank';
+import { PadFxVerticalFader, PadSamplerEqCompControls } from '@/app/components/creation/PadSamplerFxWidgets';
+import {
+  beatLabPatternBankCategoryLabel,
+  beatLabPatternBankIdForPresetGenre,
+  presetToBeatLabDrums,
+  type BeatLabPatternBankId,
+} from '@/app/lib/creationStation/beatLabPatternBank';
 import { BEAT_LAB_DEFAULT_BPM } from '@/app/lib/creationStation/beatLabFactoryDefaults';
-import type { PatternPreset } from '@/app/lib/patternPresets';
+import { getPatternPresetBpm, type PatternPreset } from '@/app/lib/patternPresets';
+import { registerBeatLabMeterVoice } from '@/app/lib/creationStation/beatLabChannelMeters';
 import {
   audioBufferToStoredKitSample,
   buildKitGroovePattern,
@@ -122,25 +140,85 @@ import {
 } from '@/app/lib/creationStation/drumKitGenerator';
 import { ChordBuilderTab } from '@/app/components/creation/ChordBuilderTab';
 import {
+  beatLabChordRailFromImportSections,
   beatLabPatternColsForLoop,
+  beatLabStepsPerBar,
   chordBuilderSongRollToBeatLabRoll,
+  snapBeatLabChordNotesToBarDownbeats,
+  type BeatLabImportedChordRail,
+  type ChordBuilderBeatLabImportSection,
 } from '@/app/lib/creationStation/chordBuilderBeatLabImport';
-import type { ChordBuilderBeatLabImportSection } from '@/app/lib/creationStation/chordBuilderBeatLabImport';
+import {
+  grooveProgressionStepsToChordRail,
+  grooveRollBarsNeeded,
+  grooveProgressionStepsToBeatLabRoll,
+  grooveRollHitsToBeatLabRoll,
+} from '@/app/lib/creationStation/grooveLabBeatLabImport';
+import {
+  beatLabSynthV2ApplyChordHarmonyMute,
+  beatLabSynthV2HarmonyColumnsOnLane,
+  beatLabSynthV2IsChordHarmonyMuted,
+  beatLabSynthV2IsLowestNoteAtCol,
+} from '@/app/lib/creationStation/beatLabSynthV2BasslineGenerator';
+import {
+  beatLabSynth2IsBassLane,
+  beatLabSynth2IsHarmonyLane,
+  beatLabSynth2NormalizePair,
+  readStoredBeatLabSynth2Lanes,
+  storeBeatLabSynth2Lanes,
+} from '@/app/lib/creationStation/beatLabSynthV2LaneRoles';
+import {
+  BEAT_LAB_SYNTH2_DEFAULT_PIANO_INSTRUMENT,
+  normalizeBeatLabSynth2PianoInstrument,
+  beatLabSynth2PianoRollInstrumentGain,
+} from '@/app/lib/creationStation/beatLabSynthV2PianoBank';
+import { BeatLabSynthV2ChannelAssign } from '@/app/components/creation/BeatLabSynthV2ChannelAssign';
+import {
+  ensureBeatLabMelodicInstrumentsReady,
+  scheduleBeatLabMelodicNote,
+} from '@/app/lib/creationStation/beatLabMelodicSoundfont';
 import { BeatLabPianoRoll } from '@/app/components/creation/BeatLabPianoRoll';
 import { BeatLabSnapGridOverlay } from '@/app/components/creation/BeatLabSnapGridOverlay';
 import { BeatLabMelodicChannelPanel } from '@/app/components/creation/BeatLabMelodicChannelPanel';
 import { BeatLabSynthPianoRoll } from '@/app/components/creation/BeatLabSynthPianoRoll';
+import { BeatLabSynthV2Panel } from '@/app/components/creation/BeatLabSynthV2Panel';
+import { BeatLabSynthV2Workspace } from '@/app/components/creation/BeatLabSynthV2Workspace';
 import {
   BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS,
   BEAT_LAB_MELODIC_INSTRUMENT_OPTIONS,
+  BEAT_LAB_PIANO_TRANSPORT_ONSET_LEAD_SEC,
   beatLabMelodicSlotIndex,
   normalizeBeatLabMelodicInstruments,
   previewBeatLabMelodicNote,
-  scheduleBeatLabMelodicNote,
   resetBeatLabMelodicWarmupFlag,
   startBeatLabMelodicPreview,
   warmupBeatLabMelodicSoundfont,
 } from '@/app/lib/creationStation/beatLabMelodicSoundfont';
+import {
+  BEAT_LAB_DEFAULT_SYNTH_PRESET_ID,
+  beatLabBassSynthPresetById,
+  normalizeBeatLabMelodicSynthPresetIds,
+} from '@/app/lib/creationStation/beatLabMelodicSynthPresets';
+import {
+  beatLabBassSynthVoiceParamsFromPresetId,
+  normalizeBeatLabBassSynthVoiceParams,
+} from '@/app/lib/creationStation/beatLabMelodicSynthV2State';
+import {
+  previewBeatLabSynthV2Note,
+  scheduleBeatLabSynthV2Note,
+  isBeatLabSynthV2HeldPreviewActive,
+  startBeatLabSynthV2HeldPreview,
+  stopBeatLabSynthV2HeldPreview,
+  touchBeatLabSynthV2HeldPreview,
+  playBeatLabSynthV2KeyboardNote,
+  releaseBeatLabSynthV2Keyboard,
+} from '@/app/lib/creationStation/beatLabMelodicSynthV2Engine';
+import {
+  beatLabSynthV2ChordGlideSourceMidi,
+  beatLabSynthV2LegatoSourceMidi,
+  beatLabSynthV2TransportDurationSec,
+  resetBeatLabSynthV2GlideState,
+} from '@/app/lib/creationStation/beatLabMelodicSynthV2Timing';
 import { beatLabSynthWapiPianoColW } from '@/app/lib/creationStation/beatLabChordPianoRollAdapter';
 import { beatLabNoteMidi, beatLabPitchSemiForMidi } from '@/app/lib/creationStation/beatLabMelodicSynth';
 import {
@@ -157,6 +235,7 @@ import {
 } from '@/app/lib/creationStation/beatLabBankHistory';
 import {
   beatLabMelodicLanePitch,
+  beatLabMelodicSynthV2AuditionPitch,
   beatLabPadPlaybackRateDetune,
   beatLabLaneIsPad,
   beatLabRollNotesOverlap,
@@ -199,7 +278,7 @@ import {
   type CreationSubScreenId,
 } from '@/app/lib/creationStation/creationSubScreens';
 import ChordSequencerScreen from '@/app/screens/ChordSequencerScreen';
-import GrooveLabScreen from '@/app/screens/GrooveLabScreen';
+import GrooveLabScreen, { type GrooveLabNewSynthExportArgs } from '@/app/screens/GrooveLabScreen';
 import EightZeroEightTab from '@/app/screens/EightZeroEightTab';
 import { uint8ArrayToBase64 } from '@/app/lib/creationStation/chordRender';
 import {
@@ -224,6 +303,7 @@ import {
   loadBeatLabProducerKitPads,
   type BeatLabProducerKitId,
 } from '@/app/lib/creationStation/beatLabProducerKits';
+import { beatLabProducerKitIdForPatternPreset } from '@/app/lib/creationStation/beatLabPatternPresetKits';
 import {
   captureActiveBankKitPads,
   countSavedKitPads,
@@ -1093,9 +1173,14 @@ function playPadSampleBuffer(
     ((window as unknown as { __daMusicChannelPans?: Record<number, number> }).__daMusicChannelPans?.[chId] ?? 0) / 100;
   const panNode = ctx.createStereoPanner();
   panNode.pan.value = Math.max(-1, Math.min(1, rawPan));
+  const meterAnalyser = ctx.createAnalyser();
+  /** Large window + zero smoothing → reads real peaks (hardware-style), not sluggish averages. */
+  meterAnalyser.fftSize = 2048;
+  meterAnalyser.smoothingTimeConstant = 0;
   const master = (window as unknown as { __daMusicMasterGain?: GainNode | null }).__daMusicMasterGain;
   const dest =
     master && master.context === ctx ? master : ctx.destination;
+  meterAnalyser.connect(panNode);
   panNode.connect(dest);
   const src = ctx.createBufferSource();
   src.buffer = buffer;
@@ -1108,8 +1193,8 @@ function playPadSampleBuffer(
   src.detune.value = detuneCents;
   const dryG = ctx.createGain();
   const wetG = ctx.createGain();
-  dryG.connect(panNode);
-  wetG.connect(panNode);
+  dryG.connect(meterAnalyser);
+  wetG.connect(meterAnalyser);
   const snap = Math.max(0, Math.min(1, sampler.triggerSnap ?? 0));
 
   const sr = buffer.sampleRate;
@@ -1183,6 +1268,7 @@ function playPadSampleBuffer(
       }
       dryG.disconnect();
       wetG.disconnect();
+      meterAnalyser.disconnect();
       panNode.disconnect();
     } catch {
       /* */
@@ -1247,6 +1333,14 @@ function playPadSampleBuffer(
       wetG.gain.linearRampToValueAtTime(vol, whenPlay + decaySec);
     }
     src.start(whenPlay, t0, playDur);
+    registerBeatLabMeterVoice(
+      chId,
+      meterAnalyser,
+      rawPan,
+      whenPlay,
+      whenPlay + Math.min(playDur + fxTailSec + 0.35, 6),
+    );
+    /** Pad VU follows the Analyser tap only — no guessed “velocity pulse” vs real SPL. */
   } catch {
     disposeGraph();
     return () => {};
@@ -1476,6 +1570,10 @@ interface Bank {
   pitchAutomation?: number[];
   /** MusyngKite GM instrument per melodic lane (CH 17?32). */
   melodicInstruments?: string[];
+  /** Bass synth preset id per melodic lane (CH 17-32). */
+  melodicSynthPresetIds?: string[];
+  /** Editable synth v2 voice params per melodic lane (CH 17-32). */
+  melodicSynthVoices?: ReturnType<typeof normalizeBeatLabBassSynthVoiceParams>;
 }
 
 function emptyDrums(): DrumPattern {
@@ -2055,6 +2153,8 @@ interface BeatLabDeckToolbarProps {
   onLoadProducerKit?: () => void;
   producerKitLoading?: boolean;
   producerKitTribute?: string | null;
+  /** Last Pattern Bank drum preset — highlighted next to crew kit / Load kit. */
+  patternBankActivePick?: string | null;
   onGeniusMySoundPlay?: (padIndex: number) => void;
   /** Stop all currently playing sample voices on this pad (long samples / stacked hits). */
   onStopPadSamplePlayback?: (padIndex: number) => void;
@@ -2112,6 +2212,9 @@ interface BeatLabDeckToolbarProps {
   deckTransportClocks?: React.ReactNode;
   /** 32-ch piano roll panel (under sampler pads) */
   pianoRollSlot?: React.ReactNode;
+  /** Beat Lab mixer strip panel (pads CH 1–16 + melodic CH 17–32) */
+  beatLabMixerOpen?: boolean;
+  onBeatLabMixerToggle?: () => void;
   beatLabDeckFocus?: BeatLabDeckFocus;
   onBeatLabDeckFocusChange?: (focus: BeatLabDeckFocus) => void;
   /** GRID full editor ? hide 16-pad sampler block; kit row stays visible. */
@@ -2121,9 +2224,11 @@ interface BeatLabDeckToolbarProps {
   onSelectDrumPad?: (padIndex: number) => void;
   selectedMelodicLane?: number | null;
   melodicInstruments?: string[];
+  melodicSynthPresetIds?: string[];
   channelVolumes?: Record<number, number>;
   getAudioContext?: () => AudioContext;
   onMelodicInstrumentChange?: (slotIndex: number, instrumentId: string) => void;
+  onMelodicSynthPresetChange?: (slotIndex: number, presetId: string) => void;
   creationBackendBlank?: boolean;
   /** Project BPM ? delay sync + readout in EFX rack. */
   sessionBpm?: number;
@@ -2148,6 +2253,7 @@ function BeatLabDeckToolbar({
   onLoadProducerKit,
   producerKitLoading = false,
   producerKitTribute,
+  patternBankActivePick = null,
   onGeniusMySoundPlay,
   onStopPadSamplePlayback,
   geniusSamplerTargetPad = 14,
@@ -2189,6 +2295,8 @@ function BeatLabDeckToolbar({
   sessionZoomTools,
   deckTransportClocks,
   pianoRollSlot,
+  beatLabMixerOpen = false,
+  onBeatLabMixerToggle,
   beatLabDeckFocus = 'sequence',
   onBeatLabDeckFocusChange,
   hideSamplerPads = false,
@@ -2196,9 +2304,11 @@ function BeatLabDeckToolbar({
   onSelectDrumPad,
   selectedMelodicLane = null,
   melodicInstruments = [...BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS],
+  melodicSynthPresetIds = Array.from({ length: 16 }, () => BEAT_LAB_DEFAULT_SYNTH_PRESET_ID),
   channelVolumes = {},
   getAudioContext,
   onMelodicInstrumentChange,
+  onMelodicSynthPresetChange,
   creationBackendBlank = false,
   sessionBpm = 120,
 }: BeatLabDeckToolbarProps) {
@@ -2456,7 +2566,7 @@ function BeatLabDeckToolbar({
       const btn = efxTriggerRefs.current[efxOpenPad];
       if (btn) {
         const br = btn.getBoundingClientRect();
-        const w = Math.min(248, vw - 2 * VIEW);
+        const w = Math.min(270, vw - 2 * VIEW);
         const panel = efxPopoverMeasureRef.current;
         const rawH = panel?.offsetHeight ?? 320;
         const h = Math.min(rawH, vh - 2 * VIEW);
@@ -2623,6 +2733,28 @@ function BeatLabDeckToolbar({
               title="Built-in kits: long 808 tails, claps, trap hits ? or Import folder for your own drums"
             >
               <span style={{ fontSize: 7, color: '#c9a227', fontWeight: 900, letterSpacing: 0.8 }}>CREW KITS</span>
+              {patternBankActivePick ? (
+                <span
+                  title={patternBankActivePick}
+                  style={{
+                    fontSize: 8,
+                    fontWeight: 900,
+                    color: '#7cf4c6',
+                    padding: '3px 7px',
+                    borderRadius: 4,
+                    border: '1px solid rgba(124, 244, 198, 0.5)',
+                    background: 'rgba(124, 244, 198, 0.12)',
+                    maxWidth: 160,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 1,
+                    letterSpacing: 0.2,
+                  }}
+                >
+                  Pattern: {patternBankActivePick}
+                </span>
+              ) : null}
               <select
                 value={producerKitId}
                 onChange={(e) => onProducerKitIdChange?.(e.target.value as BeatLabProducerKitId)}
@@ -2896,6 +3028,37 @@ function BeatLabDeckToolbar({
               }}
             >
               Load project folder
+            </button>
+          ) : null}
+          {typeof onBeatLabMixerToggle === 'function' ? (
+            <button
+              type="button"
+              disabled={patternActionsDisabled}
+              onClick={() => {
+                if (patternActionsDisabled) return;
+                onBeatLabMixerToggle();
+              }}
+              title="32-channel Beat Lab mixer · CH 1–16 pads · CH 17–32 melodic lanes"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 28,
+                padding: '0 8px',
+                borderRadius: 4,
+                border: '1px solid rgba(0, 229, 255, 0.45)',
+                background: beatLabMixerOpen ? 'rgba(0, 229, 255, 0.14)' : 'rgba(11, 11, 16, 0.65)',
+                color: '#00E5FF',
+                fontSize: 10,
+                fontWeight: 800,
+                cursor: patternActionsDisabled ? 'not-allowed' : 'pointer',
+                opacity: patternActionsDisabled ? 0.45 : 1,
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <SlidersHorizontal size={13} aria-hidden />
+              Mixer
             </button>
           ) : null}
           {typeof onSaveKit === 'function' ? (
@@ -3506,7 +3669,7 @@ function BeatLabDeckToolbar({
                           }}
                           title={
                             has
-                              ? 'EFX rack: drive, delay, reverb (per pad)'
+                              ? 'EFX rack: EQ, compressor, drive, delay, reverb (per pad)'
                               : 'Load a sample first ? then open the EFX rack'
                           }
                           style={{
@@ -3634,7 +3797,7 @@ function BeatLabDeckToolbar({
         </div>
       </div>
         ) : null}
-        {beatLabDeckFocus === 'roll' &&
+        {beatLabDeckFocus !== 'sequence' &&
         selectedMelodicLane != null &&
         selectedMelodicLane >= BEAT_LAB_MELODIC_LANE_START &&
         getAudioContext &&
@@ -3646,10 +3809,17 @@ function BeatLabDeckToolbar({
               BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[beatLabMelodicSlotIndex(selectedMelodicLane)]!
             }
             melodicInstruments={melodicInstruments}
+            synthPresetId={
+              melodicSynthPresetIds[beatLabMelodicSlotIndex(selectedMelodicLane)] ??
+              BEAT_LAB_DEFAULT_SYNTH_PRESET_ID
+            }
             channelVolumes={channelVolumes}
             disabled={creationBackendBlank}
             getAudioContext={getAudioContext}
             onInstrumentChange={onMelodicInstrumentChange}
+            onSynthPresetChange={(slotIndex, presetId) => {
+              onMelodicSynthPresetChange?.(slotIndex, presetId);
+            }}
           />
         ) : null}
     </div>
@@ -4168,12 +4338,12 @@ function BeatLabDeckToolbar({
             background: 'linear-gradient(165deg, rgba(14, 11, 22, 0.94) 0%, rgba(8, 8, 14, 0.98) 100%)',
             boxShadow: '0 12px 36px rgba(0,0,0,0.75)',
             overflow: 'hidden',
-            maxHeight: 'min(420px, calc(100vh - 16px))',
+            maxHeight: 'min(560px, calc(100vh - 16px))',
           }}
         >
           <div
             style={{
-              maxHeight: 'min(62vh, 380px)',
+              maxHeight: 'min(68vh, 520px)',
               overflowY: 'auto',
               overflowX: 'hidden',
               margin: '-2px',
@@ -4239,21 +4409,45 @@ function BeatLabDeckToolbar({
                 </button>
               </div>
             </div>
-            <label style={{ fontSize: 7, color: '#888', display: 'block', marginBottom: 2 }}>Drive / saturation</label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={Math.round(efxDraft.drive * 100)}
-              onChange={(e) =>
-                setEfxDraft((d) => ({ ...d, drive: Math.max(0, Math.min(1, Number(e.target.value) / 100)) }))
-              }
-              style={{ width: '100%', margin: '6px 0', accentColor: '#a78bfa' }}
-            />
-            <div style={{ fontSize: 8, color: '#9ca3af', marginBottom: 8 }}>
-              {Math.round(efxDraft.drive * 100)}%
+            <div style={{ fontSize: 7, color: '#6b7280', fontWeight: 800, marginBottom: 6 }}>DRIVE / SAT</div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'flex-start',
+                gap: 12,
+                marginBottom: 10,
+              }}
+            >
+              <PadFxVerticalFader
+                label="DRIVE"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(efxDraft.drive * 100)}
+                onChange={(pct) =>
+                  setEfxDraft((d) => ({ ...d, drive: Math.max(0, Math.min(1, pct / 100)) }))
+                }
+                format={(v) => `${Math.round(v)}%`}
+                accent="#a78bfa"
+              />
             </div>
+            <PadSamplerEqCompControls
+              eq={efxDraft.eq}
+              onEqChange={(next) =>
+                setEfxDraft((d) => ({
+                  ...d,
+                  eq: { ...d.eq, ...next },
+                }))
+              }
+              comp={efxDraft.compressor}
+              onCompChange={(next) =>
+                setEfxDraft((d) => ({
+                  ...d,
+                  compressor: { ...d.compressor, ...next },
+                }))
+              }
+            />
             <div style={{ fontSize: 7, color: '#6b7280', fontWeight: 800, marginBottom: 4 }}>DELAY</div>
             <button
               type="button"
@@ -4614,11 +4808,13 @@ function CreationStationScreenBody({
   const {
     triggerChannel,
     channelVolumes,
+    setChannelVolume,
     getOrCreateAudioContext,
     getMetronomeBusGain,
     masterOutputLinear,
     setMasterOutputLinear,
     // Keep shared audio routing / synth only; Creation transport is local.
+    stopMetronomeLoop,
   } = useMasterClock();
   const { settings, updateSetting } = useSettings();
 
@@ -4637,6 +4833,9 @@ function CreationStationScreenBody({
 
   type LocalTransportState = 'stopped' | 'playing' | 'paused' | 'recording';
   const [transport, setTransport] = useState<LocalTransportState>('stopped');
+  /** Audio lookahead + rAF gate — set only in start / pause / stop (do not mirror from React state here). */
+  const runningRef = useRef(false);
+  const recordingRef = useRef(false);
   /**
    * Keep master `pause`/`stop` from suspending the shared graph while Beat Lab is playing.
    * `runningRef` is set before `setTransport` — never clear the flag from stale React transport alone.
@@ -4648,9 +4847,6 @@ function CreationStationScreenBody({
         transport === 'recording',
     );
   }, [transport]);
-  /** Audio lookahead + rAF gate ? set only in start / pause / stop (do not mirror from React state here). */
-  const runningRef = useRef(false);
-  const recordingRef = useRef(false);
 
   const [bpm, setBpm] = useState(() => {
     try {
@@ -4718,6 +4914,8 @@ function CreationStationScreenBody({
   );
 
   const ctxRef = useRef<AudioContext | null>(null);
+  const synthV2KeyboardLaneRef = useRef(BEAT_LAB_MELODIC_LANE_START);
+  const clearSynthV2PlayingMidisRef = useRef<() => void>(() => {});
   const sessionStartRef = useRef(0);
   const originBeatRef = useRef(0);
   const cursorBeatRef = useRef(0);
@@ -4769,15 +4967,18 @@ function CreationStationScreenBody({
   const beatLabDeckFocusRef = useRef<BeatLabDeckFocus>('sequence');
   const beatLabSynthFocusRef = useRef<{ lane: number; col: number } | null>(null);
 
+  const beatLabDeckIsSynthRoll = (focus: BeatLabDeckFocus = beatLabDeckFocusRef.current) =>
+    focus === 'synth' || focus === 'synth2';
+
   const beatLabPianoPlaylineEl = (): HTMLDivElement | null => {
     if (tabRef.current !== 'grid') return pianoPlaylineRef.current;
-    if (beatLabDeckFocusRef.current === 'synth') return beatLabSynthPlaylineRef.current;
+    if (beatLabDeckIsSynthRoll()) return beatLabSynthPlaylineRef.current;
     return beatLabRollPlaylineRef.current;
   };
 
   /** Step-grid col width (ROLL) or scaled width so WAAPI `colF` matches SYNTH quarter columns. */
   const beatLabPianoColWForView = (gridColW: number): number => {
-    if (beatLabDeckFocusRef.current === 'synth') {
+    if (beatLabDeckIsSynthRoll()) {
       return beatLabSynthWapiPianoColW(
         drumStepSubdivRef.current,
         beatsPerBarRef.current,
@@ -4823,6 +5024,8 @@ function CreationStationScreenBody({
   const nextStepBeatRef = useRef(0);
   const nextStepTimeRef = useRef(0);
   const nextMetroKRef = useRef(0);
+  /** Anti-double-metronome: at most one buffer click per quarter index (refill races / master+local). */
+  const creationLastEmittedMetroKRef = useRef(Number.NEGATIVE_INFINITY);
   const lastScheduledQuarterRef = useRef<number>(Number.NEGATIVE_INFINITY);
   /** Caller audio-time snapshot for the active refill (DAW chain rule — do not re-read `ctx.currentTime` in steps). */
   const creationRefillCtSnapRef = useRef(0);
@@ -4905,7 +5108,7 @@ function CreationStationScreenBody({
   }, [getOrCreateAudioContext]);
 
   const resetCreationPlaylineTransforms = useCallback(() => {
-    const cw = Math.max(colWidthRef.current, DRUM_GRID_MIN_CW);
+    const pianoEl = beatLabPianoPlaylineEl();
     cancelCreationPlaylineWapi(
       {
         drumAnimRef: creationDrumPlaylineAnimRef,
@@ -4913,11 +5116,10 @@ function CreationStationScreenBody({
         drumQuantGlowAnimRef: creationDrumQuantGlowAnimRef,
       },
       drumPlaylineRef.current,
-      beatLabPianoPlaylineEl(),
+      pianoEl,
       null,
     );
     const drumEl = drumPlaylineRef.current;
-    const pianoEl = beatLabPianoPlaylineEl();
     if (drumEl) drumEl.style.transform = `translate3d(${-CREATION_DRUM_PLAYLINE_CENTER_X}px, 0, 0)`;
     if (pianoEl) pianoEl.style.transform = `translate3d(${-CREATION_PIANO_PLAYLINE_CENTER_X}px, 0, 0)`;
   }, []);
@@ -4929,6 +5131,7 @@ function CreationStationScreenBody({
    */
   /** Cancel compositor motion and snap playline to `beatNow` (stop / rewind / scrub while halted). */
   const haltCreationPlaylineAtBeat = useCallback((beatNow: number) => {
+    const pianoEl = beatLabPianoPlaylineEl();
     cancelCreationPlaylineWapi(
       {
         drumAnimRef: creationDrumPlaylineAnimRef,
@@ -4938,7 +5141,7 @@ function CreationStationScreenBody({
         wapiBpmRef: creationWapiBpmRef,
       },
       drumPlaylineRef.current,
-      beatLabPianoPlaylineEl(),
+      pianoEl,
       null,
     );
     creationWapiSegStateRef.current = { ...CREATION_PLAYLINE_WAPI_SEG_IDLE };
@@ -4946,7 +5149,7 @@ function CreationStationScreenBody({
     const pcw = beatLabPianoColWForView(Math.max(colWidthRef.current, PIANO_GRID_MIN_CW));
     setCreationPlaylineTransformStatic({
       drumEl: drumPlaylineRef.current,
-      pianoEl: beatLabPianoPlaylineEl(),
+      pianoEl,
       drumQuantGlowEl: null,
       beatNow,
       subdiv: drumStepSubdivRef.current,
@@ -4958,7 +5161,7 @@ function CreationStationScreenBody({
       loopEndBeat: loopEndBeatRef.current,
       playMode: patternPlayModeRef.current,
     });
-    for (const el of [drumPlaylineRef.current, beatLabPianoPlaylineEl()]) {
+    for (const el of [drumPlaylineRef.current, pianoEl]) {
       if (!el) continue;
       el.getAnimations().forEach((a) => a.cancel());
       el.style.removeProperty('will-change');
@@ -5005,7 +5208,7 @@ function CreationStationScreenBody({
     scrollEl(drumScrollRef.current);
     if (tabRef.current === 'grid') {
       scrollEl(
-        beatLabDeckFocusRef.current === 'synth'
+        beatLabDeckIsSynthRoll()
           ? beatLabSynthScrollRef.current
           : beatLabRollScrollRef.current,
       );
@@ -5081,6 +5284,9 @@ function CreationStationScreenBody({
     recordingRef.current = mode === 'record';
     creationTransportPlayStartMsRef.current = performance.now();
     setCreationBeatLabTransportRunning(true);
+    /** Single metronome authority — Beat Lab lookahead only (same as Groove Lab `stopMetronomeLoop`). */
+    stopMetronomeLoop();
+    cancelScheduledCreationMetroNodes();
     resetCreationLoopWrapDetectRefs(
       creationWapiPrevPhaseMsRef,
       creationWapiLoopCycleSeenRef,
@@ -5093,7 +5299,7 @@ function CreationStationScreenBody({
     launchCreationPlaylineWapiNow(origin, true, { immediateCompositorStart: true });
     const ctx = await ensureCtx();
     stopAllScheduledPadVoices();
-    const tNow = Math.max(0, ctx.currentTime);
+    const tNow = beatLabAudioNow(ctx);
     sessionStartRef.current = tNow + SE2_AUDIO_START_FLOOR_SEC;
     schedAnchorTimeRef.current = tNow;
     schedAnchorPerfRef.current = performance.now();
@@ -5105,10 +5311,15 @@ function CreationStationScreenBody({
     nextStepBeatRef.current = k0;
     nextStepTimeRef.current = sessionStartRef.current + (k0 - origin) * spb;
     nextMetroKRef.current = k0;
+    creationLastEmittedMetroKRef.current = k0 - 1;
     lastScheduledQuarterRef.current = k0 - 1;
     displayBeatRef.current = origin;
+    /** Preload GM piano before scheduling — async load on beat-0 caused late chord hits. */
+    await ensureBeatLabMelodicInstrumentsReady(ctx, [
+      ...melodicInstrumentsRef.current,
+      beatLabSynth2PianoInstrumentRef.current,
+    ]);
     runningRef.current = true;
-    void warmupBeatLabMelodicSoundfont(ctx, melodicInstrumentsRef.current);
     /** SE2 order: anchor audio, immediate refill, then compositor WAAPI locked to `sessionStart`. */
     refillCreationScheduleRef.current(ctx, tNow, { skipOverdueCatchUp: true });
     /** Lock playline to cursor + audio session anchor (no cancel — avoids flash). */
@@ -5158,7 +5369,7 @@ function CreationStationScreenBody({
         scrollOne(drumScrollRef.current, pos0.drumX);
         if (tabRef.current === 'grid') {
           scrollOne(
-            beatLabDeckFocusRef.current === 'synth'
+            beatLabDeckIsSynthRoll()
               ? beatLabSynthScrollRef.current
               : beatLabRollScrollRef.current,
             pos0.pianoX,
@@ -5201,6 +5412,8 @@ function CreationStationScreenBody({
     launchCreationPlaylineWapiNow,
     paintCreationSe2TransportReadouts,
     stopAllScheduledPadVoices,
+    stopMetronomeLoop,
+    cancelScheduledCreationMetroNodes,
   ]);
 
   const pauseTransport = useCallback(async () => {
@@ -5222,7 +5435,8 @@ function CreationStationScreenBody({
       creationWapiLoopCycleSeenRef,
       creationLoopPhaseRef,
     );
-    haltCreationPlaylineAtBeat(b);
+    /** SE2 `pauseTransport`: paused WAAPI at `pauseBeat` (not cancel + static snap). */
+    launchCreationPlaylineWapiNow(b, false);
     const qpbR = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
     const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
     const pcols = Math.max(1, patternColsDrumsRef.current);
@@ -5257,7 +5471,7 @@ function CreationStationScreenBody({
   }, [
     cancelScheduledCreationMetroNodes,
     ensureCtx,
-    haltCreationPlaylineAtBeat,
+    launchCreationPlaylineWapiNow,
     paintCreationSe2TransportReadouts,
     stopAllScheduledPadVoices,
   ]);
@@ -5265,6 +5479,11 @@ function CreationStationScreenBody({
   const stopTransport = useCallback(() => {
     cancelScheduledCreationMetroNodes();
     stopAllScheduledPadVoices();
+    const cStop = ctxRef.current;
+    if (cStop && cStop.state === 'running') {
+      // Hard-stop audio tails (synth slide/glide FX, delay/reverb feedback, etc.).
+      void cStop.suspend().catch(() => {});
+    }
     let b = displayBeatRef.current;
     const ctx = ctxRef.current;
     if (ctx && ctx.state !== 'closed' && sessionStartRef.current > 0 && runningRef.current) {
@@ -5274,6 +5493,10 @@ function CreationStationScreenBody({
     }
     runningRef.current = false;
     recordingRef.current = false;
+    resetBeatLabSynthV2GlideState();
+    stopBeatLabSynthV2HeldPreview(synthV2KeyboardLaneRef.current);
+    releaseBeatLabSynthV2Keyboard(synthV2KeyboardLaneRef.current);
+    clearSynthV2PlayingMidisRef.current();
     creationTransportPlayStartMsRef.current = -1;
     setCreationBeatLabTransportRunning(false);
     schedAnchorTimeRef.current = 0;
@@ -5482,14 +5705,6 @@ function CreationStationScreenBody({
   const loopStartBar = Math.floor(loopStartBeatRef.current / beatsPerBarRef.current) + 1;
   const loopEndBar = Math.floor(loopEndBeatRef.current / beatsPerBarRef.current);
   const loopSection: string | null = null;
-  const setLoopRange = useCallback(
-    (startBar: number, endBar: number) => {
-      const s = Math.max(1, Math.round(startBar));
-      const e = Math.max(s, Math.round(endBar));
-      setLoopRangeBeats((s - 1) * beatsPerBarRef.current, e * beatsPerBarRef.current);
-    },
-    [setLoopRangeBeats],
-  );
 
   const drumStepSubdivUi = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdiv)));
 
@@ -5510,12 +5725,37 @@ function CreationStationScreenBody({
   const [tab, setTab]               = useState<'drums' | 'grid' | 'groove-lab' | 'piano' | 'chord' | 'chord-seq' | '808-lab'>('grid');
   tabRef.current = tab;
 
-  /** Master transport UI only exists on Beat Lab ? pause if the user leaves while playing so audio is not stuck with no controls. */
+  /** Master transport UI only exists on Beat Lab — pause if the user leaves while playing so audio is not stuck with no controls. */
   useEffect(() => {
     if (tab === 'grid') return;
     if (!runningRef.current) return;
     void pauseTransport();
   }, [tab, pauseTransport]);
+
+  /** Groove Lab owns transport + metronome — silence master MET lookahead and Beat Lab metro on that tab. */
+  useEffect(() => {
+    if (tab !== 'groove-lab') return;
+    stopMetronomeLoop();
+    cancelScheduledCreationMetroNodes();
+    setCreationBeatLabTransportRunning(false);
+  }, [tab, stopMetronomeLoop, cancelScheduledCreationMetroNodes]);
+
+  /** Beat Lab / NEW SYNTH use local lookahead MET — never stack on master-clock worker clicks. */
+  useEffect(() => {
+    if (!isScreenActive || tab === 'groove-lab') return;
+    stopMetronomeLoop();
+  }, [isScreenActive, tab, stopMetronomeLoop]);
+
+  /** MET toggle while playing — drop queued clicks and re-seed from `nextMetroKRef`. */
+  useEffect(() => {
+    if (!runningRef.current) return;
+    const ctx = ctxRef.current;
+    if (!ctx || ctx.state === 'closed') return;
+    stopMetronomeLoop();
+    cancelScheduledCreationMetroNodes();
+    creationLastEmittedMetroKRef.current = nextMetroKRef.current - 1;
+    refillCreationScheduleRef.current(ctx, Math.max(0, ctx.currentTime), { skipOverdueCatchUp: true });
+  }, [metronomeEnabled, cancelScheduledCreationMetroNodes, stopMetronomeLoop]);
 
   const [drumKitGenOpen, setDrumKitGenOpen] = useState(false);
 
@@ -5566,6 +5806,15 @@ function CreationStationScreenBody({
               melodicInstruments: normalizeBeatLabMelodicInstruments(
                 (b as { melodicInstruments?: unknown }).melodicInstruments,
               ),
+              melodicSynthPresetIds: normalizeBeatLabMelodicSynthPresetIds(
+                (b as { melodicSynthPresetIds?: unknown }).melodicSynthPresetIds,
+              ),
+              melodicSynthVoices: normalizeBeatLabBassSynthVoiceParams(
+                (b as { melodicSynthVoices?: unknown }).melodicSynthVoices,
+                normalizeBeatLabMelodicSynthPresetIds(
+                  (b as { melodicSynthPresetIds?: unknown }).melodicSynthPresetIds,
+                ),
+              ),
             };
           });
         }
@@ -5581,6 +5830,8 @@ function CreationStationScreenBody({
       volAutomation: undefined,
       pitchAutomation: undefined,
       melodicInstruments: normalizeBeatLabMelodicInstruments(undefined),
+      melodicSynthPresetIds: normalizeBeatLabMelodicSynthPresetIds(undefined),
+      melodicSynthVoices: normalizeBeatLabBassSynthVoiceParams(undefined),
     }));
   });
   const [beatLabDeckFocus, setBeatLabDeckFocusState] = useState<BeatLabDeckFocus>('sequence');
@@ -5595,7 +5846,7 @@ function CreationStationScreenBody({
     });
   }, []);
   useEffect(() => {
-    if (beatLabDeckFocus === 'synth') {
+    if (beatLabDeckFocus === 'synth' || beatLabDeckFocus === 'synth2') {
       setSelectedBeatLabLane((lane) =>
         lane != null && lane >= BEAT_LAB_MELODIC_LANE_START ? lane : BEAT_LAB_MELODIC_LANE_START,
       );
@@ -5608,12 +5859,37 @@ function CreationStationScreenBody({
     }
   }, [beatLabDeckFocus]);
 
+  const [beatLabMixerOpen, setBeatLabMixerOpen] = useState(false);
+  const [beatLabSynthChordRail, setBeatLabSynthChordRail] = useState<BeatLabImportedChordRail | null>(null);
+  const beatLabSynthChordRailRef = useRef<BeatLabImportedChordRail | null>(null);
+  beatLabSynthChordRailRef.current = beatLabSynthChordRail;
+
+  const [beatLabSynth2BassLane, setBeatLabSynth2BassLane] = useState(
+    () => readStoredBeatLabSynth2Lanes().bassLane,
+  );
+  const [beatLabSynth2HarmonyLane, setBeatLabSynth2HarmonyLane] = useState(
+    () => readStoredBeatLabSynth2Lanes().harmonyLane,
+  );
+  const [beatLabSynth2PianoInstrument, setBeatLabSynth2PianoInstrument] = useState(
+    BEAT_LAB_SYNTH2_DEFAULT_PIANO_INSTRUMENT,
+  );
+  const beatLabSynth2BassLaneRef = useRef(beatLabSynth2BassLane);
+  const beatLabSynth2HarmonyLaneRef = useRef(beatLabSynth2HarmonyLane);
+  const beatLabSynth2PianoInstrumentRef = useRef(beatLabSynth2PianoInstrument);
+  beatLabSynth2BassLaneRef.current = beatLabSynth2BassLane;
+  beatLabSynth2HarmonyLaneRef.current = beatLabSynth2HarmonyLane;
+  beatLabSynth2PianoInstrumentRef.current = beatLabSynth2PianoInstrument;
+
   useEffect(() => {
-    if (beatLabDeckFocus !== 'synth' || CREATION_BACKEND_BLANK) return;
+    if ((beatLabDeckFocus !== 'synth' && beatLabDeckFocus !== 'synth2') || CREATION_BACKEND_BLANK) return;
     resetBeatLabMelodicWarmupFlag();
     const ctx = getOrCreateAudioContext();
     void ctx.resume().then(() => {
-      void warmupBeatLabMelodicSoundfont(ctx, melodicInstrumentsRef.current, true);
+      void warmupBeatLabMelodicSoundfont(
+        ctx,
+        [...melodicInstrumentsRef.current, beatLabSynth2PianoInstrumentRef.current],
+        true,
+      );
     });
   }, [beatLabDeckFocus, getOrCreateAudioContext]);
 
@@ -5629,6 +5905,14 @@ function CreationStationScreenBody({
   /** Last grid cell pointer-down (any tool) ? shortcuts work without PTR selection state. */
   const beatLabGridFocusRef = useRef<{ lane: number; col: number } | null>(null);
   beatLabDeckFocusRef.current = beatLabDeckFocus;
+
+  /** While playing, swap SYNTH / ROLL / NEW SYNTH compositor without touching Beat Lab audio session. */
+  useEffect(() => {
+    if (!runningRef.current) return;
+    const beat = displayBeatRef.current;
+    launchCreationPlaylineWapiNow(beat, true);
+  }, [beatLabDeckFocus, launchCreationPlaylineWapiNow]);
+
   const beatLabRollClipboardRef = useRef<BeatLabMidiNote[]>([]);
   const [beatLabTimeStretch, setBeatLabTimeStretch] = useState(false);
   const beatLabTimeStretchRef = useRef(false);
@@ -5886,6 +6170,7 @@ function CreationStationScreenBody({
       playOpts?: { tempoSyncRate?: number },
     ) => {
       const ctx = getOrCreateAudioContext();
+      ctxRef.current = ctx;
       if (ctx.state === 'suspended') {
         void ctx.resume().catch(() => {});
       }
@@ -6107,6 +6392,8 @@ function CreationStationScreenBody({
   // Single source of truth for visible transport column (grid + HUD stay linked).
   let activeCol = -1;
   if (transportNotStopped) activeCol = visualSyncCol;
+  /** SYNTH quarter roll: same fallback as ROLL when paused/stopped (`activeCol === -1`). */
+  const beatLabSynthPlayheadStepCol = activeCol >= 0 ? activeCol : visualSyncCol;
 
   const qpbHud = Math.max(2, Math.min(16, Math.round(qpb)));
 
@@ -6126,6 +6413,65 @@ function CreationStationScreenBody({
   );
   const melodicInstrumentsRef = useRef(currentMelodicInstruments);
   melodicInstrumentsRef.current = currentMelodicInstruments;
+  const currentMelodicSynthPresetIds = useMemo(
+    () =>
+      banks[activeBank]?.melodicSynthPresetIds ??
+      normalizeBeatLabMelodicSynthPresetIds(undefined),
+    [activeBank, banks],
+  );
+  const currentMelodicSynthVoices = useMemo(
+    () =>
+      banks[activeBank]?.melodicSynthVoices ??
+      normalizeBeatLabBassSynthVoiceParams(undefined, currentMelodicSynthPresetIds),
+    [activeBank, banks, currentMelodicSynthPresetIds],
+  );
+  const melodicSynthPresetIdsRef = useRef(currentMelodicSynthPresetIds);
+  melodicSynthPresetIdsRef.current = currentMelodicSynthPresetIds;
+  const melodicSynthVoicesRef = useRef(currentMelodicSynthVoices);
+  melodicSynthVoicesRef.current = currentMelodicSynthVoices;
+
+  const beatLabMixerPadStripLabels = useMemo(
+    () =>
+      PAD_NAMES.map((_, i) =>
+        beatLabLaneDisplayLabel(i, padSampleLabels[padSampleKey(activeBank, i)]),
+      ),
+    [activeBank, padSampleLabels],
+  );
+
+  const beatLabMelodicMixerStripLabels = useMemo(
+    () =>
+      currentMelodicSynthPresetIds.map((id) => beatLabBassSynthPresetById(id).name),
+    [currentMelodicSynthPresetIds],
+  );
+
+  const beatLabMixerPanelNode = useMemo(
+    () => (
+      <BeatLabMixerPanel
+        open={beatLabMixerOpen}
+        onClose={() => setBeatLabMixerOpen(false)}
+        padStripLabels={beatLabMixerPadStripLabels}
+        melodicInstrumentIds={currentMelodicInstruments}
+        melodicStripLabels={
+          beatLabDeckFocus === 'synth2' ? beatLabMelodicMixerStripLabels : undefined
+        }
+        channelVolumes={channelVolumes}
+        setChannelVolume={setChannelVolume}
+        masterOutputLinear={masterOutputLinear}
+        onMasterVolumeChange={onMasterVolumeChange}
+      />
+    ),
+    [
+      beatLabDeckFocus,
+      beatLabMelodicMixerStripLabels,
+      beatLabMixerOpen,
+      beatLabMixerPadStripLabels,
+      channelVolumes,
+      currentMelodicInstruments,
+      masterOutputLinear,
+      onMasterVolumeChange,
+      setChannelVolume,
+    ],
+  );
 
   const patchMelodicInstrument = useCallback((slotIndex: number, instrumentId: string) => {
     setBanks((prev) =>
@@ -6137,6 +6483,49 @@ function CreationStationScreenBody({
       }),
     );
   }, [activeBank]);
+  const patchMelodicSynthPreset = useCallback((slotIndex: number, presetId: string) => {
+    setBanks((prev) =>
+      prev.map((b, i) => {
+        if (i !== activeBank) return b;
+        const next = normalizeBeatLabMelodicSynthPresetIds(b.melodicSynthPresetIds);
+        next[slotIndex] = presetId;
+        return { ...b, melodicSynthPresetIds: next };
+      }),
+    );
+  }, [activeBank]);
+  const patchMelodicSynthVoice = useCallback(
+    (slotIndex: number, nextPatch: Partial<ReturnType<typeof beatLabBassSynthVoiceParamsFromPresetId>>) => {
+      setBanks((prev) =>
+        prev.map((b, i) => {
+          if (i !== activeBank) return b;
+          const ids = normalizeBeatLabMelodicSynthPresetIds(b.melodicSynthPresetIds);
+          const voices = normalizeBeatLabBassSynthVoiceParams(b.melodicSynthVoices, ids);
+          voices[slotIndex] = { ...voices[slotIndex], ...nextPatch };
+          return { ...b, melodicSynthVoices: voices };
+        }),
+      );
+    },
+    [activeBank],
+  );
+  const loadMelodicSynthVoiceFromPreset = useCallback(
+    (slotIndex: number, presetId: string) => {
+      setBanks((prev) =>
+        prev.map((b, i) => {
+          if (i !== activeBank) return b;
+          const ids = normalizeBeatLabMelodicSynthPresetIds(b.melodicSynthPresetIds);
+          const voices = normalizeBeatLabBassSynthVoiceParams(b.melodicSynthVoices, ids);
+          const prevOut = voices[slotIndex]?.outputLevel;
+          voices[slotIndex] = {
+            ...beatLabBassSynthVoiceParamsFromPresetId(presetId),
+            outputLevel: prevOut,
+          };
+          return { ...b, melodicSynthVoices: voices };
+        }),
+      );
+    },
+    [activeBank],
+  );
+
   const currentMidiRollRef = useRef(currentMidiRoll);
   currentMidiRollRef.current = currentMidiRoll;
 
@@ -6420,20 +6809,168 @@ function CreationStationScreenBody({
     const ctx = getOrCreateAudioContext();
     void ctx.resume().then(() => {
       const slot = beatLabMelodicSlotIndex(lane);
-      const instId =
-        melodicInstrumentsRef.current[slot] ?? BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[slot]!;
       const when = ctx.currentTime + 0.01;
+      const channelVolumes = channelVolumesRef.current;
+      const bassLane = beatLabSynth2BassLaneRef.current;
+      const harmonyLane = beatLabSynth2HarmonyLaneRef.current;
+      if (beatLabSynth2IsHarmonyLane(lane, harmonyLane)) {
+        const pianoId = beatLabSynth2PianoInstrumentRef.current;
+        previewBeatLabMelodicNote(ctx, {
+          lane,
+          midi,
+          velocity: 100,
+          when,
+          durationSec: 0.45,
+          channelVolumes,
+          instrumentId: pianoId,
+          instrumentGain: beatLabSynth2PianoRollInstrumentGain(pianoId),
+        });
+        return;
+      }
+      if (beatLabSynth2IsBassLane(lane, bassLane)) {
+        const bassSlot = beatLabMelodicSlotIndex(bassLane);
+        const presetId =
+          melodicSynthPresetIdsRef.current[bassSlot] ?? BEAT_LAB_DEFAULT_SYNTH_PRESET_ID;
+        const voice =
+          melodicSynthVoicesRef.current[bassSlot] ??
+          beatLabBassSynthVoiceParamsFromPresetId(presetId);
+        previewBeatLabSynthV2Note(ctx, {
+          lane,
+          midi,
+          velocity: 100,
+          when,
+          durationSec: 0.45,
+          channelVolumes,
+          voice,
+          bpm: bpmRef.current,
+        });
+        return;
+      }
       previewBeatLabMelodicNote(ctx, {
         lane,
         midi,
         velocity: 100,
         when,
-        instrumentId: instId,
-        channelVolumes: channelVolumesRef.current,
         durationSec: 0.45,
+        channelVolumes,
+        instrumentId:
+          melodicInstrumentsRef.current[slot] ??
+          BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[slot] ??
+          'acoustic_grand_piano',
       });
     });
   }, [getOrCreateAudioContext]);
+
+  const synthV2AuditionMidiRef = useRef<number | null>(null);
+
+  const synthV2VoiceForLane = useCallback((lane: number) => {
+    const slot = beatLabMelodicSlotIndex(lane);
+    const presetId = melodicSynthPresetIdsRef.current[slot] ?? BEAT_LAB_DEFAULT_SYNTH_PRESET_ID;
+    return (
+      melodicSynthVoicesRef.current[slot] ??
+      beatLabBassSynthVoiceParamsFromPresetId(presetId)
+    );
+  }, []);
+
+  const previewBeatLabSynthV2Lane = useCallback(
+    (lane: number, midi?: number) => {
+      if (CREATION_BACKEND_BLANK) return;
+      setSelectedBeatLabLane(lane);
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() => {
+        const note =
+          midi ?? synthV2AuditionMidiRef.current ?? beatLabMelodicSynthV2AuditionPitch(lane);
+        if (midi != null) synthV2AuditionMidiRef.current = midi;
+        previewBeatLabSynthV2Note(ctx, {
+          lane,
+          midi: note,
+          velocity: 100,
+          when: ctx.currentTime + 0.01,
+          channelVolumes: channelVolumesRef.current,
+          voice: synthV2VoiceForLane(lane),
+          bpm: bpmRef.current,
+        });
+      });
+    },
+    [getOrCreateAudioContext, synthV2VoiceForLane],
+  );
+
+  const startSynthV2Audition = useCallback(
+    (lane: number) => {
+      if (CREATION_BACKEND_BLANK) return;
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() => {
+        const midi =
+          synthV2AuditionMidiRef.current ?? beatLabMelodicSynthV2AuditionPitch(lane);
+        startBeatLabSynthV2HeldPreview(ctx, {
+          lane,
+          midi,
+          velocity: 100,
+          channelVolumes: channelVolumesRef.current,
+          voice: synthV2VoiceForLane(lane),
+          bpm: bpmRef.current,
+        });
+      });
+    },
+    [getOrCreateAudioContext, synthV2VoiceForLane],
+  );
+
+  const touchSynthV2Audition = useCallback(
+    (lane: number) => {
+      if (CREATION_BACKEND_BLANK) return;
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() => {
+        const midi =
+          synthV2AuditionMidiRef.current ?? beatLabMelodicSynthV2AuditionPitch(lane);
+        touchBeatLabSynthV2HeldPreview(ctx, {
+          lane,
+          midi,
+          velocity: 100,
+          channelVolumes: channelVolumesRef.current,
+          voice: synthV2VoiceForLane(lane),
+          bpm: bpmRef.current,
+        });
+      });
+    },
+    [getOrCreateAudioContext, synthV2VoiceForLane],
+  );
+
+  const stopSynthV2Audition = useCallback((lane: number) => {
+    stopBeatLabSynthV2HeldPreview(lane);
+  }, []);
+
+  const [synthV2PlayingMidis, setSynthV2PlayingMidis] = useState<ReadonlySet<number>>(() => new Set());
+  clearSynthV2PlayingMidisRef.current = () => setSynthV2PlayingMidis(new Set());
+
+  const sustainSynthV2Midi = useCallback(
+    (lane: number, midi: number) => {
+      if (CREATION_BACKEND_BLANK) return;
+      setSelectedBeatLabLane(lane);
+      synthV2KeyboardLaneRef.current = lane;
+      synthV2AuditionMidiRef.current = midi;
+      setSynthV2PlayingMidis(new Set([midi]));
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() => {
+        playBeatLabSynthV2KeyboardNote(ctx, {
+          lane,
+          midi,
+          velocity: 100,
+          channelVolumes: channelVolumesRef.current,
+          voice: synthV2VoiceForLane(lane),
+          bpm: bpmRef.current,
+        });
+      });
+    },
+    [getOrCreateAudioContext, synthV2VoiceForLane],
+  );
+
+  const releaseSynthV2Midi = useCallback(
+    (lane: number) => {
+      releaseBeatLabSynthV2Keyboard(lane);
+      setSynthV2PlayingMidis(new Set());
+    },
+    [],
+  );
 
   const applyDrumSpanForPadNote = useCallback(
     (
@@ -7050,10 +7587,62 @@ function CreationStationScreenBody({
   ]);
 
   const beatLabPianoRollExpanded = beatLabDeckFocus === 'sequence';
+  const beatLabSynthBassLane = beatLabSynth2BassLane;
+  const beatLabSynthHarmonyLane = beatLabSynth2HarmonyLane;
+  /** V2 editor / glide follows selected melodic CH when it is the bass lane. */
   const beatLabSynthLane =
-    selectedBeatLabLane != null && selectedBeatLabLane >= BEAT_LAB_MELODIC_LANE_START
+    selectedBeatLabLane != null && beatLabSynth2IsBassLane(selectedBeatLabLane, beatLabSynthBassLane)
       ? selectedBeatLabLane
-      : BEAT_LAB_MELODIC_LANE_START;
+      : beatLabSynthBassLane;
+
+  const setBeatLabSynth2BassLaneSafe = useCallback((lane: number) => {
+    const pair = beatLabSynth2NormalizePair(lane, beatLabSynth2HarmonyLaneRef.current);
+    setBeatLabSynth2BassLane(pair.bassLane);
+    if (pair.harmonyLane !== beatLabSynth2HarmonyLaneRef.current) {
+      setBeatLabSynth2HarmonyLane(pair.harmonyLane);
+    }
+    storeBeatLabSynth2Lanes(pair.bassLane, pair.harmonyLane);
+  }, []);
+
+  const setBeatLabSynth2HarmonyLaneSafe = useCallback((lane: number) => {
+    const pair = beatLabSynth2NormalizePair(beatLabSynth2BassLaneRef.current, lane);
+    setBeatLabSynth2HarmonyLane(pair.harmonyLane);
+    if (pair.bassLane !== beatLabSynth2BassLaneRef.current) {
+      setBeatLabSynth2BassLane(pair.bassLane);
+    }
+    storeBeatLabSynth2Lanes(pair.bassLane, pair.harmonyLane);
+  }, []);
+
+  const onBeatLabSynth2PianoInstrumentChange = useCallback(
+    (instrumentId: string) => {
+      const norm = normalizeBeatLabSynth2PianoInstrument(instrumentId);
+      setBeatLabSynth2PianoInstrument(norm);
+      const slot = beatLabMelodicSlotIndex(beatLabSynth2HarmonyLaneRef.current);
+      patchMelodicInstrument(slot, norm);
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() => {
+        resetBeatLabMelodicWarmupFlag();
+        void warmupBeatLabMelodicSoundfont(ctx, [norm], true);
+      });
+    },
+    [getOrCreateAudioContext, patchMelodicInstrument],
+  );
+
+  useEffect(() => {
+    const slot = beatLabMelodicSlotIndex(beatLabSynth2HarmonyLane);
+    const fromSlot = currentMelodicInstruments[slot];
+    if (!fromSlot) return;
+    const norm = normalizeBeatLabSynth2PianoInstrument(fromSlot);
+    setBeatLabSynth2PianoInstrument((prev) => (prev === norm ? prev : norm));
+  }, [beatLabSynth2HarmonyLane, currentMelodicInstruments]);
+
+  useEffect(() => {
+    if (beatLabDeckFocus !== 'synth2') {
+      stopBeatLabSynthV2HeldPreview(beatLabSynthBassLane);
+      releaseBeatLabSynthV2Keyboard(beatLabSynthBassLane);
+      setSynthV2PlayingMidis(new Set());
+    }
+  }, [beatLabDeckFocus, beatLabSynthBassLane]);
 
   const fitBeatLabGridToViewport = useCallback(() => {
     const el = beatLabRollScrollRef.current;
@@ -7148,21 +7737,11 @@ function CreationStationScreenBody({
             playPadSoundRef.current(pi, PAD_VEL[pi] ?? 90);
             return;
           }
-          const ctx = getOrCreateAudioContext();
-          void ctx.resume().then(() => {
-            const slot = beatLabMelodicSlotIndex(pi);
-            const instId =
-              melodicInstrumentsRef.current[slot] ??
-              BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[slot]!;
-            previewBeatLabMelodicNote(ctx, {
-              lane: pi,
-              midi: beatLabMelodicLanePitch(pi),
-              velocity: 100,
-              when: ctx.currentTime + 0.01,
-              instrumentId: instId,
-              channelVolumes: channelVolumesRef.current,
-            });
-          });
+          const base =
+            beatLabDeckFocus === 'synth2'
+              ? beatLabMelodicSynthV2AuditionPitch(pi)
+              : beatLabMelodicLanePitch(pi);
+          previewBeatLabMelodicMidi(pi, base);
         }}
         deckFocus={beatLabDeckFocus}
         onDeckFocusChange={setBeatLabDeckFocus}
@@ -7227,10 +7806,73 @@ function CreationStationScreenBody({
   const patchBeatLabSynthLaneNotes = useCallback(
     (lane: number, laneNotes: BeatLabMidiNote[]) => {
       if (CREATION_BACKEND_BLANK) return;
+      let normalized = laneNotes;
+      if (beatLabSynth2IsHarmonyLane(lane, beatLabSynth2HarmonyLaneRef.current)) {
+        const subdiv = Math.max(1, Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)));
+        const spb = beatLabStepsPerBar(subdiv, beatsPerBarRef.current, MEASURES_PER_BAR);
+        normalized = snapBeatLabChordNotesToBarDownbeats(laneNotes, {
+          stepsPerBar: spb,
+          patternCols: patternColsDrumsRef.current,
+        });
+      }
       const kept = currentMidiRoll.filter((n) => n.lane !== lane);
-      patchActiveBankMidiRollWithUndo([...kept, ...laneNotes]);
+      patchActiveBankMidiRollWithUndo([...kept, ...normalized]);
     },
     [currentMidiRoll, patchActiveBankMidiRollWithUndo],
+  );
+
+  const beatLabSynthHarmonyLaneNotes = useMemo(
+    () => currentMidiRoll.filter((n) => n.lane === beatLabSynthHarmonyLane),
+    [currentMidiRoll, beatLabSynthHarmonyLane],
+  );
+
+  const beatLabSynthHarmonyMidiAt = useCallback(
+    (n: BeatLabMidiNote) => beatLabNoteMidi(beatLabSynthHarmonyLane, n),
+    [beatLabSynthHarmonyLane],
+  );
+
+  const beatLabSynthChordsMuted = useMemo(
+    () =>
+      beatLabSynthV2IsChordHarmonyMuted(
+        beatLabSynthHarmonyLaneNotes,
+        beatLabSynthHarmonyLane,
+        beatLabSynthHarmonyMidiAt,
+      ),
+    [beatLabSynthHarmonyMidiAt, beatLabSynthHarmonyLaneNotes, beatLabSynthHarmonyLane],
+  );
+
+  const toggleBeatLabSynthChordMute = useCallback(() => {
+    if (CREATION_BACKEND_BLANK) return;
+    const next = beatLabSynthV2ApplyChordHarmonyMute(
+      beatLabSynthHarmonyLaneNotes,
+      beatLabSynthHarmonyLane,
+      !beatLabSynthChordsMuted,
+      beatLabSynthHarmonyMidiAt,
+    );
+    patchBeatLabSynthLaneNotes(beatLabSynthHarmonyLane, next);
+  }, [
+    beatLabSynthHarmonyMidiAt,
+    beatLabSynthChordsMuted,
+    beatLabSynthHarmonyLane,
+    beatLabSynthHarmonyLaneNotes,
+    patchBeatLabSynthLaneNotes,
+  ]);
+
+  const transposeBeatLabSynthHarmonyOctaves = useCallback(
+    (direction: -1 | 1) => {
+      if (CREATION_BACKEND_BLANK) return;
+      const lane = beatLabSynthHarmonyLane;
+      const delta = direction * 12;
+      const laneNotes = currentMidiRoll.filter((n) => n.lane === lane);
+      if (laneNotes.length === 0) return;
+      const shifted = laneNotes.map((n) => {
+        const merged = Math.max(-24, Math.min(24, (n.pitchSemi ?? 0) + delta));
+        const { pitchSemi: _drop, ...rest } = n;
+        return merged === 0 ? rest : { ...rest, pitchSemi: merged };
+      });
+      patchBeatLabSynthLaneNotes(lane, shifted as BeatLabMidiNote[]);
+    },
+    [beatLabSynthHarmonyLane, currentMidiRoll, patchBeatLabSynthLaneNotes],
   );
 
   const beatLabSynthPanel = useMemo(
@@ -7242,7 +7884,7 @@ function CreationStationScreenBody({
         beatsPerBar={beatsPerBar}
         colsPerBar={MEASURES_PER_BAR}
         stepSubdiv={subdivHud}
-        playheadStepCol={activeCol >= 0 ? activeCol : 0}
+        playheadStepCol={beatLabSynthPlayheadStepCol}
         isPlaying={isPlaying}
         playheadElRef={beatLabSynthPlaylineRef}
         scrollContainerRef={beatLabSynthScrollRef}
@@ -7251,28 +7893,12 @@ function CreationStationScreenBody({
         onSeekStepCol={seekTransportToPatternColumn}
         onPreviewMidi={previewBeatLabMelodicMidi}
         onSelectLane={setSelectedBeatLabLane}
-        onPreviewLane={(pi) => {
-          if (CREATION_BACKEND_BLANK) return;
-          setSelectedBeatLabLane(pi);
-          const ctx = getOrCreateAudioContext();
-          void ctx.resume().then(() => {
-            const slot = beatLabMelodicSlotIndex(pi);
-            const instId =
-              melodicInstrumentsRef.current[slot] ??
-              BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[slot]!;
-            previewBeatLabMelodicNote(ctx, {
-              lane: pi,
-              midi: beatLabMelodicLanePitch(pi),
-              velocity: 100,
-              when: ctx.currentTime + 0.01,
-              instrumentId: instId,
-              channelVolumes: channelVolumesRef.current,
-            });
-          });
-        }}
+        onPreviewLane={(pi) => previewBeatLabMelodicMidi(pi, beatLabMelodicLanePitch(pi))}
         channelLabelForLane={beatLabMelodicChannelLabel}
         melodicInstruments={currentMelodicInstruments}
+        melodicSynthPresetIds={currentMelodicSynthPresetIds}
         onMelodicInstrumentChange={patchMelodicInstrument}
+        onMelodicSynthPresetChange={patchMelodicSynthPreset}
         editTool={beatLabEditTool}
         onEditGestureStart={beginBeatLabUndoGesture}
         onEditGestureEnd={endBeatLabUndoGesture}
@@ -7283,7 +7909,7 @@ function CreationStationScreenBody({
       />
     ),
     [
-      activeCol,
+      beatLabSynthPlayheadStepCol,
       beatLabEditTool,
       beatLabMelodicChannelLabel,
       beatLabMelodicLanePitch,
@@ -7294,14 +7920,296 @@ function CreationStationScreenBody({
       setSelectedBeatLabLane,
       beatsPerBar,
       currentMelodicInstruments,
+      currentMelodicSynthPresetIds,
       currentMidiRoll,
       patchBeatLabSynthLaneNotes,
       patchMelodicInstrument,
+      patchMelodicSynthPreset,
       patternColsDrums,
       previewBeatLabMelodicMidi,
       seekTransportToPatternColumn,
       subdivHud,
       isPlaying,
+    ],
+  );
+
+  const beatLabSynthV2Panel = useMemo(() => {
+    const bassLane = beatLabSynthBassLane;
+    const slot = beatLabMelodicSlotIndex(bassLane);
+    const synthPresetId = currentMelodicSynthPresetIds[slot] ?? BEAT_LAB_DEFAULT_SYNTH_PRESET_ID;
+    const voice = currentMelodicSynthVoices[slot] ?? beatLabBassSynthVoiceParamsFromPresetId(synthPresetId);
+    return (
+      <BeatLabSynthV2Panel
+        bassLane={bassLane}
+        harmonyLane={beatLabSynthHarmonyLane}
+        presetId={synthPresetId}
+        voice={voice}
+        onPresetChange={(presetId) => patchMelodicSynthPreset(slot, presetId)}
+        onLoadPresetToVoice={(presetId) => loadMelodicSynthVoiceFromPreset(slot, presetId)}
+        onPatchVoice={(next) => patchMelodicSynthVoice(slot, next)}
+        onPreview={() => previewBeatLabSynthV2Lane(bassLane)}
+        onPreviewMidi={(midi) => {
+          synthV2AuditionMidiRef.current = midi;
+          if (isBeatLabSynthV2HeldPreviewActive(bassLane)) {
+            const ctx = getOrCreateAudioContext();
+            void ctx.resume().then(() => {
+              startBeatLabSynthV2HeldPreview(ctx, {
+                lane: bassLane,
+                midi,
+                velocity: 100,
+                channelVolumes: channelVolumesRef.current,
+                voice: synthV2VoiceForLane(bassLane),
+                bpm: bpmRef.current,
+              });
+            });
+            return;
+          }
+          previewBeatLabSynthV2Lane(bassLane, midi);
+        }}
+        onAuditionStart={() => startSynthV2Audition(bassLane)}
+        onAuditionStop={() => stopSynthV2Audition(bassLane)}
+        onAuditionTouch={() => touchSynthV2Audition(bassLane)}
+        onSustainMidi={(midi) => sustainSynthV2Midi(bassLane, midi)}
+        onReleaseMidi={() => releaseSynthV2Midi(bassLane)}
+        playingMidis={synthV2PlayingMidis}
+        bpm={bpm}
+        quantSubdiv={subdivHud}
+        chordRail={beatLabSynthChordRail}
+        laneNotes={currentMidiRoll}
+        patternCols={patternColsDrums}
+        beatsPerBar={beatLabQpb}
+        colsPerBar={MEASURES_PER_BAR}
+        isActive={beatLabDeckFocus === 'synth2'}
+        onApplyBassLaneNotes={(notes) => patchBeatLabSynthLaneNotes(bassLane, notes)}
+        onApplyHarmonyLaneNotes={(notes) =>
+          patchBeatLabSynthLaneNotes(beatLabSynthHarmonyLane, notes)
+        }
+      />
+    );
+  }, [
+    beatLabSynthBassLane,
+    beatLabSynthHarmonyLane,
+    currentMelodicSynthPresetIds,
+    currentMelodicSynthVoices,
+    currentMidiRoll,
+    patternColsDrums,
+    beatLabQpb,
+    beatLabDeckFocus,
+    patchMelodicSynthPreset,
+    loadMelodicSynthVoiceFromPreset,
+    patchMelodicSynthVoice,
+    previewBeatLabSynthV2Lane,
+    startSynthV2Audition,
+    stopSynthV2Audition,
+    touchSynthV2Audition,
+    sustainSynthV2Midi,
+    releaseSynthV2Midi,
+    synthV2PlayingMidis,
+    bpm,
+    subdivHud,
+    beatLabSynthChordRail,
+    patchBeatLabSynthLaneNotes,
+    getOrCreateAudioContext,
+    synthV2VoiceForLane,
+  ]);
+
+  const beatLabSynthV2RollPanel = useMemo(
+    () => (
+      <BeatLabSynthPianoRoll
+        engineVariant="v2"
+        notes={currentMidiRoll}
+        lane={beatLabSynthHarmonyLane}
+        v2HarmonyLane={beatLabSynthHarmonyLane}
+        v2PianoInstrumentId={beatLabSynth2PianoInstrument}
+        onV2PianoInstrumentChange={onBeatLabSynth2PianoInstrumentChange}
+        patternCols={patternColsDrums}
+        beatsPerBar={beatsPerBar}
+        colsPerBar={MEASURES_PER_BAR}
+        stepSubdiv={subdivHud}
+        playheadStepCol={beatLabSynthPlayheadStepCol}
+        isPlaying={isPlaying}
+        playheadElRef={beatLabSynthPlaylineRef}
+        scrollContainerRef={beatLabSynthScrollRef}
+        playingMidis={synthV2PlayingMidis}
+        onNotesChange={patchBeatLabSynthLaneNotes}
+        onSeekStepCol={seekTransportToPatternColumn}
+        onPreviewMidi={previewBeatLabMelodicMidi}
+        onSelectLane={setSelectedBeatLabLane}
+        channelLabelForLane={beatLabMelodicChannelLabel}
+        melodicInstruments={currentMelodicInstruments}
+        melodicSynthPresetIds={currentMelodicSynthPresetIds}
+        onMelodicInstrumentChange={patchMelodicInstrument}
+        onMelodicSynthPresetChange={patchMelodicSynthPreset}
+        editTool={beatLabEditTool}
+        onEditGestureStart={beginBeatLabUndoGesture}
+        onEditGestureEnd={endBeatLabUndoGesture}
+        onGridCellFocus={(stepCol) => {
+          beatLabSynthFocusRef.current = { lane: beatLabSynthHarmonyLane, col: stepCol };
+        }}
+        disabled={CREATION_BACKEND_BLANK}
+        chordRail={beatLabSynthChordRail}
+      />
+    ),
+    [
+      beatLabSynthPlayheadStepCol,
+      beatLabEditTool,
+      beatLabMelodicChannelLabel,
+      beatLabSynthChordRail,
+      beatLabSynthHarmonyLane,
+      beatLabSynth2PianoInstrument,
+      onBeatLabSynth2PianoInstrumentChange,
+      beginBeatLabUndoGesture,
+      endBeatLabUndoGesture,
+      beatsPerBar,
+      currentMelodicInstruments,
+      currentMelodicSynthPresetIds,
+      currentMidiRoll,
+      patchBeatLabSynthLaneNotes,
+      patchMelodicInstrument,
+      patchMelodicSynthPreset,
+      patternColsDrums,
+      previewBeatLabMelodicMidi,
+      seekTransportToPatternColumn,
+      subdivHud,
+      isPlaying,
+      synthV2PlayingMidis,
+    ],
+  );
+
+  const beatLabSynthV2RollChrome = useMemo(
+    () => (
+      <>
+        <BeatLabSynthV2ChannelAssign
+          bassLane={beatLabSynthBassLane}
+          harmonyLane={beatLabSynthHarmonyLane}
+          pianoInstrumentId={beatLabSynth2PianoInstrument}
+          onBassLaneChange={setBeatLabSynth2BassLaneSafe}
+          onHarmonyLaneChange={setBeatLabSynth2HarmonyLaneSafe}
+          onPianoInstrumentChange={onBeatLabSynth2PianoInstrumentChange}
+          disabled={CREATION_BACKEND_BLANK}
+        />
+        <button
+          type="button"
+          disabled={CREATION_BACKEND_BLANK}
+          onClick={() => transposeBeatLabSynthHarmonyOctaves(-1)}
+          title="Transpose piano-roll chords down one octave (−12 semitones)"
+          style={{
+            fontSize: 8,
+            fontWeight: 900,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #3a4860',
+            background: '#121820',
+            color: '#d8e4f8',
+            cursor: CREATION_BACKEND_BLANK ? 'default' : 'pointer',
+            opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+          }}
+        >
+          −8va
+        </button>
+        <button
+          type="button"
+          disabled={CREATION_BACKEND_BLANK}
+          onClick={() => transposeBeatLabSynthHarmonyOctaves(1)}
+          title="Transpose piano-roll chords up one octave (+12 semitones)"
+          style={{
+            fontSize: 8,
+            fontWeight: 900,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: '1px solid #3a4860',
+            background: '#121820',
+            color: '#d8e4f8',
+            cursor: CREATION_BACKEND_BLANK ? 'default' : 'pointer',
+            opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+          }}
+        >
+          +8va
+        </button>
+        <button
+          type="button"
+          disabled={
+            CREATION_BACKEND_BLANK ||
+            beatLabSynthV2HarmonyColumnsOnLane(
+              beatLabSynthHarmonyLaneNotes,
+              beatLabSynthHarmonyLane,
+              beatLabSynthHarmonyMidiAt,
+            ).size === 0
+          }
+          onClick={toggleBeatLabSynthChordMute}
+          title={
+            beatLabSynthChordsMuted
+              ? 'Unmute chord stacks on the piano roll'
+              : 'Mute chord stacks — hear bass only; chords stay for GENERATOR'
+          }
+          style={{
+            fontSize: 8,
+            fontWeight: 900,
+            padding: '4px 8px',
+            borderRadius: 4,
+            border: `1px solid ${beatLabSynthChordsMuted ? 'rgba(251,191,36,0.5)' : 'rgba(147,197,253,0.45)'}`,
+            background: beatLabSynthChordsMuted ? 'rgba(251,191,36,0.12)' : 'rgba(59,130,246,0.1)',
+            color: beatLabSynthChordsMuted ? '#fde68a' : '#bfdbfe',
+            cursor: CREATION_BACKEND_BLANK ? 'default' : 'pointer',
+            opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+          }}
+        >
+          {beatLabSynthChordsMuted ? 'Unmute chords' : 'Mute chords'}
+        </button>
+        {beatLabSynthChordRail ? (
+          <>
+            <span
+              title="Imported from Chord Builder — bar headers follow chord rhythm"
+              style={{
+                fontSize: 8,
+                fontWeight: 800,
+                color: '#58c4ff',
+                padding: '3px 8px',
+                borderRadius: 4,
+                border: '1px solid rgba(88, 196, 255, 0.35)',
+                background: 'rgba(88, 196, 255, 0.07)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {KEY_ROOTS.find((k) => k.value === beatLabSynthChordRail.keyRoot)?.label ?? '?'}
+              {` ${MODE_LABELS[beatLabSynthChordRail.mode]} · chord rail`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setBeatLabSynthChordRail(null)}
+              title="Hide chord names in the roll (MIDI notes stay)"
+              style={{
+                fontSize: 8,
+                fontWeight: 800,
+                padding: '4px 8px',
+                borderRadius: 4,
+                border: '1px solid #4a3848',
+                background: '#18141a',
+                color: '#b8a8bc',
+                cursor: 'pointer',
+              }}
+            >
+              Clear chord rail
+            </button>
+          </>
+        ) : null}
+      </>
+    ),
+    [
+      CREATION_BACKEND_BLANK,
+      beatLabSynthBassLane,
+      beatLabSynthHarmonyLane,
+      beatLabSynth2PianoInstrument,
+      setBeatLabSynth2BassLaneSafe,
+      setBeatLabSynth2HarmonyLaneSafe,
+      onBeatLabSynth2PianoInstrumentChange,
+      beatLabSynthChordRail,
+      beatLabSynthHarmonyMidiAt,
+      beatLabSynthChordsMuted,
+      beatLabSynthHarmonyLane,
+      beatLabSynthHarmonyLaneNotes,
+      toggleBeatLabSynthChordMute,
+      transposeBeatLabSynthHarmonyOctaves,
     ],
   );
 
@@ -7338,26 +8246,32 @@ function CreationStationScreenBody({
         : currentDrumsRef.current;
     const ctSnap = creationRefillCtSnapRef.current;
     const whenSnap = Math.max(idealGridT, ctSnap + SE2_AUDIO_START_FLOOR_SEC);
-    const subSpb = (60 / Math.max(1, bpmRef.current)) / subdiv;
+    const spbQ = 60 / Math.max(1, bpmRef.current);
+    const subSpb = spbQ / subdiv;
     for (let s = 0; s < subdiv; s += 1) {
       const colInPattern = ((posInPattern * subdiv + s) % gridCols + gridCols) % gridCols;
       const bankCol = colInPattern + drumColOff;
+      /** Metronome uses `idealGridT`; pads use `whenSnap` (chain floor). */
+      const gridT = idealGridT + s * subSpb;
       const whenSub = whenSnap + s * subSpb;
       const colPitch = beatLabPitchSemiAtColumn(
         currentPitchAutomationRef.current,
         colInPattern,
         0,
       );
-      patternDrums.forEach((row, pi) => {
-        if (row[bankCol] && !mutedPadsRef.current[pi]) {
-          playPadSoundRef.current(
-            pi,
-            beatLabEffectiveVelocity(PAD_VEL[pi], currentVolAutomationRef.current, colInPattern),
-            whenSub,
-            colPitch,
-          );
-        }
-      });
+      /** SYNTH / NEW SYNTH — piano-roll transport only; drum grid stays silent (one metronome + roll notes). */
+      if (!beatLabDeckIsSynthRoll()) {
+        patternDrums.forEach((row, pi) => {
+          if (row[bankCol] && !mutedPadsRef.current[pi]) {
+            playPadSoundRef.current(
+              pi,
+              beatLabEffectiveVelocity(PAD_VEL[pi], currentVolAutomationRef.current, colInPattern),
+              whenSub,
+              colPitch,
+            );
+          }
+        });
+      }
       const roll = currentMidiRollRef.current;
       for (const n of roll) {
         if (n.col !== colInPattern || n.muted) continue;
@@ -7378,33 +8292,148 @@ function CreationStationScreenBody({
           continue;
         }
         const slot = beatLabMelodicSlotIndex(n.lane);
-        const instId =
-          melodicInstrumentsRef.current[slot] ??
-          BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[slot] ??
-          'acoustic_grand_piano';
-        const autoSemi = beatLabPitchSemiAtColumn(
-          currentPitchAutomationRef.current,
-          colInPattern,
-          0,
-        );
         const midi = Math.max(
           0,
-          Math.min(127, Math.round(beatLabNoteMidi(n.lane, n) + autoSemi)),
+          Math.min(
+            127,
+            Math.round(
+              beatLabNoteMidi(n.lane, n) +
+                beatLabPitchSemiAtColumn(currentPitchAutomationRef.current, colInPattern, 0),
+            ),
+          ),
         );
-        const effVel = beatLabEffectiveVelocity(
+        const velocity = beatLabEffectiveVelocity(
           n.vel,
           currentVolAutomationRef.current,
           colInPattern,
         );
-        const noteSteps = Math.max(1, n.len);
-        scheduleBeatLabMelodicNote(ctx, {
-          lane: n.lane,
+        const stepsPerBar = beatLabStepsPerBar(subdiv, beatsPerBarRef.current, MEASURES_PER_BAR);
+        const colInBar = ((colInPattern % stepsPerBar) + stepsPerBar) % stepsPerBar;
+        const colsToBarEnd = Math.max(1, stepsPerBar - colInBar);
+        let nextLaneGap = Number.POSITIVE_INFINITY;
+        for (const o of roll) {
+          if (o.muted || o.lane !== n.lane) continue;
+          if (o.col === colInPattern) continue;
+          const delta = o.col > colInPattern ? o.col - colInPattern : gridCols - colInPattern + o.col;
+          if (delta > 0 && delta < nextLaneGap) nextLaneGap = delta;
+        }
+        const colsToNextLaneNote = Number.isFinite(nextLaneGap) ? Math.max(1, Math.floor(nextLaneGap)) : gridCols;
+        const safeLenCols = Math.max(1, Math.min(Math.max(1, n.len), colsToBarEnd, colsToNextLaneNote));
+        const channelVolumes = channelVolumesRef.current;
+        const bassLane = beatLabSynth2BassLaneRef.current;
+        const harmonyLane = beatLabSynth2HarmonyLaneRef.current;
+
+        /** Piano-roll / chord lane — always GM piano bank, never bass V2 presets. */
+        if (beatLabSynth2IsHarmonyLane(n.lane, harmonyLane)) {
+          /** Bar chords live on the first step of each bar — ignore stray sub-step columns. */
+          if (colInBar !== 0) continue;
+          const durationSec = Math.max(0.08, subSpb * safeLenCols);
+          const pianoId = beatLabSynth2PianoInstrumentRef.current;
+          /** Same grid instant as bass (`whenSub`) — smplr uses Web Audio `time` on that clock. */
+          const whenChord = whenSub;
+          const lead = BEAT_LAB_PIANO_TRANSPORT_ONSET_LEAD_SEC;
+          const whenLocked = Math.max(whenChord - lead, ctx.currentTime + 0.001);
+          scheduleBeatLabMelodicNote(ctx, {
+            lane: n.lane,
+            midi,
+            velocity,
+            when: whenChord,
+            whenLocked,
+            durationSec,
+            channelVolumes,
+            instrumentId: pianoId,
+            instrumentGain: beatLabSynth2PianoRollInstrumentGain(pianoId),
+            transportOnsetLeadSec: 0,
+          });
+          continue;
+        }
+
+        const whenNote = whenSub;
+
+        /** Bass lane only — Web Audio bass synth (left panel presets). */
+        if (!beatLabSynth2IsBassLane(n.lane, bassLane)) {
+          const durationSec = Math.max(0.08, subSpb * safeLenCols);
+          scheduleBeatLabMelodicNote(ctx, {
+            lane: n.lane,
+            midi,
+            velocity,
+            when: whenNote,
+            durationSec,
+            channelVolumes,
+            instrumentId:
+              melodicInstrumentsRef.current[slot] ??
+              BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS[slot] ??
+              'acoustic_grand_piano',
+          });
+          continue;
+        }
+
+        const bassMidiAt = (note: BeatLabMidiNote) =>
+          Math.max(
+            0,
+            Math.min(
+              127,
+              Math.round(
+                beatLabNoteMidi(bassLane, note) +
+                  beatLabPitchSemiAtColumn(currentPitchAutomationRef.current, colInPattern, 0),
+              ),
+            ),
+          );
+        if (!beatLabSynthV2IsLowestNoteAtCol(roll, n, colInPattern, bassLane, bassMidiAt)) {
+          continue;
+        }
+
+        const bassSlot = beatLabMelodicSlotIndex(bassLane);
+        const presetId =
+          melodicSynthPresetIdsRef.current[bassSlot] ?? BEAT_LAB_DEFAULT_SYNTH_PRESET_ID;
+        const voice =
+          melodicSynthVoicesRef.current[bassSlot] ??
+          beatLabBassSynthVoiceParamsFromPresetId(presetId);
+        const durationSec = beatLabSynthV2TransportDurationSec(subSpb, safeLenCols, voice);
+        const playLane = bassLane;
+        const legatoFromMidi =
+          voice.glideMode === 'legato'
+            ? beatLabSynthV2LegatoSourceMidi(roll, playLane, colInPattern, bassMidiAt)
+            : undefined;
+        const chordRail = beatLabSynthChordRailRef.current;
+        const chordFromMidi =
+          voice.glideMode === 'chord' && chordRail
+            ? beatLabSynthV2ChordGlideSourceMidi(
+                roll,
+                playLane,
+                colInPattern,
+                midi,
+                chordRail,
+                subdiv,
+                MEASURES_PER_BAR,
+                MEASURES_PER_BAR,
+                voice.glideBarMask ?? 0xffffffff,
+              )
+            : undefined;
+        const lead = BEAT_LAB_PIANO_TRANSPORT_ONSET_LEAD_SEC;
+        const whenLockedBass =
+          colInBar === 0
+            ? Math.max(whenNote - lead, ctx.currentTime + 0.001)
+            : undefined;
+        scheduleBeatLabSynthV2Note(ctx, {
+          lane: playLane,
           midi,
-          velocity: effVel,
-          when: whenSub,
-          durationSec: Math.min(4, Math.max(0.08, subSpb * noteSteps * 0.95)),
-          instrumentId: instId,
-          channelVolumes: channelVolumesRef.current,
+          velocity,
+          when: whenNote,
+          whenLocked: whenLockedBass,
+          durationSec,
+          channelVolumes,
+          voice,
+          legatoFromMidi,
+          chordFromMidi,
+          bpm: bpmRef.current,
+          stepCol: colInPattern,
+          stepLenCols: safeLenCols,
+          subdiv,
+          beatsPerBar: MEASURES_PER_BAR,
+          strictNoteOff: true,
+          keyRoot: chordRail?.keyRoot,
+          keyMode: chordRail?.mode,
         });
       }
     }
@@ -7417,6 +8446,8 @@ function CreationStationScreenBody({
 
   const playCreationMetronomeClick = useCallback(
     (k: number, idealGridT: number, ctx: AudioContext) => {
+      if (k <= creationLastEmittedMetroKRef.current) return;
+      creationLastEmittedMetroKRef.current = k;
       const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBarRef.current)));
       const orgQ = Math.floor(Math.max(0, originBeatRef.current) + 1e-8);
       const downbeat = (((k - orgQ) % bpb) + bpb) % bpb === 0;
@@ -7468,8 +8499,12 @@ function CreationStationScreenBody({
 
   refillCreationScheduleRef.current = refillCreationSchedule;
 
-  onAudioContextRebuiltRef.current = (ctx: AudioContext) => {
+  onAudioContextRebuiltRef.current = async (ctx: AudioContext) => {
     if (!runningRef.current) return;
+    await ensureBeatLabMelodicInstrumentsReady(ctx, [
+      ...melodicInstrumentsRef.current,
+      beatLabSynth2PianoInstrumentRef.current,
+    ]);
     const tCapture = Math.max(0, ctx.currentTime);
     sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
     schedAnchorTimeRef.current = tCapture;
@@ -7488,6 +8523,7 @@ function CreationStationScreenBody({
     creationMetroClickBuffersRef.current = null;
     refillCreationScheduleRef.current(ctx, tCapture, { skipOverdueCatchUp: true });
     launchCreationPlaylineWapiNow(displayBeatRef.current, true);
+    seekRunningCreationPlaylineWapi(creationPlaylineWapiRefs, displayBeatRef.current, bpmRef.current);
   };
 
   const clearAllQuantMeasureImperativeLit = useCallback(() => {
@@ -7513,15 +8549,19 @@ function CreationStationScreenBody({
     clearAllQuantMeasureImperativeLit();
   }, [tab, transportBeatEpoch, clearAllQuantMeasureImperativeLit]);
 
-  creationTransportOnFrameRef.current = (bDisplay: number) => {
+  creationTransportOnFrameRef.current = (bDisplayIn: number) => {
     /** SE2 split: `b` = compositor (scroll / loop edge); `bDisplay` = audio clock (BAR/MSR/time/steps). */
+    const tb = Math.max(1e-9, patternColsDrumsBeatsRef.current);
+    let bDisplay = Math.max(0, Math.min(tb, bDisplayIn));
+    displayBeatRef.current = bDisplay;
+
     let b = bDisplay;
     if (runningRef.current) {
-      const anim = creationDrumPlaylineAnimRef.current;
+      const pianoAnim = creationPianoPlaylineAnimRef.current;
       const seg = creationWapiSegStateRef.current;
-      if (anim && anim.playState !== 'idle') {
-        const animMs = Number(anim.currentTime ?? 0);
-        b = beatFromCreationPlaylineWapiAnim(animMs, seg, creationWapiBpmRef.current);
+      if (pianoAnim && pianoAnim.playState !== 'idle') {
+        const animMs = Number(pianoAnim.currentTime ?? 0);
+        b = beatLabVisualBeatFromWapi(animMs, seg, creationWapiBpmRef.current, bDisplay);
       }
     }
 
@@ -7529,30 +8569,67 @@ function CreationStationScreenBody({
       const ls = loopStartBeatRef.current;
       const le = loopEndBeatRef.current;
       if (le > ls) {
-        const seg = creationWapiSegStateRef.current;
+        const loopSeg = creationWapiSegStateRef.current;
+        const loopAnim =
+          creationPianoPlaylineAnimRef.current ?? creationDrumPlaylineAnimRef.current;
         /** Only seamless loop segment WAAPI — open-pattern cycles must not cancel voices (SE2). */
         const wapiWrap =
-          seg.seamlessLoop &&
+          loopSeg.seamlessLoop &&
           creationPlaylineWapiLoopWrapped(
-            creationDrumPlaylineAnimRef.current,
+            loopAnim,
             creationWapiPrevPhaseMsRef,
             creationWapiLoopCycleSeenRef,
           );
         const audioWrap = creationAudioLoopPhaseWrapped(bDisplay, ls, le, creationLoopPhaseRef);
-        if (
-          (wapiWrap || audioWrap) &&
-          performance.now() - creationTransportPlayStartMsRef.current > 150
-        ) {
-          const spanMs = ((le - ls) * 60 * 1000) / Math.max(1, bpmRef.current);
-          const debounceMs = Math.max(80, spanMs * 0.35);
-          const nowMs = performance.now();
-          if (nowMs - creationLastLoopWrapMsRef.current >= debounceMs) {
-            creationLastLoopWrapMsRef.current = nowMs;
-            const ctx = ctxRef.current;
-            if (ctx && ctx.state !== 'closed') {
-              const tCapture = Math.max(0, ctx.currentTime);
+        const pastPlayGrace =
+          performance.now() - creationTransportPlayStartMsRef.current > 150;
+        const ctxLoop = ctxRef.current;
+        if (pastPlayGrace && ctxLoop && ctxLoop.state !== 'closed') {
+          if (wapiWrap && loopSeg.seamlessLoop && loopAnim && loopAnim.playState !== 'idle') {
+            const animMs = Number(loopAnim.currentTime ?? 0);
+            bDisplay = applyBeatLabSeamlessLoopSplice(
+              ctxLoop,
+              loopSeg,
+              animMs,
+              bpmRef.current,
+              {
+                sessionStartRef,
+                originBeatRef,
+                schedAnchorTimeRef,
+                schedAnchorPerfRef,
+                nextMetroKRef,
+                cursorBeatRef,
+                displayBeatRef,
+                perfSessionStartMsRef: creationPerfSessionStartMsRef,
+              },
+            );
+            displayBeatRef.current = bDisplay;
+            b = beatLabVisualBeatFromWapi(animMs, loopSeg, creationWapiBpmRef.current, bDisplay);
+            const spb = 60 / Math.max(1, bpmRef.current);
+            reanchorNextStepWhileRunning(
+              {
+                nextStepBeatRef,
+                nextStepTimeRef,
+                sessionStartRef,
+                originBeatRef,
+                lastScheduledQuarterRef,
+              },
+              sessionStartRef.current,
+              originBeatRef.current,
+              spb,
+            );
+            refillCreationScheduleRef.current(ctxLoop, beatLabAudioNow(ctxLoop), {
+              loopContinuation: true,
+            });
+          } else if (wapiWrap || audioWrap) {
+            const spanMs = ((le - ls) * 60 * 1000) / Math.max(1, bpmRef.current);
+            const debounceMs = Math.max(80, spanMs * 0.35);
+            const nowMs = performance.now();
+            if (nowMs - creationLastLoopWrapMsRef.current >= debounceMs) {
+              creationLastLoopWrapMsRef.current = nowMs;
+              const tCapture = beatLabAudioNow(ctxLoop);
               /** Do not cancel queued clicks — that blanks the metronome until refill catches up. */
-              refillCreationScheduleRef.current(ctx, tCapture, { loopContinuation: true });
+              refillCreationScheduleRef.current(ctxLoop, tCapture, { loopContinuation: true });
             }
           }
         }
@@ -7637,7 +8714,7 @@ function CreationStationScreenBody({
       scrollFollowPx(drumScrollRef.current, pxDrum);
       if (tab === 'grid') {
         scrollFollowPx(
-          beatLabDeckFocusRef.current === 'synth'
+          beatLabDeckIsSynthRoll()
             ? beatLabSynthScrollRef.current
             : beatLabRollScrollRef.current,
           pxPiano,
@@ -7657,6 +8734,9 @@ function CreationStationScreenBody({
     paintCreationSe2TransportReadouts(bDisplay, false);
   };
 
+  const beatLabTransportPumpActive =
+    !!isScreenActive && (tab === 'grid' || tab === 'drums' || tab === 'piano');
+
   useCreationTransportPump(
     {
       ctxRef,
@@ -7668,9 +8748,10 @@ function CreationStationScreenBody({
       lastScheduledQuarterRef,
       schedAnchorTimeRef,
       schedAnchorPerfRef,
+      totalBeatsRef: patternColsDrumsBeatsRef,
     },
     {
-      isScreenActive: !!isScreenActive,
+      isScreenActive: beatLabTransportPumpActive,
       isPlaying,
       getOrCreateAudioContext,
       refillRef: refillCreationScheduleRef,
@@ -7678,6 +8759,23 @@ function CreationStationScreenBody({
       onAudioContextRebuiltRef,
     },
   );
+
+  /** Beat Lab mixer VU — audio-clock tick (pad preview, transport, decay).
+   * Must resolve the **same** `AudioContext` as pad playback (`getOrCreateAudioContext`);
+   * `ctxRef` is often unset until Play because only `ensureCtx` wrote it previously. */
+  useEffect(() => {
+    if (!isScreenActive) return;
+    let raf = 0;
+    const pump = () => {
+      const ctx = resolveBeatLabAudioContext(ctxRef, getOrCreateAudioContext);
+      if (ctx.state !== 'closed') {
+        tickBeatLabChannelMeters(ctx.currentTime, runningRef.current);
+      }
+      raf = requestAnimationFrame(pump);
+    };
+    raf = requestAnimationFrame(pump);
+    return () => cancelAnimationFrame(raf);
+  }, [isScreenActive, getOrCreateAudioContext]);
 
   /**
    * Playline relaunch ? **same split as Studio Editor 2** (`StudioEditor2Screen` ~6220?6231):
@@ -7728,6 +8826,7 @@ function CreationStationScreenBody({
     cancelScheduledCreationMetroNodes();
     refillCreationScheduleRef.current(ctx, Math.max(0, ctx.currentTime), { skipOverdueCatchUp: true });
     launchCreationPlaylineWapiNow(b, true);
+    seekRunningCreationPlaylineWapi(creationPlaylineWapiRefs, b, bpmRef.current);
   }, [bpm, isScreenActive, launchCreationPlaylineWapiNow]);
 
   useEffect(() => {
@@ -7735,7 +8834,7 @@ function CreationStationScreenBody({
     launchCreationPlaylineWapiNow(displayBeatRef.current, true);
   }, [loopOn, loopStartBeat, loopEndBeat, isScreenActive, launchCreationPlaylineWapiNow]);
 
-  /** SYNTH vs ROLL: same WAAPI clock, different playline element + quarter-scaled `pianoColW`. */
+  /** SYNTH vs ROLL: one `creationPlaylineWapi` — active roll element + quarter-scaled `pianoColW` on synth. */
   useEffect(() => {
     if (!isScreenActive || tab !== 'grid') return;
     if (runningRef.current) {
@@ -8725,21 +9824,88 @@ function CreationStationScreenBody({
       setLoopStartBeat(0);
       setLoopEndBeat(barsNeeded * bpb);
       setLoopBars(barsNeeded);
+      const harmonyLane = beatLabSynth2HarmonyLaneRef.current;
       const imported = chordBuilderSongRollToBeatLabRoll(args.sections, {
         stepSubdiv: subdiv,
         patternCols: patternColsForImport,
         beatsPerBar: bpb,
-        targetLane: BEAT_LAB_MELODIC_LANE_START,
+        targetLane: harmonyLane,
       });
       if (imported.length === 0) return;
-      const kept = currentMidiRoll.filter((n) => n.lane < BEAT_LAB_MELODIC_LANE_START);
+      const kept = currentMidiRoll.filter((n) => n.lane !== harmonyLane);
       patchActiveBankMidiRollWithUndo([...kept, ...imported]);
-      setBeatLabDeckFocus('synth');
+      const chordRail = beatLabChordRailFromImportSections(args.sections);
+      setBeatLabSynthChordRail(chordRail);
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() =>
+        warmupBeatLabMelodicSoundfont(ctx, [beatLabSynth2PianoInstrumentRef.current], true),
+      );
+      setBeatLabDeckFocus('synth2');
       goToCreationSub('beat-lab');
-      setSelectedBeatLabLane(BEAT_LAB_MELODIC_LANE_START);
+      setSelectedBeatLabLane(harmonyLane);
     },
     [
       currentMidiRoll,
+      getOrCreateAudioContext,
+      goToCreationSub,
+      patchActiveBankMidiRollWithUndo,
+      setBeatLabDeckFocus,
+    ],
+  );
+
+  /** Groove Lab chord roll → Beat Lab NEW SYNTH (no Chord Builder). */
+  const onSendGrooveChordsToNewSynth = useCallback(
+    (args: GrooveLabNewSynthExportArgs) => {
+      if (CREATION_BACKEND_BLANK) return;
+      const subdiv = Math.max(
+        1,
+        Math.min(DRUM_MAX_SUBDIV, Math.round(drumStepSubdivRef.current)),
+      );
+      const bpb = Math.max(1, Math.round(beatsPerBarRef.current));
+      const barsNeeded = grooveRollBarsNeeded(args.chordHits);
+      const patternColsForImport = beatLabPatternColsForLoop(
+        barsNeeded,
+        subdiv,
+        bpb,
+        TOTAL_COLS,
+      );
+      setLoopStartBeat(0);
+      setLoopEndBeat(barsNeeded * bpb);
+      setLoopBars(barsNeeded);
+      const harmonyLane = beatLabSynth2HarmonyLaneRef.current;
+      const imported =
+        args.progressionSteps && args.progressionSteps.length > 0
+          ? grooveProgressionStepsToBeatLabRoll(args.progressionSteps, {
+              stepSubdiv: subdiv,
+              patternCols: patternColsForImport,
+              beatsPerBar: bpb,
+              targetLane: harmonyLane,
+            })
+          : grooveRollHitsToBeatLabRoll(args.chordHits, {
+              stepSubdiv: subdiv,
+              patternCols: patternColsForImport,
+              beatsPerBar: bpb,
+              targetLane: harmonyLane,
+            });
+      if (imported.length === 0) return;
+      const kept = currentMidiRoll.filter((n) => n.lane !== harmonyLane);
+      patchActiveBankMidiRollWithUndo([...kept, ...imported]);
+      const chordRail =
+        args.progressionSteps && args.progressionSteps.length > 0
+          ? grooveProgressionStepsToChordRail(args.progressionSteps, bpb)
+          : null;
+      setBeatLabSynthChordRail(chordRail);
+      const ctx = getOrCreateAudioContext();
+      void ctx.resume().then(() =>
+        warmupBeatLabMelodicSoundfont(ctx, [beatLabSynth2PianoInstrumentRef.current], true),
+      );
+      setBeatLabDeckFocus('synth2');
+      goToCreationSub('beat-lab');
+      setSelectedBeatLabLane(harmonyLane);
+    },
+    [
+      currentMidiRoll,
+      getOrCreateAudioContext,
       goToCreationSub,
       patchActiveBankMidiRollWithUndo,
       setBeatLabDeckFocus,
@@ -8780,45 +9946,52 @@ function CreationStationScreenBody({
     [activeBank, bpm, drumKitGenStyle, ensureCtx],
   );
 
-  const applyBeatLabProducerKit = useCallback(async () => {
-    const meta = beatLabProducerKitMeta(producerKitId);
-    if (!meta) return;
-    const ctx = await ensureCtx();
-    setProducerKitLoading(true);
-    flashKitImportHint(`Loading ${meta.title}?`);
-    try {
-      const pads = await loadBeatLabProducerKitPads(producerKitId, ctx);
-      if (pads.length === 0) {
-        flashKitImportHint('Kit download failed ? check your connection');
-        return;
+  const applyBeatLabProducerKit = useCallback(
+    async (kitIdOverride?: BeatLabProducerKitId) => {
+      const kitToLoad = kitIdOverride ?? producerKitId;
+      const meta = beatLabProducerKitMeta(kitToLoad);
+      if (!meta) return;
+      if (kitIdOverride != null && kitIdOverride !== producerKitId) {
+        setProducerKitId(kitToLoad);
       }
-      for (const { pad, buffer, label, sampler } of pads) {
-        const stored = audioBufferToStoredKitSample(buffer, label, bpm);
-        const ab = storedToArrayBuffer(stored);
-        const decoded = await ctx.decodeAudioData(ab.slice(0));
-        const k = padSampleKey(activeBank, pad);
-        padSampleBuffersRef.current.set(k, decoded);
-        setPadSamplePresence((prev) => ({ ...prev, [k]: true }));
-        setPadSampleRootBpms((prev) => ({ ...prev, [k]: bpm }));
-        setPadSampleLabels((prev) => ({ ...prev, [k]: label }));
-        const store = loadPadSampleStore();
-        store[k] = stored;
-        writeSamplerOptsToStored(store[k], sampler);
-        writeFxRackToStored(store[k], defaultPadSamplerFxRack());
-        savePadSampleStore(store);
-        padSamplePlaybackOptsRef.current[k] = samplerOptsFromStored(store[k]);
-        padSampleFxRackRef.current[k] = fxRackFromStored(store[k]);
+      const ctx = await ensureCtx();
+      setProducerKitLoading(true);
+      flashKitImportHint(`Loading ${meta.title}…`);
+      try {
+        const pads = await loadBeatLabProducerKitPads(kitToLoad, ctx);
+        if (pads.length === 0) {
+          flashKitImportHint('Kit download failed — check your connection');
+          return;
+        }
+        for (const { pad, buffer, label, sampler } of pads) {
+          const stored = audioBufferToStoredKitSample(buffer, label, bpm);
+          const ab = storedToArrayBuffer(stored);
+          const decoded = await ctx.decodeAudioData(ab.slice(0));
+          const k = padSampleKey(activeBank, pad);
+          padSampleBuffersRef.current.set(k, decoded);
+          setPadSamplePresence((prev) => ({ ...prev, [k]: true }));
+          setPadSampleRootBpms((prev) => ({ ...prev, [k]: bpm }));
+          setPadSampleLabels((prev) => ({ ...prev, [k]: label }));
+          const store = loadPadSampleStore();
+          store[k] = stored;
+          writeSamplerOptsToStored(store[k], sampler);
+          writeFxRackToStored(store[k], defaultPadSamplerFxRack());
+          savePadSampleStore(store);
+          padSamplePlaybackOptsRef.current[k] = samplerOptsFromStored(store[k]);
+          padSampleFxRackRef.current[k] = fxRackFromStored(store[k]);
+        }
+        flashKitImportHint(
+          `${meta.tribute} — ${pads.length} pads on bank ${activeBank + 1} (crew kit)`,
+        );
+      } catch (err) {
+        console.debug('Producer kit load failed:', err);
+        flashKitImportHint('Could not load crew kit');
+      } finally {
+        setProducerKitLoading(false);
       }
-      flashKitImportHint(
-        `${meta.tribute} ? ${pads.length} pads on bank ${activeBank + 1} (loud 808s)`,
-      );
-    } catch (err) {
-      console.debug('Producer kit load failed:', err);
-      flashKitImportHint('Could not load crew kit');
-    } finally {
-      setProducerKitLoading(false);
-    }
-  }, [activeBank, bpm, ensureCtx, flashKitImportHint, producerKitId]);
+    },
+    [activeBank, bpm, ensureCtx, flashKitImportHint, producerKitId, setProducerKitId],
+  );
 
   const applyDrumKitGenFullKit = useCallback(async () => {
     const ctx = await ensureCtx();
@@ -8873,10 +10046,28 @@ function CreationStationScreenBody({
   }, [activeBank, beatsPerBar, drumKitGenStyle, drumStepSubdiv, patternColsDrums, patternSlot, goToCreationSub]);
 
   const [patternBankHint, setPatternBankHint] = useState<string | null>(null);
+  const [loadedPatternBankPick, setLoadedPatternBankPick] = useState<{
+    bankId: BeatLabPatternBankId;
+    presetId: string;
+    presetName: string;
+  } | null>(null);
+
+  const patternBankActivePickSummary =
+    loadedPatternBankPick != null
+      ? `${beatLabPatternBankCategoryLabel(loadedPatternBankPick.bankId)} · ${loadedPatternBankPick.presetName}`
+      : null;
 
   const applyBeatLabPatternPreset = useCallback(
     (preset: PatternPreset) => {
+      if (CREATION_BACKEND_BLANK) return;
+      const bankId = beatLabPatternBankIdForPresetGenre(preset.genre);
+      if (bankId) {
+        setLoadedPatternBankPick({ bankId, presetId: preset.id, presetName: preset.name });
+      }
       const pat = presetToBeatLabDrums(preset, { totalCols: patternColsDrums }).map((r) => r.slice());
+      const presetBpm = getPatternPresetBpm(preset);
+      const kitPick = beatLabProducerKitIdForPatternPreset(preset);
+      const kitMeta = beatLabProducerKitMeta(kitPick);
       setBanks((prev) =>
         prev.map((b, i) => (i === activeBank ? { ...b, drums: pat.map((row) => row.slice()) } : b)),
       );
@@ -8885,10 +10076,22 @@ function CreationStationScreenBody({
           i !== activeBank ? slots : { ...slots, [patternSlot]: pat.map((row) => row.slice()) },
         ),
       );
-      setPatternBankHint(`Loaded ?${preset.name}? ? bank ${BANKS[activeBank]} ? slot ${patternSlot}`);
+      setBpm(presetBpm);
+      setBpmInput(String(presetBpm));
+      setPatternBankHint(
+        `Loaded "${preset.name}" @ ${presetBpm} BPM — ${kitMeta?.title ?? 'Crew'} kit — bank ${BANKS[activeBank]} slot ${patternSlot}`,
+      );
       goToCreationSub('beat-lab');
+      void applyBeatLabProducerKit(kitPick);
     },
-    [activeBank, patternColsDrums, patternSlot, goToCreationSub],
+    [
+      CREATION_BACKEND_BLANK,
+      activeBank,
+      applyBeatLabProducerKit,
+      patternColsDrums,
+      patternSlot,
+      goToCreationSub,
+    ],
   );
 
   useEffect(() => {
@@ -9443,9 +10646,9 @@ function CreationStationScreenBody({
           display: 'flex',
           flexDirection: 'column',
           gap: 4,
-          flex: '1.2 1 320px',
-          minWidth: 280,
-          padding: '5px 8px 6px',
+          flex: '2 1 380px',
+          minWidth: 320,
+          padding: '4px 8px 5px',
           borderRadius: 10,
           border: '1px solid rgba(124, 244, 198, 0.22)',
           background: 'linear-gradient(165deg, rgba(11, 11, 16, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%)',
@@ -9464,24 +10667,43 @@ function CreationStationScreenBody({
           onLoadPreset={applyBeatLabPatternPreset}
           onCopyAToB={copyPatternAToB}
           disabled={CREATION_BACKEND_BLANK}
+          loadedBankId={loadedPatternBankPick?.bankId ?? null}
+          loadedPresetId={loadedPatternBankPick?.presetId ?? null}
         />
       </div>
 
       <div
         style={{
-          flex: '2 1 360px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+          flex: '2.25 1 320px',
           minWidth: 260,
+          minHeight: 0,
+          padding: '3px 8px 4px',
           borderRadius: 10,
           border: '1px solid rgba(52, 211, 153, 0.18)',
           background: 'linear-gradient(165deg, rgba(6, 40, 32, 0.35) 0%, rgba(8, 8, 10, 0.95) 100%)',
           overflow: 'visible',
-          minHeight: 72,
           position: 'relative',
           zIndex: 50,
         }}
       >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: 9, color: '#7cf4c6', fontWeight: 800, letterSpacing: 0.65 }}>SOUND FAMILIES</span>
+          <span style={{ fontSize: 8, color: '#6a6a78', fontFamily: 'monospace', fontWeight: 700 }}>
+            Bank {BANKS[activeBank] ?? '?'}
+          </span>
+        </div>
         <SoundFamiliesBar
-          bankLabel={BANKS[activeBank] ?? 'A'}
           targetPad={geniusSamplerTargetPad}
           onTargetPadChange={setGeniusSamplerTargetPad}
           onLoadSample={(args) => {
@@ -9489,19 +10711,6 @@ function CreationStationScreenBody({
           }}
         />
       </div>
-
-      <button onClick={() => setFollow(p => !p)} style={{ padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, fontFamily: 'monospace', background: follow ? '#00E5FF18' : '#1a1a24', color: follow ? '#00E5FF' : '#4a4a58', border: `1px solid ${follow ? '#00E5FF44' : '#2a2a32'}`, cursor: 'pointer' }}>
-        ? FOLLOW
-      </button>
-
-      <BankButtons activeBank={activeBank} setActiveBank={setActiveBank} hasDrums={hasDrums} hasNotes={hasNotes} />
-
-      <button type="button" disabled={CREATION_BACKEND_BLANK} onClick={() => {
-        if (CREATION_BACKEND_BLANK) return;
-        onExport('master-arranger');
-      }} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#1a1a24', color: '#7cf4c6', border: '1px solid rgba(124,244,198,0.27)', cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer', opacity: CREATION_BACKEND_BLANK ? 0.45 : 1 }}>
-        <Send size={9} /> Arrange
-      </button>
     </div>
   );
 
@@ -9577,6 +10786,7 @@ function CreationStationScreenBody({
             </div>
           </div>
 
+          {tab !== 'groove-lab' ? (
           <button
             type="button"
             role="switch"
@@ -9608,6 +10818,39 @@ function CreationStationScreenBody({
           >
             Met
           </button>
+          ) : (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={CREATION_BACKEND_BLANK ? false : metronomeEnabled}
+            disabled={CREATION_BACKEND_BLANK}
+            title="Groove Lab metronome"
+            onClick={() => {
+              if (CREATION_BACKEND_BLANK) return;
+              setMetronomeEnabled(!metronomeEnabled);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: 36,
+              minWidth: 36,
+              flexShrink: 0,
+              padding: '0 8px',
+              borderRadius: 6,
+              border: '1px solid',
+              borderColor: CREATION_BACKEND_BLANK ? '#2a2a32' : metronomeEnabled ? '#2a4a3c' : '#2a2a32',
+              color: CREATION_BACKEND_BLANK ? '#5c5c68' : metronomeEnabled ? '#7cf4c6' : '#5c5c68',
+              background: CREATION_BACKEND_BLANK ? 'transparent' : metronomeEnabled ? '#14221c' : 'transparent',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+              opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+            }}
+          >
+            Met
+          </button>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignSelf: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: '#0a0a0e', border: '1px solid #2a2a32', borderRadius: 4, overflow: 'hidden' }}>
@@ -9712,31 +10955,6 @@ function CreationStationScreenBody({
                 </button>
               </div>
             </div>
-            <input
-              type="range"
-              min={40}
-              max={240}
-              step={1}
-              disabled={CREATION_BACKEND_BLANK}
-              value={bpm}
-              onChange={(e) => {
-                if (CREATION_BACKEND_BLANK) return;
-                const n = Number(e.target.value);
-                setBpm(n);
-                setBpmInput(String(n));
-              }}
-              style={{
-                width: '100%',
-                minWidth: 132,
-                maxWidth: 200,
-                height: 6,
-                margin: 0,
-                cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
-                accentColor: '#7cf4c6',
-                opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
-              }}
-              title="Drag to set tempo ? 40?240 BPM"
-            />
           </div>
 
           <div
@@ -10181,8 +11399,8 @@ function CreationStationScreenBody({
 
         </div>
 
-        {/* Beat Lab: kit + sampler pads (GRID / ROLL). SYNTH view uses the workspace below only. */}
-          {beatLabDeckFocus !== 'synth' ? (
+        {/* Beat Lab: kit + sampler pads (GRID / ROLL). SYNTH views use the workspace below only. */}
+          {beatLabDeckFocus !== 'synth' && beatLabDeckFocus !== 'synth2' ? (
           <div
             style={{
               position: 'relative',
@@ -10217,6 +11435,7 @@ function CreationStationScreenBody({
             }}
             producerKitLoading={producerKitLoading}
             producerKitTribute={beatLabProducerKitMeta(producerKitId)?.tribute ?? null}
+            patternBankActivePick={patternBankActivePickSummary}
             onGeniusMySoundPlay={(pi) => {
               playPadSoundRef.current(pi, PAD_VEL[pi] ?? 90);
             }}
@@ -10276,6 +11495,8 @@ function CreationStationScreenBody({
             saveSongStatus={saveSongStatus}
             sessionZoomTools={beatLabSessionZoomTools}
             deckTransportClocks={beatLabDeckTransportClocks}
+            beatLabMixerOpen={beatLabMixerOpen}
+            onBeatLabMixerToggle={() => setBeatLabMixerOpen((v) => !v)}
             beatLabDeckFocus={beatLabDeckFocus}
             onBeatLabDeckFocusChange={setBeatLabDeckFocus}
             hideSamplerPads={beatLabGridFullView}
@@ -10287,12 +11508,15 @@ function CreationStationScreenBody({
                 : null
             }
             melodicInstruments={currentMelodicInstruments}
+            melodicSynthPresetIds={currentMelodicSynthPresetIds}
             channelVolumes={channelVolumes}
             getAudioContext={getOrCreateAudioContext}
             onMelodicInstrumentChange={patchMelodicInstrument}
+            onMelodicSynthPresetChange={patchMelodicSynthPreset}
             sessionBpm={bpm}
             creationBackendBlank={CREATION_BACKEND_BLANK}
           />
+          {beatLabMixerPanelNode}
           </div>
           ) : null}
 
@@ -10432,12 +11656,16 @@ function CreationStationScreenBody({
             embedded
             isScreenActive={tab === 'groove-lab'}
             bpm={bpm}
+            metronomeEnabled={metronomeEnabled}
+            onMetronomeEnabledChange={setMetronomeEnabled}
             onBpmChange={(next) => {
               const clamped = Math.max(40, Math.min(240, Math.round(next)));
               setBpm(clamped);
               setBpmInput(String(clamped));
             }}
             getAudioContext={getOrCreateAudioContext}
+            onExportChordWavToPad={onPadBounceExport}
+            onSendChordsToNewSynth={onSendGrooveChordsToNewSynth}
           />
         </div>
       )}
@@ -10520,6 +11748,12 @@ function CreationStationScreenBody({
               onClick={() => setBeatLabDeckFocus('sequence')}
             />
             <BeatLabDeckFocusChip
+              active={beatLabDeckFocus === 'synth2'}
+              label="NEW SYNTH"
+              title="New scratch-built synth workspace (separate from current synth)"
+              onClick={() => setBeatLabDeckFocus('synth2')}
+            />
+            <BeatLabDeckFocusChip
               active={beatLabDeckFocus === 'roll'}
               label="ROLL"
               title="32-channel piano roll ? edit all lanes"
@@ -10544,7 +11778,9 @@ function CreationStationScreenBody({
               timeStretch={beatLabTimeStretch}
               onTimeStretchChange={setBeatLabTimeStretch}
               snapHint={snapLabelFromPianoSnapSubdiv(
-                beatLabDeckFocus === 'roll' || beatLabDeckFocus === 'synth'
+                beatLabDeckFocus === 'roll' ||
+                  beatLabDeckFocus === 'synth' ||
+                  beatLabDeckFocus === 'synth2'
                   ? pianoSnapSubdiv
                   : drumStepSubdiv,
               )}
@@ -10558,6 +11794,76 @@ function CreationStationScreenBody({
               onResetPitch={resetBeatLabPitchAutomation}
               disabled={CREATION_BACKEND_BLANK}
             />
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginLeft: 4,
+                paddingLeft: 8,
+                borderLeft: '1px solid rgba(124, 244, 198, 0.18)',
+                flexShrink: 0,
+              }}
+            >
+              <span style={{ fontSize: 8, fontWeight: 800, color: '#5c5c68', letterSpacing: 0.6 }}>BANK</span>
+              <BankButtons activeBank={activeBank} setActiveBank={setActiveBank} hasDrums={hasDrums} hasNotes={hasNotes} />
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginLeft: 4,
+                paddingLeft: 8,
+                borderLeft: '1px solid rgba(124, 244, 198, 0.18)',
+                flexShrink: 0,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setFollow((p) => !p)}
+                title="Follow playhead while scrolling"
+                style={{
+                  fontSize: 9,
+                  fontWeight: 800,
+                  letterSpacing: 0.3,
+                  color: follow ? '#5eeadb' : '#8a8a98',
+                  background: follow ? 'rgba(0, 229, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                  border: `1px solid ${follow ? 'rgba(0, 229, 255, 0.42)' : 'rgba(255, 255, 255, 0.08)'}`,
+                  borderRadius: 4,
+                  padding: '3px 7px',
+                  cursor: 'pointer',
+                }}
+              >
+                FOLLOW
+              </button>
+              <button
+                type="button"
+                disabled={CREATION_BACKEND_BLANK}
+                title="Arrange — open Studio / master arranger export"
+                onClick={() => {
+                  if (CREATION_BACKEND_BLANK) return;
+                  onExport('master-arranger');
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  fontSize: 9,
+                  fontWeight: 800,
+                  letterSpacing: 0.3,
+                  color: CREATION_BACKEND_BLANK ? '#5c5c68' : '#7cf4c6',
+                  background: 'rgba(124, 244, 198, 0.10)',
+                  border: `1px solid ${CREATION_BACKEND_BLANK ? '#2a2a32' : 'rgba(124,244,198,0.35)'}`,
+                  borderRadius: 4,
+                  padding: '3px 7px',
+                  cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                  opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+                }}
+              >
+                <Send size={10} strokeWidth={2.5} /> ARRANGE
+              </button>
+            </div>
             {beatLabPianoRollExpanded ? (
               <button
                 type="button"
@@ -10582,10 +11888,66 @@ function CreationStationScreenBody({
                 CLEAR
               </button>
             ) : null}
-            {beatLabGridFullView || beatLabDeckFocus === 'synth' ? (
+            {beatLabGridFullView || beatLabDeckFocus === 'synth' || beatLabDeckFocus === 'synth2' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={CREATION_BACKEND_BLANK}
+                  onClick={() => {
+                    if (CREATION_BACKEND_BLANK) return;
+                    setBeatLabMixerOpen((v) => !v);
+                  }}
+                  title="32-channel Beat Lab mixer · CH 1–16 pads · CH 17–32 synth"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 4,
+                    border: `1px solid ${beatLabMixerOpen ? 'rgba(0, 229, 255, 0.65)' : 'rgba(0, 229, 255, 0.35)'}`,
+                    background: beatLabMixerOpen ? 'rgba(0, 229, 255, 0.16)' : 'rgba(11, 11, 16, 0.65)',
+                    color: '#00E5FF',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                    opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+                    flexShrink: 0,
+                  }}
+                >
+                  <SlidersHorizontal size={13} aria-hidden />
+                  Mixer
+                </button>
                 {beatLabSessionZoomTools}
                 {beatLabDeckTransportClocks}
+              </div>
+            ) : null}
+            {beatLabDeckFocus === 'roll' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  disabled={CREATION_BACKEND_BLANK}
+                  onClick={() => setBeatLabMixerOpen((v) => !v)}
+                  title="Beat Lab mixer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 4,
+                    border: `1px solid ${beatLabMixerOpen ? 'rgba(0, 229, 255, 0.65)' : 'rgba(0, 229, 255, 0.35)'}`,
+                    background: beatLabMixerOpen ? 'rgba(0, 229, 255, 0.16)' : 'rgba(11, 11, 16, 0.65)',
+                    color: '#00E5FF',
+                    fontSize: 10,
+                    fontWeight: 800,
+                    cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
+                    opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
+                  }}
+                >
+                  <SlidersHorizontal size={13} aria-hidden />
+                  Mixer
+                </button>
               </div>
             ) : null}
           </div>
@@ -10600,7 +11962,14 @@ function CreationStationScreenBody({
                 flexShrink: 1,
               }}
             >
-              {beatLabPianoRollPanel}
+              {beatLabMixerOpen ? (
+                <div style={{ flexShrink: 0, padding: '0 8px 6px', maxHeight: 'min(38vh, 280px)', overflow: 'auto' }}>
+                  {beatLabMixerPanelNode}
+                </div>
+              ) : null}
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {beatLabPianoRollPanel}
+              </div>
             </div>
           )}
           {beatLabDeckFocus === 'synth' && (
@@ -10614,7 +11983,39 @@ function CreationStationScreenBody({
                 flexShrink: 1,
               }}
             >
-              {beatLabSynthPanel}
+              {beatLabMixerOpen ? (
+                <div style={{ flexShrink: 0, padding: '0 8px 6px', maxHeight: 'min(42vh, 320px)', overflow: 'auto' }}>
+                  {beatLabMixerPanelNode}
+                </div>
+              ) : null}
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {beatLabSynthPanel}
+              </div>
+            </div>
+          )}
+          {beatLabDeckFocus === 'synth2' && (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: '1 1 auto',
+                minHeight: 0,
+                overflow: 'hidden',
+                flexShrink: 1,
+              }}
+            >
+              {beatLabMixerOpen ? (
+                <div style={{ flexShrink: 0, padding: '0 8px 6px', maxHeight: 'min(42vh, 320px)', overflow: 'auto' }}>
+                  {beatLabMixerPanelNode}
+                </div>
+              ) : null}
+              <div style={{ flex: '1 1 auto', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <BeatLabSynthV2Workspace
+                  synthEditor={beatLabSynthV2Panel}
+                  pianoRoll={beatLabSynthV2RollPanel}
+                  rollHeaderExtra={beatLabSynthV2RollChrome}
+                />
+              </div>
             </div>
           )}
           {beatLabDeckFocus === 'sequence' && (
@@ -11072,10 +12473,6 @@ function CreationStationScreenBody({
                   activeCol={-1}
                   colWidth={drumGridColW}
                   barNumberStart={loopStartBar}
-                  onRangeCommit={(s, e) => {
-                    if (CREATION_BACKEND_BLANK) return;
-                    setLoopRange(s, e);
-                  }}
                   stepsPerBar={beatLabQpb * subdivHud}
                   barStepCounts={creationDrumRulerCounts}
                   segmentHeaderLabels={creationDrumRulerHeaderLabels}

@@ -9,7 +9,10 @@
  */
 import type { MutableRefObject } from 'react';
 
-import { creationPlaylineBankColFFromBeat } from '@/app/lib/creationStation/creationDrumGridAdaptive';
+import {
+  creationPatternColFFromBeat,
+  creationPlaylineBankColFFromBeat,
+} from '@/app/lib/creationStation/creationDrumGridAdaptive';
 
 /** Compositor lead for **Chord Builder / 808 Lab** playlines only — not Beat Lab transport. */
 export const CREATION_PLAYLINE_WAPI_LEAD_SEC = 0.052;
@@ -191,15 +194,23 @@ export function creationPlaylineColFAndPx(
   drumColW: number,
   pianoColW: number,
 ): { colF: number; drumX: number; pianoX: number } {
-  void pcols;
-  void loopEndBeat;
-  void playMode;
   const sub = Math.max(1, Math.min(64, Math.round(subdiv)));
+  const pc = Math.max(1, Math.round(pcols));
   const drumColOffset = Math.floor(Math.max(0, loopOn ? loopStartBeat * sub : 0) + 1e-8);
-  const colF = creationPlaylineBankColFFromBeat(beatNow, sub, drumColOffset);
+  const bankColF = creationPlaylineBankColFFromBeat(beatNow, sub, drumColOffset);
+  /** ROLL / SYNTH piano rolls are pattern-relative — bank col + loop offset desyncs the chord grid. */
+  const patternColF = creationPatternColFFromBeat(
+    beatNow,
+    sub,
+    pc,
+    loopOn,
+    loopStartBeat,
+    loopEndBeat,
+    playMode,
+  );
   const cw = Math.max(1, drumColW);
   const pcw = Math.max(1, pianoColW);
-  return { colF, drumX: colF * cw, pianoX: colF * pcw };
+  return { colF: bankColF, drumX: bankColF * cw, pianoX: patternColF * pcw };
 }
 
 export function cancelCreationPlaylineWapi(
