@@ -1,0 +1,23 @@
+{
+  "kitName": "Brass Room",
+  "bankIndex": 1,
+  "comment": "Drop your trap drum WAVs here with these names (or use Beat Lab → Load Brass Room bank → pick your folder).",
+  "files": [
+    { "pad": 0, "file": "kick.wav", "label": "Kick — 808" },
+    { "pad": 1, "file": "snare.wav", "label": "Snare" },
+    { "pad": 2, "file": "clap.wav", "label": "Clap" },
+    { "pad": 3, "file": "hihat-closed.wav", "label": "Hi-Hat" },
+    { "pad": 4, "file": "hihat-open.wav", "label": "Open HH" },
+    { "pad": 5, "file": "tom-hi.wav", "label": "Tom Hi" },
+    { "pad": 6, "file": "808-click.wav", "label": "808 click" },
+    { "pad": 7, "file": "rim.wav", "label": "Rim" },
+    { "pad": 8, "file": "perc.wav", "label": "Perc 1" },
+    { "pad": 9, "file": "hit.wav", "label": "Perc 2" },
+    { "pad": 10, "file": "crash.wav", "label": "Crash" },
+    { "pad": 11, "file": "ride.wav", "label": "Ride" },
+    { "pad": 12, "file": "shaker.wav", "label": "Shaker" },
+    { "pad": 13, "file": "cowbell.wav", "label": "Cowbell" },
+    { "pad": 14, "file": "snap.wav", "label": "Snap" },
+    { "pad": 15, "file": "808-sub-long.wav", "label": "SUB BASS — 808 long" }
+  ]
+}

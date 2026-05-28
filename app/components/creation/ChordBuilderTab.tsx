@@ -1,6 +1,6 @@
-import { Children, isValidElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Download, Eraser, Link2, Pause, Play, Plus, Sparkles, Square, Volume2, Wand2, X } from 'lucide-react';
+import { Download, Eraser, Link2, Pause, Play, Plus, Send, Sparkles, Square, Volume2, Wand2, X } from 'lucide-react';
 
 import {
   GENRES,
@@ -8,13 +8,13 @@ import {
   MODE_LABELS,
   MODES_BY_FAMILY,
   PATTERNS,
-  buildChordEvents,
   chordSymbolToMidi,
   chordSymbolToName,
   findProgressionsWithChord,
   getGenre,
   getModePads,
   getPattern,
+  resolveProgressionMode,
   suggestLikelyNextChords,
   suggestNextChord,
   type ChordEventOut,
@@ -34,6 +34,19 @@ import {
   generateSongPlan,
   type GeneratedSection,
 } from '@/app/lib/creationStation/chordSongBuilder';
+import { ChordBuilderPianoRoll } from '@/app/components/creation/ChordBuilderPianoRoll';
+import {
+  buildChordBuilderMidiNotesFromPreview,
+  buildChordBuilderPreviewEvents,
+  buildChordBuilderSongMidiNotesFromPreview,
+  chordBuilderBlockSpansFromBlocks,
+  chordBuilderDefaultNoteLengthQ,
+  chordBuilderPreviewCols,
+  CHORD_BUILDER_SMF_PPQ,
+  type ChordBuilderBeatLabImportSection,
+  type ChordBuilderBlockSpan,
+  type ChordBuilderRollEdits,
+} from '@/app/lib/creationStation/chordBuilderBeatLabImport';
 import {
   buildStandardMidiFile,
   downloadBytes,
@@ -64,6 +77,74 @@ import {
   totalBlockBeats,
   type ChordBlock,
 } from '@/app/lib/creationStation/chordBlocks';
+import {
+  buildAutoNoteKeys,
+  clearAllRollNotes,
+  extractBarNotesClipboard,
+  pasteBarNotesClipboard,
+  type BarNotesClipboard,
+  type RollEdits,
+} from '@/app/lib/creationStation/chordRollNoteClipboard';
+import { LAB808_ROOTS_IMPORTED_EVENT, sendRootsTo808Lab } from '@/app/lib/creationStation/lab808ChordRoots';
+import {
+  duplicateTimelineLoop,
+  normalizeBarRange,
+  tileTimelineSlots,
+} from '@/app/lib/creationStation/chordTimelineEdit';
+import type { ProProgressionEntry } from '@/app/lib/creationStation/professionalChordProgressions';
+import { ProChordProgressionsPanel } from '@/app/components/creation/ProChordProgressionsPanel';
+import { MelodyMatchPanel } from '@/app/components/creation/MelodyMatchPanel';
+import {
+  analyzeMelodyToProgressions,
+  extractPitchEventsFromAudioBuffer,
+  type MelodyProgressionCandidate,
+} from '@/app/lib/creationStation/melodyToChordProgression';
+import { detectPitchACF, type PitchEvent } from '@/app/lib/pitchDetection';
+import {
+  midiNoteLabel,
+  VOICE_MIDI_MIN_NOTE_GAP_MS,
+  connectScriptProcessorSilentMonitor,
+  voiceMidiNoteFromFrequency,
+  voiceMidiPitchEvent,
+} from '@/app/lib/creationStation/voiceToMidiEffect';
+import { beatAtSessionTime } from '@/app/lib/creationStation/creationTransportSync';
+import {
+  cancelCreationPlaylineWapi,
+  launchCreationPlaylineWapi,
+  setCreationPlaylineTransformStatic,
+  type CreationPlaylineWapiRefs,
+} from '@/app/lib/creationStation/creationPlaylineWapi';
+import {
+  buildScheduleEventsFromBlocks,
+  CHORD_BUILDER_DEFAULT_LOAD_BARS,
+  CHORD_BUILDER_PLAYLINE_WAPI_LEAD_SEC,
+  chordBuilderPlaylineDacLeadSec,
+  expandProgressionToBars,
+  refillChordBuilderLookahead,
+  resetChordBuilderStepClock,
+} from '@/app/lib/creationStation/chordBuilderTransport';
+import {
+  CHORD_VOICING_OPTIONS,
+  type ChordVoicingSize,
+} from '@/app/lib/creationStation/chordVoicing';
+import {
+  buildVoicedMidiSet,
+  voicedChordNoteNames,
+  type ChordTension,
+} from '@/app/lib/creationStation/smartChordVoicing';
+import {
+  DEFAULT_CHORD_ARP,
+  type ChordArpSettings,
+} from '@/app/lib/creationStation/chordArpeggiator';
+import {
+  createChordFxBus,
+  DEFAULT_CHORD_BUILDER_FX,
+  type ChordBuilderFxSettings,
+  type ChordFxBus,
+} from '@/app/lib/creationStation/chordBuilderFx';
+import { scheduleVoicedChordPlayback } from '@/app/lib/creationStation/chordBuilderPlayback';
+import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/creationStation/creationTransportSystem';
+import { useCreationTransportPump } from '@/app/hooks/useCreationTransportPump';
 
 const MINT = '#7cf4c6';
 const MINT_DIM = 'rgba(124, 244, 198, 0.35)';
@@ -156,6 +237,17 @@ export interface ChordBuilderTabProps {
      *  inside Beat Lab's sampler. */
     rootBpm: number;
   }) => void;
+  /** After roots are written to storage, open 808 Lab (optional). */
+  onOpen808Lab?: () => void;
+  /**
+   * Send the active progression's MIDI into Beat Lab SYNTH (channels 17–32).
+   * Host merges into the active bank's piano roll and switches to SYNTH view.
+   */
+  onSendMidiToBeatLabSynth?: (args: {
+    sections: ReadonlyArray<ChordBuilderBeatLabImportSection>;
+    bpm: number;
+    label: string;
+  }) => void;
 }
 
 interface TimelineSlot {
@@ -239,6 +331,8 @@ export function ChordBuilderTab({
   colsPerBar,
   getAudioContext,
   onExportToPad,
+  onOpen808Lab,
+  onSendMidiToBeatLabSynth,
 }: ChordBuilderTabProps) {
   const [keyRoot, setKeyRoot] = useState(0);
   const [mode, setMode] = useState<ChordMode>('major');
@@ -255,6 +349,10 @@ export function ChordBuilderTab({
    *  real DAW. Always ≥ 0; pause preserves position, Stop resets it to 0. */
   const [playheadCol, setPlayheadCol] = useState<number>(0);
   const playheadColRef = useRef(0);
+  const [barSelAnchor, setBarSelAnchor] = useState<number | null>(null);
+  const [barSelEnd, setBarSelEnd] = useState<number | null>(null);
+  const barNotesCopyBufferRef = useRef<BarNotesClipboard | null>(null);
+  const [barEditHint, setBarEditHint] = useState<string | null>(null);
   // Only sync React state → ref when NOT playing. During playback the rAF
   // loop owns this ref (writes the live audio-clock position into it every
   // frame). Resetting the ref from stale React state on every parent
@@ -275,6 +373,13 @@ export function ChordBuilderTab({
   // components attach their playhead `<div>` elements to these refs.
   const pianoPlayheadElRef = useRef<HTMLDivElement | null>(null);
   const gridPlayheadElRef = useRef<HTMLDivElement | null>(null);
+  const runningRef = useRef(false);
+  const sessionStartRef = useRef(0);
+  const originBeatRef = useRef(0);
+  const displayBeatRef = useRef(0);
+  const cbDrumPlaylineAnimRef = useRef<Animation | null>(null);
+  const cbPianoPlaylineAnimRef = useRef<Animation | null>(null);
+  const cbDrumQuantGlowAnimRef = useRef<Animation | null>(null);
   /** Bumped whenever the user repositions the playhead while playback is
    *  active. Adding this to the play-effect deps causes the effect to tear
    *  down and re-run so the tick loop restarts from the new playhead column
@@ -287,12 +392,56 @@ export function ChordBuilderTab({
    *  the user does anything tempo-related here (types a BPM, clicks ± or
    *  tap-tempos) so the local override sticks until they re-sync. */
   const [syncToProject, setSyncToProject] = useState<boolean>(true);
+
+  const [melodyPitchEvents, setMelodyPitchEvents] = useState<PitchEvent[]>([]);
+  const [melodyRecording, setMelodyRecording] = useState(false);
+  const [melodyMatchBusy, setMelodyMatchBusy] = useState(false);
+  const [melodyMatchError, setMelodyMatchError] = useState<string | null>(null);
+  const [melodyCandidates, setMelodyCandidates] = useState<MelodyProgressionCandidate[] | null>(null);
+  const melodyAnalysisMetaRef = useRef<{ keyRoot: number; mode: ChordMode; barCount: number } | null>(null);
+  const melodyStreamRef = useRef<MediaStream | null>(null);
+  const melodyProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const melodyEventsRef = useRef<PitchEvent[]>([]);
+  const [voiceMidiLive, setVoiceMidiLive] = useState(false);
+  const [voiceMidiLiveNote, setVoiceMidiLiveNote] = useState<string | null>(null);
+  const [voiceMidiCaptureCount, setVoiceMidiCaptureCount] = useState(0);
+  const voiceMidiStreamRef = useRef<MediaStream | null>(null);
+  const voiceMidiProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const voiceMidiEventsRef = useRef<PitchEvent[]>([]);
+  const voiceMidiLastMidiRef = useRef<number | null>(null);
+  const voiceMidiLastTriggerMsRef = useRef(0);
+  const voiceMidiLiveRef = useRef(false);
+  voiceMidiLiveRef.current = voiceMidiLive;
+  const playMidiSetRef = useRef<(midis: number[], sustain: number) => void>(() => {});
   /** Currently selected Sound Bank voice id. Drives both the live audition
    *  path (`playMidiSet`) and the offline WAV bouncer. Mirrored into a ref so
    *  the playback callback can read it without taking it as a dep. */
   const [instrumentId, setInstrumentId] = useState<ChordInstrumentId>(DEFAULT_CHORD_INSTRUMENT_ID);
   const instrumentIdRef = useRef<ChordInstrumentId>(instrumentId);
   instrumentIdRef.current = instrumentId;
+  const [chordVoicingSize, setChordVoicingSize] = useState<ChordVoicingSize>(5);
+  const [smartVoicing, setSmartVoicing] = useState(true);
+  const [voicingSpread, setVoicingSpread] = useState(55);
+  const [chordTension, setChordTension] = useState<ChordTension>('mid');
+  /** Transpose chord playback and piano-roll preview (−2…+2 octaves). */
+  const [chordOctaveShift, setChordOctaveShift] = useState(0);
+  const chordVoicingSizeRef = useRef<ChordVoicingSize>(5);
+  const smartVoicingRef = useRef(true);
+  const voicingSpreadRef = useRef(55);
+  const chordTensionRef = useRef<ChordTension>('mid');
+  chordVoicingSizeRef.current = chordVoicingSize;
+  smartVoicingRef.current = smartVoicing;
+  voicingSpreadRef.current = voicingSpread;
+  chordTensionRef.current = chordTension;
+  const chordOctaveShiftRef = useRef(0);
+  chordOctaveShiftRef.current = chordOctaveShift;
+  const [chordFx, setChordFx] = useState<ChordBuilderFxSettings>(DEFAULT_CHORD_BUILDER_FX);
+  const [chordArp, setChordArp] = useState<ChordArpSettings>(DEFAULT_CHORD_ARP);
+  const chordFxRef = useRef<ChordBuilderFxSettings>(DEFAULT_CHORD_BUILDER_FX);
+  const chordArpRef = useRef<ChordArpSettings>(DEFAULT_CHORD_ARP);
+  const fxBusRef = useRef<ChordFxBus | null>(null);
+  chordFxRef.current = chordFx;
+  chordArpRef.current = chordArp;
   // While Sync is on, keep `localBpm` in lockstep with the host project BPM.
   // Without this effect, changing the project BPM in Beat Lab wouldn't be
   // reflected here even with the sync indicator lit.
@@ -330,8 +479,8 @@ export function ChordBuilderTab({
   // not in the chord, or removed a note the chord would otherwise have.
   // `lengths` is a map from cell-key → column length (≥ 1) for notes the
   // user has stretched out via the right-edge resize handle (slow blues,
-  // sustained ballads, etc.). Default length is 1 (a single cell); lengths
-  // are capped at the end of the note's bar so a note never crosses bars.
+  // sustained ballads, etc.). Default length follows the chord block / pattern;
+  // lengths are capped at the end of the note's bar so a note never crosses bars.
   // Layered on top of the chord-derived preview events so the chord
   // abstraction stays intact while the user is free to fine-tune voicings.
   const [manualEditsById, setManualEditsById] = useState<
@@ -384,6 +533,59 @@ export function ChordBuilderTab({
   }, [padsForMode, selectedPad]);
 
   const activeProg = progressions.find((p) => p.id === activeId) ?? progressions[0]!;
+  const [send808Status, setSend808Status] = useState<string | null>(null);
+
+  const onSendRootsTo808Lab = useCallback(() => {
+    const syncBlocks = timelineToBlocks(activeProg.timeline, BEATS_PER_BAR).map((b) => ({
+      chord: b.chord,
+      durationBeats: Math.max(1, b.durationBeats),
+    }));
+    if (syncBlocks.length === 0) {
+      setSend808Status('Add chords to the progression first');
+      return;
+    }
+    const effectiveBpm = syncToProject
+      ? Math.max(20, Math.min(300, Math.round(bpm)))
+      : localBpm;
+    const payload = sendRootsTo808Lab({
+      source: 'chord-builder',
+      progressionName: activeProg.name,
+      keyRoot,
+      mode,
+      bpm: effectiveBpm,
+      blocks: syncBlocks,
+      hintMode: genre.mode,
+    });
+    if (!payload) {
+      setSend808Status('Could not build roots');
+      return;
+    }
+    setSend808Status(`✓ ${payload.notes.length} root${payload.notes.length === 1 ? '' : 's'} → 808 Lab`);
+    onOpen808Lab?.();
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(LAB808_ROOTS_IMPORTED_EVENT));
+    });
+  }, [activeProg.timeline, activeProg.name, keyRoot, mode, genre.mode, localBpm, syncToProject, bpm, onOpen808Lab]);
+
+  useEffect(() => {
+    if (!send808Status) return;
+    const t = window.setTimeout(() => setSend808Status(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [send808Status]);
+
+  const bpmRef = useRef(localBpm);
+  bpmRef.current = localBpm;
+  const blocksRef = useRef(activeProg.blocks);
+  blocksRef.current = activeProg.blocks;
+  const timelineRef = useRef(activeProg.timeline);
+  timelineRef.current = activeProg.timeline;
+  const totalBarsRef = useRef(activeProg.totalBars);
+  totalBarsRef.current = activeProg.totalBars;
+  const cbPlaylineAnimRefs: CreationPlaylineWapiRefs = {
+    drumAnimRef: cbDrumPlaylineAnimRef,
+    pianoAnimRef: cbPianoPlaylineAnimRef,
+    drumQuantGlowAnimRef: cbDrumQuantGlowAnimRef,
+  };
   const pattern = useMemo(() => getPattern(activeProg.patternId) ?? PATTERNS[0]!, [activeProg.patternId]);
 
 
@@ -459,13 +661,258 @@ export function ChordBuilderTab({
     updateActive({ timeline: tl, totalBars: newTotal });
   }
 
-  function onPickPreset(progression: ChordSymbol[]) {
-    const newBarsTotal = Math.max(progression.length, activeProg.totalBars);
-    const newTimeline: TimelineSlot[] = Array.from({ length: newBarsTotal }, (_, i) => ({
-      chord: progression[i] ?? null,
-    }));
-    updateActive({ timeline: newTimeline, totalBars: newBarsTotal });
+  /** One symbol per chord change in timeline order (skips consecutive duplicates). */
+  function timelineChordRoots(timeline: ReadonlyArray<TimelineSlot>): ChordSymbol[] {
+    const roots: ChordSymbol[] = [];
+    let last: ChordSymbol | null = null;
+    for (const slot of timeline) {
+      if (slot.chord && slot.chord !== last) {
+        roots.push(slot.chord);
+        last = slot.chord;
+      }
+    }
+    return roots;
   }
+
+  function onPickPreset(progression: ChordSymbol[], opts?: { totalBars?: number; barsPerChord?: number }) {
+    const totalBars = opts?.totalBars ?? Math.max(CHORD_BUILDER_DEFAULT_LOAD_BARS, progression.length);
+    const barsPerChord =
+      opts?.barsPerChord ?? Math.max(1, Math.floor(totalBars / Math.max(1, progression.length)));
+    const timeline = expandProgressionToBars(progression, totalBars, barsPerChord);
+    updateActive({ timeline, totalBars, barsPerChord });
+  }
+
+  /** Load a complete professional / hit-song progression onto the roll. */
+  function onPickProfessionalProgression(entry: ProProgressionEntry) {
+    if (entry.chords.length === 0) return;
+    const g = getGenre(entry.genreId);
+    if (g && entry.genreId !== genreId) setGenreId(entry.genreId);
+    if (entry.mode !== mode) setMode(entry.mode);
+    const pads = getModePads(entry.mode);
+    setSelectedPad(pads[0] ?? entry.chords[0] ?? 'I');
+    const totalBars = Math.max(CHORD_BUILDER_DEFAULT_LOAD_BARS, entry.chords.length);
+    const barsPerChord = Math.max(1, Math.floor(totalBars / entry.chords.length));
+    onPickPreset(entry.chords, { totalBars, barsPerChord });
+  }
+
+  const stopVoiceMidiLive = useCallback(() => {
+    voiceMidiLiveRef.current = false;
+    voiceMidiStreamRef.current?.getTracks().forEach((t) => t.stop());
+    voiceMidiStreamRef.current = null;
+    voiceMidiProcessorRef.current?.disconnect();
+    voiceMidiProcessorRef.current = null;
+    voiceMidiLastMidiRef.current = null;
+    setVoiceMidiLive(false);
+    setVoiceMidiLiveNote(null);
+    const events = [...voiceMidiEventsRef.current];
+    if (events.length > 0) {
+      setMelodyPitchEvents(events);
+      setVoiceMidiCaptureCount(events.length);
+    }
+  }, []);
+
+  const stopMelodyRecording = useCallback(() => {
+    melodyStreamRef.current?.getTracks().forEach((t) => t.stop());
+    melodyStreamRef.current = null;
+    melodyProcessorRef.current?.disconnect();
+    melodyProcessorRef.current = null;
+    setMelodyPitchEvents([...melodyEventsRef.current]);
+    setMelodyRecording(false);
+  }, []);
+
+  const toggleVoiceMidiLive = useCallback(async () => {
+    if (voiceMidiLive) {
+      const noteCount = voiceMidiEventsRef.current.length;
+      stopVoiceMidiLive();
+      if (noteCount < 8) {
+        setMelodyMatchError('Need more notes — sing a short melody while LIVE is on');
+      }
+      return;
+    }
+    if (melodyRecording) stopMelodyRecording();
+    setMelodyMatchError(null);
+    setMelodyCandidates(null);
+    melodyAnalysisMetaRef.current = null;
+    voiceMidiEventsRef.current = [];
+    voiceMidiLastMidiRef.current = null;
+    voiceMidiLastTriggerMsRef.current = 0;
+    setVoiceMidiCaptureCount(0);
+    setMelodyPitchEvents([]);
+    setVoiceMidiLiveNote(null);
+    try {
+      const ctx = getAudioContextRef.current();
+      if (!ctx) throw new Error('Audio unavailable');
+      if (ctx.state === 'suspended') await ctx.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      voiceMidiStreamRef.current = stream;
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      voiceMidiProcessorRef.current = processor;
+      voiceMidiLiveRef.current = true;
+      const startMs = performance.now();
+      processor.onaudioprocess = (e: AudioProcessingEvent) => {
+        if (!voiceMidiLiveRef.current) return;
+        const audioData = e.inputBuffer.getChannelData(0);
+        const { frequency, confidence } = detectPitchACF(audioData, ctx.sampleRate);
+        const stable = voiceMidiNoteFromFrequency(
+          frequency,
+          confidence,
+          voiceMidiLastMidiRef.current,
+          0.12,
+        );
+        if (!stable) {
+          setVoiceMidiLiveNote(null);
+          return;
+        }
+        const { midi, changed } = stable;
+        setVoiceMidiLiveNote(midiNoteLabel(midi));
+        if (!changed) return;
+        const now = performance.now();
+        if (now - voiceMidiLastTriggerMsRef.current < VOICE_MIDI_MIN_NOTE_GAP_MS) return;
+        voiceMidiLastTriggerMsRef.current = now;
+        voiceMidiLastMidiRef.current = midi;
+        const vel = Math.max(40, Math.min(127, Math.round(confidence * 127)));
+        voiceMidiEventsRef.current.push(voiceMidiPitchEvent(now - startMs, midi, vel));
+        setVoiceMidiCaptureCount(voiceMidiEventsRef.current.length);
+        playMidiSetRef.current([midi + chordOctaveShiftRef.current * 12], 0.22);
+      };
+      connectScriptProcessorSilentMonitor(ctx, source, processor);
+      setVoiceMidiLive(true);
+    } catch {
+      voiceMidiLiveRef.current = false;
+      setMelodyMatchError('Microphone access denied');
+      setVoiceMidiLive(false);
+    }
+  }, [voiceMidiLive, melodyRecording, stopMelodyRecording, stopVoiceMidiLive]);
+
+  const toggleMelodyRecord = useCallback(async () => {
+    if (melodyRecording) {
+      stopMelodyRecording();
+      return;
+    }
+    if (voiceMidiLive) stopVoiceMidiLive();
+    setMelodyMatchError(null);
+    setMelodyCandidates(null);
+    melodyAnalysisMetaRef.current = null;
+    try {
+      const ctx = getAudioContextRef.current();
+      if (!ctx) throw new Error('Audio unavailable');
+      if (ctx.state === 'suspended') await ctx.resume();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      melodyStreamRef.current = stream;
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(4096, 1, 1);
+      melodyProcessorRef.current = processor;
+      melodyEventsRef.current = [];
+      const startMs = performance.now();
+      processor.onaudioprocess = (e: AudioProcessingEvent) => {
+        const audioData = e.inputBuffer.getChannelData(0);
+        const { frequency, confidence } = detectPitchACF(audioData, ctx.sampleRate);
+        if (confidence > 0.12 && frequency > 0) {
+          melodyEventsRef.current.push({
+            time: performance.now() - startMs,
+            frequency,
+            confidence,
+            velocity: 100,
+          });
+        }
+      };
+      connectScriptProcessorSilentMonitor(ctx, source, processor);
+      setMelodyRecording(true);
+    } catch {
+      setMelodyMatchError('Microphone access denied');
+      setMelodyRecording(false);
+    }
+  }, [melodyRecording, stopMelodyRecording]);
+
+  const uploadMelodyFile = useCallback(async (file: File) => {
+    if (voiceMidiLive) stopVoiceMidiLive();
+    setMelodyMatchError(null);
+    setMelodyCandidates(null);
+    melodyAnalysisMetaRef.current = null;
+    setVoiceMidiCaptureCount(0);
+    setMelodyMatchBusy(true);
+    try {
+      const ctx = getAudioContextRef.current();
+      if (!ctx) throw new Error('Audio unavailable');
+      if (ctx.state === 'suspended') await ctx.resume();
+      const buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+      const events = extractPitchEventsFromAudioBuffer(buffer);
+      setMelodyPitchEvents(events);
+      setVoiceMidiCaptureCount(events.length);
+      if (events.length < 8) setMelodyMatchError('Not enough pitch in that clip — try humming louder');
+    } catch {
+      setMelodyMatchError('Could not read that audio file');
+    } finally {
+      setMelodyMatchBusy(false);
+    }
+  }, [voiceMidiLive, stopVoiceMidiLive]);
+
+  const analyzeMelodyMatch = useCallback(() => {
+    if (voiceMidiLive) stopVoiceMidiLive();
+    const captured =
+      voiceMidiEventsRef.current.length > 0
+        ? voiceMidiEventsRef.current
+        : melodyPitchEvents;
+    const events = melodyRecording ? melodyEventsRef.current : captured;
+    if (events.length < 8) {
+      setMelodyMatchError('Record, upload, or use LIVE voice MIDI first (a few seconds is enough)');
+      return;
+    }
+    setMelodyMatchBusy(true);
+    setMelodyMatchError(null);
+    try {
+      const result = analyzeMelodyToProgressions(events, localBpm, {
+        keyRootHint: keyRoot,
+        modeHint: mode,
+        topK: 4,
+      });
+      if (!result) {
+        setMelodyMatchError('Could not detect a clear melody — try again');
+        setMelodyCandidates(null);
+        return;
+      }
+      melodyAnalysisMetaRef.current = {
+        keyRoot: result.keyRoot,
+        mode: result.mode,
+        barCount: result.barCount,
+      };
+      setMelodyCandidates(result.candidates);
+    } finally {
+      setMelodyMatchBusy(false);
+    }
+  }, [melodyPitchEvents, melodyRecording, voiceMidiLive, localBpm, keyRoot, mode, stopVoiceMidiLive]);
+
+  const applyMelodyCandidate = useCallback(
+    (candidate: MelodyProgressionCandidate) => {
+      const meta = melodyAnalysisMetaRef.current;
+      if (!meta) return;
+      if (meta.keyRoot !== keyRoot) setKeyRoot(meta.keyRoot);
+      if (meta.mode !== mode) setMode(meta.mode);
+      const totalBars = Math.max(CHORD_BUILDER_DEFAULT_LOAD_BARS, meta.barCount);
+      const barsPerChord = Math.max(
+        1,
+        Math.floor(totalBars / Math.max(1, candidate.chords.length)),
+      );
+      onPickPreset(candidate.chords, { totalBars, barsPerChord });
+      setSelectedPad(candidate.chords[0] ?? getModePads(meta.mode)[0] ?? 'I');
+      setMelodyMatchError(null);
+    },
+    [keyRoot, mode],
+  );
+
+  useEffect(() => {
+    return () => {
+      melodyStreamRef.current?.getTracks().forEach((t) => t.stop());
+      melodyProcessorRef.current?.disconnect();
+      voiceMidiStreamRef.current?.getTracks().forEach((t) => t.stop());
+      voiceMidiProcessorRef.current?.disconnect();
+    };
+  }, []);
 
   /** Find the bar index *after* the last placed chord. Used by every
    *  "append" path (Likely Next chips, double-click pad, Suggest Next) so
@@ -513,7 +960,7 @@ export function ChordBuilderTab({
         break;
       }
     }
-    const nextChord = suggestions[0]?.chord ?? suggestNextChord(last, genre);
+    const nextChord = suggestions[0]?.chord ?? suggestNextChord(last, genre, Math.random, mode);
     const targetIdx = bridgeIndex();
     if (targetIdx >= tl.length) {
       updateActive({
@@ -532,7 +979,7 @@ export function ChordBuilderTab({
     let prev: ChordSymbol | null = null;
     const out: TimelineSlot[] = [];
     for (let i = 0; i < length; i++) {
-      const next = suggestNextChord(prev, genre);
+      const next = suggestNextChord(prev, genre, Math.random, mode);
       out.push({ chord: next });
       prev = next;
     }
@@ -544,18 +991,59 @@ export function ChordBuilderTab({
     updateActive({ timeline: emptyTimeline(activeProg.totalBars) });
   }
 
-  function onBarLabelClick(barIdx: number) {
-    const existing = activeProg.timeline[barIdx]?.chord ?? null;
-    placeChordAt(barIdx, existing === selectedPad ? null : selectedPad);
-  }
-
   function onTotalBarsChange(v: number) {
     const clamped = Math.max(1, Math.min(64, v));
+    const current = activeProg.timeline.slice(0, activeProg.totalBars);
+    const hasContent = current.some((s) => s.chord != null);
+    if (clamped > activeProg.totalBars && hasContent) {
+      updateActive({
+        timeline: tileTimelineSlots(current, clamped),
+        totalBars: clamped,
+      });
+      flashBarEditHint(`Extended to ${clamped} bars — loop copied forward`);
+      return;
+    }
+    if (clamped < activeProg.totalBars) {
+      updateActive({ timeline: current.slice(0, clamped), totalBars: clamped });
+      return;
+    }
+    const roots = timelineChordRoots(current);
+    if (roots.length === 0) {
     updateActive({ totalBars: clamped });
+      return;
+    }
+    const timeline = expandProgressionToBars(roots, clamped, activeProg.barsPerChord);
+    updateActive({ timeline, totalBars: clamped });
   }
 
+  function flashBarEditHint(msg: string): void {
+    setBarEditHint(msg);
+    window.setTimeout(() => setBarEditHint(null), 2800);
+  }
+
+  const barSelRange = useMemo(() => {
+    if (barSelAnchor == null || barSelEnd == null) return null;
+    return normalizeBarRange(barSelAnchor, barSelEnd, activeProg.totalBars);
+  }, [barSelAnchor, barSelEnd, activeProg.totalBars]);
+
+  const onDuplicateLoop = useCallback(() => {
+    const result = duplicateTimelineLoop(activeProg.timeline, activeProg.totalBars);
+    if (!result) {
+      flashBarEditHint('Cannot duplicate — max 64 bars');
+      return;
+    }
+    updateActive(result);
+    flashBarEditHint(`Duplicated loop → ${result.totalBars} bars`);
+  }, [activeProg.timeline, activeProg.totalBars, updateActive]);
+
   function onBarsPerChordChange(v: number) {
+    const roots = timelineChordRoots(activeProg.timeline);
+    if (roots.length === 0) {
     updateActive({ barsPerChord: v });
+      return;
+    }
+    const timeline = expandProgressionToBars(roots, activeProg.totalBars, v);
+    updateActive({ timeline, barsPerChord: v });
   }
 
   function onPatternChange(id: string) {
@@ -843,8 +1331,55 @@ export function ChordBuilderTab({
     }, 6000);
   }
 
+  const resolveChordPlaybackDest = useCallback((ctx: AudioContext): AudioNode => {
+    const master = (window as unknown as { __daMusicMasterGain?: GainNode | null }).__daMusicMasterGain ?? null;
+    const finalDest = master ?? ctx.destination;
+    if (!fxBusRef.current || fxBusRef.current.ctx !== ctx) {
+      fxBusRef.current?.dispose();
+      fxBusRef.current = createChordFxBus(ctx, finalDest);
+    }
+    fxBusRef.current.update(chordFxRef.current);
+    return fxBusRef.current.input;
+  }, []);
+
   const auditionTimerRef = useRef<number | null>(null);
   const auditionGainsRef = useRef<GainNode[]>([]);
+  /** Transport-scheduled chord voices — separate from pad audition so lookahead
+   *  does not cancel chords already queued on the audio clock. */
+  const transportGainsRef = useRef<GainNode[]>([]);
+  const nextChordEventRef = useRef(0);
+  const nextChordTimeRef = useRef(0);
+
+  const voicingOptsRef = useCallback(() => ({
+    size: chordVoicingSizeRef.current,
+    smartVoicing: smartVoicingRef.current,
+    spread: voicingSpreadRef.current,
+    tension: chordTensionRef.current,
+  }), []);
+
+  const resolveVoicedMidis = useCallback(
+    (symbol: ChordSymbol, prevSymbol?: ChordSymbol | null): number[] => {
+      const midis = buildVoicedMidiSet(symbol, keyRoot, mode, voicingOptsRef(), prevSymbol ?? null);
+      const shift = chordOctaveShiftRef.current * 12;
+      return shift === 0 ? midis : midis.map((m) => m + shift);
+    },
+    [keyRoot, mode, voicingOptsRef],
+  );
+
+  const selectedChordReadout = useMemo(
+    () => voicedChordNoteNames(selectedPad, keyRoot, mode, {
+      size: chordVoicingSize,
+      smartVoicing,
+      spread: voicingSpread,
+      tension: chordTension,
+    }),
+    [selectedPad, keyRoot, mode, chordVoicingSize, smartVoicing, voicingSpread, chordTension],
+  );
+
+  const blocksPlaySignature = useMemo(
+    () => activeProg.blocks.map((b) => `${b.chord}:${b.durationBeats}`).join('|'),
+    [activeProg.blocks],
+  );
   const highlightTimerRef = useRef<number | null>(null);
   /** MIDI numbers currently being sounded — drives piano-key highlight. */
   const [playingMidis, setPlayingMidis] = useState<ReadonlySet<number>>(
@@ -883,7 +1418,7 @@ export function ChordBuilderTab({
    *  stable across parent re-renders — important because it's transitively
    *  in the dep list of the chord-playback effect. */
   const playMidiSet = useCallback(
-    (midis: number[], sustain: number) => {
+    (midis: number[], sustain: number, startTime?: number) => {
       const ctx = getAudioContextRef.current();
       if (!ctx || midis.length === 0) return;
       if (ctx.state === 'suspended') void ctx.resume();
@@ -908,21 +1443,22 @@ export function ChordBuilderTab({
         }
       });
       auditionGainsRef.current = [];
-      const now = ctx.currentTime + 0.005;
-      const master = (window as unknown as { __daMusicMasterGain?: GainNode | null }).__daMusicMasterGain ?? null;
-      const dest: AudioNode = master ?? ctx.destination;
+      const now = startTime ?? ctx.currentTime + 0.005;
+      const dest = resolveChordPlaybackDest(ctx);
       const instrument = getChordInstrument(instrumentIdRef.current);
-      for (const midi of midis) {
-        const envs = instrument.scheduleNote({
-          ctx,
-          destination: dest,
-          midi,
-          startTime: now,
-          sustainSec: sustain,
-        });
-        for (const env of envs) auditionGainsRef.current.push(env);
-      }
-      setPlayingMidis(new Set(midis));
+      const lit = scheduleVoicedChordPlayback(
+        instrument,
+        ctx,
+        dest,
+        midis,
+        now,
+        sustain,
+        bpmRef.current,
+        chordArpRef.current,
+        chordFxRef.current,
+        { minStartTime: now, gainCollector: auditionGainsRef.current },
+      );
+      setPlayingMidis(new Set(lit));
       const ms = sustain * 1000;
       auditionTimerRef.current = window.setTimeout(() => {
         auditionGainsRef.current = [];
@@ -933,22 +1469,68 @@ export function ChordBuilderTab({
         highlightTimerRef.current = null;
       }, ms);
     },
-    [],
+    [resolveChordPlaybackDest],
   );
+  playMidiSetRef.current = playMidiSet;
 
   const auditionChord = useCallback(
     (symbol: ChordSymbol) => {
-      const midis = chordSymbolToMidi(symbol, keyRoot, mode, 4);
+      const midis = resolveVoicedMidis(symbol);
       if (!midis || midis.length === 0) return;
       playMidiSet(midis, 1.0);
     },
-    [keyRoot, mode, playMidiSet],
+    [resolveVoicedMidis, playMidiSet],
+  );
+
+  const cancelTransportChords = useCallback(() => {
+    const ctx = getAudioContextRef.current();
+    if (!ctx) {
+      transportGainsRef.current = [];
+      return;
+    }
+    transportGainsRef.current.forEach((g) => {
+      try {
+        g.gain.cancelScheduledValues(ctx.currentTime);
+        g.gain.setValueAtTime(0, ctx.currentTime);
+      } catch {
+        /* noop */
+      }
+    });
+    transportGainsRef.current = [];
+  }, []);
+
+  /** One chord at a time on the audio clock (preview transport). */
+  const scheduleTransportChord = useCallback(
+    (symbol: ChordSymbol, audioTime: number, sustainSec: number, prevSymbol?: ChordSymbol | null) => {
+      const ctx = getAudioContextRef.current();
+      if (!ctx) return;
+      const midis = resolveVoicedMidis(symbol, prevSymbol);
+      if (midis.length === 0) return;
+      if (ctx.state === 'suspended') void ctx.resume();
+      const startTime = Math.max(audioTime, ctx.currentTime + 0.005);
+      const dest = resolveChordPlaybackDest(ctx);
+      const instrument = getChordInstrument(instrumentIdRef.current);
+      const lit = scheduleVoicedChordPlayback(
+        instrument,
+        ctx,
+        dest,
+        midis,
+        startTime,
+        sustainSec,
+        bpmRef.current,
+        chordArpRef.current,
+        chordFxRef.current,
+        { minStartTime: startTime, gainCollector: transportGainsRef.current },
+      );
+      setPlayingMidis(new Set(lit));
+    },
+    [resolveVoicedMidis, resolveChordPlaybackDest],
   );
 
   /** Audition a single piano-key pitch with a short, snappy envelope. */
   const playPitch = useCallback(
     (midi: number) => {
-      playMidiSet([midi], 0.4);
+      playMidiSet([midi + chordOctaveShiftRef.current * 12], 0.4);
     },
     [playMidiSet],
   );
@@ -980,160 +1562,244 @@ export function ChordBuilderTab({
     auditionChord(symbol);
   }
 
-  const playTimerRef = useRef<number | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const lastScheduledQuarterRef = useRef(Number.NEGATIVE_INFINITY);
 
-  /** Pause playback without moving the playhead. Used by Pause toggle and by
-   *  internal cleanup paths (empty progression, tab closes, scrubbing). */
+  const launchCbPlaylineNow = useCallback(
+    (beatNow: number, play: boolean) => {
+      const ctx = ctxRef.current;
+      const pianoColW = Math.max(20, Math.floor(PIANO_BAR_MIN_W / colsPerBar));
+      const loopBeats = Math.max(
+        1,
+        totalBlockBeats(blocksRef.current) || totalBarsRef.current * BEATS_PER_BAR,
+      );
+      const pcols = Math.max(1, Math.round(totalBarsRef.current * colsPerBar));
+      const leadSec = play
+        ? CHORD_BUILDER_PLAYLINE_WAPI_LEAD_SEC + chordBuilderPlaylineDacLeadSec(ctx)
+        : 0;
+      const beatForWapi = play ? beatNow + leadSec * (bpmRef.current / 60) : beatNow;
+      launchCreationPlaylineWapi(cbPlaylineAnimRefs, {
+        drumEl: gridPlayheadElRef.current,
+        pianoEl: pianoPlayheadElRef.current,
+        drumQuantGlowEl: null,
+        beatNow: beatForWapi,
+        play,
+        bpm: bpmRef.current,
+        subdiv: 1,
+        pcols,
+        drumColW: GRID_PX_PER_BEAT,
+        pianoColW,
+        loopOn: true,
+        loopStartBeat: 0,
+        loopEndBeat: loopBeats,
+        playMode: 'chainAB',
+      });
+    },
+    [colsPerBar, activeProg.totalBars],
+  );
+
+  const snapCbPlaylineStatic = useCallback(
+    (beatNow: number) => {
+      const pianoColW = Math.max(20, Math.floor(PIANO_BAR_MIN_W / colsPerBar));
+      const loopBeats = Math.max(
+        1,
+        totalBlockBeats(blocksRef.current) || totalBarsRef.current * BEATS_PER_BAR,
+      );
+      const pcols = Math.max(1, Math.round(totalBarsRef.current * colsPerBar));
+      setCreationPlaylineTransformStatic({
+        drumEl: gridPlayheadElRef.current,
+        pianoEl: pianoPlayheadElRef.current,
+        drumQuantGlowEl: null,
+        beatNow,
+        subdiv: 1,
+        pcols,
+        drumColW: GRID_PX_PER_BEAT,
+        pianoColW,
+        loopOn: true,
+        loopStartBeat: 0,
+        loopEndBeat: loopBeats,
+        playMode: 'chainAB',
+      });
+    },
+    [colsPerBar, activeProg.totalBars],
+  );
+
+  const cbTransportRefs = useMemo(
+    () => ({
+      sessionStartRef,
+      originBeatRef,
+      nextEventRef: nextChordEventRef,
+      nextTimeRef: nextChordTimeRef,
+    }),
+    [],
+  );
+
+  /** Beat Lab pump: 25 ms lookahead schedules chord changes on the audio clock. */
+  const refillCbScheduleRef = useRef<(ctx: AudioContext, ctSnap: number) => void>(() => {});
+  refillCbScheduleRef.current = (ctx, ctSnap) => {
+    if (!runningRef.current) return;
+    const blocks =
+      blocksRef.current.length > 0
+        ? blocksRef.current
+        : timelineToBlocks(timelineRef.current, BEATS_PER_BAR);
+    const events = buildScheduleEventsFromBlocks(blocks);
+    if (events.length === 0) return;
+    const spb = 60 / Math.max(1, bpmRef.current);
+    refillChordBuilderLookahead(
+      ctx,
+      ctSnap,
+      spb,
+      events,
+      cbTransportRefs,
+      (chord, t0, _c, sustainSec, eventIndex) => {
+        const prevIdx = eventIndex > 0 ? (eventIndex - 1) % events.length : events.length - 1;
+        const prevChord = events[prevIdx]?.chord ?? null;
+        scheduleTransportChord(chord, t0, sustainSec, prevChord);
+      },
+      () => runningRef.current,
+    );
+  };
+
+  const cbTransportOnFrameRef = useRef<(bDisplay: number) => void>(() => {});
+  cbTransportOnFrameRef.current = (bDisplay) => {
+    displayBeatRef.current = bDisplay;
+    const loopBeats = Math.max(1, totalBlockBeats(blocksRef.current) || totalBarsRef.current * BEATS_PER_BAR);
+    const maxBeats = Math.max(0, totalBarsRef.current * colsPerBar);
+    let pos = loopBeats > 0 ? bDisplay % loopBeats : bDisplay;
+    if (maxBeats > 0 && pos >= maxBeats) pos = pos % maxBeats;
+    playheadColRef.current = pos;
+  };
+
+  useCreationTransportPump(
+    {
+      ctxRef,
+      runningRef,
+      sessionStartRef,
+      originBeatRef,
+      displayBeatRef,
+      bpmRef,
+      lastScheduledQuarterRef,
+    },
+    {
+      isScreenActive: active,
+      isPlaying,
+      getOrCreateAudioContext: () => {
+        const c = getAudioContextRef.current();
+        if (!c) throw new Error('AudioContext unavailable');
+        ctxRef.current = c;
+        return c;
+      },
+      refillRef: refillCbScheduleRef,
+      onFrameRef: cbTransportOnFrameRef,
+    },
+  );
+
+  /** Pause playback without moving the playhead — Beat Lab contract (audio snap + WAAPI pause). */
   const pausePlayback = useCallback(() => {
-    if (playTimerRef.current != null) {
-      window.clearTimeout(playTimerRef.current);
-      playTimerRef.current = null;
-    }
+    runningRef.current = false;
     setIsPlaying(false);
-  }, []);
+    resetChordBuilderStepClock({
+      nextEventRef: nextChordEventRef,
+      nextTimeRef: nextChordTimeRef,
+    });
+    cancelTransportChords();
+    const ctx = ctxRef.current ?? getAudioContextRef.current();
+    if (ctx) {
+      const b = beatAtSessionTime(
+        ctx.currentTime,
+        sessionStartRef.current,
+        originBeatRef.current,
+        bpmRef.current,
+      );
+      playheadColRef.current = b;
+      setPlayheadCol(Math.floor(b));
+      launchCbPlaylineNow(b, false);
+    }
+  }, [launchCbPlaylineNow, cancelTransportChords]);
 
   /** Stop button: stop playback AND return the playhead to column 0 (DAW
    *  convention — Stop = "rewind to start"). */
   const stopAndReset = useCallback(() => {
-    pausePlayback();
+    runningRef.current = false;
+    setIsPlaying(false);
+    resetChordBuilderStepClock({
+      nextEventRef: nextChordEventRef,
+      nextTimeRef: nextChordTimeRef,
+    });
+    cancelTransportChords();
+    sessionStartRef.current = 0;
+    cancelCreationPlaylineWapi(
+      cbPlaylineAnimRefs,
+      gridPlayheadElRef.current,
+      pianoPlayheadElRef.current,
+      null,
+    );
     setPlayheadCol(0);
-  }, [pausePlayback]);
+    playheadColRef.current = 0;
+    snapCbPlaylineStatic(0);
+  }, [snapCbPlaylineStatic, cancelTransportChords]);
 
-  useEffect(() => {
-    if (!isPlaying) return;
-    // Beat-precise chord scheduler — walks the block sequence (which is
-    // the source of truth for chord identity AND duration) and fires each
-    // chord at its cumulative beat offset. 1 beat = 1 piano-roll column
-    // because `colsPerBar === BEATS_PER_BAR === 4`, so playhead math stays
-    // in column units throughout.
-    const blocks = activeProg.blocks;
+  useLayoutEffect(() => {
+    if (!isPlaying) return undefined;
+    const blocks =
+      activeProg.blocks.length > 0
+        ? activeProg.blocks
+        : timelineToBlocks(activeProg.timeline, BEATS_PER_BAR);
     if (blocks.length === 0) {
       pausePlayback();
-      return;
+      return undefined;
     }
     const audioCtx = getAudioContextRef.current();
-    if (!audioCtx) return;
+    if (!audioCtx) return undefined;
     if (audioCtx.state === 'suspended') void audioCtx.resume();
-    // Audio-clock anchored. Same self-correcting pattern as the previous
-    // bar-precise scheduler: a single anchor (`beatZeroAt`) defines when
-    // beat 0 of the progression should fire, and every `setTimeout`
-    // recomputes its delay from the live audio clock — so even if a
-    // timer fires 20 ms late, the next one fires 20 ms earlier and
-    // cumulative drift can never grow.
-    const secPerBeat = 60 / Math.max(1, localBpm);
-    const startBeats = cumulativeStartBeats(blocks);
-    const totalLoopBeats = totalBlockBeats(blocks);
-    // Pick up wherever the playhead is. If it's sitting mid-block, jump
-    // to the block that starts at or after the playhead column.
-    const playheadBeat = playheadColRef.current;
-    let startStep = 0;
-    for (let i = startBeats.length - 1; i >= 0; i--) {
-      if (startBeats[i]! <= playheadBeat) {
-        startStep = i;
-        break;
-      }
-    }
-    // Solve for `beatZeroAt` so `beatZeroAt + startBeats[startStep] *
-    // secPerBeat === firstChordAt`. That way the first scheduled chord
-    // lands at `firstChordAt` and every following chord stays on-grid
-    // relative to beat 0.
-    const firstChordAt = audioCtx.currentTime + 0.05;
-    const beatZeroAt = firstChordAt - startBeats[startStep]! * secPerBeat;
-    let step = startStep;
-    let cancelled = false;
-    function fireAndScheduleNext() {
-      if (cancelled) return;
-      const ctx = audioCtx!;
-      const blockIdx = step % blocks.length;
-      const block = blocks[blockIdx]!;
-      // No `setPlayheadCol` here — the rAF loop below drives the
-      // playhead from the live audio clock so the line glides smoothly
-      // between chord boundaries instead of snapping per chord.
-      auditionChord(block.chord);
-      step += 1;
-      const nextBlockIdx = step % blocks.length;
-      const loops = Math.floor(step / blocks.length);
-      const nextAbsBeat = startBeats[nextBlockIdx]! + loops * totalLoopBeats;
-      const nextTargetTime = beatZeroAt + nextAbsBeat * secPerBeat;
-      const delayMs = Math.max(0, (nextTargetTime - ctx.currentTime) * 1000);
-      playTimerRef.current = window.setTimeout(fireAndScheduleNext, delayMs);
-    }
-    const initialDelayMs = Math.max(0, (firstChordAt - audioCtx.currentTime) * 1000);
-    playTimerRef.current = window.setTimeout(fireAndScheduleNext, initialDelayMs);
+    ctxRef.current = audioCtx;
 
-    // ── Smooth playhead via direct DOM ──────────────────────────────
-    // Read the audio clock every animation frame and write
-    // `transform: translateX(...)` straight onto each playhead `<div>`
-    // via refs handed in by `PianoRoll` / `ChordBlockGrid`. translateX
-    // is GPU-composited, so the only main-thread cost per frame is a
-    // few math ops + a style write — no React reconciliation, no
-    // layout/paint of unrelated nodes. This is the same pattern a DAW
-    // uses to keep transport visuals smooth when the editor view is
-    // heavy.
-    const cellWForPiano = Math.max(20, Math.floor(PIANO_BAR_MIN_W / colsPerBar));
-    let rafId = 0;
-    let lastPaintedBeat = -1;
-    function paintPlayhead() {
-      if (cancelled) return;
-      const ctx = audioCtx!;
-      // `beatZeroAt` was solved so that beat 0 of the progression maps
-      // to a specific audio-clock time. `elapsedBeats` may be slightly
-      // negative for the first ~50 ms (we schedule with a look-ahead).
-      const elapsedBeats = (ctx.currentTime - beatZeroAt) / secPerBeat;
-      let pos: number;
-      if (elapsedBeats < 0) {
-        pos = startBeats[startStep]!;
-      } else if (totalLoopBeats > 0) {
-        pos = elapsedBeats % totalLoopBeats;
-      } else {
-        pos = elapsedBeats;
-      }
-      const maxBeats = Math.max(0, activeProg.totalBars * colsPerBar);
-      if (maxBeats > 0 && pos >= maxBeats) pos = pos % maxBeats;
-      // Skip frames where the playhead didn't move enough to be
-      // visible — avoids burning GPU work when nothing changed.
-      if (Math.abs(pos - lastPaintedBeat) >= 0.005) {
-        const pianoEl = pianoPlayheadElRef.current;
-        if (pianoEl) {
-          pianoEl.style.transform = `translateX(${pos * cellWForPiano}px)`;
-        }
-        const gridEl = gridPlayheadElRef.current;
-        if (gridEl) {
-          gridEl.style.transform = `translateX(${pos * GRID_PX_PER_BEAT}px)`;
-        }
-        // Keep the ref in sync for scrub / restart logic which reads
-        // `playheadColRef.current` to seed the next play position.
-        playheadColRef.current = pos;
-        lastPaintedBeat = pos;
-      }
-      rafId = window.requestAnimationFrame(paintPlayhead);
-    }
-    rafId = window.requestAnimationFrame(paintPlayhead);
+    cancelTransportChords();
+    resetChordBuilderStepClock({
+      nextEventRef: nextChordEventRef,
+      nextTimeRef: nextChordTimeRef,
+    });
+    const origin = Math.max(0, playheadColRef.current);
+    originBeatRef.current = origin;
+    displayBeatRef.current = origin;
+    const tCapture = Math.max(0, audioCtx.currentTime);
+    sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+    runningRef.current = true;
+    refillCbScheduleRef.current(audioCtx, tCapture);
+
+    const tPost = Math.max(0, audioCtx.currentTime);
+    const beatLaunch = beatAtSessionTime(
+      tPost,
+      sessionStartRef.current,
+      originBeatRef.current,
+      bpmRef.current,
+    );
+    displayBeatRef.current = beatLaunch;
+    launchCbPlaylineNow(beatLaunch, true);
 
     return () => {
-      cancelled = true;
-      if (playTimerRef.current != null) {
-        window.clearTimeout(playTimerRef.current);
-        playTimerRef.current = null;
-      }
-      if (rafId !== 0) {
-        window.cancelAnimationFrame(rafId);
-        rafId = 0;
-      }
+      runningRef.current = false;
+      cancelTransportChords();
+      cancelCreationPlaylineWapi(
+        cbPlaylineAnimRefs,
+        gridPlayheadElRef.current,
+        pianoPlayheadElRef.current,
+        null,
+      );
     };
-    // playheadCol intentionally not in deps — we capture its value at effect
-    // start via ref; mid-playback scrubs bump playStartKey to force a clean
-    // restart from the new position.
   }, [
     isPlaying,
     playStartKey,
-    activeProg.blocks,
-    activeProg.totalBars,
-    colsPerBar,
-    localBpm,
-    auditionChord,
+    blocksPlaySignature,
     pausePlayback,
+    launchCbPlaylineNow,
+    cancelTransportChords,
   ]);
+
+  useEffect(() => {
+    if (!isPlaying || !runningRef.current) return;
+    launchCbPlaylineNow(displayBeatRef.current, true);
+  }, [localBpm, colsPerBar, activeProg.totalBars, isPlaying, launchCbPlaylineNow]);
 
   useEffect(() => {
     if (active) return;
@@ -1145,7 +1811,7 @@ export function ChordBuilderTab({
     // scheduling lanes — which is the most plausible cause of the
     // Beat Lab metronome "stopping / pausing / skipping" you've seen
     // after using Chord Builder. We:
-    //   1. Stop chord-sequence playback (clears playTimerRef).
+    //   1. Stop chord-sequence playback (clears transport + WAAPI).
     //   2. Hard-cancel every audition gain envelope so any in-flight
     //      ramps stop scheduling new automation points.
     //   3. Clear the audition + highlight timeouts so no late state
@@ -1155,6 +1821,9 @@ export function ChordBuilderTab({
     //      switching tabs and force a Chord Builder re-render at a
     //      sensitive moment in Beat Lab playback.
     pausePlayback();
+    cancelTransportChords();
+    fxBusRef.current?.dispose();
+    fxBusRef.current = null;
     const ctx = getAudioContextRef.current();
     if (ctx) {
       auditionGainsRef.current.forEach((g) => {
@@ -1192,7 +1861,7 @@ export function ChordBuilderTab({
       exportStatusTimerRef.current = null;
     }
     setPlayingMidis(new Set());
-  }, [active, pausePlayback]);
+  }, [active, pausePlayback, cancelTransportChords]);
 
   function onTogglePlay() {
     if (isPlaying) {
@@ -1211,20 +1880,41 @@ export function ChordBuilderTab({
       const maxCol = Math.max(0, activeProg.totalBars * colsPerBar - 1);
       const clamped = Math.max(0, Math.min(maxCol, Math.floor(col)));
       setPlayheadCol(clamped);
-      // Mirror the scrub into the ref so the rAF loop, if it's running,
-      // sees the new starting beat on the next iteration. Without this
-      // the rAF cleanup would later write the stale rAF-tracked position
-      // back to state, overriding the user's scrub.
       playheadColRef.current = clamped;
-      if (isPlaying) setPlayStartKey((k) => k + 1);
+      if (isPlaying) {
+        setPlayStartKey((k) => k + 1);
+      } else {
+        snapCbPlaylineStatic(clamped);
+      }
     },
-    [activeProg.totalBars, colsPerBar, isPlaying],
+    [activeProg.totalBars, colsPerBar, isPlaying, snapCbPlaylineStatic],
+  );
+
+  /** Bar number click: select bar for copy/paste only — does not edit chords or notes. */
+  const onBarHeaderPointer = useCallback(
+    (barIdx: number, shiftKey: boolean) => {
+      if (shiftKey) {
+        if (barSelAnchor == null) {
+          setBarSelAnchor(barIdx);
+          setBarSelEnd(barIdx);
+        } else {
+          setBarSelEnd(barIdx);
+        }
+        return;
+      }
+      setBarSelAnchor(barIdx);
+      setBarSelEnd(barIdx);
+      setPlayhead(barIdx * colsPerBar);
+    },
+    [barSelAnchor, colsPerBar, setPlayhead],
   );
 
   // When switching progressions, snap the playhead to the start of the new one.
   useEffect(() => {
     setPlayheadCol(0);
-  }, [activeId]);
+    playheadColRef.current = 0;
+    if (!isPlaying) snapCbPlaylineStatic(0);
+  }, [activeId, isPlaying, snapCbPlaylineStatic]);
 
   // If the active progression shrinks below the current playhead, clamp it
   // so the playhead doesn't sit beyond the visible timeline.
@@ -1284,13 +1974,13 @@ export function ChordBuilderTab({
     }
   }
 
-  function onClearEdits() {
+  function applyRollEdits(edits: RollEdits) {
     setManualEditsById((prev) => ({
       ...prev,
       [activeProg.id]: {
-        added: new Set<string>(),
-        removed: new Set<string>(),
-        lengths: new Map<string, number>(),
+        added: new Set(edits.added),
+        removed: new Set(edits.removed),
+        lengths: new Map(edits.lengths),
       },
     }));
   }
@@ -1359,102 +2049,105 @@ export function ChordBuilderTab({
     }));
   }
 
-  /** Tick resolution for the exported Standard MIDI File. 480 PPQ is the
-   *  near-universal default — divides cleanly by 1/2/3/4/5/6/8/12/16 and
-   *  imports identically in every DAW we tested. */
-  const SMF_TICKS_PER_QUARTER = 480;
-
   /** Transient feedback for the Save-MIDI button (mirrors the WAV
    *  export's status pill). `null` = no toast. */
   const [saveMidiStatus, setSaveMidiStatus] = useState<string | null>(null);
   const saveMidiStatusTimerRef = useRef<number | null>(null);
+  const [sendSynthStatus, setSendSynthStatus] = useState<string | null>(null);
+  const sendSynthStatusTimerRef = useRef<number | null>(null);
+
+  const activeProgressionChords = useMemo(
+    () =>
+      activeProg.timeline
+        .map((s) => s.chord)
+        .filter((c): c is ChordSymbol => Boolean(c)),
+    [activeProg.timeline],
+  );
+
+  /** Must be declared before MIDI export callbacks that close over it. */
+  const previewEvents = useMemo<ChordEventOut[]>(
+    () =>
+      buildChordBuilderPreviewEvents({
+        timeline: activeProg.timeline,
+        keyRoot,
+        mode,
+        pattern,
+        colsPerBar,
+        bandLow: PREVIEW_BAND_LOW,
+        bandHigh: PREVIEW_BAND_HIGH,
+        resolveMidis: (sym, prev) => resolveVoicedMidis(sym, prev),
+      }),
+    [
+      activeProg.timeline,
+      keyRoot,
+      mode,
+      pattern,
+      colsPerBar,
+      resolveVoicedMidis,
+      chordVoicingSize,
+      smartVoicing,
+      voicingSpread,
+      chordTension,
+      chordOctaveShift,
+    ],
+  );
+
+  const buildPreviewEventsForProg = useCallback(
+    (prog: Progression) =>
+      buildChordBuilderPreviewEvents({
+        timeline: prog.timeline,
+        keyRoot,
+        mode,
+        pattern: getPattern(prog.patternId) ?? pattern,
+        colsPerBar,
+        bandLow: PREVIEW_BAND_LOW,
+        bandHigh: PREVIEW_BAND_HIGH,
+        resolveMidis: (sym, prev) => resolveVoicedMidis(sym, prev),
+      }),
+    [colsPerBar, keyRoot, mode, pattern, resolveVoicedMidis],
+  );
+
+  const activeSectionTrackLabel = useMemo(() => {
+    const chordList = activeProgressionChords
+      .map((sym) => chordSymbolToName(sym, keyRoot, mode))
+      .join(' · ');
+    return chordList || activeProg.name || 'Chord Builder';
+  }, [activeProgressionChords, activeProg.name, keyRoot, mode]);
+
+  const activeBlockSpans = useMemo(
+    () => chordBuilderBlockSpansFromBlocks(activeProg.blocks),
+    [activeProg.blocks],
+  );
+
+  const buildActiveSectionMidiNotes = useCallback((): MidiNoteEvent[] => {
+    return buildChordBuilderMidiNotesFromPreview({
+      previewEvents,
+      edits: editsForActive,
+      totalCols: activeProg.totalBars * colsPerBar,
+      blockSpans: activeBlockSpans,
+    });
+  }, [activeBlockSpans, activeProg.totalBars, colsPerBar, editsForActive, previewEvents]);
 
   function onSaveMidiClick() {
-    const progression = activeProg.timeline
-      .map((s) => s.chord)
-      .filter((c): c is ChordSymbol => Boolean(c));
-    if (progression.length === 0 && editsForActive.added.size === 0) {
+    if (activeProgressionChords.length === 0 && editsForActive.added.size === 0) {
       flashSaveMidi('Add at least one chord first.');
       return;
     }
-
-    // Re-derive the cell-key set the user has been editing in (C3..C6
-    // preview band) so manual add / remove / length edits are honoured
-    // exactly the way they look on the piano roll. We DON'T octave-clamp
-    // afterward — the SMF should carry the real pitches so external DAWs
-    // can render the full chord voicings.
-    const previewBandEvents = progression.length > 0
-      ? buildChordEvents({
-          progression,
-          keyRoot,
-          mode,
-          pattern,
-          barsPerChord: activeProg.barsPerChord,
-          startCol: 0,
-          colsPerBar,
-          bandLow: PREVIEW_BAND_LOW,
-          bandHigh: PREVIEW_BAND_HIGH,
-        })
-      : [];
-
-    const cellKeys = new Set<string>();
-    for (const ev of previewBandEvents) {
-      const noteName = midiToNoteName(ev.midi);
-      const row = PIANO_ROWS.indexOf(noteName);
-      if (row < 0) continue;
-      const key = `${row},${ev.col}`;
-      if (!editsForActive.removed.has(key)) cellKeys.add(key);
-    }
-    for (const key of editsForActive.added) cellKeys.add(key);
-
-    // Convert each (row, col) cell into a single MidiNoteEvent with the
-    // user-set length. `col` is in quarter-note units (matches the project
-    // grid), so we scale by `SMF_TICKS_PER_QUARTER` to get absolute SMF
-    // ticks. Held notes become one note-on / note-off span rather than
-    // N re-triggers, which is what every external DAW expects.
-    const notes: MidiNoteEvent[] = [];
-    for (const key of cellKeys) {
-      const [rowStr, colStr] = key.split(',');
-      const row = parseInt(rowStr ?? '-1', 10);
-      const col = parseInt(colStr ?? '-1', 10);
-      const noteName = PIANO_ROWS[row];
-      if (!noteName) continue;
-      const midi = noteNameToMidi(noteName);
-      if (midi <= 0) continue;
-      const length = editsForActive.lengths.get(key) ?? 1;
-      notes.push({
-        midi,
-        startTick: col * SMF_TICKS_PER_QUARTER,
-        durationTicks: Math.max(1, length) * SMF_TICKS_PER_QUARTER,
-        velocity: 100,
-      });
-    }
-
+    const notes = buildActiveSectionMidiNotes();
     if (notes.length === 0) {
       flashSaveMidi('No notes to save — try adding chords or notes.');
       return;
     }
-
-    // Build a descriptive label: e.g. "C · Am · F · G". Falls back to the
-    // progression's name if every slot is empty (shouldn't happen — we
-    // bailed above — but keeps the filename sane in edge cases).
-    const chordList = activeProg.timeline
-      .map((s) => s.chord)
-      .filter((c): c is ChordSymbol => Boolean(c))
-      .map((sym) => chordSymbolToName(sym, keyRoot, mode))
-      .join(' · ');
-    const trackName = chordList || activeProg.name || 'Chord Builder';
-
     try {
       const bytes = buildStandardMidiFile({
         notes,
         bpm: localBpm,
-        ticksPerQuarter: SMF_TICKS_PER_QUARTER,
-        trackName,
+        ticksPerQuarter: CHORD_BUILDER_SMF_PPQ,
+        trackName: activeSectionTrackLabel,
       });
-      const filenameBase = chordList
-        ? `ChordBuilder · ${chordList}`
-        : activeProg.name || 'ChordBuilder';
+      const filenameBase = activeSectionTrackLabel.startsWith('Chord Builder')
+        ? activeSectionTrackLabel
+        : `ChordBuilder · ${activeSectionTrackLabel}`;
       downloadBytes(bytes, `${safeFilename(filenameBase)}.mid`, 'audio/midi');
       flashSaveMidi(`✓ Saved ${notes.length} note${notes.length === 1 ? '' : 's'} → .mid`);
     } catch (err) {
@@ -1462,6 +2155,57 @@ export function ChordBuilderTab({
       flashSaveMidi(err instanceof Error ? err.message : 'Save failed.');
     }
   }
+
+  const onSendMidiToBeatLabClick = useCallback(() => {
+    if (!onSendMidiToBeatLabSynth) return;
+    if (activeProgressionChords.length === 0 && editsForActive.added.size === 0) {
+      flashSendSynth('Add at least one chord first.');
+      return;
+    }
+    if (previewEvents.length === 0 && editsForActive.added.size === 0) {
+      flashSendSynth('No notes to send — try adding chords or notes.');
+      return;
+    }
+    try {
+      onSendMidiToBeatLabSynth({
+        sections: [
+          {
+            previewEvents,
+            edits: editsForActive,
+            totalQuarterCols: activeProg.totalBars * colsPerBar,
+            colsPerBar,
+            blockSpans: activeBlockSpans,
+            chordTimeline: activeProg.timeline,
+            chordKeyRoot: keyRoot,
+            chordMode: mode,
+          },
+        ],
+        bpm: localBpm,
+        label: activeSectionTrackLabel,
+      });
+      const noteCount = buildActiveSectionMidiNotes().length;
+      flashSendSynth(
+        `✓ Sent ${noteCount} note${noteCount === 1 ? '' : 's'} → Beat Lab SYNTH`,
+      );
+    } catch (err) {
+      console.debug('Send MIDI to Beat Lab failed:', err);
+      flashSendSynth(err instanceof Error ? err.message : 'Send failed.');
+    }
+  }, [
+    activeProg.totalBars,
+    activeProgressionChords.length,
+    activeBlockSpans,
+    activeSectionTrackLabel,
+    buildActiveSectionMidiNotes,
+    colsPerBar,
+    editsForActive,
+    localBpm,
+    onSendMidiToBeatLabSynth,
+    previewEvents,
+    keyRoot,
+    mode,
+    activeProg.timeline,
+  ]);
 
   // Show a small status pill under the Save-MIDI button for 3 seconds.
   function flashSaveMidi(msg: string) {
@@ -1475,11 +2219,26 @@ export function ChordBuilderTab({
     }, 3000);
   }
 
+  function flashSendSynth(msg: string) {
+    if (sendSynthStatusTimerRef.current != null) {
+      window.clearTimeout(sendSynthStatusTimerRef.current);
+    }
+    setSendSynthStatus(msg);
+    sendSynthStatusTimerRef.current = window.setTimeout(() => {
+      setSendSynthStatus(null);
+      sendSynthStatusTimerRef.current = null;
+    }, 3000);
+  }
+
   useEffect(() => {
     return () => {
       if (saveMidiStatusTimerRef.current != null) {
         window.clearTimeout(saveMidiStatusTimerRef.current);
         saveMidiStatusTimerRef.current = null;
+      }
+      if (sendSynthStatusTimerRef.current != null) {
+        window.clearTimeout(sendSynthStatusTimerRef.current);
+        sendSynthStatusTimerRef.current = null;
       }
     };
   }, []);
@@ -1554,6 +2313,12 @@ export function ChordBuilderTab({
         mode,
         bpm: localBpm,
         instrumentId,
+        chordVoicingSize,
+        smartVoicing,
+        spread: voicingSpread,
+        arp: chordArp,
+        fx: chordFx,
+        octaveShift: chordOctaveShift,
       });
       const sectionNames = populated.map((p) => p.name).join(' · ');
       const filenameBase = `ChordBuilder Song · ${sectionNames}`;
@@ -1567,86 +2332,55 @@ export function ChordBuilderTab({
     } finally {
       setSongExportBusy(false);
     }
-  }, [songExportBusy, progressions, keyRoot, mode, localBpm, instrumentId]);
+  }, [
+    songExportBusy,
+    progressions,
+    keyRoot,
+    mode,
+    localBpm,
+    instrumentId,
+    chordVoicingSize,
+    smartVoicing,
+    voicingSpread,
+    chordArp,
+    chordFx,
+  ]);
 
   /** Save every populated Progression tab as one Standard MIDI File. Each
    *  section is placed sequentially on the timeline (offset by the cumulative
    *  bar count of all prior sections) so the MIDI plays end-to-end in any
    *  DAW. Per-section manual edits (added / removed / lengthened notes) are
    *  preserved — same fidelity as the single-section Save MIDI. */
+  const buildSongMidiNotes = useCallback(() => {
+    const populated = progressions.filter((p) => p.timeline.some((s) => Boolean(s.chord)));
+    const emptyEdits: ChordBuilderRollEdits = {
+      added: new Set<string>(),
+      removed: new Set<string>(),
+      lengths: new Map<string, number>(),
+    };
+    return {
+      populated,
+      notes: buildChordBuilderSongMidiNotesFromPreview({
+        sections: populated.map((p) => ({
+          previewEvents: buildPreviewEventsForProg(p),
+          totalBars: p.totalBars,
+          edits: manualEditsById[p.id] ?? emptyEdits,
+          blockSpans: chordBuilderBlockSpansFromBlocks(p.blocks),
+        })),
+        colsPerBar,
+      }),
+    };
+  }, [buildPreviewEventsForProg, colsPerBar, manualEditsById, progressions]);
+
   const onSaveSongMidiClick = useCallback(() => {
     if (songExportBusy) return;
-    const populated = progressions.filter((p) => p.timeline.some((s) => Boolean(s.chord)));
+    const { populated, notes: allNotes } = buildSongMidiNotes();
     if (populated.length === 0) {
       flashSongExport('Add chords to at least one section first.');
       return;
     }
     setSongExportBusy('midi');
     try {
-      const allNotes: MidiNoteEvent[] = [];
-      // Cursor advances in QUARTER-NOTE columns (matches `colsPerBar` math
-      // throughout Chord Builder — typically 4 cols per bar in 4/4).
-      let cursorCol = 0;
-      for (const prog of populated) {
-        const progChords = prog.timeline
-          .map((s) => s.chord)
-          .filter((c): c is ChordSymbol => Boolean(c));
-        const sectionEdits = manualEditsById[prog.id] ?? {
-          added: new Set<string>(),
-          removed: new Set<string>(),
-          lengths: new Map<string, number>(),
-        };
-
-        // Re-derive the lit-cell set the same way `onSaveMidiClick` does
-        // for a single section, but reusing the per-section pattern +
-        // barsPerChord so each section keeps its own feel.
-        const sectionPattern = getPattern(prog.patternId) ?? PATTERNS[0]!;
-        const previewEvents = progChords.length > 0
-          ? buildChordEvents({
-              progression: progChords,
-              keyRoot,
-              mode,
-              pattern: sectionPattern,
-              barsPerChord: prog.barsPerChord,
-              startCol: 0,
-              colsPerBar,
-              bandLow: PREVIEW_BAND_LOW,
-              bandHigh: PREVIEW_BAND_HIGH,
-            })
-          : [];
-        const cellKeys = new Set<string>();
-        for (const ev of previewEvents) {
-          const noteName = midiToNoteName(ev.midi);
-          const row = PIANO_ROWS.indexOf(noteName);
-          if (row < 0) continue;
-          const key = `${row},${ev.col}`;
-          if (!sectionEdits.removed.has(key)) cellKeys.add(key);
-        }
-        for (const key of sectionEdits.added) cellKeys.add(key);
-
-        // Convert each lit cell into a MidiNoteEvent, offset by the
-        // song cursor so the section lands at the right point in time.
-        for (const key of cellKeys) {
-          const [rowStr, colStr] = key.split(',');
-          const row = parseInt(rowStr ?? '-1', 10);
-          const col = parseInt(colStr ?? '-1', 10);
-          const noteName = PIANO_ROWS[row];
-          if (!noteName) continue;
-          const midi = noteNameToMidi(noteName);
-          if (midi <= 0) continue;
-          const length = sectionEdits.lengths.get(key) ?? 1;
-          allNotes.push({
-            midi,
-            startTick: (cursorCol + col) * SMF_TICKS_PER_QUARTER,
-            durationTicks: Math.max(1, length) * SMF_TICKS_PER_QUARTER,
-            velocity: 100,
-          });
-        }
-        // The section's footprint is its visible bar count — keeps empty
-        // bars in the section as silence in the timeline (matches WAV).
-        cursorCol += prog.totalBars * colsPerBar;
-      }
-
       if (allNotes.length === 0) {
         flashSongExport('No notes to save — try adding chords or notes.');
         return;
@@ -1656,7 +2390,7 @@ export function ChordBuilderTab({
       const bytes = buildStandardMidiFile({
         notes: allNotes,
         bpm: localBpm,
-        ticksPerQuarter: SMF_TICKS_PER_QUARTER,
+        ticksPerQuarter: CHORD_BUILDER_SMF_PPQ,
         trackName,
       });
       downloadBytes(
@@ -1673,7 +2407,61 @@ export function ChordBuilderTab({
     } finally {
       setSongExportBusy(false);
     }
-  }, [songExportBusy, progressions, manualEditsById, keyRoot, mode, localBpm, colsPerBar]);
+  }, [buildSongMidiNotes, localBpm, songExportBusy]);
+
+  const onSendSongMidiToBeatLabClick = useCallback(() => {
+    if (!onSendMidiToBeatLabSynth || songExportBusy) return;
+    const populated = progressions.filter((p) => p.timeline.some((s) => Boolean(s.chord)));
+    if (populated.length === 0) {
+      flashSongExport('Add chords to at least one section first.');
+      return;
+    }
+    const emptyEdits: ChordBuilderRollEdits = {
+      added: new Set<string>(),
+      removed: new Set<string>(),
+      lengths: new Map<string, number>(),
+    };
+    const sections = populated.map((p) => ({
+      previewEvents: buildPreviewEventsForProg(p),
+      edits: manualEditsById[p.id] ?? emptyEdits,
+      totalQuarterCols: p.totalBars * colsPerBar,
+      colsPerBar,
+      blockSpans: chordBuilderBlockSpansFromBlocks(p.blocks),
+      chordTimeline: p.timeline,
+      chordKeyRoot: keyRoot,
+      chordMode: mode,
+    }));
+    const noteCount = buildSongMidiNotes().notes.length;
+    if (noteCount === 0) {
+      flashSongExport('No notes to send — try adding chords or notes.');
+      return;
+    }
+    const sectionNames = populated.map((p) => p.name).join(' · ');
+    try {
+      onSendMidiToBeatLabSynth({
+        sections,
+        bpm: localBpm,
+        label: `Chord Builder Song · ${sectionNames}`,
+      });
+      flashSongExport(
+        `✓ Sent ${noteCount} note${noteCount === 1 ? '' : 's'} → Beat Lab SYNTH`,
+      );
+    } catch (err) {
+      console.debug('Song MIDI → Beat Lab failed:', err);
+      flashSongExport(err instanceof Error ? err.message : 'Send to SYNTH failed.');
+    }
+  }, [
+    buildPreviewEventsForProg,
+    buildSongMidiNotes,
+    colsPerBar,
+    localBpm,
+    manualEditsById,
+    onSendMidiToBeatLabSynth,
+    progressions,
+    songExportBusy,
+    keyRoot,
+    mode,
+  ]);
 
   // ── WAV export to Beat Lab sample pad ────────────────────────────────
   //
@@ -1718,6 +2506,12 @@ export function ChordBuilderTab({
           bpm: localBpm,
           barsPerChord: activeProg.barsPerChord,
           instrumentId,
+          chordVoicingSize,
+          smartVoicing,
+          spread: voicingSpread,
+          arp: chordArp,
+          fx: chordFx,
+          octaveShift: chordOctaveShift,
         });
         const label = exportLabelChords
           ? `Chord · ${exportLabelChords}`
@@ -1760,6 +2554,11 @@ export function ChordBuilderTab({
       localBpm,
       exportLabelChords,
       instrumentId,
+      chordVoicingSize,
+      smartVoicing,
+      voicingSpread,
+      chordArp,
+      chordFx,
     ],
   );
 
@@ -1775,26 +2574,125 @@ export function ChordBuilderTab({
 
   const chordCount = activeProg.timeline.filter((s) => s.chord).length;
 
-  const previewEvents = useMemo<ChordEventOut[]>(() => {
-    const progression = activeProg.timeline
-      .map((s) => s.chord)
-      .filter((c): c is ChordSymbol => Boolean(c));
-    if (progression.length === 0) return [];
-    // Preview uses the wider chord-builder piano-roll band (C3..C6) so 7th chords,
-    // sus voicings, and high-key roots all display their full voicing without
-    // being octave-compressed. Commit still uses the host's narrower band.
-    return buildChordEvents({
-      progression,
-      keyRoot,
-      mode,
-      pattern,
-      barsPerChord: activeProg.barsPerChord,
-      startCol: 0,
+  useEffect(() => {
+    fxBusRef.current?.update(chordFx);
+  }, [chordFx]);
+
+  const rowForMidi = useCallback((midi: number) => PIANO_ROWS.indexOf(midiToNoteName(midi)), []);
+
+  const getNoteCopyRange = useCallback((): { start: number; end: number } | null => {
+    if (barSelRange) return barSelRange;
+    if (barSelAnchor != null) return { start: barSelAnchor, end: barSelAnchor };
+    const bar = Math.floor(playheadColRef.current / colsPerBar);
+    if (bar >= 0 && bar < activeProg.totalBars) return { start: bar, end: bar };
+    return null;
+  }, [barSelRange, barSelAnchor, activeProg.totalBars, colsPerBar]);
+
+  const onCopyBars = useCallback(() => {
+    const range = getNoteCopyRange();
+    if (!range) {
+      flashBarEditHint('Click a bar number (or Shift+click a range), then Ctrl+C');
+      return;
+    }
+    const totalCols = activeProg.totalBars * colsPerBar;
+    const autoKeys = buildAutoNoteKeys(previewEvents, totalCols, rowForMidi);
+    const clip = extractBarNotesClipboard(
+      range.start,
+      range.end,
+      autoKeys,
+      editsForActive.added,
+      editsForActive.removed,
+      editsForActive.lengths,
       colsPerBar,
-      bandLow: PREVIEW_BAND_LOW,
-      bandHigh: PREVIEW_BAND_HIGH,
-    });
-  }, [activeProg.timeline, activeProg.barsPerChord, keyRoot, mode, pattern, colsPerBar]);
+      PIANO_ROWS.length,
+      totalCols,
+    );
+    if (clip.cells.length === 0) {
+      flashBarEditHint(`No notes on bar${range.start === range.end ? '' : 's'} ${range.start + 1}${range.end === range.start ? '' : `–${range.end + 1}`}`);
+      return;
+    }
+    barNotesCopyBufferRef.current = clip;
+    const n = range.end - range.start + 1;
+    flashBarEditHint(
+      `Copied ${clip.cells.length} note${clip.cells.length === 1 ? '' : 's'} from bar${n === 1 ? '' : 's'} ${range.start + 1}${n === 1 ? '' : `–${range.end + 1}`}`,
+    );
+  }, [getNoteCopyRange, previewEvents, editsForActive, colsPerBar, rowForMidi, activeProg.totalBars]);
+
+  const onPasteBars = useCallback(() => {
+    const clip = barNotesCopyBufferRef.current;
+    if (!clip?.cells.length) {
+      flashBarEditHint('Copy notes first (select bar · Ctrl+C)');
+      return;
+    }
+    if (clip.colsPerBar !== colsPerBar) {
+      flashBarEditHint('Grid changed since copy — select bar and Ctrl+C again');
+      return;
+    }
+    const atBar = barSelAnchor ?? Math.floor(playheadColRef.current / colsPerBar);
+    if (atBar < 0 || atBar >= activeProg.totalBars) {
+      flashBarEditHint('Click the bar where you want to paste');
+      return;
+    }
+    if (atBar + clip.barCount > activeProg.totalBars) {
+      flashBarEditHint(`Need ${atBar + clip.barCount} bars total — increase Total Bars first`);
+      return;
+    }
+    const totalCols = activeProg.totalBars * colsPerBar;
+    const autoKeys = buildAutoNoteKeys(previewEvents, totalCols, rowForMidi);
+    const next = pasteBarNotesClipboard(
+      atBar,
+      clip,
+      autoKeys,
+      editsForActive,
+      colsPerBar,
+      PIANO_ROWS.length,
+      totalCols,
+      activeProg.totalBars,
+    );
+    if (!next) {
+      flashBarEditHint('Paste failed — check bar fits in the timeline');
+      return;
+    }
+    setManualEditsById((prev) => ({
+      ...prev,
+      [activeProg.id]: next,
+    }));
+    flashBarEditHint(
+      `Pasted ${clip.cells.length} note${clip.cells.length === 1 ? '' : 's'} at bar ${atBar + 1}${clip.barCount > 1 ? `–${atBar + clip.barCount}` : ''}`,
+    );
+  }, [
+    activeProg.id,
+    activeProg.totalBars,
+    barSelAnchor,
+    colsPerBar,
+    previewEvents,
+    editsForActive,
+    rowForMidi,
+  ]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        onCopyBars();
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        onPasteBars();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, onCopyBars, onPasteBars]);
+
+  const onClearNotes = useCallback(() => {
+    const totalCols = activeProg.totalBars * colsPerBar;
+    applyRollEdits(clearAllRollNotes(previewEvents, totalCols, rowForMidi));
+    flashBarEditHint('Cleared all notes on the piano roll');
+  }, [activeProg.id, activeProg.totalBars, colsPerBar, previewEvents, rowForMidi]);
 
   useEffect(() => {
     if (!active) return;
@@ -1861,15 +2759,34 @@ export function ChordBuilderTab({
         onBarsPerChord={onBarsPerChordChange}
         totalBars={activeProg.totalBars}
         onTotalBars={onTotalBarsChange}
+        onDuplicateLoop={onDuplicateLoop}
+        onCopyBars={onCopyBars}
+        onPasteBars={onPasteBars}
+        onClearNotes={onClearNotes}
+        barEditHint={barEditHint}
         chordCount={chordCount}
         isPlaying={isPlaying}
         bpm={localBpm}
         onBpm={setLocalBpmAndUnsync}
         instrumentId={instrumentId}
+        chordVoicingSize={chordVoicingSize}
+        onChordVoicingSize={(v) => setChordVoicingSize(Number(v) as ChordVoicingSize)}
+        smartVoicing={smartVoicing}
+        onSmartVoicing={setSmartVoicing}
+        voicingSpread={voicingSpread}
+        onVoicingSpread={setVoicingSpread}
+        chordTension={chordTension}
+        onChordTension={setChordTension}
+        chordOctaveShift={chordOctaveShift}
+        onChordOctaveShift={setChordOctaveShift}
+        chordFx={chordFx}
+        onChordFx={setChordFx}
+        chordArp={chordArp}
+        onChordArp={setChordArp}
         onPickInstrument={(id) => {
           setInstrumentId(id);
-          const midis = chordSymbolToMidi(selectedPad, keyRoot, mode, 4);
-          if (midis && midis.length > 0) {
+          const midis = resolveVoicedMidis(selectedPad);
+          if (midis.length > 0) {
             instrumentIdRef.current = id;
             playMidiSet(midis, 1.0);
           }
@@ -1884,6 +2801,9 @@ export function ChordBuilderTab({
         onClear={onClearTimeline}
         onSaveMidi={onSaveMidiClick}
         saveMidiStatus={saveMidiStatus}
+        canSendToSynth={Boolean(onSendMidiToBeatLabSynth)}
+        onSendMidiToBeatLab={onSendMidiToBeatLabClick}
+        sendSynthStatus={sendSynthStatus}
         canExportToPad={Boolean(onExportToPad)}
         exportPickerOpen={exportPickerOpen}
         onToggleExportPicker={() =>
@@ -1894,10 +2814,15 @@ export function ChordBuilderTab({
         exportStatus={exportStatus}
         onSaveSongWav={onSaveSongWavClick}
         onSaveSongMidi={onSaveSongMidiClick}
+        onSendSongMidiToBeatLab={onSendSongMidiToBeatLabClick}
+        canSendSongToSynth={Boolean(onSendMidiToBeatLabSynth)}
         canSaveSong={songHasContent}
         songExportBusy={songExportBusy}
         songExportStatus={songExportStatus}
         songSectionsLabel={songSectionsLabel}
+        onSendRootsTo808={onSendRootsTo808Lab}
+        send808Status={send808Status}
+        canSend808={chordCount > 0}
       />
 
       <ProgressionTabStrip
@@ -1914,11 +2839,69 @@ export function ChordBuilderTab({
         }
       />
 
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            flexShrink: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}
+        >
+          <ChordVoicingReadout
+            chordName={selectedChordReadout.name}
+        noteNames={selectedChordReadout.notes}
+        keyLabel={`${KEY_ROOTS.find((k) => k.value === keyRoot)?.label ?? 'C'} ${MODE_LABELS[mode]}`}
+        smartVoicing={smartVoicing}
+        voicingCount={chordVoicingSize}
+        melodyMatchSlot={
+          <MelodyMatchPanel
+            isRecording={melodyRecording}
+            isBusy={melodyMatchBusy}
+            error={melodyMatchError}
+            candidates={melodyCandidates}
+            onToggleRecord={toggleMelodyRecord}
+            onUploadFile={uploadMelodyFile}
+            onAnalyze={analyzeMelodyMatch}
+            onApplyCandidate={applyMelodyCandidate}
+            voiceMidiLive={voiceMidiLive}
+            voiceMidiLiveNote={voiceMidiLiveNote}
+            voiceMidiCaptureCount={
+              voiceMidiLive ? voiceMidiCaptureCount : melodyPitchEvents.length
+            }
+            onToggleVoiceMidiLive={toggleVoiceMidiLive}
+          />
+        }
+      />
+
       <PresetStrip
         genre={genre}
         keyRoot={keyRoot}
+        onPickProgression={(p) => {
+          const progMode = resolveProgressionMode(p, genre);
+          if (progMode !== mode) setMode(progMode);
+          const totalBars = Math.max(CHORD_BUILDER_DEFAULT_LOAD_BARS, p.chords.length);
+          const barsPerChord = Math.max(1, Math.floor(totalBars / Math.max(1, p.chords.length)));
+          onPickPreset(p.chords, { totalBars, barsPerChord });
+        }}
+      />
+
+      <ProChordProgressionsPanel
+        variant="builder"
+        defaultCategoryId="hit-songs"
+        keyRoot={keyRoot}
         mode={mode}
-        onPickPreset={onPickPreset}
+        chordVoicingSize={chordVoicingSize}
+        onChordVoicingSize={setChordVoicingSize}
+        onLoad={onPickProfessionalProgression}
       />
 
       <ChordScaleStrip
@@ -1982,8 +2965,10 @@ export function ChordBuilderTab({
         onAppendChord={appendChord}
         onPickPreset={onPickPreset}
       />
+        </div>
 
-      <PianoRoll
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <ChordBuilderPianoRoll
         timeline={activeProg.timeline}
         previewEvents={previewEvents}
         totalBars={activeProg.totalBars}
@@ -1998,20 +2983,93 @@ export function ChordBuilderTab({
         manualAdded={editsForActive.added}
         manualRemoved={editsForActive.removed}
         noteLengths={editsForActive.lengths}
+        blockSpans={activeBlockSpans}
         onPlayPitch={playPitch}
         onPlayheadChange={setPlayhead}
         onToggleNote={toggleNote}
         onMoveNote={moveNote}
         onResizeNote={resizeNote}
-        onBarLabelClick={onBarLabelClick}
+        barSelRange={barSelRange}
+        onBarHeaderPointer={onBarHeaderPointer}
         onBarDrop={onBarDrop}
         onBarDragOver={setDragTargetBar}
         onBarDragLeave={() => setDragTargetBar(null)}
-        onClearEdits={onClearEdits}
+        onClearEdits={onClearNotes}
         hasEdits={editsForActive.added.size > 0 || editsForActive.removed.size > 0}
         sizeMode={pianoRollMode}
         onSizeModeChange={setPianoRollMode}
-      />
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Harmonimo-style chord + note readout above the progression strip. */
+function ChordVoicingReadout({
+  chordName,
+  noteNames,
+  keyLabel,
+  smartVoicing,
+  voicingCount,
+  melodyMatchSlot,
+}: {
+  chordName: string;
+  noteNames: string[];
+  keyLabel: string;
+  smartVoicing: boolean;
+  voicingCount: number;
+  melodyMatchSlot?: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        flexShrink: 0,
+        margin: '0 8px 2px',
+        padding: '4px 10px',
+        borderRadius: 6,
+        border: `1px solid ${MINT_DIM}`,
+        background: 'linear-gradient(180deg, rgba(124, 244, 198, 0.08) 0%, rgba(10, 10, 14, 0.92) 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        flexWrap: 'nowrap',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 72, flexShrink: 0 }}>
+        <span style={{ fontSize: 9, fontWeight: 800, color: '#6a6a78', letterSpacing: 0.6 }}>
+          {keyLabel}
+        </span>
+        <span style={{ fontSize: 16, fontWeight: 900, color: MINT, lineHeight: 1.05 }}>
+          {chordName}
+        </span>
+        <span
+          style={{
+            fontSize: 9,
+            fontWeight: 700,
+            color: '#a8a8b4',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            letterSpacing: 0.6,
+            maxWidth: 120,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={noteNames.join(' ')}
+        >
+          {noteNames.length > 0 ? noteNames.join(' ') : '—'}
+        </span>
+      </div>
+      {melodyMatchSlot}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
+        <span style={{ fontSize: 9, fontWeight: 800, color: smartVoicing ? MINT : '#6a6a78' }}>
+          {smartVoicing ? 'SMART VOICINGS ON' : 'SMART VOICINGS OFF'}
+        </span>
+        <span style={{ fontSize: 9, color: '#6a6a78', fontWeight: 700 }}>
+          {voicingCount} keys · spread voicing
+        </span>
+      </div>
     </div>
   );
 }
@@ -2062,6 +3120,106 @@ function Header({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Rotary knob for continuous FX parameters (drag up = increase). */
+function FxKnob({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  formatValue,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  formatValue?: (v: number) => string;
+  onChange: (v: number) => void;
+  disabled?: boolean;
+}) {
+  const dragRef = useRef<{ startY: number; startVal: number } | null>(null);
+  const norm = max > min ? (value - min) / (max - min) : 0;
+  const angle = -135 + Math.max(0, Math.min(1, norm)) * 270;
+  const display = formatValue ? formatValue(value) : String(value);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      const d = dragRef.current;
+      if (!d) return;
+      const dy = d.startY - e.clientY;
+      const range = max - min;
+      let next = d.startVal + (dy / 100) * range;
+      next = Math.round(next / step) * step;
+      onChange(Math.max(min, Math.min(max, next)));
+    }
+    function onUp() {
+      dragRef.current = null;
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [min, max, step, onChange]);
+
+  return (
+    <div
+      title={`${label}: ${display} — drag up/down`}
+      onMouseDown={(e) => {
+        if (disabled) return;
+        e.preventDefault();
+        dragRef.current = { startY: e.clientY, startVal: value };
+      }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 2,
+        flexShrink: 0,
+        opacity: disabled ? 0.45 : 1,
+        cursor: disabled ? 'not-allowed' : 'ns-resize',
+        userSelect: 'none',
+      }}
+    >
+      <span style={{ fontSize: 8, fontWeight: 800, color: '#7a7a88', letterSpacing: 0.3 }}>{label}</span>
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          border: `2px solid ${disabled ? 'rgba(255,255,255,0.12)' : MINT_DIM}`,
+          background: 'radial-gradient(circle at 35% 30%, rgba(124,244,198,0.14) 0%, rgba(10,10,14,0.95) 70%)',
+          position: 'relative',
+          boxShadow: disabled ? 'none' : '0 0 8px rgba(124,244,198,0.12)',
+        }}
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 2,
+            height: 9,
+            marginLeft: -1,
+            marginTop: -9,
+            background: disabled ? '#6a6a78' : MINT,
+            borderRadius: 1,
+            transform: `rotate(${angle}deg)`,
+            transformOrigin: '50% 100%',
+          }}
+        />
+      </div>
+      <span style={{ fontSize: 8, fontWeight: 700, color: disabled ? '#5a5a66' : '#b8b8c4', fontFamily: 'monospace' }}>
+        {display}
+      </span>
+    </div>
+  );
+}
+
 function TopToolbar({
   keyRoot,
   onKeyRoot,
@@ -2075,12 +3233,31 @@ function TopToolbar({
   onBarsPerChord,
   totalBars,
   onTotalBars,
+  onDuplicateLoop,
+  onCopyBars,
+  onPasteBars,
+  onClearNotes,
+  barEditHint,
   chordCount,
   isPlaying,
   bpm,
   onBpm,
   instrumentId,
   onPickInstrument,
+  chordVoicingSize,
+  onChordVoicingSize,
+  smartVoicing,
+  onSmartVoicing,
+  voicingSpread,
+  onVoicingSpread,
+  chordTension,
+  onChordTension,
+  chordOctaveShift,
+  onChordOctaveShift,
+  chordFx,
+  onChordFx,
+  chordArp,
+  onChordArp,
   syncToProject,
   onToggleSync,
   onTapTempo,
@@ -2091,6 +3268,9 @@ function TopToolbar({
   onClear,
   onSaveMidi,
   saveMidiStatus,
+  canSendToSynth,
+  onSendMidiToBeatLab,
+  sendSynthStatus,
   canExportToPad,
   exportPickerOpen,
   onToggleExportPicker,
@@ -2099,10 +3279,15 @@ function TopToolbar({
   exportStatus,
   onSaveSongWav,
   onSaveSongMidi,
+  onSendSongMidiToBeatLab,
+  canSendSongToSynth,
   canSaveSong,
   songExportBusy,
   songExportStatus,
   songSectionsLabel,
+  onSendRootsTo808,
+  send808Status,
+  canSend808,
 }: {
   keyRoot: number;
   onKeyRoot: (v: number) => void;
@@ -2116,6 +3301,11 @@ function TopToolbar({
   onBarsPerChord: (v: number) => void;
   totalBars: number;
   onTotalBars: (v: number) => void;
+  onDuplicateLoop: () => void;
+  onCopyBars: () => void;
+  onPasteBars: () => void;
+  onClearNotes: () => void;
+  barEditHint: string | null;
   chordCount: number;
   isPlaying: boolean;
   bpm: number;
@@ -2126,6 +3316,20 @@ function TopToolbar({
    *  roll keeps maximum vertical real estate). */
   instrumentId: ChordInstrumentId;
   onPickInstrument: (id: ChordInstrumentId) => void;
+  chordVoicingSize: ChordVoicingSize;
+  onChordVoicingSize: (v: ChordVoicingSize) => void;
+  smartVoicing: boolean;
+  onSmartVoicing: (v: boolean) => void;
+  voicingSpread: number;
+  onVoicingSpread: (v: number) => void;
+  chordTension: ChordTension;
+  onChordTension: (v: ChordTension) => void;
+  chordOctaveShift: number;
+  onChordOctaveShift: (v: number) => void;
+  chordFx: ChordBuilderFxSettings;
+  onChordFx: (v: ChordBuilderFxSettings) => void;
+  chordArp: ChordArpSettings;
+  onChordArp: (v: ChordArpSettings) => void;
   /** True if the preview tempo mirrors the project BPM (clicking the Sync
    *  button toggles this). When true the input is read-only and the ± /
    *  Tap buttons are disabled. */
@@ -2141,6 +3345,12 @@ function TopToolbar({
   onSaveMidi: () => void;
   /** Transient status string for the Save-MIDI button. `null` = idle. */
   saveMidiStatus: string | null;
+  /** True iff the host can receive MIDI into Beat Lab SYNTH. */
+  canSendToSynth: boolean;
+  /** Send the active section's MIDI into Beat Lab SYNTH (channels 17–32). */
+  onSendMidiToBeatLab: () => void;
+  /** Transient status for the Send-to-SYNTH button. */
+  sendSynthStatus: string | null;
   /** True iff the host supplied an `onExportToPad` handler. Hides the WAV
    *  export button entirely when running in a context that doesn't accept
    *  rendered audio (e.g. screens other than Creation Station). */
@@ -2161,6 +3371,9 @@ function TopToolbar({
   /** Save every populated Progression tab back-to-back into one .mid
    *  download. Mirrors `onSaveSongWav` but emits MIDI instead of audio. */
   onSaveSongMidi: () => void;
+  /** Send the whole song (all tabs) into Beat Lab SYNTH. */
+  onSendSongMidiToBeatLab: () => void;
+  canSendSongToSynth: boolean;
   /** True iff at least one Progression tab has at least one chord placed. */
   canSaveSong: boolean;
   /** While a song render is in flight: 'wav' or 'midi' (so the right
@@ -2173,6 +3386,9 @@ function TopToolbar({
    *  export button's tooltip body so the user knows what's about to land
    *  in their downloads folder. */
   songSectionsLabel: string;
+  onSendRootsTo808: () => void;
+  send808Status: string | null;
+  canSend808: boolean;
 }) {
   const canSave = chordCount > 0;
   const canExport = canSave && canExportToPad;
@@ -2180,14 +3396,14 @@ function TopToolbar({
     <div
       style={{
         flexShrink: 0,
-        padding: '5px 12px',
+        padding: '3px 8px',
         borderBottom: '1px solid rgba(124, 244, 198, 0.12)',
         background: 'linear-gradient(180deg, rgba(20, 20, 26, 0.95) 0%, rgba(10, 10, 14, 0.98) 100%)',
         display: 'flex',
         alignItems: 'center',
-        gap: 8,
+        gap: 6,
         flexWrap: 'wrap',
-        rowGap: 4,
+        rowGap: 2,
       }}
     >
       <button
@@ -2400,7 +3616,7 @@ function TopToolbar({
         value={instrumentId}
         onChange={(v) => onPickInstrument(v as ChordInstrumentId)}
       >
-        {(['Piano', 'Keys', 'Strings', 'Pad', 'Bass', 'Pluck', 'Bell', 'Brass', 'Lead'] as const).map((cat) => {
+        {(['Piano', 'Piano+Strings', 'Keys', 'Strings', 'Pad', 'Bass', 'Pluck', 'Bell', 'Brass', 'Lead'] as const).map((cat) => {
           const inCat = CHORD_INSTRUMENTS.filter((i) => i.category === cat);
           if (inCat.length === 0) return null;
           return (
@@ -2414,6 +3630,229 @@ function TopToolbar({
           );
         })}
       </ToolbarSelect>
+
+      <ToolbarSelect
+        label="Voicing"
+        value={String(chordVoicingSize)}
+        onChange={(v) => onChordVoicingSize(Number(v) as ChordVoicingSize)}
+      >
+        {CHORD_VOICING_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value} title={o.hint}>
+            {o.label}
+          </option>
+        ))}
+      </ToolbarSelect>
+
+      <button
+        type="button"
+        onClick={() => onSmartVoicing(!smartVoicing)}
+        title="Harmonimo-style: auto 7ths/9ths/11ths from chord role and progression"
+        style={{
+          padding: '5px 10px',
+          borderRadius: 4,
+          border: `1px solid ${smartVoicing ? MINT : 'rgba(255,255,255,0.18)'}`,
+          background: smartVoicing ? MINT_BG_STRONG : 'rgba(255,255,255,0.04)',
+          color: smartVoicing ? MINT : '#9a9aa8',
+          fontSize: 9,
+          fontWeight: 900,
+          letterSpacing: 0.4,
+          cursor: 'pointer',
+        }}
+      >
+        SMART
+      </button>
+
+      <ToolbarSelect
+        label="Spread"
+        value={String(voicingSpread)}
+        onChange={(v) => onVoicingSpread(Number(v))}
+      >
+        <option value="25">25% · compact</option>
+        <option value="55">55% · balanced</option>
+        <option value="85">85% · wide</option>
+      </ToolbarSelect>
+
+      <ToolbarSelect
+        label="Tension"
+        value={chordTension}
+        onChange={(v) => onChordTension(v as ChordTension)}
+      >
+        <option value="low">Low</option>
+        <option value="mid">Mid</option>
+        <option value="high">High</option>
+      </ToolbarSelect>
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+          flexShrink: 0,
+          padding: '2px 6px',
+          borderRadius: 4,
+          border: '1px solid rgba(255,255,255,0.12)',
+          background: 'rgba(255,255,255,0.03)',
+        }}
+        title="Transpose chords up or down by octave"
+      >
+        <span style={{ fontSize: 8, fontWeight: 800, color: '#7a7a88', letterSpacing: 0.3 }}>Oct</span>
+        <button
+          type="button"
+          onClick={() => onChordOctaveShift(Math.max(-2, chordOctaveShift - 1))}
+          disabled={chordOctaveShift <= -2}
+          style={{
+            background: '#111',
+            color: chordOctaveShift <= -2 ? '#444' : MINT,
+            border: '1px solid rgba(124,244,198,0.25)',
+            borderRadius: 3,
+            padding: '1px 6px',
+            fontSize: 10,
+            fontWeight: 900,
+            cursor: chordOctaveShift <= -2 ? 'not-allowed' : 'pointer',
+          }}
+        >
+          −
+        </button>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 900,
+            color: chordOctaveShift === 0 ? '#6a6a78' : MINT,
+            minWidth: 22,
+            textAlign: 'center',
+            fontFamily: 'monospace',
+          }}
+        >
+          {chordOctaveShift > 0 ? `+${chordOctaveShift}` : chordOctaveShift}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChordOctaveShift(Math.min(2, chordOctaveShift + 1))}
+          disabled={chordOctaveShift >= 2}
+          style={{
+            background: '#111',
+            color: chordOctaveShift >= 2 ? '#444' : MINT,
+            border: '1px solid rgba(124,244,198,0.25)',
+            borderRadius: 3,
+            padding: '1px 6px',
+            fontSize: 10,
+            fontWeight: 900,
+            cursor: chordOctaveShift >= 2 ? 'not-allowed' : 'pointer',
+          }}
+        >
+          +
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onChordArp({ ...chordArp, enabled: !chordArp.enabled })}
+        title="Arpeggiate chord notes on each bar"
+        style={{
+          padding: '5px 10px',
+          borderRadius: 4,
+          border: `1px solid ${chordArp.enabled ? MINT : 'rgba(255,255,255,0.18)'}`,
+          background: chordArp.enabled ? MINT_BG_STRONG : 'rgba(255,255,255,0.04)',
+          color: chordArp.enabled ? MINT : '#9a9aa8',
+          fontSize: 9,
+          fontWeight: 900,
+          letterSpacing: 0.4,
+          cursor: 'pointer',
+        }}
+      >
+        ARP
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
+          onChordFx({ ...chordFx, delay: { ...chordFx.delay, enabled: !chordFx.delay.enabled } })
+        }
+        title="Delay echo on chords and piano"
+        style={{
+          padding: '5px 10px',
+          borderRadius: 4,
+          border: `1px solid ${chordFx.delay.enabled ? MINT : 'rgba(255,255,255,0.18)'}`,
+          background: chordFx.delay.enabled ? MINT_BG_STRONG : 'rgba(255,255,255,0.04)',
+          color: chordFx.delay.enabled ? MINT : '#9a9aa8',
+          fontSize: 9,
+          fontWeight: 900,
+          cursor: 'pointer',
+        }}
+      >
+        DELAY
+      </button>
+
+      <button
+        type="button"
+        onClick={() =>
+          onChordFx({ ...chordFx, filter: { ...chordFx.filter, enabled: !chordFx.filter.enabled } })
+        }
+        title="Low-cut and high-cut filters"
+        style={{
+          padding: '5px 10px',
+          borderRadius: 4,
+          border: `1px solid ${chordFx.filter.enabled ? MINT : 'rgba(255,255,255,0.18)'}`,
+          background: chordFx.filter.enabled ? MINT_BG_STRONG : 'rgba(255,255,255,0.04)',
+          color: chordFx.filter.enabled ? MINT : '#9a9aa8',
+          fontSize: 9,
+          fontWeight: 900,
+          cursor: 'pointer',
+        }}
+      >
+        FILTER
+      </button>
+
+      {chordArp.enabled && (
+        <ToolbarSelect
+          label="Arp"
+          value={String(chordArp.rate)}
+          onChange={(v) => onChordArp({ ...chordArp, rate: Number(v) as 4 | 8 | 16 })}
+        >
+          <option value="4">1/4</option>
+          <option value="8">1/8</option>
+          <option value="16">1/16</option>
+        </ToolbarSelect>
+      )}
+
+      {chordFx.delay.enabled && (
+        <ToolbarSelect
+          label="Delay"
+          value={String(chordFx.delay.timeMs)}
+          onChange={(v) => onChordFx({ ...chordFx, delay: { ...chordFx.delay, timeMs: Number(v) } })}
+        >
+          <option value="220">Short</option>
+          <option value="380">Medium</option>
+          <option value="520">Long</option>
+        </ToolbarSelect>
+      )}
+
+      {chordFx.filter.enabled && (
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexShrink: 0 }}>
+          <FxKnob
+            label="Low cut"
+            value={chordFx.filter.lowCutHz}
+            min={40}
+            max={400}
+            step={5}
+            formatValue={(v) => `${v} Hz`}
+            onChange={(lowCutHz) =>
+              onChordFx({ ...chordFx, filter: { ...chordFx.filter, lowCutHz } })
+            }
+          />
+          <FxKnob
+            label="High cut"
+            value={chordFx.filter.highCutHz}
+            min={2000}
+            max={14000}
+            step={100}
+            formatValue={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`)}
+            onChange={(highCutHz) =>
+              onChordFx({ ...chordFx, filter: { ...chordFx.filter, highCutHz } })
+            }
+          />
+        </div>
+      )}
 
       <ToolbarSelect label="Key" value={String(keyRoot)} onChange={(v) => onKeyRoot(Number(v))}>
         {KEY_ROOTS.map((k) => (
@@ -2458,9 +3897,9 @@ function TopToolbar({
       </ToolbarSelect>
 
       <ToolbarSelect label="Bars/Chord" value={String(barsPerChord)} onChange={(v) => onBarsPerChord(Number(v))}>
-        <option value="1">1</option>
-        <option value="2">2</option>
-        <option value="4">4</option>
+        <option value="1">1 bar each</option>
+        <option value="2">2 bars each</option>
+        <option value="4">4 bars each</option>
       </ToolbarSelect>
 
       <ToolbarSelect label="Total Bars" value={String(totalBars)} onChange={(v) => onTotalBars(Number(v))}>
@@ -2469,13 +3908,70 @@ function TopToolbar({
         ))}
       </ToolbarSelect>
 
+      <ToolbarButton onClick={onDuplicateLoop} icon={<Plus size={11} />} label="Dup loop" />
+      <ToolbarButton
+        onClick={onCopyBars}
+        icon={<span style={{ fontSize: 9, fontWeight: 900 }}>C</span>}
+        label="Copy notes"
+        subdued
+      />
+      <ToolbarButton
+        onClick={onPasteBars}
+        icon={<span style={{ fontSize: 9, fontWeight: 900 }}>V</span>}
+        label="Paste notes"
+        subdued
+      />
+      <ToolbarButton
+        onClick={onClearNotes}
+        icon={<Eraser size={11} />}
+        label="Clear notes"
+        subdued
+      />
+
       <div style={{ flex: 1 }} />
+
+      {barEditHint ? (
+        <span style={{ fontSize: 9, fontWeight: 700, color: MINT, maxWidth: 220 }}>{barEditHint}</span>
+      ) : null}
 
       <span style={{ fontSize: 10, color: '#8a8a98' }}>{chordCount}/{totalBars} bars filled</span>
 
       <ToolbarButton onClick={onGenerate} icon={<Wand2 size={11} />} label="Generate" primary />
       <ToolbarButton onClick={onSuggestNext} icon={<Sparkles size={11} />} label="Suggest Next" />
       <ToolbarButton onClick={onClear} icon={<Eraser size={11} />} label="Clear" subdued />
+
+      <div style={{ position: 'relative', display: 'inline-block' }}>
+        <ToolbarButton
+          onClick={onSendRootsTo808}
+          icon={<Link2 size={11} />}
+          label="Roots → 808"
+          primary
+          disabled={!canSend808}
+        />
+        {send808Status ? (
+          <div
+            role="status"
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              whiteSpace: 'nowrap',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: 0.3,
+              color: send808Status.startsWith('✓') ? MINT : '#ffb4b4',
+              background: 'rgba(10, 10, 14, 0.95)',
+              border: `1px solid ${send808Status.startsWith('✓') ? MINT_DIM : 'rgba(255, 180, 180, 0.35)'}`,
+              borderRadius: 4,
+              padding: '4px 8px',
+              pointerEvents: 'none',
+              zIndex: 25,
+            }}
+          >
+            {send808Status}
+          </div>
+        ) : null}
+      </div>
 
       {/* Two-way "send" cluster: Save MIDI → .mid file download,
           WAV bounce → a Beat-Lab sample pad. The export side opens a
@@ -2512,6 +4008,41 @@ function TopToolbar({
           </div>
         ) : null}
       </div>
+      {canSendToSynth ? (
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          <ToolbarButton
+            onClick={onSendMidiToBeatLab}
+            icon={<Send size={11} />}
+            label="MIDI → SYNTH"
+            primary
+            disabled={!canSave}
+            title="Send this section's chords into Beat Lab SYNTH (channels 17–32)"
+          />
+          {sendSynthStatus ? (
+            <div
+              role="status"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 4px)',
+                right: 0,
+                whiteSpace: 'nowrap',
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: 0.3,
+                color: sendSynthStatus.startsWith('✓') ? MINT : '#ffb4b4',
+                background: 'rgba(10, 10, 14, 0.95)',
+                border: `1px solid ${sendSynthStatus.startsWith('✓') ? MINT_DIM : 'rgba(255, 180, 180, 0.35)'}`,
+                borderRadius: 4,
+                padding: '4px 8px',
+                pointerEvents: 'none',
+                zIndex: 25,
+              }}
+            >
+              {sendSynthStatus}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {canExportToPad ? (
         <div style={{ position: 'relative', display: 'inline-block' }}>
           <ToolbarButton
@@ -2642,6 +4173,8 @@ function TopToolbar({
       <SongExportCluster
         onSaveSongWav={onSaveSongWav}
         onSaveSongMidi={onSaveSongMidi}
+        onSendSongMidiToBeatLab={onSendSongMidiToBeatLab}
+        canSendSongToSynth={canSendSongToSynth}
         canSaveSong={canSaveSong}
         songExportBusy={songExportBusy}
         songExportStatus={songExportStatus}
@@ -2658,6 +4191,8 @@ function TopToolbar({
 function SongExportCluster({
   onSaveSongWav,
   onSaveSongMidi,
+  onSendSongMidiToBeatLab,
+  canSendSongToSynth,
   canSaveSong,
   songExportBusy,
   songExportStatus,
@@ -2665,6 +4200,8 @@ function SongExportCluster({
 }: {
   onSaveSongWav: () => void;
   onSaveSongMidi: () => void;
+  onSendSongMidiToBeatLab: () => void;
+  canSendSongToSynth: boolean;
   canSaveSong: boolean;
   songExportBusy: false | 'wav' | 'midi';
   songExportStatus: string | null;
@@ -2713,6 +4250,20 @@ function SongExportCluster({
             : tipBase
         }
       />
+      {canSendSongToSynth ? (
+        <ToolbarButton
+          onClick={onSendSongMidiToBeatLab}
+          icon={<Send size={11} />}
+          label="Song → SYNTH"
+          primary
+          disabled={!canSaveSong || songExportBusy !== false}
+          title={
+            canSaveSong
+              ? `Send the WHOLE SONG into Beat Lab SYNTH (channels 17–32).\n${tipBase}`
+              : tipBase
+          }
+        />
+      ) : null}
       {songExportStatus ? (
         <div
           role="status"
@@ -2932,18 +4483,16 @@ function ProgressionTabStrip({
 function PresetStrip({
   genre,
   keyRoot,
-  mode,
-  onPickPreset,
+  onPickProgression,
 }: {
   genre: GenreDef;
   keyRoot: number;
-  mode: ChordMode;
-  onPickPreset: (chords: ChordSymbol[]) => void;
+  onPickProgression: (p: ProgressionDef) => void;
 }) {
   /** Shorten very long progressions (e.g. 12-bar blues = 12 chords) so the
    *  preview chord-name strip doesn't run off the button. */
-  function previewChain(chords: ChordSymbol[]): string {
-    const names = chords.map((c) => chordSymbolToName(c, keyRoot, mode));
+  function previewChain(chords: ChordSymbol[], progMode: ChordMode): string {
+    const names = chords.map((c) => chordSymbolToName(c, keyRoot, progMode));
     if (names.length <= 6) return names.join(' · ');
     return `${names.slice(0, 6).join(' · ')} · …`;
   }
@@ -2951,22 +4500,22 @@ function PresetStrip({
     <div
       style={{
         flexShrink: 0,
-        padding: '5px 12px',
+        padding: '3px 8px',
         borderBottom: '1px solid rgba(124, 244, 198, 0.18)',
         background:
           'linear-gradient(180deg, rgba(124, 244, 198, 0.06) 0%, rgba(10, 10, 14, 0.85) 100%)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 3,
+        gap: 2,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <span
           style={{
-            fontSize: 10,
+            fontSize: 9,
             fontWeight: 900,
             color: '#7cf4c6',
-            letterSpacing: 1.4,
+            letterSpacing: 1.2,
             textShadow: '0 0 8px rgba(124, 244, 198, 0.35)',
           }}
         >
@@ -2981,21 +4530,22 @@ function PresetStrip({
       </div>
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
         {genre.progressions.map((p) => {
-          const chain = previewChain(p.chords);
+          const progMode = resolveProgressionMode(p, genre);
+          const chain = previewChain(p.chords, progMode);
           const romans = p.chords.length <= 8 ? p.chords.join(' · ') : `${p.chords.slice(0, 8).join(' · ')} · …`;
           return (
             <button
               key={p.id}
               type="button"
-              onClick={() => onPickPreset(p.chords)}
+              onClick={() => onPickProgression(p)}
               title={`${p.name}\n${p.chords.join(' · ')}\n${p.chords
-                .map((c) => chordSymbolToName(c, keyRoot, mode))
+                .map((c) => chordSymbolToName(c, keyRoot, progMode))
                 .join(' · ')}`}
               style={{
                 flexShrink: 0,
-                minWidth: 140,
-                padding: '6px 10px',
-                borderRadius: 6,
+                minWidth: 110,
+                padding: '4px 8px',
+                borderRadius: 4,
                 border: '1px solid rgba(124, 244, 198, 0.28)',
                 background:
                   'linear-gradient(180deg, rgba(124, 244, 198, 0.08) 0%, rgba(10, 10, 14, 0.85) 100%)',
@@ -4168,13 +5718,13 @@ function ChordSuggestionsStrip({
     <div
       style={{
         flexShrink: 0,
-        padding: '4px 12px',
+        padding: '3px 8px',
         borderBottom: '1px solid rgba(124, 244, 198, 0.18)',
         background:
           'linear-gradient(180deg, rgba(124, 244, 198, 0.04) 0%, rgba(10, 10, 14, 0.85) 100%)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 3,
+        gap: 2,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -4344,18 +5894,18 @@ function ChordScaleStrip({
     <div
       style={{
         flexShrink: 0,
-        padding: '5px 12px',
+        padding: '3px 8px',
         borderBottom: '1px solid rgba(124, 244, 198, 0.10)',
         background: 'rgba(8, 8, 12, 0.85)',
       }}
     >
       <div
         style={{
-          fontSize: 9,
+          fontSize: 8,
           fontWeight: 800,
           color: '#8a8a98',
-          letterSpacing: 1.5,
-          marginBottom: 3,
+          letterSpacing: 1.2,
+          marginBottom: 2,
           display: 'flex',
           alignItems: 'center',
           gap: 6,
@@ -4444,9 +5994,9 @@ function ChordScaleStrip({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: 1,
-                minWidth: 64,
-                padding: '6px 12px',
-                borderRadius: 6,
+                minWidth: 52,
+                padding: '4px 8px',
+                borderRadius: 4,
                 border: `1px solid ${border}`,
                 background: bg,
                 color: fg,
@@ -4539,954 +6089,6 @@ function ChordScaleStrip({
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function PianoRoll({
-  timeline,
-  previewEvents,
-  totalBars,
-  colsPerBar,
-  keyRoot,
-  mode,
-  playheadCol,
-  dragTargetBar,
-  playingMidis,
-  manualAdded,
-  manualRemoved,
-  noteLengths,
-  onPlayPitch,
-  onPlayheadChange,
-  onToggleNote,
-  onMoveNote,
-  onResizeNote,
-  onBarLabelClick,
-  onBarDrop,
-  onBarDragOver,
-  onBarDragLeave,
-  onClearEdits,
-  hasEdits,
-  sizeMode,
-  onSizeModeChange,
-  isPlaying,
-  playheadElRef,
-}: {
-  timeline: TimelineSlot[];
-  previewEvents: ChordEventOut[];
-  totalBars: number;
-  colsPerBar: number;
-  keyRoot: number;
-  mode: ChordMode;
-  /** Column position of the playhead (0..totalCols-1). Finer than per-bar so
-   *  the user can drop it inside a bar at any subdivision. */
-  playheadCol: number;
-  /** True while the parent's rAF loop owns the playhead `transform`. We
-   *  omit the inline `transform` in that case so React doesn't keep
-   *  overwriting the rAF-written position on every unrelated re-render. */
-  isPlaying: boolean;
-  /** Parent-owned ref pointing at the playhead `<div>`. The parent rAF
-   *  loop writes `style.transform` directly to it during playback so
-   *  the line glides without React re-renders per frame. */
-  playheadElRef?: React.MutableRefObject<HTMLDivElement | null>;
-  dragTargetBar: number | null;
-  playingMidis: ReadonlySet<number>;
-  /** Cell keys ("row,col") that the user has manually added on top of the
-   *  chord-derived auto notes. */
-  manualAdded: ReadonlySet<string>;
-  /** Cell keys ("row,col") that the user has manually removed from what the
-   *  chord would otherwise generate. */
-  manualRemoved: ReadonlySet<string>;
-  /** Per-note length overrides keyed by cell head ("row,col") → length in
-   *  columns (≥ 1). Notes without an entry are length 1 (single-cell). */
-  noteLengths: ReadonlyMap<string, number>;
-  onPlayPitch: (midi: number) => void;
-  /** Position the playhead at column `col`. Triggered by click / drag on
-   *  the ruler. */
-  onPlayheadChange: (col: number) => void;
-  onToggleNote: (row: number, col: number, isAutoNote: boolean) => void;
-  onMoveNote: (
-    fromRow: number,
-    fromCol: number,
-    toRow: number,
-    toCol: number,
-    wasAuto: boolean,
-  ) => void;
-  /** Stretch the note whose head sits at (row, col) to span `len` columns
-   *  (clamped to ≥ 1 and to the bar's remaining columns by the parent). */
-  onResizeNote: (row: number, col: number, len: number) => void;
-  onBarLabelClick: (barIdx: number) => void;
-  onBarDrop: (barIdx: number, symbol: ChordSymbol) => void;
-  onBarDragOver: (barIdx: number | null) => void;
-  onBarDragLeave: () => void;
-  onClearEdits: () => void;
-  hasEdits: boolean;
-  /** Current size mode. `'compact'` keeps the piano roll tucked away
-   *  (~140 px). `'normal'` is the default flex:1 fill. `'expanded'` floats
-   *  the piano roll as an overlay covering ~80 % of the viewport for
-   *  focused note editing — visually covers the strips above but doesn't
-   *  unmount them so any state in those strips is preserved. */
-  sizeMode: 'compact' | 'normal' | 'expanded';
-  onSizeModeChange: (mode: 'compact' | 'normal' | 'expanded') => void;
-}) {
-  const totalCols = totalBars * colsPerBar;
-  /** Cells produced by the chord progression itself, before user overrides. */
-  const autoNoteSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const { midi, col } of previewEvents) {
-      const noteName = midiToNoteName(midi);
-      const row = PIANO_ROWS.indexOf(noteName);
-      if (row >= 0 && col >= 0 && col < totalCols) {
-        set.add(`${row},${col}`);
-      }
-    }
-    return set;
-  }, [previewEvents, totalCols]);
-
-  const cellW = Math.max(20, Math.floor(PIANO_BAR_MIN_W / colsPerBar));
-  const barW = cellW * colsPerBar;
-
-  // Center the scroll view on the C4..C5 chord-voicing zone the first time the
-  // panel renders so users don't have to scroll down past empty high octaves
-  // to find where the chord notes actually appear.
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const didInitialScroll = useRef(false);
-  useEffect(() => {
-    if (didInitialScroll.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    const c5Idx = PIANO_ROWS.indexOf('C5');
-    if (c5Idx < 0) return;
-    const target = Math.max(0, c5Idx * PIANO_ROW_H - 24);
-    el.scrollTop = target;
-    didInitialScroll.current = true;
-  }, []);
-
-  /** Hit-test a viewport-space (clientX, clientY) coordinate against the
-   *  piano-roll grid and return the (row, col) of the cell underneath. Used
-   *  by the drag-to-move handler to translate pointer position into a target
-   *  cell while the mouse is moving. Accounts for sticky key column + sticky
-   *  bar header offsets and current scroll position. */
-  const cellAt = useCallback(
-    (clientX: number, clientY: number): { row: number; col: number } | null => {
-      const el = scrollRef.current;
-      if (!el) return null;
-      const rect = el.getBoundingClientRect();
-      const localX = clientX - rect.left + el.scrollLeft - PIANO_LABEL_W;
-      const localY = clientY - rect.top + el.scrollTop - (RULER_H + BAR_LABEL_H);
-      if (localX < 0 || localY < 0) return null;
-      const col = Math.floor(localX / cellW);
-      const row = Math.floor(localY / PIANO_ROW_H);
-      if (col < 0 || col >= totalCols) return null;
-      if (row < 0 || row >= PIANO_ROWS.length) return null;
-      return { row, col };
-    },
-    [cellW, totalCols],
-  );
-
-  /** Per-mousedown drag context. Populated on mousedown over a lit cell and
-   *  cleared on mouseup. `moved` flips to true once the pointer has traveled
-   *  past the 3-px threshold so the subsequent click event knows to skip its
-   *  toggle (the click is the drag's mouseup-completion, not an intent-to-toggle). */
-  const dragRef = useRef<{
-    fromRow: number;
-    fromCol: number;
-    wasAuto: boolean;
-    startX: number;
-    startY: number;
-    moved: boolean;
-  } | null>(null);
-  /** Set by the drag-end mouseup so the immediately-following click handler
-   *  on the lifted-over cell skips its toggle action. Cleared on next click. */
-  const justDraggedRef = useRef(false);
-  /** Live drag-target cell for the hover outline while dragging. */
-  const [dragTargetCell, setDragTargetCell] = useState<{ row: number; col: number } | null>(null);
-
-  /** Active resize-handle context. Populated on mousedown over a note's
-   *  right-edge grabber and cleared on mouseup. Drives mousemove → length
-   *  updates so the note grows / shrinks in real time as the pointer moves. */
-  const resizeRef = useRef<{
-    row: number;
-    headCol: number;
-    startX: number;
-    startLen: number;
-  } | null>(null);
-
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      const r = resizeRef.current;
-      if (!r) return;
-      const deltaX = e.clientX - r.startX;
-      const deltaCols = Math.round(deltaX / cellW);
-      const nextLen = Math.max(1, r.startLen + deltaCols);
-      onResizeNote(r.row, r.headCol, nextLen);
-    }
-    function onUp() {
-      if (resizeRef.current) justDraggedRef.current = true;
-      resizeRef.current = null;
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [cellW, onResizeNote]);
-
-  useEffect(() => {
-    function onMove(e: MouseEvent) {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const dx = e.clientX - drag.startX;
-      const dy = e.clientY - drag.startY;
-      if (!drag.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
-      drag.moved = true;
-      const cell = cellAt(e.clientX, e.clientY);
-      setDragTargetCell(cell);
-    }
-    function onUp(e: MouseEvent) {
-      const drag = dragRef.current;
-      if (!drag) return;
-      if (drag.moved) {
-        const cell = cellAt(e.clientX, e.clientY);
-        if (cell && (cell.row !== drag.fromRow || cell.col !== drag.fromCol)) {
-          onMoveNote(drag.fromRow, drag.fromCol, cell.row, cell.col, drag.wasAuto);
-        }
-        justDraggedRef.current = true;
-      }
-      dragRef.current = null;
-      setDragTargetCell(null);
-    }
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [cellAt, onMoveNote]);
-
-  // Piano roll outer container style is driven by the current size mode.
-  // Compact + Normal stay in the natural flex flow so other strips slot
-  // above them as usual. Expanded mode lifts the panel out of flow as an
-  // overlay (position: absolute, inset:0 within Chord Builder) so it can
-  // cover the strips without forcing them to shrink or unmount.
-  const containerStyle: React.CSSProperties =
-    sizeMode === 'expanded'
-      ? {
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: 92,  // leaves the Chord Builder header + top toolbar visible
-          bottom: 0,
-          zIndex: 200,
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#06060a',
-          borderTop: '1px solid rgba(124, 244, 198, 0.35)',
-          boxShadow: '0 -8px 24px rgba(0, 0, 0, 0.55)',
-        }
-      : sizeMode === 'compact'
-        ? {
-            flex: '0 0 140px',
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            background: '#06060a',
-          }
-        : {
-            flex: 1,
-            minHeight: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            background: '#06060a',
-          };
-
-  /** Tiny size-toggle button used three times in the header. Style stays
-   *  inline so this file doesn't need a stylesheet for a feature the user
-   *  only touches occasionally. */
-  function SizeButton({
-    mode: m,
-    label,
-    glyph,
-    title,
-  }: {
-    mode: 'compact' | 'normal' | 'expanded';
-    label: string;
-    glyph: string;
-    title: string;
-  }) {
-    const isActive = sizeMode === m;
-    return (
-      <button
-        type="button"
-        onClick={() => onSizeModeChange(m)}
-        title={title}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 4,
-          fontSize: 9,
-          fontWeight: 800,
-          color: isActive ? '#7cf4c6' : '#8a8a98',
-          background: isActive
-            ? 'rgba(124, 244, 198, 0.14)'
-            : 'rgba(255, 255, 255, 0.04)',
-          border: `1px solid ${isActive ? 'rgba(124, 244, 198, 0.45)' : 'rgba(255, 255, 255, 0.08)'}`,
-          borderRadius: 4,
-          padding: '3px 7px',
-          cursor: 'pointer',
-          letterSpacing: 0.4,
-        }}
-      >
-        <span aria-hidden style={{ fontSize: 11, lineHeight: 1 }}>{glyph}</span>
-        <span>{label}</span>
-      </button>
-    );
-  }
-
-  return (
-    <div style={containerStyle}>
-      <div
-        style={{
-          flexShrink: 0,
-          padding: '6px 12px',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
-          background: 'rgba(0,0,0,0.30)',
-          fontSize: 9,
-          fontWeight: 800,
-          color: '#8a8a98',
-          letterSpacing: 1.5,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-        }}
-      >
-        <span>PIANO ROLL</span>
-        <span
-          style={{
-            fontSize: 8,
-            fontWeight: 600,
-            color: '#54545e',
-            letterSpacing: 0.4,
-            flex: 1,
-            minWidth: 0,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          click / drag ruler = playhead  ·  click bar header = place chord  ·  click cell = add / remove  ·  drag note = move  ·  drag right edge = resize
-        </span>
-        {/* Size-mode toggles. Three explicit buttons rather than a
-            single cycle button so the active mode is always visible and
-            users can jump directly to any size without cycling through
-            the others. */}
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          <SizeButton
-            mode="compact"
-            label="MIN"
-            glyph="▁"
-            title="Minimize the piano roll — tuck it out of the way while arranging chords above"
-          />
-          <SizeButton
-            mode="normal"
-            label="FIT"
-            glyph="▣"
-            title="Fit the piano roll to the remaining viewport space (default)"
-          />
-          <SizeButton
-            mode="expanded"
-            label="MAX"
-            glyph="▔"
-            title="Expand the piano roll as an overlay — covers the strips above for focused note editing"
-          />
-        </div>
-        {hasEdits && (
-          <button
-            type="button"
-            onClick={onClearEdits}
-            title="Revert all per-note edits on the active progression and restore the chord-derived notes"
-            style={{
-              fontSize: 9,
-              fontWeight: 800,
-              color: '#7cf4c6',
-              background: 'rgba(124, 244, 198, 0.10)',
-              border: '1px solid rgba(124, 244, 198, 0.30)',
-              borderRadius: 4,
-              padding: '3px 8px',
-              cursor: 'pointer',
-              letterSpacing: 0.4,
-              flexShrink: 0,
-            }}
-          >
-            ↺ RESET NOTE EDITS
-          </button>
-        )}
-      </div>
-      <div ref={scrollRef} style={{ flex: 1, overflow: 'auto' }}>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            minWidth: 'fit-content',
-            position: 'relative',
-          }}
-        >
-          {/* Single playhead line — a 2-px vertical mint stripe that spans
-              the entire scrollable content (ruler, chord-name header, and
-              every pitch row). Positioned absolutely so it sits *between*
-              cells at column-precise X with no per-bar background glow.
-              `pointer-events: none` keeps clicks falling through to the
-              cells below, and a high z-index ensures it draws above the
-              sticky ruler + bar header so the line stays visually continuous. */}
-          <div
-            ref={playheadElRef}
-            aria-hidden
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              // Base offset stays on `left` (sticky-friendly). Beat
-              // position is driven via `transform: translateX(...)`:
-              // translateX is GPU-composited and the parent's rAF loop
-              // writes directly to it without paint or layout reflow.
-              // While playing we omit `transform` from the React-managed
-              // style so React doesn't reset the rAF-written value on
-              // unrelated re-renders.
-              left: PIANO_LABEL_W,
-              ...(isPlaying
-                ? null
-                : { transform: `translateX(${playheadCol * cellW}px)` }),
-              willChange: 'transform',
-              width: 2,
-              background: 'rgba(124, 244, 198, 0.88)',
-              boxShadow: '0 0 5px rgba(124, 244, 198, 0.50)',
-              zIndex: 5,
-              pointerEvents: 'none',
-            }}
-          />
-          {/* Transport ruler — click or drag anywhere inside a bar to drop
-              the playhead at that exact column (1/N-note resolution). Sticks
-              to the top of the scroller so it's always reachable. */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'stretch',
-              height: RULER_H,
-              position: 'sticky',
-              top: 0,
-              zIndex: 4,
-              background: 'rgba(8, 8, 12, 0.98)',
-              borderBottom: '1px solid rgba(124, 244, 198, 0.10)',
-              userSelect: 'none',
-            }}
-            onMouseDown={(e) => {
-              if (e.button !== 0) return;
-              e.preventDefault();
-              const el = scrollRef.current;
-              if (!el) return;
-              function applyAt(clientX: number) {
-                const node = scrollRef.current;
-                if (!node) return;
-                const rect = node.getBoundingClientRect();
-                const localX = clientX - rect.left + node.scrollLeft - PIANO_LABEL_W;
-                // localX < 0 means the click landed on the sticky "BAR" label
-                // column on the left — ignore so the playhead doesn't snap to
-                // col 0 every time the user grazes the label.
-                if (localX < 0) return;
-                const col = Math.floor(localX / cellW);
-                onPlayheadChange(col);
-              }
-              applyAt(e.clientX);
-              function onMove(ev: MouseEvent) {
-                applyAt(ev.clientX);
-              }
-              function onUp() {
-                window.removeEventListener('mousemove', onMove);
-                window.removeEventListener('mouseup', onUp);
-              }
-              window.addEventListener('mousemove', onMove);
-              window.addEventListener('mouseup', onUp);
-            }}
-            title="Click or drag anywhere to position the playhead"
-          >
-            <div
-              style={{
-                boxSizing: 'border-box',
-                width: PIANO_LABEL_W,
-                flexShrink: 0,
-                background: '#08080c',
-                borderRight: '1px solid rgba(124,244,198,0.18)',
-                position: 'sticky',
-                left: 0,
-                zIndex: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 8,
-                fontWeight: 700,
-                color: 'rgba(255,255,255,0.30)',
-                letterSpacing: 0.6,
-                fontFamily: 'monospace',
-              }}
-            >
-              BAR
-            </div>
-            {Array.from({ length: totalBars }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  boxSizing: 'border-box',
-                  width: barW,
-                  flexShrink: 0,
-                  position: 'relative',
-                  borderRight: '1px solid rgba(124, 244, 198, 0.08)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  paddingLeft: 4,
-                  fontSize: 8,
-                  fontWeight: 700,
-                  color: 'rgba(255,255,255,0.30)',
-                  fontFamily: 'monospace',
-                  letterSpacing: 0.3,
-                }}
-              >
-                {i + 1}
-              </div>
-            ))}
-          </div>
-          {/* Bar label header (drop zone + chord names) */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'stretch',
-              height: BAR_LABEL_H,
-              position: 'sticky',
-              top: RULER_H,
-              zIndex: 3,
-              background: 'rgba(10, 10, 14, 0.95)',
-              borderBottom: '1px solid rgba(124, 244, 198, 0.16)',
-            }}
-          >
-            <div
-              style={{
-                boxSizing: 'border-box',
-                width: PIANO_LABEL_W,
-                flexShrink: 0,
-                background: '#0a0a10',
-                borderRight: '1px solid rgba(124,244,198,0.18)',
-                position: 'sticky',
-                left: 0,
-                zIndex: 4,
-              }}
-            />
-            {Array.from({ length: totalBars }).map((_, i) => {
-              const slot = timeline[i] ?? { chord: null };
-              const isDragTarget = i === dragTargetBar;
-              const filled = slot.chord != null;
-              const chordName = filled ? chordSymbolToName(slot.chord!, keyRoot, mode) : '';
-              return (
-                <div
-                  key={i}
-                  onDragEnter={(e) => {
-                    e.preventDefault();
-                    onBarDragOver(i);
-                  }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.dataTransfer.dropEffect = 'copy';
-                    if (dragTargetBar !== i) onBarDragOver(i);
-                  }}
-                  onDragLeave={(e) => {
-                    const rt = e.relatedTarget as Node | null;
-                    if (!rt || !(e.currentTarget as Node).contains(rt)) onBarDragLeave();
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const sym = e.dataTransfer.getData(DND_CHORD_MIME) || e.dataTransfer.getData('text/plain');
-                    onBarDragLeave();
-                    if (sym) onBarDrop(i, sym as ChordSymbol);
-                  }}
-                  onClick={() => onBarLabelClick(i)}
-                  style={{
-                    boxSizing: 'border-box',
-                    width: barW,
-                    flexShrink: 0,
-                    borderRight: '1px solid rgba(124, 244, 198, 0.10)',
-                    background: isDragTarget
-                      ? 'rgba(124, 244, 198, 0.22)'
-                      : filled
-                        ? 'rgba(124, 244, 198, 0.08)'
-                        : 'rgba(255,255,255,0.02)',
-                    color: filled ? MINT : '#54545e',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 1,
-                    position: 'relative',
-                    transition: 'background 80ms ease-out, color 80ms ease-out',
-                  }}
-                  title={filled ? `Bar ${i + 1}: ${chordName} (${slot.chord}) — click to clear` : `Bar ${i + 1} — drop a chord here`}
-                >
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 2,
-                      left: 4,
-                      fontSize: 8,
-                      fontWeight: 700,
-                      color: 'rgba(255,255,255,0.35)',
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {i + 1}
-                  </span>
-                  {filled ? (
-                    <>
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 900,
-                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                          lineHeight: 1,
-                        }}
-                      >
-                        {chordName}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 8,
-                          fontWeight: 700,
-                          opacity: 0.6,
-                          fontFamily: 'monospace',
-                          lineHeight: 1,
-                        }}
-                      >
-                        {slot.chord}
-                      </span>
-                    </>
-                  ) : (
-                    '·'
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Pitch rows */}
-          {PIANO_ROWS.map((noteName, ri) => {
-            const isBlack = PIANO_BLACK_ROWS.has(noteName);
-            const isC = noteName.startsWith('C') && !noteName.startsWith('C#');
-            const rowMidi = noteNameToMidi(noteName);
-            const isActiveKey = playingMidis.has(rowMidi);
-            // Build the row's "note layout": for each lit cell, look up its
-            // stretched length and mark the trailing columns as `skipCols`
-            // so they won't render their own cell (the head cell expands to
-            // visually cover them). `headLens` carries the final clamped
-            // length per head column. Lengths never cross a bar boundary —
-            // the parent already enforces this on writes, but we re-clamp
-            // here as a defensive net.
-            const rowSkipCols = new Set<number>();
-            const rowHeadLens = new Map<number, number>();
-            for (let col = 0; col < totalCols; col++) {
-              if (rowSkipCols.has(col)) continue;
-              const k = `${ri},${col}`;
-              const isAuto = autoNoteSet.has(k);
-              const isAdded = manualAdded.has(k);
-              const isRemoved = manualRemoved.has(k);
-              const isLit = (isAuto && !isRemoved) || isAdded;
-              if (!isLit) continue;
-              const rawLen = noteLengths.get(k) ?? 1;
-              const barIdxForCol = Math.floor(col / colsPerBar);
-              const maxLen = (barIdxForCol + 1) * colsPerBar - col;
-              const len = Math.max(1, Math.min(rawLen, maxLen));
-              if (len > 1) {
-                rowHeadLens.set(col, len);
-                for (let c = col + 1; c < col + len; c++) rowSkipCols.add(c);
-              }
-            }
-            // Pitch letter shown on the key. Naturals get full name on the C
-            // octave anchor (e.g. "C4") and a single letter on the rest.
-            // Black keys carry the sharp letter (e.g. "C#") without the octave
-            // digit so the narrow ~35px key surface stays readable.
-            const keyLabel = isC
-              ? noteName
-              : isBlack
-                ? noteName.slice(0, 2)
-                : noteName.charAt(0);
-            return (
-              <div
-                key={noteName}
-                style={{
-                  display: 'flex',
-                  alignItems: 'stretch',
-                  height: PIANO_ROW_H,
-                  background: isBlack ? '#08080c' : '#0c0c10',
-                  borderBottom: isC
-                    ? '1px solid rgba(124,244,198,0.10)'
-                    : '1px solid rgba(255,255,255,0.02)',
-                }}
-              >
-                {/* Piano key — vertical real-piano keyboard on the left side.
-                 *   White keys: full-width, ivory gradient.
-                 *   Black keys: ~62% width, dark gradient — leaves the white-key
-                 *   surface visible to the right, mirroring a real keyboard.
-                 *   `position: sticky` keeps the keyboard pinned to the viewport
-                 *   left edge while the bars scroll horizontally. */}
-                <div
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    if (rowMidi > 0) onPlayPitch(rowMidi);
-                  }}
-                  title={`${noteName} · click to audition`}
-                  style={{
-                    boxSizing: 'border-box',
-                    width: PIANO_LABEL_W,
-                    flexShrink: 0,
-                    position: 'sticky',
-                    left: 0,
-                    zIndex: 2,
-                    background: '#050507',
-                    borderRight: '1px solid rgba(124,244,198,0.18)',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                  }}
-                >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: isBlack ? PIANO_BLACK_KEY_W : PIANO_WHITE_KEY_W,
-                      background: isActiveKey
-                        ? `linear-gradient(180deg, ${MINT} 0%, rgba(124,244,198,0.70) 100%)`
-                        : isBlack
-                          ? 'linear-gradient(180deg, #25252e 0%, #0e0e14 100%)'
-                          : 'linear-gradient(180deg, #e5e5ec 0%, #b6b6c0 100%)',
-                      boxShadow: isActiveKey
-                        ? `0 0 6px ${MINT}, inset 0 0 0 1px rgba(255,255,255,0.4)`
-                        : isBlack
-                          ? 'inset 0 -1px 1px rgba(0,0,0,0.6), inset -1px 0 1px rgba(0,0,0,0.4)'
-                          : 'inset 0 -1px 1px rgba(0,0,0,0.18), inset -1px 0 1px rgba(0,0,0,0.10)',
-                      borderRadius: '0 3px 3px 0',
-                      borderTop: isBlack ? 'none' : '1px solid rgba(255,255,255,0.45)',
-                      borderBottom: isBlack
-                        ? '1px solid #000'
-                        : isC
-                          ? '1px solid #4a4a54'
-                          : '1px solid rgba(0,0,0,0.25)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-end',
-                      paddingRight: 5,
-                      fontSize: isC ? 9 : 8,
-                      fontWeight: isC ? 800 : 700,
-                      color: isActiveKey
-                        ? '#0a0a0e'
-                        : isBlack
-                          ? '#9a9aa6'
-                          : '#1a1a22',
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                      letterSpacing: 0.2,
-                      transition: 'background 80ms linear, box-shadow 80ms linear',
-                    }}
-                  >
-                    {keyLabel}
-                  </div>
-                </div>
-                <div style={{ flex: 1, display: 'flex' }}>
-                  {Array.from({ length: totalBars }).map((_, bi) => {
-                    const isDragTarget = bi === dragTargetBar;
-                    return (
-                      <div
-                        key={bi}
-                        onDragEnter={(e) => {
-                          e.preventDefault();
-                          onBarDragOver(bi);
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.dataTransfer.dropEffect = 'copy';
-                          if (dragTargetBar !== bi) onBarDragOver(bi);
-                        }}
-                        onDragLeave={(e) => {
-                          const rt = e.relatedTarget as Node | null;
-                          if (!rt || !(e.currentTarget as Node).contains(rt)) onBarDragLeave();
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const sym =
-                            e.dataTransfer.getData(DND_CHORD_MIME) || e.dataTransfer.getData('text/plain');
-                          onBarDragLeave();
-                          if (sym) onBarDrop(bi, sym as ChordSymbol);
-                        }}
-                        style={{
-                          boxSizing: 'border-box',
-                          width: barW,
-                          flexShrink: 0,
-                          display: 'flex',
-                          background: isDragTarget
-                            ? 'rgba(124, 244, 198, 0.08)'
-                            : 'transparent',
-                          borderRight: '1px solid rgba(124, 244, 198, 0.08)',
-                          cursor: 'cell',
-                        }}
-                      >
-                        {Array.from({ length: colsPerBar }).map((_, ci) => {
-                          const colIdx = bi * colsPerBar + ci;
-                          // Cells that fall inside another note's stretched
-                          // span are owned by that note's head — skip them so
-                          // the head's wider div absorbs their flex slot.
-                          if (rowSkipCols.has(colIdx)) return null;
-                          const cellKey = `${ri},${colIdx}`;
-                          const isAuto = autoNoteSet.has(cellKey);
-                          const isAdded = manualAdded.has(cellKey);
-                          const isRemoved = manualRemoved.has(cellKey);
-                          // Final visibility: auto note unless removed, OR manually added.
-                          const isLit = (isAuto && !isRemoved) || isAdded;
-                          // Stretched-note head: width covers this column +
-                          // its trailing siblings. Single-cell notes (and
-                          // empty cells) keep the normal cell width.
-                          const headLen = rowHeadLens.get(colIdx) ?? 1;
-                          const cellRenderW = cellW * headLen;
-                          // Color hint: manually-added cells render a brighter
-                          // mint with a contrasting halo so the user can tell
-                          // their tweaks apart from the chord-generated notes.
-                          const bg = !isLit
-                            ? 'transparent'
-                            : isAdded
-                              ? 'linear-gradient(180deg, #a8ffd9 0%, #5feab1 100%)'
-                              : MINT;
-                          const glow = !isLit
-                            ? 'none'
-                            : isAdded
-                              ? '0 0 7px rgba(168, 255, 217, 0.85)'
-                              : '0 0 6px rgba(124, 244, 198, 0.55)';
-                          // Ghost outline on auto notes the user removed, so
-                          // it's visible they were silenced and can be restored.
-                          const ghost = isAuto && isRemoved;
-                          const isDragTarget =
-                            dragTargetCell !== null &&
-                            dragTargetCell.row === ri &&
-                            dragTargetCell.col === colIdx;
-                          const isDragOrigin =
-                            dragRef.current !== null &&
-                            dragRef.current.fromRow === ri &&
-                            dragRef.current.fromCol === colIdx &&
-                            dragRef.current.moved;
-                          // borderRight = 'none' on the visual last column of
-                          // the bar (the head's rightmost column may sit past
-                          // ci if the note is stretched).
-                          const visualLastCi = ci + headLen - 1;
-                          const isLastColOfBar = visualLastCi === colsPerBar - 1;
-                          return (
-                            <div
-                              key={ci}
-                              onMouseDown={(e) => {
-                                if (e.button !== 0) return;
-                                if (!isLit) return;
-                                e.preventDefault();
-                                e.stopPropagation();
-                                dragRef.current = {
-                                  fromRow: ri,
-                                  fromCol: colIdx,
-                                  wasAuto: isAuto && !isRemoved,
-                                  startX: e.clientX,
-                                  startY: e.clientY,
-                                  moved: false,
-                                };
-                              }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Suppress the click that fires at the end of
-                                // a drag (move) or a resize — those gestures
-                                // already updated the model.
-                                if (justDraggedRef.current) {
-                                  justDraggedRef.current = false;
-                                  return;
-                                }
-                                onToggleNote(ri, colIdx, isAuto);
-                              }}
-                              onDoubleClick={(e) => e.stopPropagation()}
-                              style={{
-                                position: 'relative',
-                                width: cellRenderW,
-                                flexShrink: 0,
-                                borderRight: isLastColOfBar
-                                  ? 'none'
-                                  : '1px solid rgba(255,255,255,0.02)',
-                                background: isDragTarget && !isLit
-                                  ? 'rgba(124, 244, 198, 0.18)'
-                                  : bg,
-                                boxShadow: isDragTarget
-                                  ? '0 0 0 1px rgba(168, 255, 217, 0.95) inset, 0 0 8px rgba(168,255,217,0.55)'
-                                  : glow,
-                                opacity: isDragOrigin ? 0.35 : isLit ? 0.95 : 1,
-                                cursor: isLit ? 'grab' : 'pointer',
-                                outline: ghost ? '1px dashed rgba(124,244,198,0.30)' : 'none',
-                                outlineOffset: ghost ? -2 : 0,
-                                transition: 'background 60ms linear, box-shadow 60ms linear',
-                              }}
-                              title={
-                                isLit
-                                  ? isAdded
-                                    ? `${noteName} · bar ${bi + 1} · drag = move · right edge = resize · click = remove (added)`
-                                    : `${noteName} · bar ${bi + 1} · drag = move · right edge = resize · click = mute (chord note)`
-                                  : ghost
-                                    ? `${noteName} · bar ${bi + 1} · click to restore (was muted)`
-                                    : `${noteName} · bar ${bi + 1} · click to add note`
-                              }
-                            >
-                              {isLit ? (
-                                <div
-                                  onMouseDown={(e) => {
-                                    if (e.button !== 0) return;
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    resizeRef.current = {
-                                      row: ri,
-                                      headCol: colIdx,
-                                      startX: e.clientX,
-                                      startLen: headLen,
-                                    };
-                                  }}
-                                  onClick={(e) => e.stopPropagation()}
-                                  title={`drag to resize · current ${headLen} step${headLen === 1 ? '' : 's'}`}
-                                  style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    right: 0,
-                                    bottom: 0,
-                                    width: 6,
-                                    cursor: 'ew-resize',
-                                    // Subtle highlight strip so the handle is
-                                    // discoverable without being noisy.
-                                    background:
-                                      'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 100%)',
-                                    zIndex: 2,
-                                  }}
-                                />
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       </div>
     </div>
   );

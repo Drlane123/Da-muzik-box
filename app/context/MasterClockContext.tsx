@@ -103,7 +103,11 @@ import {
   displayAudioNowForStudio,
   pulseStudioPlayheadFrame,
 } from '@/app/lib/studioPlayheadSharedFrame';
-import { isCreationBeatLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
+import { scheduleBeatLabMeterPulseAt } from '@/app/lib/creationStation/beatLabChannelMeters';
+import {
+  isCreationBeatLabTransportRunning,
+  isGrooveLabTransportRunning,
+} from '@/app/lib/creationStation/creationTransportSync';
 
 export const PPQ = 960 as const;
 
@@ -646,6 +650,8 @@ export interface MasterClockContextValue {
   snapTick: (tick: number) => number;
   metronomeEnabled: boolean;
   setMetronomeEnabled: (v: boolean) => void;
+  /** Stop master metronome lookahead (Beat Lab / Groove Lab use local schedulers). */
+  stopMetronomeLoop: () => void;
   /**
    * Milliseconds added to **scheduled** metronome click times only (positive = later Play).
    * Transport / UI stay on the true audio clock; use for Bluetooth output latency.
@@ -666,9 +672,20 @@ export interface MasterClockContextValue {
   patternMode: boolean;
   setPatternMode: (v: boolean) => void;
   channelLevels: Record<number, number>;
+  /** L/R peaks (0–1 linear) for mixer VU — same pan law as Web Audio `StereoPannerNode`. */
+  channelStereoLevels: Record<number, { l: number; r: number }>;
   channelVolumes: Record<number, number>;
   triggerChannel: (chId: number, velocity: number, when?: number) => void;
   setChannelVolume: (chId: number, volume: number) => void;
+  /**
+   * Fire-and-forget meter pulse (Beat Lab pads / soundfont, etc.). `monoPeakLin` should already
+   * reflect channel fader; `panSigned` is −1…1 (same as `StereoPanner.pan`).
+   */
+  publishChannelMeterPulse: (
+    chId: number,
+    monoPeakLin: number,
+    panSigned: number,
+  ) => void;
   ticksToSeconds: (ticks: number) => number;
   secondsToTicks: (secs: number) => number;
   tickToBarBeat: (tick: number) => {
@@ -834,6 +851,9 @@ export function MasterClockProvider({
   const [channelLevels, setChannelLevels] = useState<Record<number, number>>(
     {},
   );
+  const [channelStereoLevels, setChannelStereoLevels] = useState<
+    Record<number, { l: number; r: number }>
+  >({});
   const [channelVolumes, setChannelVolumesState] = useState<
     Record<number, number>
   >({});
@@ -1114,7 +1134,7 @@ export function MasterClockProvider({
    */
   const attachNewMetronomeBus = useCallback(() => {
     /** Beat Lab schedules buffer clicks on the metro bus — swapping it mid-take mutes them until refill. */
-    if (isCreationBeatLabTransportRunning()) return;
+    if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) return;
     const ctx = getOrCreateAudioContext();
     if (ctx.state === 'closed') return;
     const master = masterGainRef.current;
@@ -1197,11 +1217,11 @@ export function MasterClockProvider({
       document.removeEventListener('visibilitychange', handleVisibility);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Channel level decay
+  // Channel level decay — Beat Lab pad/synth pulses use this path while transport runs.
   useEffect(() => {
-    const CHANNEL_DECAY_MULT = 0.35;
-    const CHANNEL_DECAY_MS = 10;
-    const CHANNEL_ZERO_SNAP = 0.03;
+    const CHANNEL_DECAY_MULT = 0.78;
+    const CHANNEL_DECAY_MS = 16;
+    const CHANNEL_ZERO_SNAP = 0.025;
     const id = setInterval(() => {
       const studioPerfPlaybackActive =
         typeof window !== 'undefined' &&
@@ -1214,7 +1234,12 @@ export function MasterClockProvider({
         (
           window as unknown as { __daMusicStudioTransportAuthority?: boolean }
         ).__daMusicStudioTransportAuthority !== false;
-      if (studioPerfPlaybackActive && isRunningRef.current) {
+      if (
+        studioPerfPlaybackActive &&
+        isRunningRef.current &&
+        !isCreationBeatLabTransportRunning() &&
+        !isGrooveLabTransportRunning()
+      ) {
         return;
       }
       setChannelLevels((prev) => {
@@ -1225,6 +1250,22 @@ export function MasterClockProvider({
           const d = dRaw < CHANNEL_ZERO_SNAP ? 0 : dRaw;
           next[k] = d;
           if (d !== prev[k]) changed = true;
+        }
+        return changed ? next : prev;
+      });
+      setChannelStereoLevels((prev) => {
+        const next: Record<number, { l: number; r: number }> = {};
+        let changed = false;
+        for (const kStr in prev) {
+          const id = Number(kStr);
+          const v = prev[id];
+          if (!v || !Number.isFinite(id)) continue;
+          const dlRaw = Math.max(0, v.l * CHANNEL_DECAY_MULT);
+          const drRaw = Math.max(0, v.r * CHANNEL_DECAY_MULT);
+          const nl = dlRaw < CHANNEL_ZERO_SNAP ? 0 : dlRaw;
+          const nr = drRaw < CHANNEL_ZERO_SNAP ? 0 : drRaw;
+          next[id] = { l: nl, r: nr };
+          if (nl !== v.l || nr !== v.r) changed = true;
         }
         return changed ? next : prev;
       });
@@ -1711,7 +1752,9 @@ export function MasterClockProvider({
         ctx.state === 'closed' ||
         !isRunningRef.current ||
         !metronomeRef.current ||
-        !metronomeActiveRef.current
+        !metronomeActiveRef.current ||
+        isCreationBeatLabTransportRunning() ||
+        isGrooveLabTransportRunning()
       ) {
         return;
       }
@@ -2739,7 +2782,8 @@ export function MasterClockProvider({
     if (
       ac &&
       ac.state === 'running' &&
-      !isCreationBeatLabTransportRunning()
+      !isCreationBeatLabTransportRunning() &&
+      !isGrooveLabTransportRunning()
     ) {
       void ac.suspend().catch(() => {});
     }
@@ -2790,7 +2834,8 @@ export function MasterClockProvider({
     if (
       ac &&
       ac.state === 'running' &&
-      !isCreationBeatLabTransportRunning()
+      !isCreationBeatLabTransportRunning() &&
+      !isGrooveLabTransportRunning()
     ) {
       void ac.suspend().catch(() => {});
     }
@@ -3279,17 +3324,8 @@ export function MasterClockProvider({
     }
   }, [getOrCreateAudioContext]);
 
-  const triggerChannel = useCallback(
-    (chId: number, velocity: number, when?: number) => {
-      const MIN_TRIGGER = 0.02;
-      const MIN_AUDIBLE_VELOCITY = 0.12;
-      const rawVelocity = Math.max(0, Math.min(1, velocity / 127));
-      if (rawVelocity <= MIN_TRIGGER) return;
-      const shapedVelocity = Math.pow(rawVelocity, 0.7);
-      const safeVelocity = Math.round(
-        Math.max(MIN_AUDIBLE_VELOCITY, Math.min(1, shapedVelocity)) * 127,
-      );
-      const vol = channelVolsRef.current[chId] ?? 80;
+  const publishChannelMeterPulse = useCallback(
+    (chId: number, monoPeakLin: number, panSigned: number) => {
       const studioPerfPlaybackActive =
         typeof window !== 'undefined' &&
         (
@@ -3301,15 +3337,86 @@ export function MasterClockProvider({
         (
           window as unknown as { __daMusicStudioTransportAuthority?: boolean }
         ).__daMusicStudioTransportAuthority !== false;
-      if (!(studioPerfPlaybackActive && isRunningRef.current)) {
-        setChannelLevels((prev) => ({
+      if (
+        studioPerfPlaybackActive &&
+        isRunningRef.current &&
+        !isCreationBeatLabTransportRunning() &&
+        !isGrooveLabTransportRunning()
+      ) {
+        return;
+      }
+
+      const p = Math.max(-1, Math.min(1, panSigned));
+      const theta = ((p + 1) / 2) * (Math.PI / 2);
+      const wl = Math.cos(theta);
+      const wr = Math.sin(theta);
+      const peak = Math.max(0, Math.min(1, monoPeakLin));
+      const l = Math.min(1, peak * wl);
+      const r = Math.min(1, peak * wr);
+      const mono = Math.max(l, r);
+      setChannelLevels((prev) => ({
+        ...prev,
+        [chId]: Math.max(prev[chId] ?? 0, mono),
+      }));
+      setChannelStereoLevels((prev) => {
+        const old = prev[chId];
+        return {
           ...prev,
-          [chId]: Math.min(1, (safeVelocity / 127) * (vol / 100)),
-        }));
+          [chId]: {
+            l: Math.max(old?.l ?? 0, l),
+            r: Math.max(old?.r ?? 0, r),
+          },
+        };
+      });
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    type PulseFn = (c: number, m: number, p: number) => void;
+    const w = window as unknown as {
+      __daMusicPublishChannelMeterPulse?: PulseFn;
+    };
+    w.__daMusicPublishChannelMeterPulse = publishChannelMeterPulse as PulseFn;
+    return () => {
+      if (w.__daMusicPublishChannelMeterPulse === publishChannelMeterPulse) {
+        delete w.__daMusicPublishChannelMeterPulse;
+      }
+    };
+  }, [publishChannelMeterPulse]);
+
+  const triggerChannel = useCallback(
+    (chId: number, velocity: number, when?: number) => {
+      const MIN_TRIGGER = 0.02;
+      const MIN_AUDIBLE_VELOCITY = 0.12;
+      const rawVelocity = Math.max(0, Math.min(1, velocity / 127));
+      if (rawVelocity <= MIN_TRIGGER) return;
+      const shapedVelocity = Math.pow(rawVelocity, 0.7);
+      const safeVelocity = Math.round(
+        Math.max(MIN_AUDIBLE_VELOCITY, Math.min(1, shapedVelocity)) * 127,
+      );
+      const vol = channelVolsRef.current[chId] ?? 80;
+      const panRaw =
+        (typeof window !== 'undefined' &&
+          (window as unknown as { __daMusicChannelPans?: Record<number, number> })
+            .__daMusicChannelPans?.[chId]) ??
+        0;
+      const panSigned = Math.max(-1, Math.min(1, panRaw / 100));
+      const monoPeak = Math.min(1, (safeVelocity / 127) * (vol / 100));
+      const ctx = getOrCreateAudioContext();
+      const tPulse =
+        when !== undefined && when > ctx.currentTime + 0.001 ? when : ctx.currentTime + 0.001;
+      scheduleBeatLabMeterPulseAt(ctx, chId, monoPeak, panSigned, tPulse);
+      const pulse = () => publishChannelMeterPulse(chId, monoPeak, panSigned);
+      if (when !== undefined && when > ctx.currentTime + 0.02) {
+        const delayMs = Math.max(0, Math.min(4000, (when - ctx.currentTime) * 1000));
+        window.setTimeout(pulse, delayMs);
+      } else {
+        pulse();
       }
       playDrumSound(chId, safeVelocity, when);
     },
-    [playDrumSound],
+    [playDrumSound, publishChannelMeterPulse, getOrCreateAudioContext],
   );
 
   const triggerChannelRef = useRef(triggerChannel);
@@ -3714,6 +3821,7 @@ export function MasterClockProvider({
         snapTick: snapTickLocal,
         metronomeEnabled,
         setMetronomeEnabled,
+        stopMetronomeLoop,
         metronomeClickLatencyMs,
         setMetronomeClickLatencyMs,
         syncMetronomeClickLatencyFromOutput,
@@ -3728,9 +3836,11 @@ export function MasterClockProvider({
         patternMode,
         setPatternMode,
         channelLevels,
+        channelStereoLevels,
         channelVolumes,
         triggerChannel,
         setChannelVolume,
+        publishChannelMeterPulse,
         ticksToSeconds: ticksToSecondsLocal,
         secondsToTicks: secondsToTicksLocal,
         tickToBarBeat: tickToBarBeatLocal,

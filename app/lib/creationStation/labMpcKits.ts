@@ -6,6 +6,12 @@
  * Trap / house / dance / R&B “kits” are curated lane maps + Pad FX defaults over TR-808 / 808-mini / LM-2 / CR-8000.
  */
 
+import { lab808MpcKickCreatedName } from '@/app/lib/creationStation/lab808KickCatalog';
+import {
+  formatLab808KickDisplayLabel,
+  isLab808KickPad,
+} from '@/app/lib/creationStation/lab808UiTheme';
+
 export type LabMpcKitId =
   | 'trapDark'
   | 'trapLight'
@@ -1335,5 +1341,8 @@ export function playLabMpcPad(
 export function labMpcPadLabel(kitId: LabMpcKitId, padIndex: number): string {
   const m = labMpcKitMeta(kitId);
   const p = m?.pads[padIndex];
-  return p?.label ?? `Pad ${padIndex + 1}`;
+  if (!p) return `Pad ${padIndex + 1}`;
+  return isLab808KickPad(p)
+    ? formatLab808KickDisplayLabel(lab808MpcKickCreatedName(p.relUrl))
+    : p.label;
 }

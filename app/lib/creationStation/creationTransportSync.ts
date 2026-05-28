@@ -122,3 +122,59 @@ export function isCreationBeatLabTransportRunning(): boolean {
       .__daMusicCreationBeatLabRunning === true
   );
 }
+
+/** Groove Lab local transport — master metronome must not run in parallel. */
+export function setGrooveLabTransportRunning(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicGrooveLabTransportRunning?: boolean }).__daMusicGrooveLabTransportRunning =
+    running;
+}
+
+export function isGrooveLabTransportRunning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicGrooveLabTransportRunning?: boolean })
+      .__daMusicGrooveLabTransportRunning === true
+  );
+}
+
+/**
+ * Groove Lab metronome — **groove playback bus only** (never `__daMusicMasterGain` / master metro bus).
+ * Prevents double clicks when master clock or Beat Lab also schedules metronome on the shared graph.
+ */
+export function scheduleGrooveLabMetronomeClickAt(
+  ctx: AudioContext,
+  idealT: number,
+  accent: boolean,
+  ctSnap: number,
+  buffers: CreationMetronomeClickBuffers,
+  grooveBus: GainNode,
+  scheduled: CreationScheduledMetroNode[],
+): void {
+  const buf = accent ? buffers.accent : buffers.click;
+  const now = Number.isFinite(ctSnap) ? Math.max(0, ctSnap) : ctx.currentTime;
+  const t0 = Math.max(idealT, now + 0.001);
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const gain = ctx.createGain();
+  gain.gain.value = CREATION_METRO_VOLUME;
+  src.connect(gain);
+  if (grooveBus.context === ctx) {
+    gain.connect(grooveBus);
+  } else {
+    gain.connect(ctx.destination);
+  }
+  src.start(t0);
+  const entry = { src, gain };
+  scheduled.push(entry);
+  src.onended = () => {
+    const idx = scheduled.indexOf(entry);
+    if (idx !== -1) scheduled.splice(idx, 1);
+    try {
+      src.disconnect();
+      gain.disconnect();
+    } catch {
+      /* */
+    }
+  };
+}

@@ -40,6 +40,17 @@ import {
   launchCreationPlaylineWapi,
   setCreationPlaylineTransformStatic,
 } from '@/app/lib/creationStation/creationPlaylineWapi';
+import { snap808LabLoopBars } from '@/app/lib/creationStation/lab808ChordRoots';
+import {
+  lab808BpmInputStyle,
+  lab808BtnGhost,
+  lab808BtnPrimary,
+  lab808Select,
+  lab808TransportButtonStyle,
+  LAB808_TRANSPORT_BTN,
+  LAB808_TRANSPORT_BTN_PLAY,
+  LAB808_TRANSPORT_ICON,
+} from '@/app/lib/creationStation/lab808UiTheme';
 
 /** Mirrors Creation Station `LocalTransportState` for the MPC deck (no count-in / record). */
 export type Lab808DeckTransportState = 'stopped' | 'playing' | 'paused';
@@ -55,6 +66,18 @@ export interface EightZeroEightLabDrumMachineProps {
   rollPlaylineRef?: RefObject<HTMLElement | null>;
   /** Live px-per-quarter-note from the piano roll (updated when zoom changes). */
   rollPxPerBeat?: number;
+  /** When set, expands the MPC loop to at least this many bars (chord progression / roll length). */
+  suggestedLoopBars?: number;
+  /**
+   * Called for each scheduled transport step — `quarterBeat` is piano-roll beats
+   * (4/4 quarters); `spb` is MPC steps-per-bar for tolerance math.
+   */
+  onTransportQuarterBeat?: (
+    quarterBeat: number,
+    spb: number,
+    ctx: AudioContext,
+    when: number,
+  ) => void;
   /** Notify parent when transport changes so the roll toolbar can mirror controls. */
   onTransportChange?: (state: Lab808DeckTransportState) => void;
   isScreenActive?: boolean;
@@ -92,36 +115,9 @@ const ROLL_GRID_BEAT = '#16161c';
 const ROLL_GRID_MEASURE = '#3f3f55';
 const DRUM_GRID_CELL_BASE = '#12121a';
 
-const btnPrimary: CSSProperties = {
-  padding: '10px 16px',
-  borderRadius: 8,
-  border: '1px solid #ca8a04',
-  background: 'linear-gradient(180deg,#422006,#1c1410)',
-  color: '#fde68a',
-  fontWeight: 900,
-  fontSize: 12,
-  cursor: 'pointer',
-};
-const btnGhost: CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 8,
-  border: '1px solid #3f3f46',
-  background: '#18181b',
-  color: '#d4d4d8',
-  fontWeight: 800,
-  fontSize: 12,
-  cursor: 'pointer',
-};
-const selectStyle: CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 8,
-  border: '1px solid #3f3f46',
-  background: '#18181b',
-  color: '#e4e4e7',
-  fontSize: 12,
-  fontWeight: 700,
-  minWidth: 160,
-};
+const btnPrimary = lab808BtnPrimary;
+const btnGhost = lab808BtnGhost;
+const selectStyle: CSSProperties = { ...lab808Select, minWidth: 180 };
 
 function stepsPerBarForQuant(q: MpcQuant): number {
   switch (q) {
@@ -197,6 +193,8 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     transportKeepAlive = false,
     rollPlaylineRef,
     rollPxPerBeat = 52,
+    suggestedLoopBars,
+    onTransportQuarterBeat,
     onTransportChange,
     isScreenActive,
     getAudioContext,
@@ -209,6 +207,12 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
   const [mpcKitId, setMpcKitId] = useState<LabMpcKitId>('trapDark');
   const [mpcKitSearch, setMpcKitSearch] = useState('');
   const [mpcBars, setMpcBars] = useState<(typeof MPC_BAR_LOOP_OPTIONS)[number]>(4);
+
+  useEffect(() => {
+    if (suggestedLoopBars == null || suggestedLoopBars <= 0) return;
+    const snapped = snap808LabLoopBars(suggestedLoopBars) as (typeof MPC_BAR_LOOP_OPTIONS)[number];
+    setMpcBars((prev) => (snapped > prev ? snapped : prev));
+  }, [suggestedLoopBars]);
   const [mpcQuant, setMpcQuant] = useState<MpcQuant>('sixteenth');
   const [mpcBankSlot, setMpcBankSlot] = useState<'A' | 'B'>('A');
   const [mpcPatternA, setMpcPatternA] = useState<boolean[][]>(() => emptyGrid(4 * 16));
@@ -330,6 +334,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     return Math.max(8, Math.min(30, raw));
   }, [seqViewportH]);
 
+  const onTransportQuarterBeatRef = useRef(onTransportQuarterBeat);
+  onTransportQuarterBeatRef.current = onTransportQuarterBeat;
+
   const fireLabMpcStep = useCallback((k: number, idealGridT: number, ctx: AudioContext) => {
     const pat = mpcPatternRef.current;
     const steps = Math.max(1, pat[0]?.length ?? 1);
@@ -341,6 +348,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     const col = rev ? ((k0 - d) % steps + steps) % steps : ((k0 + d) % steps) % steps;
     const ctSnap = ctx.currentTime;
     const whenSnap = Math.max(idealGridT, ctSnap + 0.001);
+    const spb = drumSpbRef.current;
+    const quarterBeat = (k * 4) / Math.max(1, spb);
+    onTransportQuarterBeatRef.current?.(quarterBeat, spb, ctx, whenSnap);
     for (let row = 0; row < LAB_MPC_PAD_COUNT; row += 1) {
       if (pat[row]?.[col]) {
         playLabMpcPad(ctx, kit, row, whenSnap, 0.95, {
@@ -905,17 +915,17 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
   return (
     <div
       style={{
-        padding: '6px 8px',
+        padding: '10px 12px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 5,
+        gap: 10,
         flex: 1,
         minHeight: 0,
         minWidth: 0,
         overflow: 'hidden',
       }}
     >
-      <div style={{ fontSize: 9, lineHeight: 1.2, color: '#94a3b8', flexShrink: 0 }}>
+      <div style={{ fontSize: 12, lineHeight: 1.35, color: '#94a3b8', flexShrink: 0 }}>
         Purple = bar · ruler 1…N per bar.
         {loadState === 'loading' && (
           <span style={{ marginLeft: 8, color: '#fcd34d' }} key={mpcKitUiTick}>
@@ -927,13 +937,13 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button type="button" aria-label="Previous kit" onClick={() => goMpcKitDelta(-1)} style={{ ...btnGhost, padding: '8px 10px' }}>
-            <ChevronLeft size={18} />
+          <button type="button" aria-label="Previous kit" onClick={() => goMpcKitDelta(-1)} style={btnGhost}>
+            <ChevronLeft size={22} />
           </button>
-          <button type="button" aria-label="Next kit" onClick={() => goMpcKitDelta(1)} style={{ ...btnGhost, padding: '8px 10px' }}>
-            <ChevronRight size={18} />
+          <button type="button" aria-label="Next kit" onClick={() => goMpcKitDelta(1)} style={btnGhost}>
+            <ChevronRight size={22} />
           </button>
-          <select value={mpcKitId} onChange={(e) => setMpcKitId(e.target.value as LabMpcKitId)} style={{ ...selectStyle, minWidth: 220 }}>
+          <select value={mpcKitId} onChange={(e) => setMpcKitId(e.target.value as LabMpcKitId)} style={{ ...selectStyle, minWidth: 240 }}>
             {LAB_MPC_KIT_LIST.map((k) => (
               <option key={k.id} value={k.id}>
                 {k.title}
@@ -942,7 +952,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           </select>
         </div>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#71717a' }}>SEARCH KITS</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>SEARCH KITS</span>
           <input
             value={mpcKitSearch}
             onChange={(e) => setMpcKitSearch(e.target.value)}
@@ -967,7 +977,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#71717a' }}>LOOP (BARS)</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>LOOP (BARS)</span>
           <select
             value={mpcBars}
             onChange={(e) => setMpcBars(+e.target.value as (typeof MPC_BAR_LOOP_OPTIONS)[number])}
@@ -982,7 +992,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#71717a' }}>QUANT (DAW)</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>QUANT (DAW)</span>
           <select value={mpcQuant} onChange={(e) => setMpcQuant(e.target.value as MpcQuant)} style={selectStyle}>
             <option value="beat">1/4 — 4 columns between each Bar line</option>
             <option value="eighth">1/8 — 8 columns between each Bar line</option>
@@ -1000,26 +1010,27 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             Bank B
           </button>
         </div>
-        <span style={{ fontSize: 11, color: '#71717a' }}>
+        <span style={{ fontSize: 13, color: '#71717a', fontWeight: 700 }}>
           {mpcSteps} steps · {barLoopCount} Bars · {spb} steps/Bar
         </span>
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#71717a' }}>BPM</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>BPM</span>
           <input
             type="number"
             min={40}
             max={220}
             value={mpcDrumBpmOverride ?? Math.round(labStripBpm)}
-            disabled={mpcDrumBpmOverride == null}
+            readOnly={mpcDrumBpmOverride == null}
             onChange={(e) => {
               const v = parseInt(e.target.value, 10);
               if (!Number.isFinite(v)) return;
               setMpcDrumBpmOverride(Math.max(40, Math.min(220, v)));
             }}
-            style={{ width: 72, padding: '8px 10px', borderRadius: 8, border: '1px solid #3f3f46', background: '#18181b', color: '#fde68a', fontWeight: 800 }}
+            style={lab808BpmInputStyle({ readOnly: mpcDrumBpmOverride == null })}
+            title={mpcDrumBpmOverride == null ? 'Following lab BPM — click Edit local BPM to change' : 'Local drum BPM'}
           />
         </label>
         <button type="button" onClick={() => setMpcDrumBpmOverride(null)} style={btnGhost}>
@@ -1034,9 +1045,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             flexDirection: 'row',
             alignItems: 'center',
             flexWrap: 'nowrap',
-            gap: 4,
-            padding: '4px 8px',
-            borderRadius: 4,
+            gap: 6,
+            padding: '8px 12px',
+            borderRadius: 8,
             background: '#0a0a0e',
             border: '1px solid #2a2a32',
           }}
@@ -1047,22 +1058,10 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             onClick={() => {
               labMpcSeekColumn0();
             }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 36,
-              height: 36,
-              flexShrink: 0,
-              border: 'none',
-              borderRadius: 6,
-              background: '#101014',
-              color: '#8aa0b5',
-              cursor: 'pointer',
-            }}
+            style={{ ...lab808TransportButtonStyle(), width: LAB808_TRANSPORT_BTN, height: LAB808_TRANSPORT_BTN }}
             title="Return to start"
           >
-            <SkipBack size={18} />
+            <SkipBack size={LAB808_TRANSPORT_ICON} />
           </button>
           <button
             type="button"
@@ -1073,22 +1072,10 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               }
               setLabMpcTransport('stopped');
             }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 36,
-              height: 36,
-              flexShrink: 0,
-              border: 'none',
-              borderRadius: 6,
-              background: '#101014',
-              color: '#8aa0b5',
-              cursor: 'pointer',
-            }}
+            style={{ ...lab808TransportButtonStyle(), width: LAB808_TRANSPORT_BTN, height: LAB808_TRANSPORT_BTN }}
             title="Stop"
           >
-            <Square size={18} />
+            <Square size={LAB808_TRANSPORT_ICON} />
           </button>
           <button
             type="button"
@@ -1102,14 +1089,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               setLabMpcTransport('playing');
             }}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 44,
-              height: 36,
-              flexShrink: 0,
-              border: 'none',
-              borderRadius: 6,
+              ...lab808TransportButtonStyle(labMpcTransport === 'playing'),
+              width: LAB808_TRANSPORT_BTN_PLAY,
+              height: LAB808_TRANSPORT_BTN,
               background:
                 labMpcTransport === 'playing'
                   ? 'rgba(0, 229, 255, 0.18)'
@@ -1117,7 +1099,6 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               color: labMpcTransport === 'playing' ? '#5eead4' : '#cffafe',
               boxShadow:
                 labMpcTransport === 'playing' ? 'inset 0 0 0 1px rgba(94,234,212,0.35)' : '0 0 18px rgba(0,229,255,0.12)',
-              cursor: 'pointer',
             }}
             title={
               labMpcTransport === 'playing'
@@ -1127,7 +1108,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                   : 'Play'
             }
           >
-            {labMpcTransport === 'playing' ? <Pause size={20} /> : <Play size={20} />}
+            {labMpcTransport === 'playing' ? <Pause size={LAB808_TRANSPORT_ICON} /> : <Play size={LAB808_TRANSPORT_ICON} />}
           </button>
         </div>
         <button

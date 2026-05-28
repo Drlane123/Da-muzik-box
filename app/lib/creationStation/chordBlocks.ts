@@ -256,3 +256,47 @@ export function totalBlockBeats(blocks: ReadonlyArray<ChordBlock>): number {
   for (const b of blocks) beat += b.durationBeats;
   return beat;
 }
+
+/** One scheduled chord fire — one trigger per chord block with full duration. */
+export interface ChordScheduleEvent {
+  chord: ChordSymbol;
+  startBeat: number;
+  durationBeats: number;
+}
+
+/** One event per block — chord plays once and sustains for the block length. */
+export function blocksToScheduleEvents(
+  blocks: ReadonlyArray<ChordBlock>,
+): ChordScheduleEvent[] {
+  const events: ChordScheduleEvent[] = [];
+  let beat = 0;
+  for (const block of blocks) {
+    if (block.durationBeats <= 0) continue;
+    events.push({
+      chord: block.chord,
+      startBeat: beat,
+      durationBeats: block.durationBeats,
+    });
+    beat += block.durationBeats;
+  }
+  return events;
+}
+
+/** Schedule from timeline via merged blocks (no hold-forward on empty bars). */
+export function timelineToScheduleEvents(
+  timeline: ReadonlyArray<TimelineSlot>,
+  _totalBars: number,
+  beatsPerBar = 4,
+): ChordScheduleEvent[] {
+  return blocksToScheduleEvents(timelineToBlocks(timeline, beatsPerBar));
+}
+
+export function scheduleEventStartBeats(events: ReadonlyArray<ChordScheduleEvent>): number[] {
+  return events.map((e) => e.startBeat);
+}
+
+export function totalScheduleBeats(events: ReadonlyArray<ChordScheduleEvent>): number {
+  if (events.length === 0) return 0;
+  const last = events[events.length - 1]!;
+  return last.startBeat + last.durationBeats;
+}

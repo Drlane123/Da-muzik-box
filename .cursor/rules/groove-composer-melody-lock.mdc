@@ -1,0 +1,38 @@
+---
+description: Groove Studio — Melody & Riffs composer (replaced MIDI Bassline Library). Chord pipeline untouched.
+globs: app/lib/creationStation/grooveComposerEngine.ts,app/components/creation/GrooveLabComposerPanel.tsx,app/hooks/useGrooveLabOrchid.ts,app/lib/creationStation/grooveLabTransport.ts
+alwaysApply: false
+---
+
+# Groove Melody & Riffs composer (locked direction)
+
+Replaced **MIDI Bassline Library** UI with **MELODY & RIFFS** panel. Production bass = **NEW SYNTH** only.
+
+## Do not break
+
+- Green **chord** pipeline: DROP CHORDS, `grooveLabRoll` chord channel, MATCH CHORDS ←
+- `grooveLabChordAnchorsFromHits` — harmony source for composer
+- Beat Lab NEW SYNTH (`beat-lab-synth2-chord-bass-lock.mdc`)
+
+## Architecture
+
+- `grooveComposerEngine.ts` — `generateGrooveComposerPart(part, harmony, complexity, seed)`
+- Parts: `melody` | `riff` | `arp` | `bass` (optional sub, C1–C3 only)
+- Register: melody/riff/arp = MIDI **49–59** (`GROOVE_LAB_MELODY_*`), chords **≥60**, sub **24–48**
+- Merge via `grooveComposerMergePart` — regen one part without wiping others
+
+## UI
+
+- `GrooveLabComposerPanel` — MELODY, RIFF, ARP, VARIATION, + SUB (optional), MATCH CHORDS ←
+- Requires chord columns first (`chordColumnCount > 0`)
+- Complexity slider 0..1 persisted `groove-lab-composer-complexity`
+
+## Transport
+
+- `GrooveLabTransportEvent` includes `kind: 'melody'` — uses `melodySoundId` (guitar presets)
+
+## Forbidden
+
+- Re‑centering this panel on 808 pattern templates (`grooveLabBassGrooves` as primary UX)
+- Driving chord generation from bass templates
+- Modifying Chord Builder as a full InstaComposer clone in v1

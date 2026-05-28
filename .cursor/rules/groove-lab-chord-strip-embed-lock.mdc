@@ -1,0 +1,40 @@
+---
+description: Groove Lab green chord strip — locked corner embeds (transport, WORK CH, mixer CH 33–48). Do not move or re-stack.
+globs: app/components/creation/OrchidChordStrip.tsx,app/components/creation/GrooveLabDraggableCornerPanel.tsx,app/components/creation/GrooveLabMixerPanel.tsx,app/components/creation/GrooveLabLayerChannels.tsx
+alwaysApply: false
+---
+
+# Groove Lab chord strip corner embeds (LOCKED — user verified)
+
+Green **OrchidChordStrip** (`grooveBranding`) hosts four fixed corner controls in **Creation Station / Groove Lab**. User positioned and verified layout — **do not move, re-stack, or re-enable drag** unless they explicitly ask.
+
+## Placement system (do not replace)
+
+Use **`GrooveLabDraggableCornerPanel` with `embedded`** — same `measureAndPlace` + `localStorage` keys + invisible grip spacer (preserves pixel position). **Forbidden:** flex column stacks, `right`/`bottom` CSS-only wrappers, or removing the spacer (shifts boxes).
+
+| Control | storageKey | defaultRight | defaultBottom | bare | zIndex |
+|---------|------------|--------------|---------------|------|--------|
+| Transport + MET | `groove-lab-transport-panel-pos` | 10 | 8 | yes | 5 |
+| WORK CH | `groove-lab-work-ch-panel-pos` | 10 | 78 | no | **4** |
+| Mixer button | `groove-lab-mixer-btn-pos` | 10 | 148 | yes | 5 |
+| Mixer panel (open) | `groove-lab-mixer-panel-pos` | 10 | 196 | no | **10** |
+
+**Stacking:** mixer panel must stay **above** WORK CH (`zIndex: 10` vs `4`). Do not raise WORK CH above the open mixer.
+
+## Mixer (CH 33–48)
+
+- Toggle + **`GrooveLabMixerPanel`** — 16 lanes, SUB/CHORD/MELODY labels
+- Volumes via `channelVolumes` / `setChannelVolume` from `useMasterClock()` when embedded in Creation Station
+- Pan: `groove-lab-channel-pans-v1` + `__daMusicChannelPans`
+
+## Related wiring (touch only if mixer/routing work continues)
+
+- `GrooveLabScreen` → `OrchidPerformancePanel` → `OrchidChordStrip` props
+- `CreationStationScreen` passes `channelVolumes` / `setChannelVolume` into `GrooveLabScreen`
+
+## Forbidden without explicit user request
+
+- Re-enabling drag (removing `embedded` or showing grip handles)
+- Moving transport to top of strip or merging all controls into one stack
+- Changing defaultRight/defaultBottom or storage keys (breaks saved layout)
+- Substituting Beat Lab mixer for Groove Lab CH 33–48 panel

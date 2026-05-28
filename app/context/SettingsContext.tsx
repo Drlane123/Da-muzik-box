@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+import type { TouchInputMode } from '@/app/lib/touch/touchDevice';
+
 export interface Settings {
   masterVolume: number;
   theme: 'light' | 'dark';
@@ -15,6 +17,11 @@ export interface Settings {
   midiInputEnabled: boolean;
   /** `'all'` or a `MIDIInput.id` from the browser. */
   midiInputDeviceId: string;
+  /**
+   * Touchscreen / stylus optimizations (larger taps, pointer→mouse bridge for grids and faders).
+   * `auto` — on when this device has touch; `on` — always; `off` — never.
+   */
+  touchInput: TouchInputMode;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -28,6 +35,7 @@ const DEFAULT_SETTINGS: Settings = {
   audioOutput: 'default',
   midiInputEnabled: false,
   midiInputDeviceId: 'all',
+  touchInput: 'auto',
 };
 
 interface SettingsContextType {

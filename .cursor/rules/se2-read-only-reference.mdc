@@ -1,0 +1,26 @@
+---
+description: Studio Editor 2 is the golden reference — never edit it; other screens mirror its patterns in their own code only.
+globs: app/screens/StudioEditor2Screen.tsx
+alwaysApply: true
+---
+
+# Studio Editor 2 — READ ONLY (golden reference)
+
+`app/screens/StudioEditor2Screen.tsx` is the **perfect running system** in this app. The user keeps it untouched so they can always compare when another page’s metronome/BPM/transport misbehaves.
+
+## Hard rules for agents
+
+1. **Do not modify** `StudioEditor2Screen.tsx` unless the user **explicitly** asks to change SE2.
+2. **Do not import** SE2 from Beat Lab, Chord Builder, Groove Lab, or any other screen.
+3. **Do not wire** another editor’s transport to SE2 (no shared playhead tick, no slave clock, no `subscribeMasterTick` from Creation).
+4. When the user says **“mirror SE2”**: copy the **pattern** (WAAPI playhead, audio lookahead, three-clock split) into that screen’s **own** files — fix the mirror, never “fix” SE2 to match the broken page.
+
+## Allowed cross-app touchpoints (not transport sync)
+
+- **Read** SE2 source to learn how something is done.
+- **Shared audio hardware only**: one `AudioContext` / master gain for output — Beat Lab still has its **own** `startTransport` / BPM / metronome scheduler.
+- **Numeric helpers** in `app/lib/studio/se2TransportClock.ts` (constants + `smoothSchedNow`) — math only, not SE2’s transport state.
+
+## If Beat Lab transport breaks
+
+Diff Beat Lab (`CreationStationScreen`, `app/lib/creationStation/*`) against SE2 **as documentation**. Change Beat Lab only.

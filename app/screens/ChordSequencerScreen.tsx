@@ -1,4 +1,4 @@
-﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -19,6 +19,7 @@ import {
   type ChordSymbol,
   type GenreDef,
 } from '@/app/lib/creationStation/chordBuilder';
+import { getGenreRecommendedBpm } from '@/app/lib/creationStation/genreTempoProfiles';
 import { generateSongPlan } from '@/app/lib/creationStation/chordSongBuilder';
 import {
   buildStandardMidiFile,
@@ -27,6 +28,7 @@ import {
   type MidiNoteEvent,
 } from '@/app/lib/creationStation/midiExport';
 import { writeChordSync } from '@/app/lib/chordBuilderSync';
+import { LAB808_ROOTS_IMPORTED_EVENT, sendRootsTo808Lab } from '@/app/lib/creationStation/lab808ChordRoots';
 import {
   CB_PIANO_MINT,
   CB_PIANO_MINT_BORDER,
@@ -37,6 +39,24 @@ import {
   cbPianoMidiToNoteName,
   type PianoRollMetrics,
 } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
+import {
+  CHORD_VOICES,
+  type ChordVoiceId,
+} from '@/app/lib/creationStation/chordSequencerVoices';
+import {
+  buildOrchidNotesForBassRoot,
+  diatonicOrchidTypeForRootPc,
+  scheduleOrchidChord,
+  type OrchidChordType,
+  type OrchidExtension,
+  type OrchidPerformanceMode,
+} from '@/app/lib/creationStation/orchidChordEngine';
+import {
+  CHORD_BASS_SEQ_CHANNEL_BASE,
+  chordBassSeqStepChannelLabel,
+} from '@/app/lib/creationStation/chordBassSequencerSession';
+import type { ProProgressionEntry } from '@/app/lib/creationStation/professionalChordProgressions';
+import { ProChordProgressionsPanel } from '@/app/components/creation/ProChordProgressionsPanel';
 import {
   cancelCreationPlaylineWapi,
   launchCreationPlaylineWapi,
@@ -274,20 +294,6 @@ function findBestPadFor(parsed: ParsedChord, pads: ChordPad[]): ChordPad | null 
   return bestScore > 0 ? best : null;
 }
 
-const DEFAULT_TEMPO_PROFILE = { min: 80, max: 120, recommended: 100, note: 'General songwriting tempo' };
-const GENRE_TEMPO_PROFILES: Record<string, { min: number; max: number; recommended: number; note: string }> = {
-  pop: { min: 96, max: 124, recommended: 110, note: 'Mainstream pop mid-tempo' },
-  doowop: { min: 72, max: 112, recommended: 92, note: '50s/60s doo-wop' },
-  'ballad-80s': { min: 60, max: 92, recommended: 76, note: '70s/80s ballad pace' },
-  'rnb-70s80s': { min: 86, max: 114, recommended: 98, note: 'Classic R&B pocket' },
-  'rnb-90s': { min: 68, max: 98, recommended: 84, note: '90s slow-jam to mid groove' },
-  rnb: { min: 64, max: 96, recommended: 80, note: 'Neo-soul modern R&B' },
-  'rnb-true': { min: 62, max: 94, recommended: 78, note: 'True R&B vocal lane' },
-  dance: { min: 116, max: 132, recommended: 124, note: 'Dance / pop club range' },
-  disco: { min: 108, max: 124, recommended: 118, note: 'Disco groove' },
-  country: { min: 88, max: 120, recommended: 102, note: 'Country radio mid-tempo' },
-};
-
 function uniqueSectionsInOrder(sections: SongSectionKey[]): SongSectionKey[] {
   const seen = new Set<SongSectionKey>();
   const out: SongSectionKey[] = [];
@@ -307,39 +313,6 @@ function ensureSequenceLength(input: ReadonlyArray<string>, count: number): stri
 
 function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
-}
-
-function scheduleNote(ctx: AudioContext | OfflineAudioContext, midi: number, start: number, sustain: number, velocity: number): void {
-  const freq = midiToFreq(midi);
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'lowpass';
-  filter.frequency.setValueAtTime(freq * 8, start);
-  filter.frequency.exponentialRampToValueAtTime(Math.max(280, freq * 2.2), start + 0.18);
-  gain.gain.setValueAtTime(0, start);
-  gain.gain.linearRampToValueAtTime(velocity, start + 0.004);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.001, velocity * 0.35), start + 0.2);
-  gain.gain.setTargetAtTime(0, start + sustain, 0.2);
-  const oscA = ctx.createOscillator();
-  oscA.type = 'triangle';
-  oscA.frequency.value = freq;
-  const oscB = ctx.createOscillator();
-  oscB.type = 'sine';
-  oscB.frequency.value = freq * 2;
-  const bGain = ctx.createGain();
-  bGain.gain.value = 0.18;
-  oscA.connect(filter);
-  oscB.connect(bGain).connect(filter);
-  filter.connect(gain).connect(ctx.destination);
-  const stopAt = start + sustain + 1.0;
-  oscA.start(start);
-  oscB.start(start);
-  oscA.stop(stopAt);
-  oscB.stop(stopAt);
-}
-
-function scheduleChord(ctx: AudioContext | OfflineAudioContext, notes: number[], start: number, sustain: number): void {
-  for (const n of notes) scheduleNote(ctx, n, start, sustain, 0.76);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1479,6 +1452,21 @@ function applyVariation(
   return out;
 }
 
+/** Orchid linked chords — one voicing per bass note (piano roll / keypad). */
+interface LinkedOrchidBassOpts {
+  volume: number;
+  muted: boolean;
+  keyRoot: number;
+  mode: ChordMode;
+  smartMatch: boolean;
+  chordType: OrchidChordType;
+  extensions: ReadonlySet<OrchidExtension>;
+  inversion: number;
+  perfMode: OrchidPerformanceMode;
+  bpm: number;
+  voice: ChordVoiceId;
+}
+
 function scheduleBassStep(
   ctx: AudioContext | OfflineAudioContext,
   pad: ChordPad,
@@ -1503,6 +1491,8 @@ function scheduleBassStep(
      *  Used by the Piano-Roll editor to play back user-painted notes instead
      *  of the auto-generated pattern. Fills are also bypassed when present. */
     customHits?: ReadonlyArray<CustomBassHit>;
+    /** When volume > 0, each bass hit also triggers a matching Orchid chord. */
+    linkedOrchid?: LinkedOrchidBassOpts;
     rand?: () => number;
   },
 ): void {
@@ -1570,6 +1560,23 @@ function scheduleBassStep(
     }
 
     voiceFn(ctx, midi, tBase, sustain, hit.vel * masterVelocity, glide);
+
+    const lo = options?.linkedOrchid;
+    if (lo && !lo.muted && lo.volume > 0.02) {
+      const type = lo.smartMatch
+        ? diatonicOrchidTypeForRootPc(midi % 12, lo.keyRoot, lo.mode)
+        : lo.chordType;
+      const chordNotes = buildOrchidNotesForBassRoot(midi, type, lo.extensions, lo.inversion);
+      scheduleOrchidChord(
+        ctx,
+        chordNotes,
+        tBase,
+        Math.min(sustain, secPerStep * 0.82),
+        lo.voice,
+        lo.volume,
+        { mode: lo.perfMode, bpm: lo.bpm },
+      );
+    }
   }
 }
 
@@ -1706,7 +1713,16 @@ function buildSequencerMidiFile(args: {
   });
 }
 
-async function renderToWav(steps: ReadonlyArray<number | null>, pads: ReadonlyArray<ChordPad>, bpm: number): Promise<Uint8Array> {
+async function renderToWav(
+  steps: ReadonlyArray<number | null>,
+  pads: ReadonlyArray<ChordPad>,
+  bpm: number,
+  chordVoice: ChordVoiceId,
+  chordVolume: number,
+  octaveShift: number,
+  orchidPerfMode: OrchidPerformanceMode,
+  padNoteOverrides: Readonly<Record<number, number[]>>,
+): Promise<Uint8Array> {
   const secPerStep = (60 / Math.max(1, bpm)) * 2;
   const totalSec = Math.max(1, steps.length) * secPerStep + 1.2;
   const sr = 44100;
@@ -1716,7 +1732,11 @@ async function renderToWav(steps: ReadonlyArray<number | null>, pads: ReadonlyAr
     if (padIdx == null) continue;
     const pad = pads[padIdx];
     if (!pad) continue;
-    scheduleChord(offline, pad.notes, i * secPerStep, secPerStep * 0.9);
+    const notes = (padNoteOverrides[pad.idx] ?? pad.notes).map((n) => n + octaveShift * 12);
+    scheduleOrchidChord(offline, notes, i * secPerStep, secPerStep * 0.9, chordVoice, chordVolume, {
+      mode: orchidPerfMode,
+      bpm,
+    });
   }
   const rendered = await offline.startRendering();
   const pcm = rendered.getChannelData(0);
@@ -1970,6 +1990,7 @@ interface ChordSequencerProps {
   isScreenActive?: boolean;
   onBack?: () => void;
   onExportToPad?: (args: { padIndex: number; wavBytes: Uint8Array; label: string; rootBpm: number }) => void;
+  onOpen808Lab?: () => void;
   bpm: number;
   getAudioContext: () => AudioContext;
 }
@@ -1979,6 +2000,7 @@ export default function ChordSequencerScreen({
   isScreenActive,
   onBack,
   onExportToPad,
+  onOpen808Lab,
   bpm: masterBpm,
   getAudioContext: getCtx,
 }: ChordSequencerProps) {
@@ -1994,6 +2016,23 @@ export default function ChordSequencerScreen({
   // ── CHORDS MUTE ── lets the user solo the bass line without removing
   // any steps. The chord pads dim visually while muted so it's obvious. ──
   const [chordsMuted, setChordsMuted] = useState(false);
+  const [chordVoice, setChordVoice] = useState<ChordVoiceId>('grand');
+  const [proProgressionsOpen, setProProgressionsOpen] = useState(false);
+  const pendingProLoadRef = useRef<ProProgressionEntry | null>(null);
+  const [chordVolume, setChordVolume] = useState(0.82);
+
+  // ── Orchid-style chord builder (type + stackable extensions + voicing + performance) ──
+  const [orchidType, setOrchidType] = useState<OrchidChordType>('maj');
+  const [orchidExtensions, setOrchidExtensions] = useState<Set<OrchidExtension>>(() => new Set());
+  const [orchidInversion, setOrchidInversion] = useState(0);
+  const [orchidPerfMode, setOrchidPerfMode] = useState<OrchidPerformanceMode>('strum');
+  const [orchidSmartMatch, setOrchidSmartMatch] = useState(true);
+  const [orchidLinkedChordVolume, setOrchidLinkedChordVolume] = useState(0);
+  const [orchidLinkedChordsMuted, setOrchidLinkedChordsMuted] = useState(false);
+  /** Collapse the step-sequencer strip to a slim bar (frees height for bass / piano roll). */
+  const [stepSeqCollapsed, setStepSeqCollapsed] = useState(false);
+  const pianoRollAnchorRef = useRef<HTMLDivElement | null>(null);
+  const [orchidPadOverrides, setOrchidPadOverrides] = useState<Record<number, number[]>>({});
 
   // ── BASS LINE ── follows the chord progression below the step row.
   // bassStepMutes[i] === true silences bass on chord step i (per-step kill).
@@ -2018,7 +2057,7 @@ export default function ChordSequencerScreen({
   const [bassCustomPatterns, setBassCustomPatterns] = useState<Record<number, CustomBassHit[]>>({});
   const [pianoRollStepIdx, setPianoRollStepIdx] = useState<number | null>(null);
   /** When true, bass piano roll uses a near-fullscreen fixed overlay so the grid is readable. */
-  const [pianoRollImmersive, setPianoRollImmersive] = useState(true);
+  const [pianoRollImmersive, setPianoRollImmersive] = useState(false);
   // New-note duration the user clicks-to-add into the piano roll (sub-slots).
   const [pianoRollNoteLength, setPianoRollNoteLength] = useState<number>(1);
   // Clipboard for COPY/PASTE between piano-roll steps.
@@ -2182,7 +2221,6 @@ export default function ChordSequencerScreen({
   const [allowSectionRepeats, setAllowSectionRepeats] = useState(false);
   const [songLane, setSongLane] = useState<SongLaneEntry[]>([]);
   const [activeLaneIndex, setActiveLaneIndex] = useState(0);
-  const [sectionToBuild, setSectionToBuild] = useState<SongSectionKey>('Verse');
   const [autoGenreTempo, setAutoGenreTempo] = useState(true);
   // ── Song Builder collapse ──
   // The Intro/Verse/Pre-Chorus/Chorus/Bridge/Outro card grid takes a big slice
@@ -2229,8 +2267,7 @@ export default function ChordSequencerScreen({
   useEffect(() => {
     setMode(genreProfile.mode);
     if (!autoGenreTempo) return;
-    const tp = GENRE_TEMPO_PROFILES[genreProfile.id] ?? DEFAULT_TEMPO_PROFILE;
-    setLocalBpm(tp.recommended);
+    setLocalBpm(getGenreRecommendedBpm(genreProfile.id));
   }, [genreProfile, autoGenreTempo]);
 
   useEffect(() => {
@@ -2366,6 +2403,36 @@ export default function ChordSequencerScreen({
     setPreviewHighlightPadIdx(-1);
   }, []);
 
+  const shiftedNotes = useCallback(
+    (notes: number[]) => notes.map((n) => n + octaveShift * 12),
+    [octaveShift],
+  );
+
+  const padNotesResolved = useCallback(
+    (pad: ChordPad) => orchidPadOverrides[pad.idx] ?? pad.notes,
+    [orchidPadOverrides],
+  );
+
+  const playChordNotes = useCallback(
+    (ctx: AudioContext, notes: number[], start: number, sustain: number) => {
+      const shifted = shiftedNotes(notes);
+      if (shifted.length === 0) return;
+      const fire = () => {
+        const when = Math.max(start, ctx.currentTime + 0.008);
+        scheduleOrchidChord(ctx, shifted, when, sustain, chordVoice, chordVolume, {
+          mode: orchidPerfMode,
+          bpm: localBpm,
+        });
+      };
+      if (ctx.state === 'suspended') {
+        void ctx.resume().then(fire).catch(() => {});
+        return;
+      }
+      fire();
+    },
+    [shiftedNotes, chordVoice, chordVolume, orchidPerfMode, localBpm],
+  );
+
   const previewChordSequence = useCallback(
     (symbols: ReadonlyArray<string>, opts?: { bpm?: number }) => {
       const ctx = getCtx();
@@ -2381,7 +2448,7 @@ export default function ChordSequencerScreen({
         if (idx == null) return;
         const pad = pads[idx];
         if (!pad) return;
-        scheduleChord(ctx, pad.notes, now + i * secPer, secPer * 0.82);
+        playChordNotes(ctx, padNotesResolved(pad), now + i * secPer, secPer * 0.82);
 
         // Light up the pad at the moment its chord starts; clear after the chord's duration
         const startMs = (now - ctx.currentTime + i * secPer) * 1000;
@@ -2394,7 +2461,7 @@ export default function ChordSequencerScreen({
       const offId = window.setTimeout(() => setPreviewHighlightPadIdx(-1), Math.max(0, totalMs));
       previewTimeoutsRef.current.push(offId);
     },
-    [getCtx, localBpm, padBySymbol, pads, clearPreviewHighlights],
+    [getCtx, localBpm, padBySymbol, pads, clearPreviewHighlights, playChordNotes, padNotesResolved],
   );
 
   // Clean up any pending highlight timeouts on unmount
@@ -2408,18 +2475,13 @@ export default function ChordSequencerScreen({
     setPadPage((prev) => (prev === targetPage ? prev : targetPage));
   }, [previewHighlightPadIdx]);
 
-  const shiftedNotes = useCallback(
-    (notes: number[]) => notes.map((n) => n + octaveShift * 12),
-    [octaveShift],
-  );
-
   const playPad = useCallback(
     (pad: ChordPad) => {
       const ctx = getCtx();
-      scheduleChord(ctx, shiftedNotes(pad.notes), ctx.currentTime + 0.01, 1.1);
+      playChordNotes(ctx, padNotesResolved(pad), ctx.currentTime + 0.01, 1.1);
       setSelectedPad(pad.idx);
     },
-    [getCtx, shiftedNotes],
+    [getCtx, playChordNotes, padNotesResolved],
   );
 
   // Play a chord WITHOUT re-anchoring the options panel. Used when picking
@@ -2428,10 +2490,15 @@ export default function ChordSequencerScreen({
   const auditionPad = useCallback(
     (pad: ChordPad) => {
       const ctx = getCtx();
-      scheduleChord(ctx, shiftedNotes(pad.notes), ctx.currentTime + 0.01, 1.1);
+      playChordNotes(ctx, padNotesResolved(pad), ctx.currentTime + 0.01, 1.1);
     },
-    [getCtx, shiftedNotes],
+    [getCtx, playChordNotes, padNotesResolved],
   );
+
+  const closePianoRollEditor = useCallback(() => {
+    setPianoRollImmersive(false);
+    setPianoRollStepIdx(null);
+  }, []);
 
   // When true (default), clicking a chord option places + plays it but
   // doesn't change which pad anchors the options panel. Toggle off to get
@@ -2564,6 +2631,59 @@ export default function ChordSequencerScreen({
     if (suggestionTimeoutRef.current != null) window.clearTimeout(suggestionTimeoutRef.current);
     suggestionTimeoutRef.current = window.setTimeout(() => setSuggestionLabel(null), 3500);
   }, [genreProfile, stepCount, padBySymbol, variationLevel, sectionFlavor]);
+
+  const applyProgressionToSteps = useCallback(
+    (chords: ReadonlyArray<string>, label: string, symbolMap: Map<string, number>) => {
+      const transformed = applyVariation(chords, variationLevel, Math.random);
+      setSteps(() => {
+        const next = new Array<number | null>(stepCount).fill(null);
+        for (let i = 0; i < stepCount; i++) {
+          const sym = transformed[i % transformed.length];
+          if (!sym) continue;
+          let idx = symbolMap.get(sym);
+          if (idx == null) idx = symbolMap.get(baseDegree(sym));
+          if (idx != null) next[i] = idx;
+        }
+        return next;
+      });
+      const varTag = variationLevel === 'strict' ? '' : ` · ${variationLevel.toUpperCase()}`;
+      setSuggestionLabel(`${label}${varTag}`);
+      if (suggestionTimeoutRef.current != null) window.clearTimeout(suggestionTimeoutRef.current);
+      suggestionTimeoutRef.current = window.setTimeout(() => setSuggestionLabel(null), 4000);
+    },
+    [stepCount, variationLevel],
+  );
+
+  const loadProfessionalProgression = useCallback(
+    (entry: ProProgressionEntry) => {
+      pendingProLoadRef.current = entry;
+      if (entry.genreId !== genreId) setGenreId(entry.genreId);
+      else if (entry.mode !== mode) setMode(entry.mode);
+      else {
+        const genre = getGenre(entry.genreId);
+        if (!genre) return;
+        const tempPads = buildPadsFromGenre(keyRoot, entry.mode, genre, voicingComplexity);
+        const symbolMap = new Map(tempPads.map((p) => [p.symbol, p.idx]));
+        applyProgressionToSteps(entry.chords, entry.name, symbolMap);
+        pendingProLoadRef.current = null;
+      }
+    },
+    [genreId, mode, keyRoot, voicingComplexity, applyProgressionToSteps],
+  );
+
+  useEffect(() => {
+    const pending = pendingProLoadRef.current;
+    if (!pending) return;
+    if (pending.genreId !== genreId || pending.mode !== mode) return;
+    const genre = getGenre(pending.genreId);
+    if (!genre) {
+      pendingProLoadRef.current = null;
+      return;
+    }
+    const symbolMap = new Map(pads.map((p) => [p.symbol, p.idx]));
+    applyProgressionToSteps(pending.chords, pending.name, symbolMap);
+    pendingProLoadRef.current = null;
+  }, [pads, genreId, mode, applyProgressionToSteps]);
 
   useEffect(() => () => {
     if (suggestionTimeoutRef.current != null) window.clearTimeout(suggestionTimeoutRef.current);
@@ -2904,6 +3024,40 @@ export default function ChordSequencerScreen({
     });
   }, [steps, pads, keyRoot, mode, localBpm, suggestionLabel]);
 
+  const onSendRootsTo808Lab = useCallback(() => {
+    const blocks = steps
+      .map((padIdx) => (padIdx != null ? pads[padIdx]?.symbol ?? null : null))
+      .filter((sym): sym is string => sym != null)
+      .map((sym) => ({ chord: sym, durationBeats: 2 }));
+    if (blocks.length === 0) {
+      setExportStatus('Add chord steps first');
+      window.setTimeout(() => setExportStatus(null), 2500);
+      return;
+    }
+    const progressionName =
+      suggestionLabel?.split(' · ')[0] ?? `Chord/Bass Seq · ${KEY_LABELS[keyRoot]} ${mode}`;
+    const payload = sendRootsTo808Lab({
+      source: 'chord-sequencer',
+      progressionName,
+      keyRoot,
+      mode,
+      bpm: localBpm,
+      blocks,
+      hintMode: mode,
+    });
+    if (!payload) {
+      setExportStatus('Could not build roots');
+      window.setTimeout(() => setExportStatus(null), 2500);
+      return;
+    }
+    setExportStatus(`✓ ${payload.notes.length} roots → 808 Lab`);
+    window.setTimeout(() => setExportStatus(null), 2500);
+    onOpen808Lab?.();
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent(LAB808_ROOTS_IMPORTED_EVENT));
+    });
+  }, [steps, pads, keyRoot, mode, localBpm, suggestionLabel, onOpen808Lab]);
+
   // ── FIND CHORDS — paste/parse any chord progression from online sources ──
   // The user pastes "C Am F G" or "Cmaj7 - Dm7 - G7 - Cmaj7" etc. and we
   // parse + map each chord to a real pad, then preview + offer to load.
@@ -2940,7 +3094,7 @@ export default function ChordSequencerScreen({
     clearPreviewHighlights();
     parsedFindChords.forEach(({ parsed, pad }, i) => {
       const notes = shiftedNotes(parsed.notes);
-      scheduleChord(ctx, notes, now + i * secPer, secPer * 0.82);
+      playChordNotes(ctx, notes, now + i * secPer, secPer * 0.82);
       if (pad) {
         const startMs = (i * secPer) * 1000 + 20;
         const onId = window.setTimeout(() => setPreviewHighlightPadIdx(pad.idx), Math.max(0, startMs));
@@ -2950,7 +3104,7 @@ export default function ChordSequencerScreen({
     const totalMs = parsedFindChords.length * secPer * 1000 + 20;
     const offId = window.setTimeout(() => setPreviewHighlightPadIdx(-1), Math.max(0, totalMs));
     previewTimeoutsRef.current.push(offId);
-  }, [parsedFindChords, getCtx, findChordsBpm, shiftedNotes, clearPreviewHighlights]);
+  }, [parsedFindChords, getCtx, findChordsBpm, shiftedNotes, clearPreviewHighlights, playChordNotes]);
 
   // Load the parsed progression into the step sequencer. Each chord goes to
   // one step; if more chords than steps, extras wrap. If a chord didn't map
@@ -3048,6 +3202,8 @@ export default function ChordSequencerScreen({
     setSongLane((prev) => prev.map((x) => ({ ...x, chords: null })));
   }, []);
 
+  const activeLaneEntry = songLane[activeLaneIndex] ?? null;
+
   const stepsRef = useRef(steps);
   useEffect(() => {
     stepsRef.current = steps;
@@ -3067,6 +3223,49 @@ export default function ChordSequencerScreen({
   useEffect(() => {
     octaveShiftRef.current = octaveShift;
   }, [octaveShift]);
+
+  const chordVoiceRef = useRef(chordVoice);
+  useEffect(() => { chordVoiceRef.current = chordVoice; }, [chordVoice]);
+  const chordVolumeRef = useRef(chordVolume);
+  useEffect(() => { chordVolumeRef.current = chordVolume; }, [chordVolume]);
+  const orchidPerfModeRef = useRef(orchidPerfMode);
+  useEffect(() => { orchidPerfModeRef.current = orchidPerfMode; }, [orchidPerfMode]);
+  const orchidPadOverridesRef = useRef(orchidPadOverrides);
+  useEffect(() => { orchidPadOverridesRef.current = orchidPadOverrides; }, [orchidPadOverrides]);
+  const linkedOrchidRef = useRef<LinkedOrchidBassOpts | undefined>(undefined);
+  const orchidExtensionsRef = useRef(orchidExtensions);
+  useEffect(() => { orchidExtensionsRef.current = orchidExtensions; }, [orchidExtensions]);
+  useEffect(() => {
+    if (orchidLinkedChordsMuted || orchidLinkedChordVolume <= 0.02) {
+      linkedOrchidRef.current = undefined;
+      return;
+    }
+    linkedOrchidRef.current = {
+      volume: orchidLinkedChordVolume,
+      muted: false,
+      keyRoot,
+      mode,
+      smartMatch: orchidSmartMatch,
+      chordType: orchidType,
+      extensions: orchidExtensionsRef.current,
+      inversion: orchidInversion,
+      perfMode: orchidPerfMode,
+      bpm: localBpm,
+      voice: chordVoice,
+    };
+  }, [
+    orchidLinkedChordVolume,
+    orchidLinkedChordsMuted,
+    keyRoot,
+    mode,
+    orchidSmartMatch,
+    orchidType,
+    orchidExtensions,
+    orchidInversion,
+    orchidPerfMode,
+    localBpm,
+    chordVoice,
+  ]);
 
   const stepCountRef = useRef(stepCount);
   useEffect(() => {
@@ -3293,6 +3492,7 @@ export default function ChordSequencerScreen({
 
   const startPlayback = useCallback(() => {
     const ctx = getCtx();
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
     originRef.current = ctx.currentTime + 0.05;
     nextIdxRef.current = 0;
     chordSeqUiStepRef.current = -1;
@@ -3306,6 +3506,7 @@ export default function ChordSequencerScreen({
     worker.onmessage = () => {
       if (runIdRef.current !== runId) return;
       const ctx2 = getCtx();
+      if (ctx2.state === 'suspended') void ctx2.resume().catch(() => {});
       const now = ctx2.currentTime;
       const secPerStep = (60 / Math.max(1, bpmRef.current)) * 2;
       const horizon = now + LOOK_AHEAD_SEC;
@@ -3321,7 +3522,18 @@ export default function ChordSequencerScreen({
             // chord step "live" so bass scheduling and the playhead UI still
             // know what chord is currently playing.
             if (!chordsMutedRef.current) {
-              scheduleChord(ctx2, pad.notes.map((n) => n + octaveShiftRef.current * 12), stepStart, secPerStep * 0.88);
+              const notes = (orchidPadOverridesRef.current[pad.idx] ?? pad.notes).map(
+                (n) => n + octaveShiftRef.current * 12,
+              );
+              scheduleOrchidChord(
+                ctx2,
+                notes,
+                stepStart,
+                secPerStep * 0.88,
+                chordVoiceRef.current,
+                chordVolumeRef.current,
+                { mode: orchidPerfModeRef.current, bpm: bpmRef.current },
+              );
             }
 
             // ── Bass: schedule alongside the chord. Bass derives its notes
@@ -3364,6 +3576,10 @@ export default function ChordSequencerScreen({
                   noteLength: useLength,
                   slide: useSlide,
                   customHits: bassCustomPatternsRef.current[step],
+                  linkedOrchid: (() => {
+                    const custom = bassCustomPatternsRef.current[step];
+                    return custom && custom.length > 0 ? linkedOrchidRef.current : undefined;
+                  })(),
                 },
               );
             }
@@ -3455,7 +3671,16 @@ export default function ChordSequencerScreen({
       if (!onExportToPad || exportBusy) return;
       setExportBusy(true);
       try {
-        const wavBytes = await renderToWav(steps, pads, localBpm);
+        const wavBytes = await renderToWav(
+          steps,
+          pads,
+          localBpm,
+          chordVoice,
+          chordVolume,
+          octaveShift,
+          orchidPerfMode,
+          orchidPadOverrides,
+        );
         onExportToPad({
           padIndex,
           wavBytes,
@@ -3470,7 +3695,20 @@ export default function ChordSequencerScreen({
         window.setTimeout(() => setExportStatus(null), 2500);
       }
     },
-    [onExportToPad, exportBusy, steps, pads, localBpm, keyRoot, mode],
+    [
+      onExportToPad,
+      exportBusy,
+      steps,
+      pads,
+      localBpm,
+      keyRoot,
+      mode,
+      chordVoice,
+      chordVolume,
+      octaveShift,
+      orchidPerfMode,
+      orchidPadOverrides,
+    ],
   );
 
   // ── EXPORT WAV FILE (download) ────────────────────────────────────────
@@ -3488,7 +3726,16 @@ export default function ChordSequencerScreen({
     setExportBusy(true);
     setExportStatus('Rendering WAV…');
     try {
-      const wavBytes = await renderToWav(steps, pads, localBpm);
+      const wavBytes = await renderToWav(
+        steps,
+        pads,
+        localBpm,
+        chordVoice,
+        chordVolume,
+        octaveShift,
+        orchidPerfMode,
+        orchidPadOverrides,
+      );
       const d = new Date();
       const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
       const filename = safeFilename(
@@ -3502,7 +3749,19 @@ export default function ChordSequencerScreen({
       setExportBusy(false);
       window.setTimeout(() => setExportStatus(null), 3200);
     }
-  }, [exportBusy, steps, pads, localBpm, keyRoot, mode]);
+  }, [
+    exportBusy,
+    steps,
+    pads,
+    localBpm,
+    keyRoot,
+    mode,
+    chordVoice,
+    chordVolume,
+    octaveShift,
+    orchidPerfMode,
+    orchidPadOverrides,
+  ]);
 
   // ── EXPORT MIDI FILE (download) ───────────────────────────────────────
   // Builds a Format-0 SMF (chords on channel 0, bass on channel 1) and
@@ -3703,7 +3962,7 @@ export default function ChordSequencerScreen({
         fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #151515', background: '#090909' }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid #151515', background: '#090909' }}>
         {embedded && onBack && (
           <button onClick={() => { stopPlayback(); onBack(); }} style={{ background: '#111', color: '#999', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
             <X size={12} />
@@ -3767,6 +4026,15 @@ export default function ChordSequencerScreen({
           <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
 
           <button
+            type="button"
+            onClick={onSendRootsTo808Lab}
+            disabled={exportBusy}
+            title="Send each chord's root note to 808 Lab (painted on the piano roll)"
+            style={{ background: '#1a1408', color: '#fde68a', border: '1px solid #4a3c1a', borderRadius: 6, padding: '5px 9px', cursor: exportBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 11 }}
+          >
+            ROOTS → 808
+          </button>
+          <button
             onClick={() => setPadPickerOpen((v) => !v)}
             disabled={!onExportToPad || exportBusy}
             title="Bake the chord progression to WAV and drop it into one of the chord pads as a sample."
@@ -3794,9 +4062,18 @@ export default function ChordSequencerScreen({
         </div>
       </div>
 
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
       {showHowTo && (
-        <div style={{ borderBottom: '1px solid #151515', background: '#070707', padding: '8px 12px', fontSize: 11, color: '#9ca3af' }}>
-          1) Pick key, mode, genre, then choose or generate chords. 2) Click any chord in pads/panel to arm it. 3) Click or drop onto any sequencer step to place exactly where you want. 4) Add section chords into Song Lane and audition per section. <br />
+        <div style={{ flexShrink: 0, borderBottom: '1px solid #151515', background: '#070707', padding: '6px 12px', fontSize: 10, color: '#9ca3af' }}>
+          Pick chords above · fill <strong style={{ color: '#86efac' }}>STEPS</strong> · bass row sits on the piano keys below. <br />
           <span style={{ color: '#86efac', fontWeight: 700 }}>EXPORT:</span>{' '}
           <strong style={{ color: '#22c55e' }}>EXPORT PAD</strong> bakes the sequence into a chord pad,{' '}
           <strong style={{ color: '#86efac' }}>💾 EXPORT WAV</strong> downloads it as audio, and{' '}
@@ -3806,7 +4083,17 @@ export default function ChordSequencerScreen({
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid #111', background: '#050505', flexWrap: 'wrap' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          borderBottom: '1px solid #111',
+        }}
+      >
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #111', background: '#050505', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>KEY</span>
         {KEY_LABELS.map((k, i) => (
           <button key={k} onClick={() => setKeyRoot(i)} style={{ background: keyRoot === i ? '#112015' : '#111', color: keyRoot === i ? '#22c55e' : '#7a7a7a', border: `1px solid ${keyRoot === i ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 6px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{k}</button>
@@ -3842,7 +4129,80 @@ export default function ChordSequencerScreen({
         <button onClick={loadCustomToSteps} style={{ marginLeft: 'auto', background: '#112015', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontWeight: 800, fontSize: 10 }}>LOAD CUSTOM</button>
       </div>
 
-      <div style={{ padding: '5px 12px 4px', borderBottom: '1px solid #111' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px 4px' }}>
+      <div style={{ padding: '0 0 4px', borderBottom: '1px solid #111' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+          <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>CHORD SOUND</span>
+          {CHORD_VOICES.map((v) => {
+            const on = chordVoice === v.id;
+            return (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setChordVoice(v.id)}
+                title={v.describe}
+                style={{
+                  background: on ? '#112015' : '#0d0d0d',
+                  color: on ? '#86efac' : '#6b7280',
+                  border: `1px solid ${on ? '#22c55e66' : '#1a1a1a'}`,
+                  borderRadius: 5,
+                  padding: '2px 7px',
+                  fontSize: 8,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                  letterSpacing: 0.3,
+                }}
+              >
+                {v.label}
+              </button>
+            );
+          })}
+          <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800, marginLeft: 4 }}>VOL</span>
+          <input
+            type="range"
+            min={0.2}
+            max={1}
+            step={0.05}
+            value={chordVolume}
+            onChange={(e) => setChordVolume(Number(e.target.value))}
+            title="Chord pad volume"
+            style={{ width: 72, accentColor: '#22c55e' }}
+          />
+          <span style={{ fontSize: 9, color: '#86efac', fontWeight: 800, minWidth: 28 }}>
+            {Math.round(chordVolume * 100)}%
+          </span>
+
+          <div style={{ width: 1, height: 16, background: '#1a1a1a', marginLeft: 4 }} />
+
+          <button
+            type="button"
+            onClick={() => setProProgressionsOpen((v) => !v)}
+            title="Professional chord progressions from every pop era — complete loops you can edit in the step sequencer"
+            style={{
+              background: proProgressionsOpen ? '#112015' : '#0d0d0d',
+              color: proProgressionsOpen ? '#22c55e' : '#86efac',
+              border: `1px solid ${proProgressionsOpen ? '#22c55e66' : '#1f3a29'}`,
+              borderRadius: 5,
+              padding: '2px 9px',
+              fontSize: 9,
+              fontWeight: 900,
+              cursor: 'pointer',
+              letterSpacing: 0.4,
+            }}
+          >
+            <Sparkles size={10} style={{ display: 'inline', verticalAlign: -1, marginRight: 3 }} />
+            CHORD PROGRESSIONS
+          </button>
+        </div>
+
+        {proProgressionsOpen && (
+          <ProChordProgressionsPanel
+            keyRoot={keyRoot}
+            mode={mode}
+            onLoad={loadProfessionalProgression}
+          />
+        )}
+
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 800 }}>CHORD PADS · {genreProfile.label}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -3887,10 +4247,11 @@ export default function ChordSequencerScreen({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 5 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 5, maxHeight: 'min(20vh, 160px)', overflowY: 'auto' }}>
           {pagedPads.map((pad) => {
             const selected = pad.idx === selectedPad;
             const previewing = pad.idx === previewHighlightPadIdx;
+            const orchidPinned = orchidPadOverrides[pad.idx] != null;
             const score = selPad ? suitability(selPad, pad) : 0;
             return (
               <button
@@ -3928,9 +4289,12 @@ export default function ChordSequencerScreen({
                   alignItems: 'center',
                   gap: 1,
                 }}
-                title={pad.symbol}
+                title={orchidPinned ? `${pad.symbol} · Orchid voicing pinned` : pad.symbol}
               >
-                <span style={{ fontSize: 11, fontWeight: 900 }}>{pad.name}</span>
+                <span style={{ fontSize: 11, fontWeight: 900 }}>
+                  {pad.name}
+                  {orchidPinned ? <span style={{ color: '#67e8f9', marginLeft: 3 }}>◆</span> : null}
+                </span>
                 <span style={{ fontSize: 8, color: '#6b7280', fontWeight: 700 }}>{pad.symbol}</span>
               </button>
             );
@@ -4087,8 +4451,8 @@ export default function ChordSequencerScreen({
           <button
             onClick={() => setSongBuilderCollapsed((v) => !v)}
             title={songBuilderCollapsed
-              ? 'Show the Song Builder section cards'
-              : 'Collapse the Song Builder to give the piano roll more room'}
+              ? 'Expand Song Builder (FIND CHORDS, paste, etc.)'
+              : 'Collapse Song Builder for more step-sequencer room'}
             style={{
               background: songBuilderCollapsed ? '#0a1410' : '#101010',
               color: songBuilderCollapsed ? '#22c55e' : '#86efac',
@@ -4106,10 +4470,34 @@ export default function ChordSequencerScreen({
           </button>
           <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 800 }}>SONG BUILDER</span>
           {songBuilderCollapsed && songLane.length > 0 && (
-            <span style={{ fontSize: 9, color: '#6b7280', fontWeight: 700 }}>
-              · {songLane.length} sections · {songLane.filter((e) => e.chords).length} filled
-              <span style={{ marginLeft: 8, color: '#4b5563', fontStyle: 'italic' }}>collapsed — click ▸ to expand</span>
-            </span>
+            <>
+              <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>SECTION</span>
+              <select
+                value={activeLaneIndex}
+                onChange={(e) => setActiveLaneIndex(Number(e.target.value))}
+                title="Intro, Verse, Pre-Chorus, Chorus, etc."
+                style={{
+                  background: '#101010',
+                  color: '#86efac',
+                  border: '1px solid #1f3a29',
+                  borderRadius: 5,
+                  padding: '2px 6px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  maxWidth: 168,
+                  cursor: 'pointer',
+                }}
+              >
+                {songLane.map((entry, idx) => (
+                  <option key={entry.id} value={idx}>
+                    {idx + 1}. {entry.section}{entry.chords ? ' ✓' : ''} · {entry.bars}b
+                  </option>
+                ))}
+              </select>
+              <span style={{ fontSize: 9, color: '#6b7280', fontWeight: 700 }}>
+                · {songLane.filter((e) => e.chords).length}/{songLane.length} filled
+              </span>
+            </>
           )}
           <select value={songFormId} onChange={(e) => setSongFormId(e.target.value)} style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 6px', fontSize: 10, display: songBuilderCollapsed ? 'none' : undefined }}>
             {SONG_FORMS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
@@ -4118,11 +4506,102 @@ export default function ChordSequencerScreen({
             <>
               <button onClick={() => setAllowSectionRepeats((v) => !v)} style={{ background: allowSectionRepeats ? '#112015' : '#111', color: allowSectionRepeats ? '#22c55e' : '#6b7280', border: `1px solid ${allowSectionRepeats ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>REPEATS {allowSectionRepeats ? 'ON' : 'OFF'}</button>
 
-              <select value={sectionToBuild} onChange={(e) => setSectionToBuild(e.target.value as SongSectionKey)} style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 6px', fontSize: 10 }}>
-                {(['Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Hook', 'Bridge', 'Outro'] as const).map((s) => <option key={s} value={s}>{s}</option>)}
+              <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>SECTION</span>
+              <select
+                value={songLane.length > 0 ? activeLaneIndex : ''}
+                onChange={(e) => setActiveLaneIndex(Number(e.target.value))}
+                disabled={songLane.length === 0}
+                title="Pick Intro, Verse, Pre-Chorus, Chorus, etc."
+                style={{
+                  background: '#101010',
+                  color: '#86efac',
+                  border: '1px solid #1f3a29',
+                  borderRadius: 5,
+                  padding: '2px 6px',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  maxWidth: 168,
+                  cursor: songLane.length === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {songLane.length === 0 ? (
+                  <option value="">(no sections)</option>
+                ) : (
+                  songLane.map((entry, idx) => (
+                    <option key={entry.id} value={idx}>
+                      {idx + 1}. {entry.section}{entry.chords ? ' ✓' : ''} · {entry.bars}b
+                    </option>
+                  ))
+                )}
               </select>
+              {activeLaneEntry && (
+                <>
+                  <select
+                    value={activeLaneEntry.bars}
+                    onChange={(e) => setLaneBars(activeLaneIndex, Number(e.target.value))}
+                    title="Bars in this section"
+                    style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 4px', fontSize: 9, width: 44 }}
+                  >
+                    {SECTION_BAR_OPTIONS.map((n) => <option key={n} value={n}>{n}b</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => playLaneEntry(activeLaneEntry)}
+                    disabled={!activeLaneEntry.chords?.length}
+                    title="Preview this section"
+                    style={{
+                      background: '#112015',
+                      color: activeLaneEntry.chords?.length ? '#86efac' : '#4b5563',
+                      border: '1px solid #1f3a29',
+                      borderRadius: 5,
+                      padding: '2px 7px',
+                      fontSize: 9,
+                      fontWeight: 900,
+                      cursor: activeLaneEntry.chords?.length ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    ▶
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveLaneEntry(activeLaneIndex, -1)}
+                    disabled={activeLaneIndex === 0}
+                    title="Move section earlier"
+                    style={{
+                      background: activeLaneIndex === 0 ? '#0a0a0a' : '#101820',
+                      color: activeLaneIndex === 0 ? '#333' : '#93c5fd',
+                      border: `1px solid ${activeLaneIndex === 0 ? '#1a1a1a' : '#1e3a5f'}`,
+                      borderRadius: 5,
+                      padding: '2px 6px',
+                      fontSize: 9,
+                      fontWeight: 900,
+                      cursor: activeLaneIndex === 0 ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveLaneEntry(activeLaneIndex, 1)}
+                    disabled={activeLaneIndex >= songLane.length - 1}
+                    title="Move section later"
+                    style={{
+                      background: activeLaneIndex >= songLane.length - 1 ? '#0a0a0a' : '#101820',
+                      color: activeLaneIndex >= songLane.length - 1 ? '#333' : '#93c5fd',
+                      border: `1px solid ${activeLaneIndex >= songLane.length - 1 ? '#1a1a1a' : '#1e3a5f'}`,
+                      borderRadius: 5,
+                      padding: '2px 6px',
+                      fontSize: 9,
+                      fontWeight: 900,
+                      cursor: activeLaneIndex >= songLane.length - 1 ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    ▶
+                  </button>
+                </>
+              )}
 
-              <button onClick={addCurrentPackToLane} style={{ background: '#112015', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>ADD TO ACTIVE SECTION</button>
+              <button onClick={addCurrentPackToLane} style={{ background: '#112015', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>ADD TO ACTIVE</button>
               <button onClick={buildCompleteSong} style={{ background: '#112015', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}><Sparkles size={11} /> COMPLETE SONG</button>
               <button onClick={clearLane} style={{ background: '#111', color: '#6b7280', border: '1px solid #1a1a1a', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>CLEAR LANE</button>
             </>
@@ -4277,7 +4756,7 @@ export default function ChordSequencerScreen({
                       } else {
                         // No matching pad — play the parsed notes directly
                         const ctx = getCtx();
-                        scheduleChord(ctx, shiftedNotes(item.parsed.notes), ctx.currentTime + 0.01, 1.1);
+                        playChordNotes(ctx, item.parsed.notes, ctx.currentTime + 0.01, 1.1);
                       }
                     }}
                     title={
@@ -4312,122 +4791,59 @@ export default function ChordSequencerScreen({
         </div>
         )}
 
-        {!songBuilderCollapsed && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 3 }}>
-          {songLane.map((entry, idx) => {
-            const active = idx === activeLaneIndex;
-            const done = !!entry.chords;
-            return (
-              <div key={entry.id} style={{ border: `1px solid ${active ? '#22c55e55' : '#1a1a1a'}`, background: done ? '#0d1610' : '#0b0b0b', borderRadius: 5, padding: '3px 4px' }}>
-                {/* Top row — section name + bars + play, all on one line so the
-                    card is shorter. Title doubles as the "select section" button. */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <button
-                    onClick={() => setActiveLaneIndex(idx)}
-                    title={`Select ${entry.section} as the active section`}
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      textAlign: 'left',
-                      background: 'none',
-                      border: 'none',
-                      color: done ? '#86efac' : '#d1d5db',
-                      fontSize: 9,
-                      fontWeight: 900,
-                      cursor: 'pointer',
-                      padding: 0,
-                      lineHeight: 1.1,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      letterSpacing: 0.2,
-                    }}
-                  >
-                    {entry.section}{done ? ' ✓' : ''}
-                  </button>
-                  <select
-                    value={entry.bars}
-                    onChange={(e) => setLaneBars(idx, Number(e.target.value))}
-                    title="Bars in this section"
-                    style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 3, fontSize: 8, padding: '1px 2px', width: 38 }}
-                  >
-                    {SECTION_BAR_OPTIONS.map((n) => <option key={n} value={n}>{n}b</option>)}
-                  </select>
-                  <button
-                    onClick={() => playLaneEntry(entry)}
-                    title="Play this section"
-                    style={{ background: '#112015', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 3, cursor: 'pointer', fontSize: 9, padding: '1px 5px', fontWeight: 900, lineHeight: 1 }}
-                  >
-                    ▶
-                  </button>
-                </div>
-                {/* Chord list — single line, truncated */}
-                <div
-                  style={{
-                    fontSize: 8,
-                    color: '#6b7280',
-                    marginTop: 2,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    lineHeight: 1.1,
-                  }}
-                  title={entry.chords ? entry.chords.join(' · ') : 'empty — add a section'}
-                >
-                  {entry.chords ? entry.chords.join(' · ') : '— empty —'}
-                </div>
-                {/* Move arrows — compact, on a single row, no MOVE label */}
-                <div style={{ display: 'flex', gap: 2, marginTop: 2 }}>
-                  <button
-                    onClick={() => moveLaneEntry(idx, -1)}
-                    title="Move this section earlier in the song"
-                    disabled={idx === 0}
-                    style={{
-                      flex: 1,
-                      background: idx === 0 ? '#0a0a0a' : '#101820',
-                      color: idx === 0 ? '#333' : '#93c5fd',
-                      border: `1px solid ${idx === 0 ? '#1a1a1a' : '#1e3a5f'}`,
-                      borderRadius: 3,
-                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
-                      fontSize: 10,
-                      fontWeight: 900,
-                      padding: '1px 0',
-                      lineHeight: 1,
-                    }}
-                  >
-                    ◀
-                  </button>
-                  <button
-                    onClick={() => moveLaneEntry(idx, 1)}
-                    title="Move this section later in the song"
-                    disabled={idx === songLane.length - 1}
-                    style={{
-                      flex: 1,
-                      background: idx === songLane.length - 1 ? '#0a0a0a' : '#101820',
-                      color: idx === songLane.length - 1 ? '#333' : '#93c5fd',
-                      border: `1px solid ${idx === songLane.length - 1 ? '#1a1a1a' : '#1e3a5f'}`,
-                      borderRadius: 3,
-                      cursor: idx === songLane.length - 1 ? 'not-allowed' : 'pointer',
-                      fontSize: 10,
-                      fontWeight: 900,
-                      padding: '1px 0',
-                      lineHeight: 1,
-                    }}
-                  >
-                    ▶
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {!songBuilderCollapsed && activeLaneEntry && (
+          <div
+            style={{
+              fontSize: 9,
+              color: activeLaneEntry.chords ? '#86efac' : '#6b7280',
+              fontWeight: 700,
+              marginBottom: 4,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              lineHeight: 1.2,
+            }}
+            title={activeLaneEntry.chords ? activeLaneEntry.chords.join(' · ') : 'Empty — use ADD TO ACTIVE or COMPLETE SONG'}
+          >
+            <span style={{ color: '#4b5563', fontWeight: 800 }}>ACTIVE · </span>
+            {activeLaneEntry.section}
+            {activeLaneEntry.chords ? `: ${activeLaneEntry.chords.join(' · ')}` : ' — empty'}
+          </div>
         )}
       </div>
+      </div>
+      </div>
 
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '4px 12px 6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3, flexWrap: 'wrap', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 800 }}>STEP SEQUENCER — {stepCount} STEPS</span>
+      <div
+        style={{
+          flexShrink: 0,
+          flexGrow: 0,
+          padding: stepSeqCollapsed ? '2px 10px 3px' : '3px 10px 4px',
+          borderTop: '1px solid #1a2e22',
+          background: '#050505',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: stepSeqCollapsed ? 0 : 2, flexWrap: 'wrap', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setStepSeqCollapsed((v) => !v)}
+              title={stepSeqCollapsed ? 'Expand step sequencer strip' : 'Collapse strip — frees space for bass / piano roll'}
+              style={{
+                background: stepSeqCollapsed ? '#0a1410' : '#101010',
+                color: stepSeqCollapsed ? '#22c55e' : '#86efac',
+                border: `1px solid ${stepSeqCollapsed ? '#1f3a29' : '#262626'}`,
+                borderRadius: 4,
+                padding: '1px 6px',
+                fontSize: 10,
+                fontWeight: 900,
+                cursor: 'pointer',
+                lineHeight: 1.2,
+              }}
+            >
+              {stepSeqCollapsed ? '▸' : '▾'}
+            </button>
+            <span style={{ fontSize: 9, color: '#86efac', fontWeight: 900, letterSpacing: 0.3 }}>STEPS · {stepCount}</span>
             {suggestionLabel && (
               <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 800 }}>
                 Loaded: {suggestionLabel}
@@ -4439,6 +4855,7 @@ export default function ChordSequencerScreen({
               </span>
             )}
           </div>
+          {!stepSeqCollapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {/* SECTION picker — biases SUGGEST toward progressions that fit
                 the energy of a Verse, Chorus, Bridge, etc. "Free" = no bias. */}
@@ -4495,12 +4912,10 @@ export default function ChordSequencerScreen({
               CLEAR
             </button>
           </div>
+          )}
         </div>
 
-        {/* PRESETS chip row — click a chip to load that preset, click × to
-            delete. Only renders when at least one preset exists, so the UI
-            stays clean for first-time users. */}
-        {(savedPresets.length > 0 || presetStatus) && (
+        {!stepSeqCollapsed && (savedPresets.length > 0 || presetStatus) && (
           <div
             style={{
               display: 'flex',
@@ -4570,7 +4985,8 @@ export default function ChordSequencerScreen({
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(stepCount, 16)}, minmax(0, 1fr))`, gap: 3, alignItems: 'start', opacity: chordsMuted ? 0.45 : 1, transition: 'opacity 120ms' }}>
+        {!stepSeqCollapsed && (
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(stepCount, 16)}, minmax(0, 1fr))`, gap: 2, alignItems: 'start', opacity: chordsMuted ? 0.45 : 1, transition: 'opacity 120ms' }}>
           {steps.map((padIdx, si) => {
             const pad = padIdx != null ? pads[padIdx] : null;
             const active = currentStep === si;
@@ -4615,7 +5031,8 @@ export default function ChordSequencerScreen({
                   }}
                   style={{
                     width: '100%',
-                    minHeight: stepCount <= 8 ? 38 : stepCount <= 16 ? 32 : 28,
+                    minHeight: stepCount <= 8 ? 26 : stepCount <= 16 ? 24 : 22,
+                    maxHeight: stepCount <= 8 ? 26 : stepCount <= 16 ? 24 : 22,
                     borderRadius: 5,
                     border: `1px solid ${active ? '#22c55e55' : dragOver ? '#22c55e33' : '#1a1a1a'}`,
                     background: active ? '#102014' : dragOver ? '#0f1a12' : '#0d0d0d',
@@ -4645,7 +5062,33 @@ export default function ChordSequencerScreen({
             );
           })}
         </div>
+        )}
       </div>
+
+      <div
+        style={{
+          flexShrink: 0,
+          minHeight: 0,
+          maxHeight: pianoRollStepIdx != null
+            ? (pianoRollImmersive ? 'min(72vh, 640px)' : 'min(42vh, 380px)')
+            : undefined,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          borderTop: '1px solid #1a1a1a',
+          background: '#070608',
+        }}
+      >
+      <div
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+          flex: pianoRollStepIdx != null ? 1 : undefined,
+          overflow: pianoRollStepIdx != null ? 'hidden' : undefined,
+        }}
+      >
 
       {/* ── BASS LINE ─────────────────────────────────────────────────────
           A dedicated bass-line lane that AUTO-FOLLOWS the chord progression
@@ -4655,7 +5098,7 @@ export default function ChordSequencerScreen({
           as 8 micro-dots. Right-click any cell to mute that step's bass.
           Audio scheduling for bass happens inside the same transport worker
           callback so it stays perfectly locked to the chord clock. */}
-      <div style={{ borderTop: '1px solid #1a1a1a', padding: '3px 12px 5px', background: '#070608' }}>
+      <div style={{ padding: '3px 10px 4px' }}>
         {/* Header strip — voice / pattern / octave / volume / preview / sync */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
           <span
@@ -5250,7 +5693,11 @@ export default function ChordSequencerScreen({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setPianoRollStepIdx((cur) => (cur === si ? null : si));
+                      if (pianoRollStepIdx === si) {
+                        closePianoRollEditor();
+                        return;
+                      }
+                      setPianoRollStepIdx(si);
                     }}
                     onContextMenu={(e) => e.stopPropagation()}
                     title={hasCustom ? 'Edit piano-roll pattern for this step' : 'Open piano-roll editor for this step (shows the current pattern\u2019s notes — click any to start editing)'}
@@ -5471,7 +5918,19 @@ export default function ChordSequencerScreen({
             scheduleBassStep(
               ctx, pad, nextPad, t, secPerStep,
               BASS_PATTERN_MAP[bassPattern], bassVoice, bassOctaveShift, bassVolume,
-              { stepIdx: si, totalSteps: steps.length, fillsLevel: bassFillsLevel, swing: bassSwing, noteLength: bassNoteLength, slide: bassSlide, customHits: currentHits.length > 0 ? currentHits : undefined },
+              {
+                stepIdx: si,
+                totalSteps: steps.length,
+                fillsLevel: bassFillsLevel,
+                swing: bassSwing,
+                noteLength: bassNoteLength,
+                slide: bassSlide,
+                customHits: currentHits.length > 0 ? currentHits : undefined,
+                linkedOrchid:
+                  currentHits.length > 0 && !orchidLinkedChordsMuted && orchidLinkedChordVolume > 0.02
+                    ? linkedOrchidRef.current
+                    : undefined,
+              },
             );
           };
           const loadFromGlobalPattern = () => {
@@ -5809,6 +6268,7 @@ export default function ChordSequencerScreen({
                 />
               )}
               <div
+                ref={pianoRollAnchorRef}
                 onMouseDown={(e) => e.stopPropagation()}
                 style={{
                   ...(pianoRollImmersive
@@ -6033,8 +6493,8 @@ export default function ChordSequencerScreen({
                     {pianoRollImmersive ? '⊟ DOCK' : '⛶ FULL VIEW'}
                   </button>
                   <button
-                    onClick={() => setPianoRollStepIdx(null)}
-                    title="Close the piano-roll editor"
+                    onClick={closePianoRollEditor}
+                    title="Close piano roll editor"
                     style={{ background: '#0a0e16', color: '#fde68a', border: '1px solid #4a3c1a', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: 'pointer' }}
                   >
                     CLOSE
@@ -6699,7 +7159,7 @@ export default function ChordSequencerScreen({
                   userSelect: 'none',
                   flex: pianoRollImmersive ? 1 : undefined,
                   minHeight: pianoRollImmersive ? 0 : undefined,
-                  maxHeight: pianoRollImmersive ? 'none' : (songBuilderCollapsed ? 'min(88vh, 920px)' : 'min(62vh, 720px)'),
+                  maxHeight: pianoRollImmersive ? 'none' : 'min(26vh, 220px)',
                   overflowY: 'auto',
                   // Horizontal scroll so the whole bass line fits even
                   // when stepCount is large (16 or 32). The label column
@@ -6772,7 +7232,7 @@ export default function ChordSequencerScreen({
                           key={`step-h-${sIdx}`}
                           onClick={() => setPianoRollStepIdx(sIdx)}
                           title={chordSpell
-                            ? `STEP ${sIdx + 1} · ${padName}\nVoicing: ${chordSpell}\nClick to focus — grid columns use this step’s bass root + row interval.`
+                            ? `STEP ${sIdx + 1} · ${padName} · ${chordBassSeqStepChannelLabel(sIdx)}\nVoicing: ${chordSpell}\nClick to focus this step in the piano roll.`
                             : `STEP ${sIdx + 1} · ${padName}${isPlayingStep ? ' · ▶ PLAYING NOW' : ''} · click to focus this step in the toolbar`}
                           style={{
                             cursor: 'pointer',
@@ -7659,8 +8119,12 @@ export default function ChordSequencerScreen({
           );
         })()}
       </div>
+      </div>
 
-      <div style={{ borderTop: '1px solid #1a1a1a', padding: '0 0 2px', background: '#060606' }}>
+      </div>
+      </div>
+
+      <div style={{ flexShrink: 0, marginTop: 0, padding: 0, background: '#060606', borderTop: '1px solid #1a1a1a' }}>
         <BottomKeyboard
           notes={shiftedNotes(
             // During a song preview the keyboard follows the currently-sounding
@@ -7672,7 +8136,7 @@ export default function ChordSequencerScreen({
         />
       </div>
 
-      <div style={{ borderTop: '1px solid #111', padding: '5px 12px', fontSize: 9, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flexShrink: 0, borderTop: '1px solid #111', padding: '3px 10px', fontSize: 9, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 10 }}>
         <span>Chord/Bass Seq · {KEY_LABELS[keyRoot]} {mode} · {genreProfile.label} · {stepCount} steps</span>
         {playing && <span style={{ color: '#22c55e', fontWeight: 800 }}>PLAYING</span>}
       </div>

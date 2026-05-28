@@ -24,11 +24,13 @@ import { PianoNotesProvider } from '@/app/context/PianoNotesContext';
 import { TrackAllocationProvider } from '@/app/context/TrackAllocationContext';
 
 import TitleBar from '@/app/components/TitleBar';
+import TouchDeviceBootstrap from '@/app/components/TouchDeviceBootstrap';
 
 /** Must match StudioEditorScreen — cancels local count-in before transport changes. */
 const DMB_STUDIO_PRECOUNT_CANCEL = 'dmb-studio-precount-cancel';
 
 import NavigationSidebar, { type ScreenId } from '@/app/components/NavigationSidebar';
+import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 
 
 import VocalLabScreen from '@/app/screens/VocalLabScreen';
@@ -38,6 +40,7 @@ import AiSongScreen from '@/app/screens/AiSongScreen';
 import AiPatternScreen from '@/app/screens/AiPatternScreen';
 
 import MelodyTranscriptionScreen from '@/app/screens/MelodyTranscriptionScreen';
+import HarmonyMatchScreen from '@/app/screens/HarmonyMatchScreen';
 
 import CreationStationScreen from '@/app/screens/CreationStationScreen';
 
@@ -80,7 +83,8 @@ function ScreenMount({ active, children }: { active: boolean; children: React.Re
 
 function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
-  const [activeScreen, setActiveScreen] = useState<ScreenId>('vocal-lab');
+  const [activeScreen, setActiveScreen] = useState<ScreenId>('creation-station');
+  const [creationSubScreen, setCreationSubScreen] = useState<CreationSubScreenId>('beat-lab');
   /** Passed to Studio Editor when navigating from Vocal Lab with a recorded/uploaded blob. */
   const [pendingStudioAudioBlob, setPendingStudioAudioBlob] = useState<Blob | null>(null);
   /** Full Studio JSON string from Supabase `data.studioProjectV1` (applied once in StudioEditorScreen). */
@@ -201,24 +205,34 @@ function AppContent() {
 
   /** Supports: (screenId), (screenId, audioBlob), or (midiNotes[], screenId) from Melody Transcription. */
   function handleExport(a: string | unknown[], b?: string | Blob) {
+    const resolveScreen = (id: string): ScreenId =>
+      id === 'studio-editor' ? 'studio-editor-2' : (id as ScreenId);
+
     if (typeof a === 'string') {
-      if ((a === 'studio-editor' || a === 'studio-editor-2') && b instanceof Blob && b.size > 0) {
+      const screen = resolveScreen(a);
+      if (screen === 'studio-editor-2' && b instanceof Blob && b.size > 0) {
         setPendingStudioAudioBlob(b);
       }
-      setActiveScreen(a as ScreenId);
+      setActiveScreen(screen);
       return;
     }
     if (Array.isArray(a) && typeof b === 'string') {
-      setActiveScreen(b as ScreenId);
+      setActiveScreen(resolveScreen(b));
     }
   }
 
   return (
     <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#000', color: '#ccc' }}>
+      <TouchDeviceBootstrap />
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
       <TitleBar onOpenSettings={() => setShowSettings(true)} activeScreen={activeScreen} />
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <NavigationSidebar activeScreen={activeScreen} onScreenChange={setActiveScreen} />
+        <NavigationSidebar
+          activeScreen={activeScreen}
+          onScreenChange={setActiveScreen}
+          activeCreationSubScreen={creationSubScreen}
+          onCreationSubScreenChange={setCreationSubScreen}
+        />
         <main
           className="flex-1 min-w-0 min-h-0 overflow-hidden relative"
           style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}
@@ -240,9 +254,22 @@ function AppContent() {
           <ScreenMount active={activeScreen === 'melody-transcription'}>
             <MelodyTranscriptionScreen onExport={handleExport} onBack={() => setActiveScreen('vocal-lab')} />
           </ScreenMount>
+          <ScreenMount active={activeScreen === 'harmony-match'}>
+            <HarmonyMatchScreen
+              onOpenGrooveLab={() => {
+                setCreationSubScreen('groove-lab');
+                setActiveScreen('creation-station');
+              }}
+            />
+          </ScreenMount>
           <ScreenMount active={activeScreen === 'creation-station'}>
             {activeScreen === 'creation-station' ? (
-              <CreationStationScreen onExport={handleExport} isScreenActive />
+              <CreationStationScreen
+                onExport={handleExport}
+                isScreenActive
+                creationSubScreen={creationSubScreen}
+                onCreationSubScreenChange={setCreationSubScreen}
+              />
             ) : null}
           </ScreenMount>
           <ScreenMount active={activeScreen === 'studio-editor'}>

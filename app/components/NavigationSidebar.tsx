@@ -19,10 +19,15 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import {
-  Mic2, Music, Cpu, Layers, Radio,
+  Mic2, Music, Layers, Radio,
   FolderOpen, AlignLeft, Piano, Download, GripVertical,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, ChevronDown, Sparkles,
 } from 'lucide-react';
+
+import {
+  CREATION_SUB_SCREENS,
+  type CreationSubScreenId,
+} from '@/app/lib/creationStation/creationSubScreens';
 
 
 export type ScreenId =
@@ -30,6 +35,7 @@ export type ScreenId =
   | 'ai-song'
   | 'ai-pattern'
   | 'melody-transcription'
+  | 'harmony-match'
   | 'creation-station'
   | 'studio-editor'
   | 'studio-editor-2'
@@ -52,10 +58,9 @@ const NAV_SIDEBAR_COLLAPSED_KEY = 'navModulesCollapsed';
 const DEFAULT_ITEMS: NavItem[] = [
   { id: 'vocal-lab',       label: 'AI Vocal Lab',       icon: <Mic2 size={15} />,       badge: 'NEW' },
   { id: 'ai-song',         label: 'AI Song Generator',  icon: <Music size={15} /> },
-  { id: 'ai-pattern',      label: 'AI Pattern Gen',     icon: <Cpu size={15} /> },
   { id: 'melody-transcription', label: 'Melody-to-MIDI', icon: <Mic2 size={15} />, badge: 'NEW' },
+  { id: 'harmony-match', label: 'Harmony Match', icon: <Sparkles size={15} />, badge: 'NEW' },
   { id: 'creation-station',label: 'Creation Station',   icon: <Layers size={15} /> },
-  { id: 'studio-editor',   label: 'Studio Editor',      icon: <Radio size={15} /> },
   {
     id: 'studio-editor-2',
     label: 'Studio Editor 2',
@@ -139,10 +144,145 @@ function SortableItem({ item, isActive, isGrouped, onClick }: SortableItemProps)
 interface NavigationSidebarProps {
   activeScreen: ScreenId;
   onScreenChange: (id: ScreenId) => void;
+  activeCreationSubScreen?: CreationSubScreenId;
+  onCreationSubScreenChange?: (sub: CreationSubScreenId) => void;
+}
+
+interface CreationStationNavGroupProps {
+  item: NavItem;
+  isActive: boolean;
+  isGrouped: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  activeSubScreen: CreationSubScreenId;
+  onSelectSub: (sub: CreationSubScreenId) => void;
+  onSelectModule: () => void;
+}
+
+function CreationStationNavGroup({
+  item,
+  isActive,
+  isGrouped,
+  expanded,
+  onToggleExpand,
+  activeSubScreen,
+  onSelectSub,
+  onSelectModule,
+}: CreationStationNavGroupProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      {isGrouped && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-0.5 rounded-full"
+          style={{ background: '#D500F9' }}
+        />
+      )}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onSelectModule}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectModule();
+          }
+        }}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all group relative active:scale-95 active:opacity-70 cursor-pointer"
+        style={{
+          background: isActive ? 'rgba(213,0,249,0.15)' : 'transparent',
+          color: isActive ? '#D500F9' : '#888',
+          border: '1px solid',
+          borderColor: isActive ? 'rgba(213,0,249,0.3)' : 'transparent',
+          paddingLeft: isGrouped ? 14 : undefined,
+        }}
+      >
+        <span
+          {...attributes}
+          {...listeners}
+          className="opacity-0 group-hover:opacity-40 cursor-grab active:cursor-grabbing shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical size={12} />
+        </span>
+        <span className="shrink-0" style={{ color: isActive ? '#D500F9' : '#666' }}>
+          {item.icon}
+        </span>
+        <span className="text-xs font-medium truncate flex-1">{item.label}</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand();
+          }}
+          className="shrink-0 flex items-center justify-center rounded"
+          style={{
+            width: 22,
+            height: 22,
+            border: 'none',
+            background: 'transparent',
+            color: isActive ? '#D500F9' : '#666',
+            cursor: 'pointer',
+          }}
+          title={expanded ? 'Collapse Creation Station tools' : 'Expand Creation Station tools'}
+          aria-expanded={expanded}
+        >
+          <ChevronDown
+            size={14}
+            style={{
+              transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: 'transform 0.15s ease',
+            }}
+          />
+        </button>
+      </div>
+      {expanded && (
+        <div className="flex flex-col gap-0.5 pl-2 pr-0 pb-1" style={{ marginLeft: 10 }}>
+          {CREATION_SUB_SCREENS.map((sub) => {
+            const subActive = isActive && activeSubScreen === sub.id;
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => onSelectSub(sub.id)}
+                className="w-full text-left rounded-md transition-all active:scale-[0.98]"
+                style={{
+                  padding: '5px 10px 5px 22px',
+                  fontSize: 10,
+                  fontWeight: subActive ? 700 : 500,
+                  color: subActive ? '#7cf4c6' : '#6a6a78',
+                  background: subActive ? 'rgba(124, 244, 198, 0.10)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: subActive ? 'rgba(124, 244, 198, 0.28)' : 'transparent',
+                }}
+                title={sub.label}
+              >
+                {sub.shortLabel}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 
-export default function NavigationSidebar({ activeScreen, onScreenChange }: NavigationSidebarProps) {
+export default function NavigationSidebar({
+  activeScreen,
+  onScreenChange,
+  activeCreationSubScreen = 'beat-lab',
+  onCreationSubScreenChange,
+}: NavigationSidebarProps) {
   const [modulesCollapsed, setModulesCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     try {
@@ -190,6 +330,16 @@ export default function NavigationSidebar({ activeScreen, onScreenChange }: Navi
   }, [items]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const [creationExpanded, setCreationExpanded] = useState(
+    () => activeScreen === 'creation-station',
+  );
+
+  useEffect(() => {
+    if (activeScreen === 'creation-station') {
+      setCreationExpanded(true);
+    }
+  }, [activeScreen]);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -280,15 +430,36 @@ export default function NavigationSidebar({ activeScreen, onScreenChange }: Navi
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-              {items.map(item => (
-                <SortableItem
-                  key={item.id}
-                  item={item}
-                  isActive={activeScreen === item.id}
-                  isGrouped={!!item.groupId}
-                  onClick={() => onScreenChange(item.id)}
-                />
-              ))}
+              {items.map((item) =>
+                item.id === 'creation-station' && onCreationSubScreenChange ? (
+                  <CreationStationNavGroup
+                    key={item.id}
+                    item={item}
+                    isActive={activeScreen === 'creation-station'}
+                    isGrouped={!!item.groupId}
+                    expanded={creationExpanded}
+                    onToggleExpand={() => setCreationExpanded((v) => !v)}
+                    activeSubScreen={activeCreationSubScreen}
+                    onSelectSub={(sub) => {
+                      onCreationSubScreenChange(sub);
+                      onScreenChange('creation-station');
+                    }}
+                    onSelectModule={() => {
+                      onScreenChange('creation-station');
+                      onCreationSubScreenChange(activeCreationSubScreen);
+                      setCreationExpanded(true);
+                    }}
+                  />
+                ) : (
+                  <SortableItem
+                    key={item.id}
+                    item={item}
+                    isActive={activeScreen === item.id}
+                    isGrouped={!!item.groupId}
+                    onClick={() => onScreenChange(item.id)}
+                  />
+                ),
+              )}
             </SortableContext>
           </DndContext>
 

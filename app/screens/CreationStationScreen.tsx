@@ -11658,6 +11658,8 @@ function CreationStationScreenBody({
             bpm={bpm}
             metronomeEnabled={metronomeEnabled}
             onMetronomeEnabledChange={setMetronomeEnabled}
+            channelVolumes={channelVolumes}
+            setChannelVolume={setChannelVolume}
             onBpmChange={(next) => {
               const clamped = Math.max(40, Math.min(240, Math.round(next)));
               setBpm(clamped);

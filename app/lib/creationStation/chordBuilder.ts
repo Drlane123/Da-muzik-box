@@ -85,6 +85,8 @@ export interface ProgressionDef {
   id: string;
   name: string;
   chords: ChordSymbol[];
+  /** Overrides {@link GenreDef.mode} for this progression (e.g. minor blues in major pack). */
+  mode?: ChordMode;
 }
 
 export interface GenreDef {
@@ -170,6 +172,8 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       bIII:   [3, 7, 10],
       Isus4:  [0, 5, 7],
       Vsus4:  [7, 12, 14],
+      /** Borrowed minor iv — gospel / pop back-door cadence. */
+      iv:     [5, 8, 12],
     },
     info: {
       'I':      { interval: 0,  quality: '' },
@@ -193,11 +197,12 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       'bVII':   { interval: 10, quality: '' },
       'Isus4':  { interval: 0,  quality: 'sus4' },
       'Vsus4':  { interval: 7,  quality: 'sus4' },
+      'iv':     { interval: 5,  quality: 'm' },
     },
     defaultPads: [
       'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°',
       'Imaj7', 'ii7', 'iii7', 'IV7', 'IVmaj7', 'V7', 'vi7',
-      'bIII', 'bVI', 'bVII', 'Isus4', 'Vsus4',
+      'bIII', 'bVI', 'bVII', 'Isus4', 'Vsus4', 'iv',
     ],
     defaultStart: 'I',
   },
@@ -536,6 +541,16 @@ export function getModePads(mode: ChordMode): ChordSymbol[] {
   return MODE_TABLES[mode].defaultPads;
 }
 
+/** All Roman-numeral symbols defined for a mode (for analysis / matching). */
+export function getModeChordSymbols(mode: ChordMode): ChordSymbol[] {
+  return Object.keys(MODE_TABLES[mode].semitones) as ChordSymbol[];
+}
+
+/** Tonic fallback chord when no better match exists. */
+export function getModeDefaultChord(mode: ChordMode): ChordSymbol {
+  return MODE_TABLES[mode].defaultStart;
+}
+
 /**
  * Convert a Roman numeral chord symbol in the active mode to a set of MIDI
  * pitches over the given key root. Returns null if the symbol is unknown.
@@ -555,6 +570,43 @@ export function chordSymbolToMidi(
   return intervals.map((iv) => base + iv);
 }
 
+/** Bass/root pitch for a Roman numeral — uses the mode's scale degree, not voicing order. */
+export function chordSymbolToRootMidi(
+  symbol: ChordSymbol,
+  keyRoot: number,
+  mode: ChordMode,
+  baseOctave = 4,
+): number | null {
+  const info = MODE_TABLES[mode].info[symbol];
+  if (!info) return null;
+  return (baseOctave + 1) * 12 + keyRoot + info.interval;
+}
+
+/**
+ * Map a chord symbol from another mode / casing (e.g. major `IV` → minor `iv`)
+ * onto a symbol that exists in `mode`.
+ */
+export function coerceChordSymbolForMode(
+  symbol: ChordSymbol,
+  mode: ChordMode,
+  hintMode?: ChordMode,
+): ChordSymbol {
+  if (MODE_TABLES[mode].semitones[symbol]) return symbol;
+  const hint = hintMode ?? mode;
+  const fromHint = MODE_TABLES[hint].info[symbol];
+  if (fromHint) {
+    const exact = Object.entries(MODE_TABLES[mode].info).find(
+      ([, v]) => v.interval === fromHint.interval && v.quality === fromHint.quality,
+    );
+    if (exact) return exact[0];
+    const byDegree = Object.entries(MODE_TABLES[mode].info).find(
+      ([, v]) => v.interval === fromHint.interval,
+    );
+    if (byDegree) return byDegree[0];
+  }
+  return getModeDefaultChord(mode);
+}
+
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 /**
@@ -567,6 +619,23 @@ const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 
  *   '7' = dom 7, 'm7' = minor 7, 'ø7' = half-dim 7, '°7' = full dim 7,
  *   'sus4' = suspended 4.
  */
+/** True when every symbol maps to MIDI in the given mode. */
+export function progressionResolvesInMode(
+  chords: ReadonlyArray<ChordSymbol>,
+  mode: ChordMode,
+  keyRoot = 0,
+): boolean {
+  if (chords.length === 0) return false;
+  return chords.every((c) => chordSymbolToMidi(c, keyRoot, mode) !== null);
+}
+
+export function resolveProgressionMode(
+  progression: Pick<ProgressionDef, 'mode'>,
+  genre: Pick<GenreDef, 'mode'>,
+): ChordMode {
+  return progression.mode ?? genre.mode;
+}
+
 export function chordSymbolToName(
   symbol: ChordSymbol,
   keyRoot: number,
@@ -926,8 +995,12 @@ export const GENRES: GenreDef[] = [
         chords: ['I7','IV7','I7','vi7','ii7','V7','I7','V7'] },
       { id: 'blues-8bar',      name: '8-Bar (I7-V7-IV7-IV7-I7-V7-I7-V7)',
         chords: ['I7','V7','IV7','IV7','I7','V7','I7','V7'] },
-      { id: 'blues-minor',     name: 'Minor Blues (i-i-i-i-iv-iv-i-i-V7-iv-i-V7)',
-        chords: ['i','i','i','i','iv','iv','i','i','V7','iv','i','V7'] },
+      {
+        id: 'blues-minor',
+        name: 'Minor Blues (i-i-i-i-iv-iv-i-i-V7-iv-i-V7)',
+        mode: 'minor',
+        chords: ['i', 'i', 'i', 'i', 'iv', 'iv', 'i', 'i', 'V7', 'iv', 'i', 'V7'],
+      },
       { id: 'blues-slow',      name: 'Slow Blues (I7-IV7-I7-V7)',
         chords: ['I7','IV7','I7','V7'] },
     ],
@@ -1010,6 +1083,8 @@ export function buildChordEvents(args: {
   bandHigh: number;
   /** Anchor octave for the chord root before band fitting. */
   baseOctave?: number;
+  /** When set, drives roll preview / highlights (smart voicing, spread, etc.). */
+  resolveMidis?: (symbol: ChordSymbol, prev: ChordSymbol | null) => number[] | null;
 }): ChordEventOut[] {
   const { progression, keyRoot, mode, pattern, barsPerChord, startCol, colsPerBar, bandLow, bandHigh } = args;
   const baseOctave = args.baseOctave ?? 4;
@@ -1017,7 +1092,10 @@ export function buildChordEvents(args: {
   const stride = Math.max(1, Math.round(barsPerChord * colsPerBar));
   for (let i = 0; i < progression.length; i++) {
     const sym = progression[i]!;
-    const voicing = chordSymbolToMidi(sym, keyRoot, mode, baseOctave);
+    const prev = i > 0 ? progression[i - 1]! : null;
+    const voicing = args.resolveMidis
+      ? args.resolveMidis(sym, prev)
+      : chordSymbolToMidi(sym, keyRoot, mode, baseOctave);
     if (!voicing || voicing.length === 0) continue;
     const sorted = [...voicing].sort((a, b) => a - b);
     const bass = fitIntoBand(sorted[0]!, bandLow, bandHigh);
@@ -1101,13 +1179,20 @@ export function suggestNextChord(
   prev: ChordSymbol | null,
   genre: GenreDef,
   rand: () => number = Math.random,
+  mode: ChordMode = genre.mode,
 ): ChordSymbol {
-  if (prev) {
+  const validInMode = (c: ChordSymbol) => chordSymbolToMidi(c, 0, mode) !== null;
+  const prevNorm = prev ? coerceChordSymbolForMode(prev, mode, genre.mode) : null;
+
+  if (prevNorm) {
     const counts: Record<string, number> = {};
     for (const prog of genre.progressions) {
       for (let i = 0; i < prog.chords.length; i++) {
-        if (prog.chords[i] !== prev) continue;
-        const next = i < prog.chords.length - 1 ? prog.chords[i + 1]! : prog.chords[0]!;
+        const cur = coerceChordSymbolForMode(prog.chords[i]!, mode, genre.mode);
+        if (cur !== prevNorm) continue;
+        const rawNext = i < prog.chords.length - 1 ? prog.chords[i + 1]! : prog.chords[0]!;
+        const next = coerceChordSymbolForMode(rawNext, mode, genre.mode);
+        if (!validInMode(next)) continue;
         counts[next] = (counts[next] ?? 0) + 1;
       }
     }
@@ -1123,8 +1208,11 @@ export function suggestNextChord(
   const startCounts: Record<string, number> = {};
   for (const prog of genre.progressions) {
     const first = prog.chords[0];
-    if (first) startCounts[first] = (startCounts[first] ?? 0) + 1;
+    if (!first) continue;
+    const coerced = coerceChordSymbolForMode(first, mode, genre.mode);
+    if (!validInMode(coerced)) continue;
+    startCounts[coerced] = (startCounts[coerced] ?? 0) + 1;
   }
   const ranked = Object.entries(startCounts).sort((a, b) => b[1] - a[1]);
-  return ranked[0]?.[0] ?? MODE_TABLES[genre.mode].defaultStart;
+  return ranked[0]?.[0] ?? getModeDefaultChord(mode);
 }

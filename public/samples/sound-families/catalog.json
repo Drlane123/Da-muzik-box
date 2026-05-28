@@ -1,0 +1,5884 @@
+{
+  "id": "dmb-builtin-trap",
+  "title": "Built-in Trap Kit",
+  "subtitle": "808s · claps · kicks · hats — always in the app",
+  "bankIndex": 1,
+  "families": [
+    {
+      "id": "808-sub",
+      "label": "808 / Sub",
+      "defaultPad": 15,
+      "samples": [
+        {
+          "file": "trap-kit/808-sub/01-808-1.wav",
+          "title": "808 001"
+        },
+        {
+          "file": "trap-kit/808-sub/01-808.wav",
+          "title": "808 002"
+        },
+        {
+          "file": "trap-kit/808-sub/808_cassius-jay-woofer-808-1.wav",
+          "title": "808 003"
+        },
+        {
+          "file": "trap-kit/808-sub/808_cassius-jay-woofer-808.wav",
+          "title": "808 004"
+        },
+        {
+          "file": "trap-kit/808-sub/808_zay-x-808-1.wav",
+          "title": "808 005"
+        },
+        {
+          "file": "trap-kit/808-sub/808_zay-x-808.wav",
+          "title": "808 006"
+        },
+        {
+          "file": "trap-kit/808-sub/808-1-1.wav",
+          "title": "808 007"
+        },
+        {
+          "file": "trap-kit/808-sub/808-1-2.wav",
+          "title": "808 008"
+        },
+        {
+          "file": "trap-kit/808-sub/808-1-3.wav",
+          "title": "808 009"
+        },
+        {
+          "file": "trap-kit/808-sub/808-1-c-1.wav",
+          "title": "808 010"
+        },
+        {
+          "file": "trap-kit/808-sub/808-1-c.wav",
+          "title": "808 011"
+        },
+        {
+          "file": "trap-kit/808-sub/808-1.wav",
+          "title": "808 012"
+        },
+        {
+          "file": "trap-kit/808-sub/808-12-1.wav",
+          "title": "808 013"
+        },
+        {
+          "file": "trap-kit/808-sub/808-12-e-1.wav",
+          "title": "808 014"
+        },
+        {
+          "file": "trap-kit/808-sub/808-12-e.wav",
+          "title": "808 015"
+        },
+        {
+          "file": "trap-kit/808-sub/808-12-tm88-1.wav",
+          "title": "808 016"
+        },
+        {
+          "file": "trap-kit/808-sub/808-12-tm88.wav",
+          "title": "808 017"
+        },
+        {
+          "file": "trap-kit/808-sub/808-12.wav",
+          "title": "808 018"
+        },
+        {
+          "file": "trap-kit/808-sub/808-2.wav",
+          "title": "808 019"
+        },
+        {
+          "file": "trap-kit/808-sub/808-3.wav",
+          "title": "808 020"
+        },
+        {
+          "file": "trap-kit/808-sub/808-4.wav",
+          "title": "808 021"
+        },
+        {
+          "file": "trap-kit/808-sub/808-5.wav",
+          "title": "808 022"
+        },
+        {
+          "file": "trap-kit/808-sub/808-6-1.wav",
+          "title": "808 023"
+        },
+        {
+          "file": "trap-kit/808-sub/808-6.wav",
+          "title": "808 024"
+        },
+        {
+          "file": "trap-kit/808-sub/808-7.wav",
+          "title": "808 025"
+        },
+        {
+          "file": "trap-kit/808-sub/808-atl-1.wav",
+          "title": "808 026"
+        },
+        {
+          "file": "trap-kit/808-sub/808-atl.wav",
+          "title": "808 027"
+        },
+        {
+          "file": "trap-kit/808-sub/808-bam-bam-from-bedrock-1.wav",
+          "title": "808 028"
+        },
+        {
+          "file": "trap-kit/808-sub/808-bam-bam-from-bedrock.wav",
+          "title": "808 029"
+        },
+        {
+          "file": "trap-kit/808-sub/808-cyborg-2-1.wav",
+          "title": "808 030"
+        },
+        {
+          "file": "trap-kit/808-sub/808-cyborg-2.0-1.wav",
+          "title": "808 031"
+        },
+        {
+          "file": "trap-kit/808-sub/808-cyborg-2.0.wav",
+          "title": "808 032"
+        },
+        {
+          "file": "trap-kit/808-sub/808-cyborg-2.wav",
+          "title": "808 033"
+        },
+        {
+          "file": "trap-kit/808-sub/808-sine-1.wav",
+          "title": "808 034"
+        },
+        {
+          "file": "trap-kit/808-sub/808-sine-king-1.wav",
+          "title": "808 035"
+        },
+        {
+          "file": "trap-kit/808-sub/808-sine-king.wav",
+          "title": "808 036"
+        },
+        {
+          "file": "trap-kit/808-sub/808-sine-x-1.wav",
+          "title": "808 037"
+        },
+        {
+          "file": "trap-kit/808-sub/808-sine-x.wav",
+          "title": "808 038"
+        },
+        {
+          "file": "trap-kit/808-sub/808-sine.wav",
+          "title": "808 039"
+        },
+        {
+          "file": "trap-kit/808-sub/808-siz-_2-1.wav",
+          "title": "808 040"
+        },
+        {
+          "file": "trap-kit/808-sub/808-siz-_2.wav",
+          "title": "808 041"
+        },
+        {
+          "file": "trap-kit/808-sub/808-siz-_3-1.wav",
+          "title": "808 042"
+        },
+        {
+          "file": "trap-kit/808-sub/808-siz-_3.wav",
+          "title": "808 043"
+        },
+        {
+          "file": "trap-kit/808-sub/808-siz-1.wav",
+          "title": "808 044"
+        },
+        {
+          "file": "trap-kit/808-sub/808-siz.wav",
+          "title": "808 045"
+        },
+        {
+          "file": "trap-kit/808-sub/808-w-kick-1.wav",
+          "title": "808 046"
+        },
+        {
+          "file": "trap-kit/808-sub/808-w-kick.wav",
+          "title": "808 047"
+        },
+        {
+          "file": "trap-kit/808-sub/808.wav",
+          "title": "808 048"
+        },
+        {
+          "file": "trap-kit/808-sub/acd---808-1-1.wav",
+          "title": "808 049"
+        },
+        {
+          "file": "trap-kit/808-sub/acd---808-1.wav",
+          "title": "808 050"
+        },
+        {
+          "file": "trap-kit/808-sub/acd---808-2.wav",
+          "title": "808 051"
+        },
+        {
+          "file": "trap-kit/808-sub/acd---808.wav",
+          "title": "808 052"
+        },
+        {
+          "file": "trap-kit/808-sub/bass_drop_04-1.wav",
+          "title": "808 053"
+        },
+        {
+          "file": "trap-kit/808-sub/bass_drop_04.wav",
+          "title": "808 054"
+        },
+        {
+          "file": "trap-kit/808-sub/bass_sub_03-1.wav",
+          "title": "808 055"
+        },
+        {
+          "file": "trap-kit/808-sub/bass_sub_03.wav",
+          "title": "808 056"
+        },
+        {
+          "file": "trap-kit/808-sub/bigwhites-808_s-12-1.wav",
+          "title": "808 057"
+        },
+        {
+          "file": "trap-kit/808-sub/bigwhites-808_s-12.wav",
+          "title": "808 058"
+        },
+        {
+          "file": "trap-kit/808-sub/bigwhites-808-s-1.wav",
+          "title": "808 059"
+        },
+        {
+          "file": "trap-kit/808-sub/bigwhites-808-s.wav",
+          "title": "808 060"
+        },
+        {
+          "file": "trap-kit/808-sub/c-bass-16-tuned-808-1.wav",
+          "title": "808 061"
+        },
+        {
+          "file": "trap-kit/808-sub/c-bass-16-tuned-808.wav",
+          "title": "808 062"
+        },
+        {
+          "file": "trap-kit/808-sub/c-bass-18-old-skool-za808-1.wav",
+          "title": "808 063"
+        },
+        {
+          "file": "trap-kit/808-sub/c-bass-18-old-skool-za808.wav",
+          "title": "808 064"
+        },
+        {
+          "file": "trap-kit/808-sub/ddb-808-9-1.wav",
+          "title": "808 065"
+        },
+        {
+          "file": "trap-kit/808-sub/ddb-808-9.wav",
+          "title": "808 066"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-1-1.wav",
+          "title": "808 067"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-1.wav",
+          "title": "808 068"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-2-1.wav",
+          "title": "808 069"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-2.wav",
+          "title": "808 070"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-3-1.wav",
+          "title": "808 071"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-3.wav",
+          "title": "808 072"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-4-1.wav",
+          "title": "808 073"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-4.wav",
+          "title": "808 074"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-5-1.wav",
+          "title": "808 075"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-5.wav",
+          "title": "808 076"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-6-1.wav",
+          "title": "808 077"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-6.wav",
+          "title": "808 078"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-7-1.wav",
+          "title": "808 079"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-808-7.wav",
+          "title": "808 080"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-sub-1-1.wav",
+          "title": "808 081"
+        },
+        {
+          "file": "trap-kit/808-sub/ddw2-sub-1.wav",
+          "title": "808 082"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-1-1.wav",
+          "title": "808 083"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-1.wav",
+          "title": "808 084"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-10-1.wav",
+          "title": "808 085"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-10.wav",
+          "title": "808 086"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-11-1.wav",
+          "title": "808 087"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-11.wav",
+          "title": "808 088"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-12-1.wav",
+          "title": "808 089"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-12.wav",
+          "title": "808 090"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-13-1.wav",
+          "title": "808 091"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-13.wav",
+          "title": "808 092"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-14-1.wav",
+          "title": "808 093"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-14.wav",
+          "title": "808 094"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-15-1.wav",
+          "title": "808 095"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-15.wav",
+          "title": "808 096"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-16-1.wav",
+          "title": "808 097"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-16.wav",
+          "title": "808 098"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-17-1.wav",
+          "title": "808 099"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-17.wav",
+          "title": "808 100"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-2-1.wav",
+          "title": "808 101"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-2.wav",
+          "title": "808 102"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-3-1.wav",
+          "title": "808 103"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-3.wav",
+          "title": "808 104"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-4-1.wav",
+          "title": "808 105"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-4.wav",
+          "title": "808 106"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-5-1.wav",
+          "title": "808 107"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-5.wav",
+          "title": "808 108"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-6-1.wav",
+          "title": "808 109"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-6.wav",
+          "title": "808 110"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-7-1.wav",
+          "title": "808 111"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-7.wav",
+          "title": "808 112"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-8-1.wav",
+          "title": "808 113"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-8.wav",
+          "title": "808 114"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-9-1.wav",
+          "title": "808 115"
+        },
+        {
+          "file": "trap-kit/808-sub/deedotluger-808-9.wav",
+          "title": "808 116"
+        },
+        {
+          "file": "trap-kit/808-sub/guud-sine-808-1.wav",
+          "title": "808 117"
+        },
+        {
+          "file": "trap-kit/808-sub/guud-sine-808.wav",
+          "title": "808 118"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-1-1.wav",
+          "title": "808 119"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-1.wav",
+          "title": "808 120"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-10-1.wav",
+          "title": "808 121"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-10.wav",
+          "title": "808 122"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-3-1.wav",
+          "title": "808 123"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-3.wav",
+          "title": "808 124"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-4-1.wav",
+          "title": "808 125"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-4.wav",
+          "title": "808 126"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-5-1.wav",
+          "title": "808 127"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-5.wav",
+          "title": "808 128"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-6-1.wav",
+          "title": "808 129"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-6.wav",
+          "title": "808 130"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-7-1.wav",
+          "title": "808 131"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-7.wav",
+          "title": "808 132"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-9-1.wav",
+          "title": "808 133"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---808-9.wav",
+          "title": "808 134"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---sub-1-1.wav",
+          "title": "808 135"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---sub-1.wav",
+          "title": "808 136"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---sub-2-1.wav",
+          "title": "808 137"
+        },
+        {
+          "file": "trap-kit/808-sub/jc---sub-2.wav",
+          "title": "808 138"
+        },
+        {
+          "file": "trap-kit/808-sub/jc-808-1-1.wav",
+          "title": "808 139"
+        },
+        {
+          "file": "trap-kit/808-sub/jc-808-1.wav",
+          "title": "808 140"
+        },
+        {
+          "file": "trap-kit/808-sub/jc-808-2-1.wav",
+          "title": "808 141"
+        },
+        {
+          "file": "trap-kit/808-sub/jc-808-2.wav",
+          "title": "808 142"
+        },
+        {
+          "file": "trap-kit/808-sub/kryptic-samples-808-subwoofer-lp-1.wav",
+          "title": "808 143"
+        },
+        {
+          "file": "trap-kit/808-sub/kryptic-samples-808-subwoofer-lp.wav",
+          "title": "808 144"
+        },
+        {
+          "file": "trap-kit/808-sub/ll_808_g_cyborg-1.wav",
+          "title": "808 145"
+        },
+        {
+          "file": "trap-kit/808-sub/ll_808_g_cyborg.wav",
+          "title": "808 146"
+        },
+        {
+          "file": "trap-kit/808-sub/mb-808-1-1.wav",
+          "title": "808 147"
+        },
+        {
+          "file": "trap-kit/808-sub/mb-808-1.wav",
+          "title": "808 148"
+        },
+        {
+          "file": "trap-kit/808-sub/mb-808-12-1.wav",
+          "title": "808 149"
+        },
+        {
+          "file": "trap-kit/808-sub/mb-808-12.wav",
+          "title": "808 150"
+        },
+        {
+          "file": "trap-kit/808-sub/mb-808-6-1.wav",
+          "title": "808 151"
+        },
+        {
+          "file": "trap-kit/808-sub/mb-808-6.wav",
+          "title": "808 152"
+        },
+        {
+          "file": "trap-kit/808-sub/negative---808---sine---e-1.wav",
+          "title": "808 153"
+        },
+        {
+          "file": "trap-kit/808-sub/negative---808---sine---e.wav",
+          "title": "808 154"
+        },
+        {
+          "file": "trap-kit/808-sub/no-drop-1.wav",
+          "title": "808 155"
+        },
+        {
+          "file": "trap-kit/808-sub/no-drop.wav",
+          "title": "808 156"
+        },
+        {
+          "file": "trap-kit/808-sub/oid2_subwoofer-1.wav",
+          "title": "808 157"
+        },
+        {
+          "file": "trap-kit/808-sub/oid2_subwoofer.wav",
+          "title": "808 158"
+        },
+        {
+          "file": "trap-kit/808-sub/ov-subwoofer-1.wav",
+          "title": "808 159"
+        },
+        {
+          "file": "trap-kit/808-sub/ov-subwoofer.wav",
+          "title": "808 160"
+        },
+        {
+          "file": "trap-kit/808-sub/pink---bouldercrest-808-1.wav",
+          "title": "808 161"
+        },
+        {
+          "file": "trap-kit/808-sub/pink---bouldercrest-808.wav",
+          "title": "808 162"
+        },
+        {
+          "file": "trap-kit/808-sub/pure-sine-808-1.wav",
+          "title": "808 163"
+        },
+        {
+          "file": "trap-kit/808-sub/pure-sine-808.wav",
+          "title": "808 164"
+        },
+        {
+          "file": "trap-kit/808-sub/redd-808-1-1.wav",
+          "title": "808 165"
+        },
+        {
+          "file": "trap-kit/808-sub/redd-808-1.wav",
+          "title": "808 166"
+        },
+        {
+          "file": "trap-kit/808-sub/redd-808-12-1.wav",
+          "title": "808 167"
+        },
+        {
+          "file": "trap-kit/808-sub/redd-808-12.wav",
+          "title": "808 168"
+        },
+        {
+          "file": "trap-kit/808-sub/redd-808-6-1.wav",
+          "title": "808 169"
+        },
+        {
+          "file": "trap-kit/808-sub/redd-808-6.wav",
+          "title": "808 170"
+        },
+        {
+          "file": "trap-kit/808-sub/sine-808-1.wav",
+          "title": "808 171"
+        },
+        {
+          "file": "trap-kit/808-sub/sine-808.wav",
+          "title": "808 172"
+        },
+        {
+          "file": "trap-kit/808-sub/siz-808-1.wav",
+          "title": "808 173"
+        },
+        {
+          "file": "trap-kit/808-sub/siz-808.wav",
+          "title": "808 174"
+        },
+        {
+          "file": "trap-kit/808-sub/siz-808.wav-1.wav",
+          "title": "808 175"
+        },
+        {
+          "file": "trap-kit/808-sub/siz-808.wav.wav",
+          "title": "808 176"
+        },
+        {
+          "file": "trap-kit/808-sub/slight-808-1.wav",
+          "title": "808 177"
+        },
+        {
+          "file": "trap-kit/808-sub/slight-808.wav",
+          "title": "808 178"
+        },
+        {
+          "file": "trap-kit/808-sub/spinz-808-1.wav",
+          "title": "808 179"
+        },
+        {
+          "file": "trap-kit/808-sub/spinz-808.wav",
+          "title": "808 180"
+        },
+        {
+          "file": "trap-kit/808-sub/spinz-tm-siz-808_1-1.wav",
+          "title": "808 181"
+        },
+        {
+          "file": "trap-kit/808-sub/spinz-tm-siz-808_1.wav",
+          "title": "808 182"
+        },
+        {
+          "file": "trap-kit/808-sub/spinz-x-808-1.wav",
+          "title": "808 183"
+        },
+        {
+          "file": "trap-kit/808-sub/spinz-x-808.wav",
+          "title": "808 184"
+        },
+        {
+          "file": "trap-kit/808-sub/system-in-da-trunk-bass-1.wav",
+          "title": "808 185"
+        },
+        {
+          "file": "trap-kit/808-sub/system-in-da-trunk-bass.wav",
+          "title": "808 186"
+        },
+        {
+          "file": "trap-kit/808-sub/tbp---808-bowling-1.wav",
+          "title": "808 187"
+        },
+        {
+          "file": "trap-kit/808-sub/tbp---808-bowling.wav",
+          "title": "808 188"
+        },
+        {
+          "file": "trap-kit/808-sub/tce-spinz-808-1.wav",
+          "title": "808 189"
+        },
+        {
+          "file": "trap-kit/808-sub/tce-spinz-808.wav",
+          "title": "808 190"
+        },
+        {
+          "file": "trap-kit/808-sub/thugger-808-c---pure-sine-1.wav",
+          "title": "808 191"
+        },
+        {
+          "file": "trap-kit/808-sub/thugger-808-c---pure-sine.wav",
+          "title": "808 192"
+        },
+        {
+          "file": "trap-kit/808-sub/torture-rack-808-1.wav",
+          "title": "808 193"
+        },
+        {
+          "file": "trap-kit/808-sub/torture-rack-808.wav",
+          "title": "808 194"
+        },
+        {
+          "file": "trap-kit/808-sub/torture-rack-kick-1.wav",
+          "title": "808 195"
+        },
+        {
+          "file": "trap-kit/808-sub/torture-rack-kick.wav",
+          "title": "808 196"
+        },
+        {
+          "file": "trap-kit/808-sub/trunk-808-1.wav",
+          "title": "808 197"
+        },
+        {
+          "file": "trap-kit/808-sub/trunk-808.wav",
+          "title": "808 198"
+        },
+        {
+          "file": "trap-kit/808-sub/vybe808_1-1.wav",
+          "title": "808 199"
+        },
+        {
+          "file": "trap-kit/808-sub/vybe808_1.wav",
+          "title": "808 200"
+        },
+        {
+          "file": "trap-kit/808-sub/vybe808_2-1.wav",
+          "title": "808 201"
+        },
+        {
+          "file": "trap-kit/808-sub/vybe808_2.wav",
+          "title": "808 202"
+        },
+        {
+          "file": "trap-kit/808-sub/vybe808_3-1.wav",
+          "title": "808 203"
+        },
+        {
+          "file": "trap-kit/808-sub/vybe808_3.wav",
+          "title": "808 204"
+        },
+        {
+          "file": "trap-kit/808-sub/yc-bowling-1.wav",
+          "title": "808 205"
+        },
+        {
+          "file": "trap-kit/808-sub/yc-bowling.wav",
+          "title": "808 206"
+        },
+        {
+          "file": "trap-kit/808-sub/zay-808-6-1.wav",
+          "title": "808 207"
+        },
+        {
+          "file": "trap-kit/808-sub/zay-808-6.wav",
+          "title": "808 208"
+        },
+        {
+          "file": "trap-kit/808-sub/zay-drop-6-1.wav",
+          "title": "808 209"
+        },
+        {
+          "file": "trap-kit/808-sub/zay-drop-6.wav",
+          "title": "808 210"
+        }
+      ]
+    },
+    {
+      "id": "kick",
+      "label": "Kick",
+      "defaultPad": 0,
+      "samples": [
+        {
+          "file": "trap-kit/kick/08-kick---rack-1-1.wav",
+          "title": "Kick 001"
+        },
+        {
+          "file": "trap-kit/kick/08-kick---rack-1.wav",
+          "title": "Kick 002"
+        },
+        {
+          "file": "trap-kit/kick/alchemist-kick-8-1.wav",
+          "title": "Kick 003"
+        },
+        {
+          "file": "trap-kit/kick/alchemist-kick-8.wav",
+          "title": "Kick 004"
+        },
+        {
+          "file": "trap-kit/kick/aunty-duo-kick-1.wav",
+          "title": "Kick 005"
+        },
+        {
+          "file": "trap-kit/kick/aunty-duo-kick.wav",
+          "title": "Kick 006"
+        },
+        {
+          "file": "trap-kit/kick/bz_kick-1.wav",
+          "title": "Kick 007"
+        },
+        {
+          "file": "trap-kit/kick/bz_kick.wav",
+          "title": "Kick 008"
+        },
+        {
+          "file": "trap-kit/kick/bz-dose-kick-1.wav",
+          "title": "Kick 009"
+        },
+        {
+          "file": "trap-kit/kick/bz-dose-kick.wav",
+          "title": "Kick 010"
+        },
+        {
+          "file": "trap-kit/kick/cts_kick2-1.wav",
+          "title": "Kick 011"
+        },
+        {
+          "file": "trap-kit/kick/cts_kick2.wav",
+          "title": "Kick 012"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-1-1.wav",
+          "title": "Kick 013"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-1.wav",
+          "title": "Kick 014"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-2-1.wav",
+          "title": "Kick 015"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-2.wav",
+          "title": "Kick 016"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-3-1.wav",
+          "title": "Kick 017"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-3.wav",
+          "title": "Kick 018"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-4-1.wav",
+          "title": "Kick 019"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-4.wav",
+          "title": "Kick 020"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-5-1.wav",
+          "title": "Kick 021"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-5.wav",
+          "title": "Kick 022"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-6-1.wav",
+          "title": "Kick 023"
+        },
+        {
+          "file": "trap-kit/kick/ddw2-kick-6.wav",
+          "title": "Kick 024"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-1-1.wav",
+          "title": "Kick 025"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-1.wav",
+          "title": "Kick 026"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-10-1.wav",
+          "title": "Kick 027"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-10.wav",
+          "title": "Kick 028"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-2-1.wav",
+          "title": "Kick 029"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-2.wav",
+          "title": "Kick 030"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-3-1.wav",
+          "title": "Kick 031"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-3.wav",
+          "title": "Kick 032"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-4-1.wav",
+          "title": "Kick 033"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-4.wav",
+          "title": "Kick 034"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-5-1.wav",
+          "title": "Kick 035"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-5.wav",
+          "title": "Kick 036"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-6-1.wav",
+          "title": "Kick 037"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-6.wav",
+          "title": "Kick 038"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-7-1.wav",
+          "title": "Kick 039"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-7.wav",
+          "title": "Kick 040"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-8-1.wav",
+          "title": "Kick 041"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-8.wav",
+          "title": "Kick 042"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-9-1.wav",
+          "title": "Kick 043"
+        },
+        {
+          "file": "trap-kit/kick/deedotluger-kick-9.wav",
+          "title": "Kick 044"
+        },
+        {
+          "file": "trap-kit/kick/drumma-boy-kick-1.wav",
+          "title": "Kick 045"
+        },
+        {
+          "file": "trap-kit/kick/drumma-boy-kick.wav",
+          "title": "Kick 046"
+        },
+        {
+          "file": "trap-kit/kick/dunk-kick-1.wav",
+          "title": "Kick 047"
+        },
+        {
+          "file": "trap-kit/kick/dunk-kick.wav",
+          "title": "Kick 048"
+        },
+        {
+          "file": "trap-kit/kick/famous-rack-kick-1.wav",
+          "title": "Kick 049"
+        },
+        {
+          "file": "trap-kit/kick/famous-rack-kick.wav",
+          "title": "Kick 050"
+        },
+        {
+          "file": "trap-kit/kick/heavy-kick-lv1-1.wav",
+          "title": "Kick 051"
+        },
+        {
+          "file": "trap-kit/kick/heavy-kick-lv1.wav",
+          "title": "Kick 052"
+        },
+        {
+          "file": "trap-kit/kick/kick-1-1.wav",
+          "title": "Kick 053"
+        },
+        {
+          "file": "trap-kit/kick/kick-1.wav",
+          "title": "Kick 054"
+        },
+        {
+          "file": "trap-kit/kick/kick-14-1.wav",
+          "title": "Kick 055"
+        },
+        {
+          "file": "trap-kit/kick/kick-14.wav",
+          "title": "Kick 056"
+        },
+        {
+          "file": "trap-kit/kick/kick-2-1.wav",
+          "title": "Kick 057"
+        },
+        {
+          "file": "trap-kit/kick/kick-2.wav",
+          "title": "Kick 058"
+        },
+        {
+          "file": "trap-kit/kick/kick-3.wav",
+          "title": "Kick 059"
+        },
+        {
+          "file": "trap-kit/kick/kick-atl-1.wav",
+          "title": "Kick 060"
+        },
+        {
+          "file": "trap-kit/kick/kick-atl.wav",
+          "title": "Kick 061"
+        },
+        {
+          "file": "trap-kit/kick/kick.wav",
+          "title": "Kick 062"
+        },
+        {
+          "file": "trap-kit/kick/mb-kick-14-1.wav",
+          "title": "Kick 063"
+        },
+        {
+          "file": "trap-kit/kick/mb-kick-14.wav",
+          "title": "Kick 064"
+        },
+        {
+          "file": "trap-kit/kick/md-kick-2-1.wav",
+          "title": "Kick 065"
+        },
+        {
+          "file": "trap-kit/kick/md-kick-2.wav",
+          "title": "Kick 066"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick-1.wav",
+          "title": "Kick 067"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick.wav",
+          "title": "Kick 068"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick1-1.wav",
+          "title": "Kick 069"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick1.wav",
+          "title": "Kick 070"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick2-1.wav",
+          "title": "Kick 071"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick2.wav",
+          "title": "Kick 072"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick3-1.wav",
+          "title": "Kick 073"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick3.wav",
+          "title": "Kick 074"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick4-1.wav",
+          "title": "Kick 075"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick4.wav",
+          "title": "Kick 076"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick5-1.wav",
+          "title": "Kick 077"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick5.wav",
+          "title": "Kick 078"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick6-1.wav",
+          "title": "Kick 079"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick6.wav",
+          "title": "Kick 080"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick7-1.wav",
+          "title": "Kick 081"
+        },
+        {
+          "file": "trap-kit/kick/rack-kick7.wav",
+          "title": "Kick 082"
+        },
+        {
+          "file": "trap-kit/kick/redd-kick-14-1.wav",
+          "title": "Kick 083"
+        },
+        {
+          "file": "trap-kit/kick/redd-kick-14.wav",
+          "title": "Kick 084"
+        },
+        {
+          "file": "trap-kit/kick/shawty-redd-sound-34-1.wav",
+          "title": "Kick 085"
+        },
+        {
+          "file": "trap-kit/kick/shawty-redd-sound-34.wav",
+          "title": "Kick 086"
+        },
+        {
+          "file": "trap-kit/kick/torture-rack-kick2-1.wav",
+          "title": "Kick 087"
+        },
+        {
+          "file": "trap-kit/kick/torture-rack-kick2.wav",
+          "title": "Kick 088"
+        },
+        {
+          "file": "trap-kit/kick/trunk-sk-14-1.wav",
+          "title": "Kick 089"
+        },
+        {
+          "file": "trap-kit/kick/trunk-sk-14.wav",
+          "title": "Kick 090"
+        },
+        {
+          "file": "trap-kit/kick/vybe809singlekick_2-1.wav",
+          "title": "Kick 091"
+        },
+        {
+          "file": "trap-kit/kick/vybe809singlekick_2.wav",
+          "title": "Kick 092"
+        },
+        {
+          "file": "trap-kit/kick/vybe809singlekick-1.wav",
+          "title": "Kick 093"
+        },
+        {
+          "file": "trap-kit/kick/vybe809singlekick.wav",
+          "title": "Kick 094"
+        },
+        {
+          "file": "trap-kit/kick/zaytoven-rare-kick-1.wav",
+          "title": "Kick 095"
+        },
+        {
+          "file": "trap-kit/kick/zaytoven-rare-kick.wav",
+          "title": "Kick 096"
+        }
+      ]
+    },
+    {
+      "id": "snare",
+      "label": "Snare",
+      "defaultPad": 1,
+      "samples": [
+        {
+          "file": "trap-kit/snare/_bwtigsn-1.wav",
+          "title": "Snare 001"
+        },
+        {
+          "file": "trap-kit/snare/_bwtigsn.wav",
+          "title": "Snare 002"
+        },
+        {
+          "file": "trap-kit/snare/_imnasty-1.wav",
+          "title": "Snare 003"
+        },
+        {
+          "file": "trap-kit/snare/_imnasty.wav",
+          "title": "Snare 004"
+        },
+        {
+          "file": "trap-kit/snare/_wizsn-1-1.wav",
+          "title": "Snare 005"
+        },
+        {
+          "file": "trap-kit/snare/_wizsn-1.wav",
+          "title": "Snare 006"
+        },
+        {
+          "file": "trap-kit/snare/_wizsn-3-1.wav",
+          "title": "Snare 007"
+        },
+        {
+          "file": "trap-kit/snare/_wizsn-3.wav",
+          "title": "Snare 008"
+        },
+        {
+          "file": "trap-kit/snare/12kb---808m-snare-4-1.wav",
+          "title": "Snare 009"
+        },
+        {
+          "file": "trap-kit/snare/12kb---808m-snare-4.wav",
+          "title": "Snare 010"
+        },
+        {
+          "file": "trap-kit/snare/5---snaree---pyrex-1.wav",
+          "title": "Snare 011"
+        },
+        {
+          "file": "trap-kit/snare/5---snaree---pyrex.wav",
+          "title": "Snare 012"
+        },
+        {
+          "file": "trap-kit/snare/aunty-duo-snare-1.wav",
+          "title": "Snare 013"
+        },
+        {
+          "file": "trap-kit/snare/aunty-duo-snare.wav",
+          "title": "Snare 014"
+        },
+        {
+          "file": "trap-kit/snare/bacc-2-skool-1.wav",
+          "title": "Snare 015"
+        },
+        {
+          "file": "trap-kit/snare/bacc-2-skool.wav",
+          "title": "Snare 016"
+        },
+        {
+          "file": "trap-kit/snare/bb---snare-1.wav",
+          "title": "Snare 017"
+        },
+        {
+          "file": "trap-kit/snare/bb---snare.wav",
+          "title": "Snare 018"
+        },
+        {
+          "file": "trap-kit/snare/big-wjite-clap-_-snare-22-1.wav",
+          "title": "Snare 019"
+        },
+        {
+          "file": "trap-kit/snare/big-wjite-clap-_-snare-22.wav",
+          "title": "Snare 020"
+        },
+        {
+          "file": "trap-kit/snare/big-wjite-clap-snare-25-1.wav",
+          "title": "Snare 021"
+        },
+        {
+          "file": "trap-kit/snare/big-wjite-clap-snare-25.wav",
+          "title": "Snare 022"
+        },
+        {
+          "file": "trap-kit/snare/bwb-vault-snare-pink-1.wav",
+          "title": "Snare 023"
+        },
+        {
+          "file": "trap-kit/snare/bwb-vault-snare-pink.wav",
+          "title": "Snare 024"
+        },
+        {
+          "file": "trap-kit/snare/bz-redd-snare-2-1.wav",
+          "title": "Snare 025"
+        },
+        {
+          "file": "trap-kit/snare/bz-redd-snare-2.wav",
+          "title": "Snare 026"
+        },
+        {
+          "file": "trap-kit/snare/dc---snare-1.wav",
+          "title": "Snare 027"
+        },
+        {
+          "file": "trap-kit/snare/dc---snare.wav",
+          "title": "Snare 028"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-1-1.wav",
+          "title": "Snare 029"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-1.wav",
+          "title": "Snare 030"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-2-1.wav",
+          "title": "Snare 031"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-2.wav",
+          "title": "Snare 032"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-3-1.wav",
+          "title": "Snare 033"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-3.wav",
+          "title": "Snare 034"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-4-1.wav",
+          "title": "Snare 035"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-4.wav",
+          "title": "Snare 036"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-5-1.wav",
+          "title": "Snare 037"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-5.wav",
+          "title": "Snare 038"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-6-1.wav",
+          "title": "Snare 039"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-6.wav",
+          "title": "Snare 040"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-7-1.wav",
+          "title": "Snare 041"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-7.wav",
+          "title": "Snare 042"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-8-1.wav",
+          "title": "Snare 043"
+        },
+        {
+          "file": "trap-kit/snare/ddw2-snr-8.wav",
+          "title": "Snare 044"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-1-1.wav",
+          "title": "Snare 045"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-1.wav",
+          "title": "Snare 046"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-10-1.wav",
+          "title": "Snare 047"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-10.wav",
+          "title": "Snare 048"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-11-1.wav",
+          "title": "Snare 049"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-11.wav",
+          "title": "Snare 050"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-13-1.wav",
+          "title": "Snare 051"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-13.wav",
+          "title": "Snare 052"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-14-1.wav",
+          "title": "Snare 053"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-14.wav",
+          "title": "Snare 054"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-15-1.wav",
+          "title": "Snare 055"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-15.wav",
+          "title": "Snare 056"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-16-1.wav",
+          "title": "Snare 057"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-16.wav",
+          "title": "Snare 058"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-17-1.wav",
+          "title": "Snare 059"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-17.wav",
+          "title": "Snare 060"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-18-1.wav",
+          "title": "Snare 061"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-18.wav",
+          "title": "Snare 062"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-19-1.wav",
+          "title": "Snare 063"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-19.wav",
+          "title": "Snare 064"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-2-1.wav",
+          "title": "Snare 065"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-2.wav",
+          "title": "Snare 066"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-20-1.wav",
+          "title": "Snare 067"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-20.wav",
+          "title": "Snare 068"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-3-1.wav",
+          "title": "Snare 069"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-3.wav",
+          "title": "Snare 070"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-4-1.wav",
+          "title": "Snare 071"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-4.wav",
+          "title": "Snare 072"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-5-1.wav",
+          "title": "Snare 073"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-5.wav",
+          "title": "Snare 074"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-6-1.wav",
+          "title": "Snare 075"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-6.wav",
+          "title": "Snare 076"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-7-1.wav",
+          "title": "Snare 077"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-7.wav",
+          "title": "Snare 078"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-8-1.wav",
+          "title": "Snare 079"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-8.wav",
+          "title": "Snare 080"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-9-1.wav",
+          "title": "Snare 081"
+        },
+        {
+          "file": "trap-kit/snare/deedotluger-snare-9.wav",
+          "title": "Snare 082"
+        },
+        {
+          "file": "trap-kit/snare/dre3-2cd-020-1.wav",
+          "title": "Snare 083"
+        },
+        {
+          "file": "trap-kit/snare/dre3-2cd-020.wav",
+          "title": "Snare 084"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snare-1.wav",
+          "title": "Snare 085"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snare-2-1.wav",
+          "title": "Snare 086"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snare-2.wav",
+          "title": "Snare 087"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snare-3-1.wav",
+          "title": "Snare 088"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snare-3.wav",
+          "title": "Snare 089"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snare.wav",
+          "title": "Snare 090"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snr-sso-1.wav",
+          "title": "Snare 091"
+        },
+        {
+          "file": "trap-kit/snare/drumma-boy-snr-sso.wav",
+          "title": "Snare 092"
+        },
+        {
+          "file": "trap-kit/snare/drza_snare1-1.wav",
+          "title": "Snare 093"
+        },
+        {
+          "file": "trap-kit/snare/drza_snare1.wav",
+          "title": "Snare 094"
+        },
+        {
+          "file": "trap-kit/snare/drza_snare2-1.wav",
+          "title": "Snare 095"
+        },
+        {
+          "file": "trap-kit/snare/drza_snare2.wav",
+          "title": "Snare 096"
+        },
+        {
+          "file": "trap-kit/snare/dt---blockstar-snare-_2-1.wav",
+          "title": "Snare 097"
+        },
+        {
+          "file": "trap-kit/snare/dt---blockstar-snare-_2.wav",
+          "title": "Snare 098"
+        },
+        {
+          "file": "trap-kit/snare/dt---blockstar-snare-1.wav",
+          "title": "Snare 099"
+        },
+        {
+          "file": "trap-kit/snare/dt---blockstar-snare.wav",
+          "title": "Snare 100"
+        },
+        {
+          "file": "trap-kit/snare/dy-trunk-snare-4-1.wav",
+          "title": "Snare 101"
+        },
+        {
+          "file": "trap-kit/snare/dy-trunk-snare-4.wav",
+          "title": "Snare 102"
+        },
+        {
+          "file": "trap-kit/snare/epicsnare_mj-1.wav",
+          "title": "Snare 103"
+        },
+        {
+          "file": "trap-kit/snare/epicsnare_mj.wav",
+          "title": "Snare 104"
+        },
+        {
+          "file": "trap-kit/snare/half-treesound-trunk-snare-1.wav",
+          "title": "Snare 105"
+        },
+        {
+          "file": "trap-kit/snare/half-treesound-trunk-snare.wav",
+          "title": "Snare 106"
+        },
+        {
+          "file": "trap-kit/snare/jr---pink-floyd-snare-1.wav",
+          "title": "Snare 107"
+        },
+        {
+          "file": "trap-kit/snare/jr---pink-floyd-snare.wav",
+          "title": "Snare 108"
+        },
+        {
+          "file": "trap-kit/snare/k.e-on-the-track-808-sd-14-1.wav",
+          "title": "Snare 109"
+        },
+        {
+          "file": "trap-kit/snare/k.e-on-the-track-808-sd-14.wav",
+          "title": "Snare 110"
+        },
+        {
+          "file": "trap-kit/snare/kryptic-samples-snare-epic-1.wav",
+          "title": "Snare 111"
+        },
+        {
+          "file": "trap-kit/snare/kryptic-samples-snare-epic.wav",
+          "title": "Snare 112"
+        },
+        {
+          "file": "trap-kit/snare/lex_luger_snare_tmoglg-1.wav",
+          "title": "Snare 113"
+        },
+        {
+          "file": "trap-kit/snare/lex_luger_snare_tmoglg.wav",
+          "title": "Snare 114"
+        },
+        {
+          "file": "trap-kit/snare/lexlugersnare-1.wav",
+          "title": "Snare 115"
+        },
+        {
+          "file": "trap-kit/snare/lexlugersnare.wav",
+          "title": "Snare 116"
+        },
+        {
+          "file": "trap-kit/snare/mb-snare-15-1.wav",
+          "title": "Snare 117"
+        },
+        {
+          "file": "trap-kit/snare/mb-snare-15.wav",
+          "title": "Snare 118"
+        },
+        {
+          "file": "trap-kit/snare/more-epic-snare-1.wav",
+          "title": "Snare 119"
+        },
+        {
+          "file": "trap-kit/snare/more-epic-snare.wav",
+          "title": "Snare 120"
+        },
+        {
+          "file": "trap-kit/snare/new-snare-1.wav",
+          "title": "Snare 121"
+        },
+        {
+          "file": "trap-kit/snare/new-snare.wav",
+          "title": "Snare 122"
+        },
+        {
+          "file": "trap-kit/snare/old-skool-snare-1.wav",
+          "title": "Snare 123"
+        },
+        {
+          "file": "trap-kit/snare/old-skool-snare.wav",
+          "title": "Snare 124"
+        },
+        {
+          "file": "trap-kit/snare/pbs-sn-trunk-snare-2.0-1.wav",
+          "title": "Snare 125"
+        },
+        {
+          "file": "trap-kit/snare/pbs-sn-trunk-snare-2.0.wav",
+          "title": "Snare 126"
+        },
+        {
+          "file": "trap-kit/snare/pbs-sn-trunk-snare-3.0-1.wav",
+          "title": "Snare 127"
+        },
+        {
+          "file": "trap-kit/snare/pbs-sn-trunk-snare-3.0.wav",
+          "title": "Snare 128"
+        },
+        {
+          "file": "trap-kit/snare/pink-white-snare-1.wav",
+          "title": "Snare 129"
+        },
+        {
+          "file": "trap-kit/snare/pink-white-snare.wav",
+          "title": "Snare 130"
+        },
+        {
+          "file": "trap-kit/snare/pull-up-snare-1.wav",
+          "title": "Snare 131"
+        },
+        {
+          "file": "trap-kit/snare/pull-up-snare.wav",
+          "title": "Snare 132"
+        },
+        {
+          "file": "trap-kit/snare/raz-snare-sizz-rex-ctm-1.wav",
+          "title": "Snare 133"
+        },
+        {
+          "file": "trap-kit/snare/raz-snare-sizz-rex-ctm.wav",
+          "title": "Snare 134"
+        },
+        {
+          "file": "trap-kit/snare/redd-snare-15-1.wav",
+          "title": "Snare 135"
+        },
+        {
+          "file": "trap-kit/snare/redd-snare-15.wav",
+          "title": "Snare 136"
+        },
+        {
+          "file": "trap-kit/snare/september-snare-1.wav",
+          "title": "Snare 137"
+        },
+        {
+          "file": "trap-kit/snare/september-snare.wav",
+          "title": "Snare 138"
+        },
+        {
+          "file": "trap-kit/snare/snare_clap_02-1.wav",
+          "title": "Snare 139"
+        },
+        {
+          "file": "trap-kit/snare/snare_clap_02.wav",
+          "title": "Snare 140"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-1.wav",
+          "title": "Snare 141"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-2.wav",
+          "title": "Snare 142"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-3-mafia-1.wav",
+          "title": "Snare 143"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-3-mafia.wav",
+          "title": "Snare 144"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-3.wav",
+          "title": "Snare 145"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-4.wav",
+          "title": "Snare 146"
+        },
+        {
+          "file": "trap-kit/snare/snare-1-5.wav",
+          "title": "Snare 147"
+        },
+        {
+          "file": "trap-kit/snare/snare-1.wav",
+          "title": "Snare 148"
+        },
+        {
+          "file": "trap-kit/snare/snare-10-1.wav",
+          "title": "Snare 149"
+        },
+        {
+          "file": "trap-kit/snare/snare-10.wav",
+          "title": "Snare 150"
+        },
+        {
+          "file": "trap-kit/snare/snare-11-1.wav",
+          "title": "Snare 151"
+        },
+        {
+          "file": "trap-kit/snare/snare-11.wav",
+          "title": "Snare 152"
+        },
+        {
+          "file": "trap-kit/snare/snare-12-1.wav",
+          "title": "Snare 153"
+        },
+        {
+          "file": "trap-kit/snare/snare-12.wav",
+          "title": "Snare 154"
+        },
+        {
+          "file": "trap-kit/snare/snare-13-1.wav",
+          "title": "Snare 155"
+        },
+        {
+          "file": "trap-kit/snare/snare-13.wav",
+          "title": "Snare 156"
+        },
+        {
+          "file": "trap-kit/snare/snare-14-1.wav",
+          "title": "Snare 157"
+        },
+        {
+          "file": "trap-kit/snare/snare-14.wav",
+          "title": "Snare 158"
+        },
+        {
+          "file": "trap-kit/snare/snare-15-1.wav",
+          "title": "Snare 159"
+        },
+        {
+          "file": "trap-kit/snare/snare-15.wav",
+          "title": "Snare 160"
+        },
+        {
+          "file": "trap-kit/snare/snare-16-1.wav",
+          "title": "Snare 161"
+        },
+        {
+          "file": "trap-kit/snare/snare-16.wav",
+          "title": "Snare 162"
+        },
+        {
+          "file": "trap-kit/snare/snare-17-1.wav",
+          "title": "Snare 163"
+        },
+        {
+          "file": "trap-kit/snare/snare-17.wav",
+          "title": "Snare 164"
+        },
+        {
+          "file": "trap-kit/snare/snare-18-1.wav",
+          "title": "Snare 165"
+        },
+        {
+          "file": "trap-kit/snare/snare-18.wav",
+          "title": "Snare 166"
+        },
+        {
+          "file": "trap-kit/snare/snare-19-1.wav",
+          "title": "Snare 167"
+        },
+        {
+          "file": "trap-kit/snare/snare-19.wav",
+          "title": "Snare 168"
+        },
+        {
+          "file": "trap-kit/snare/snare-2-1.wav",
+          "title": "Snare 169"
+        },
+        {
+          "file": "trap-kit/snare/snare-2-2.wav",
+          "title": "Snare 170"
+        },
+        {
+          "file": "trap-kit/snare/snare-2-3.wav",
+          "title": "Snare 171"
+        },
+        {
+          "file": "trap-kit/snare/snare-2.wav",
+          "title": "Snare 172"
+        },
+        {
+          "file": "trap-kit/snare/snare-20-1.wav",
+          "title": "Snare 173"
+        },
+        {
+          "file": "trap-kit/snare/snare-20.wav",
+          "title": "Snare 174"
+        },
+        {
+          "file": "trap-kit/snare/snare-21.wav",
+          "title": "Snare 175"
+        },
+        {
+          "file": "trap-kit/snare/snare-22.wav",
+          "title": "Snare 176"
+        },
+        {
+          "file": "trap-kit/snare/snare-23.wav",
+          "title": "Snare 177"
+        },
+        {
+          "file": "trap-kit/snare/snare-24.wav",
+          "title": "Snare 178"
+        },
+        {
+          "file": "trap-kit/snare/snare-25.wav",
+          "title": "Snare 179"
+        },
+        {
+          "file": "trap-kit/snare/snare-26.wav",
+          "title": "Snare 180"
+        },
+        {
+          "file": "trap-kit/snare/snare-27.wav",
+          "title": "Snare 181"
+        },
+        {
+          "file": "trap-kit/snare/snare-28.wav",
+          "title": "Snare 182"
+        },
+        {
+          "file": "trap-kit/snare/snare-29.wav",
+          "title": "Snare 183"
+        },
+        {
+          "file": "trap-kit/snare/snare-3-1.wav",
+          "title": "Snare 184"
+        },
+        {
+          "file": "trap-kit/snare/snare-3-2.wav",
+          "title": "Snare 185"
+        },
+        {
+          "file": "trap-kit/snare/snare-3.wav",
+          "title": "Snare 186"
+        },
+        {
+          "file": "trap-kit/snare/snare-4.wav",
+          "title": "Snare 187"
+        },
+        {
+          "file": "trap-kit/snare/snare-5-1.wav",
+          "title": "Snare 188"
+        },
+        {
+          "file": "trap-kit/snare/snare-5.wav",
+          "title": "Snare 189"
+        },
+        {
+          "file": "trap-kit/snare/snare-54-1.wav",
+          "title": "Snare 190"
+        },
+        {
+          "file": "trap-kit/snare/snare-54.wav",
+          "title": "Snare 191"
+        },
+        {
+          "file": "trap-kit/snare/snare-6-1.wav",
+          "title": "Snare 192"
+        },
+        {
+          "file": "trap-kit/snare/snare-6-2.wav",
+          "title": "Snare 193"
+        },
+        {
+          "file": "trap-kit/snare/snare-6-3.wav",
+          "title": "Snare 194"
+        },
+        {
+          "file": "trap-kit/snare/snare-6.wav",
+          "title": "Snare 195"
+        },
+        {
+          "file": "trap-kit/snare/snare-7-1.wav",
+          "title": "Snare 196"
+        },
+        {
+          "file": "trap-kit/snare/snare-7.wav",
+          "title": "Snare 197"
+        },
+        {
+          "file": "trap-kit/snare/snare-8-1.wav",
+          "title": "Snare 198"
+        },
+        {
+          "file": "trap-kit/snare/snare-8.wav",
+          "title": "Snare 199"
+        },
+        {
+          "file": "trap-kit/snare/snare-9-1.wav",
+          "title": "Snare 200"
+        },
+        {
+          "file": "trap-kit/snare/snare-9-2.wav",
+          "title": "Snare 201"
+        },
+        {
+          "file": "trap-kit/snare/snare-9-3.wav",
+          "title": "Snare 202"
+        },
+        {
+          "file": "trap-kit/snare/snare-9.wav",
+          "title": "Snare 203"
+        },
+        {
+          "file": "trap-kit/snare/snare-hit-1.wav",
+          "title": "Snare 204"
+        },
+        {
+          "file": "trap-kit/snare/snare-hit-2.wav",
+          "title": "Snare 205"
+        },
+        {
+          "file": "trap-kit/snare/snare-hit-3.wav",
+          "title": "Snare 206"
+        },
+        {
+          "file": "trap-kit/snare/snare-hit.wav",
+          "title": "Snare 207"
+        },
+        {
+          "file": "trap-kit/snare/snare-pink-slip-1.wav",
+          "title": "Snare 208"
+        },
+        {
+          "file": "trap-kit/snare/snare-pink-slip.wav",
+          "title": "Snare 209"
+        },
+        {
+          "file": "trap-kit/snare/snare-roll-1.wav",
+          "title": "Snare 210"
+        },
+        {
+          "file": "trap-kit/snare/snare-roll.wav",
+          "title": "Snare 211"
+        },
+        {
+          "file": "trap-kit/snare/snare-throne-1.wav",
+          "title": "Snare 212"
+        },
+        {
+          "file": "trap-kit/snare/snare-throne.wav",
+          "title": "Snare 213"
+        },
+        {
+          "file": "trap-kit/snare/snare-trapaholics_waka-snare-very-overused-1.wav",
+          "title": "Snare 214"
+        },
+        {
+          "file": "trap-kit/snare/snare-trapaholics_waka-snare-very-overused.wav",
+          "title": "Snare 215"
+        },
+        {
+          "file": "trap-kit/snare/snare.wav",
+          "title": "Snare 216"
+        },
+        {
+          "file": "trap-kit/snare/snr-tarentino-1.wav",
+          "title": "Snare 217"
+        },
+        {
+          "file": "trap-kit/snare/snr-tarentino.wav",
+          "title": "Snare 218"
+        },
+        {
+          "file": "trap-kit/snare/solidasssnare-1.wav",
+          "title": "Snare 219"
+        },
+        {
+          "file": "trap-kit/snare/solidasssnare.wav",
+          "title": "Snare 220"
+        },
+        {
+          "file": "trap-kit/snare/tlc---trunk-snare-1.wav",
+          "title": "Snare 221"
+        },
+        {
+          "file": "trap-kit/snare/tlc---trunk-snare.wav",
+          "title": "Snare 222"
+        },
+        {
+          "file": "trap-kit/snare/to---trunk-snare-1.wav",
+          "title": "Snare 223"
+        },
+        {
+          "file": "trap-kit/snare/to---trunk-snare.wav",
+          "title": "Snare 224"
+        },
+        {
+          "file": "trap-kit/snare/toomp-sd-1.wav",
+          "title": "Snare 225"
+        },
+        {
+          "file": "trap-kit/snare/toomp-sd-2-1.wav",
+          "title": "Snare 226"
+        },
+        {
+          "file": "trap-kit/snare/toomp-sd-2.wav",
+          "title": "Snare 227"
+        },
+        {
+          "file": "trap-kit/snare/toomp-sd.wav",
+          "title": "Snare 228"
+        },
+        {
+          "file": "trap-kit/snare/torture-rack-snare-1.wav",
+          "title": "Snare 229"
+        },
+        {
+          "file": "trap-kit/snare/torture-rack-snare.wav",
+          "title": "Snare 230"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic_snare-1.wav",
+          "title": "Snare 231"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic_snare.wav",
+          "title": "Snare 232"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-1-1.wav",
+          "title": "Snare 233"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-1.wav",
+          "title": "Snare 234"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-10-1.wav",
+          "title": "Snare 235"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-10.wav",
+          "title": "Snare 236"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-11-1.wav",
+          "title": "Snare 237"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-11.wav",
+          "title": "Snare 238"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-12-1.wav",
+          "title": "Snare 239"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-12.wav",
+          "title": "Snare 240"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-13-1.wav",
+          "title": "Snare 241"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-13.wav",
+          "title": "Snare 242"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-14-1.wav",
+          "title": "Snare 243"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-14.wav",
+          "title": "Snare 244"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-15-1.wav",
+          "title": "Snare 245"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-15.wav",
+          "title": "Snare 246"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-16.wav",
+          "title": "Snare 247"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-2-1.wav",
+          "title": "Snare 248"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-2.wav",
+          "title": "Snare 249"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-3-1.wav",
+          "title": "Snare 250"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-3.wav",
+          "title": "Snare 251"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-4-1.wav",
+          "title": "Snare 252"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-4.wav",
+          "title": "Snare 253"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-5-1.wav",
+          "title": "Snare 254"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-5.wav",
+          "title": "Snare 255"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-6-1.wav",
+          "title": "Snare 256"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-6.wav",
+          "title": "Snare 257"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-7-1.wav",
+          "title": "Snare 258"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-7.wav",
+          "title": "Snare 259"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-8-1.wav",
+          "title": "Snare 260"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-8.wav",
+          "title": "Snare 261"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-9-1.wav",
+          "title": "Snare 262"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare-9.wav",
+          "title": "Snare 263"
+        },
+        {
+          "file": "trap-kit/snare/trapaholic-snare.wav",
+          "title": "Snare 264"
+        },
+        {
+          "file": "trap-kit/snare/trunk-snare-1.wav",
+          "title": "Snare 265"
+        },
+        {
+          "file": "trap-kit/snare/trunk-snare-4-1.wav",
+          "title": "Snare 266"
+        },
+        {
+          "file": "trap-kit/snare/trunk-snare-4.wav",
+          "title": "Snare 267"
+        },
+        {
+          "file": "trap-kit/snare/trunk-snare-5-1.wav",
+          "title": "Snare 268"
+        },
+        {
+          "file": "trap-kit/snare/trunk-snare-5.wav",
+          "title": "Snare 269"
+        },
+        {
+          "file": "trap-kit/snare/trunk-snare.wav",
+          "title": "Snare 270"
+        },
+        {
+          "file": "trap-kit/snare/vintage-snare-1.wav",
+          "title": "Snare 271"
+        },
+        {
+          "file": "trap-kit/snare/vintage-snare-2.wav",
+          "title": "Snare 272"
+        },
+        {
+          "file": "trap-kit/snare/vintage-snare-3.wav",
+          "title": "Snare 273"
+        },
+        {
+          "file": "trap-kit/snare/vintage-snare.wav",
+          "title": "Snare 274"
+        },
+        {
+          "file": "trap-kit/snare/vybeempiresnare-1.wav",
+          "title": "Snare 275"
+        },
+        {
+          "file": "trap-kit/snare/vybeempiresnare.wav",
+          "title": "Snare 276"
+        },
+        {
+          "file": "trap-kit/snare/vybesnare2-1.wav",
+          "title": "Snare 277"
+        },
+        {
+          "file": "trap-kit/snare/vybesnare2.wav",
+          "title": "Snare 278"
+        },
+        {
+          "file": "trap-kit/snare/wizsnare-1.wav",
+          "title": "Snare 279"
+        },
+        {
+          "file": "trap-kit/snare/wizsnare.wav",
+          "title": "Snare 280"
+        },
+        {
+          "file": "trap-kit/snare/wu-rza-snare-8-1.wav",
+          "title": "Snare 281"
+        },
+        {
+          "file": "trap-kit/snare/wu-rza-snare-8.wav",
+          "title": "Snare 282"
+        },
+        {
+          "file": "trap-kit/snare/zay-snr-sso-1.wav",
+          "title": "Snare 283"
+        },
+        {
+          "file": "trap-kit/snare/zay-snr-sso.wav",
+          "title": "Snare 284"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven_snare_1-1.wav",
+          "title": "Snare 285"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven_snare_1.wav",
+          "title": "Snare 286"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven-snare-1.wav",
+          "title": "Snare 287"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven-snare-2-1.wav",
+          "title": "Snare 288"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven-snare-2.wav",
+          "title": "Snare 289"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven-snare-3-1.wav",
+          "title": "Snare 290"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven-snare-3.wav",
+          "title": "Snare 291"
+        },
+        {
+          "file": "trap-kit/snare/zaytoven-snare.wav",
+          "title": "Snare 292"
+        }
+      ]
+    },
+    {
+      "id": "clap",
+      "label": "Clap",
+      "defaultPad": 2,
+      "samples": [
+        {
+          "file": "trap-kit/clap/bow-clap1-1.wav",
+          "title": "Clap 001"
+        },
+        {
+          "file": "trap-kit/clap/bow-clap1.wav",
+          "title": "Clap 002"
+        },
+        {
+          "file": "trap-kit/clap/cahitz-rev-clap-1.wav",
+          "title": "Clap 003"
+        },
+        {
+          "file": "trap-kit/clap/cahitz-rev-clap.wav",
+          "title": "Clap 004"
+        },
+        {
+          "file": "trap-kit/clap/clap-15-1.wav",
+          "title": "Clap 005"
+        },
+        {
+          "file": "trap-kit/clap/clap-15.wav",
+          "title": "Clap 006"
+        },
+        {
+          "file": "trap-kit/clap/clap-2-1.wav",
+          "title": "Clap 007"
+        },
+        {
+          "file": "trap-kit/clap/clap-2.wav",
+          "title": "Clap 008"
+        },
+        {
+          "file": "trap-kit/clap/clap-3-1.wav",
+          "title": "Clap 009"
+        },
+        {
+          "file": "trap-kit/clap/clap-3.wav",
+          "title": "Clap 010"
+        },
+        {
+          "file": "trap-kit/clap/clap-4-1.wav",
+          "title": "Clap 011"
+        },
+        {
+          "file": "trap-kit/clap/clap-4-2.wav",
+          "title": "Clap 012"
+        },
+        {
+          "file": "trap-kit/clap/clap-4-3.wav",
+          "title": "Clap 013"
+        },
+        {
+          "file": "trap-kit/clap/clap-4.wav",
+          "title": "Clap 014"
+        },
+        {
+          "file": "trap-kit/clap/clap-6-1.wav",
+          "title": "Clap 015"
+        },
+        {
+          "file": "trap-kit/clap/clap-6.wav",
+          "title": "Clap 016"
+        },
+        {
+          "file": "trap-kit/clap/clap-7-1.wav",
+          "title": "Clap 017"
+        },
+        {
+          "file": "trap-kit/clap/clap-7.wav",
+          "title": "Clap 018"
+        },
+        {
+          "file": "trap-kit/clap/clap-epicdistant-1.wav",
+          "title": "Clap 019"
+        },
+        {
+          "file": "trap-kit/clap/clap-epicdistant.wav",
+          "title": "Clap 020"
+        },
+        {
+          "file": "trap-kit/clap/clap-jc-1.wav",
+          "title": "Clap 021"
+        },
+        {
+          "file": "trap-kit/clap/clap-jc.wav",
+          "title": "Clap 022"
+        },
+        {
+          "file": "trap-kit/clap/clapppp-1.wav",
+          "title": "Clap 023"
+        },
+        {
+          "file": "trap-kit/clap/clapppp.wav",
+          "title": "Clap 024"
+        },
+        {
+          "file": "trap-kit/clap/clp-bouldercrest-1.wav",
+          "title": "Clap 025"
+        },
+        {
+          "file": "trap-kit/clap/clp-bouldercrest-2-1.wav",
+          "title": "Clap 026"
+        },
+        {
+          "file": "trap-kit/clap/clp-bouldercrest-2.wav",
+          "title": "Clap 027"
+        },
+        {
+          "file": "trap-kit/clap/clp-bouldercrest-3-1.wav",
+          "title": "Clap 028"
+        },
+        {
+          "file": "trap-kit/clap/clp-bouldercrest-3.wav",
+          "title": "Clap 029"
+        },
+        {
+          "file": "trap-kit/clap/clp-bouldercrest.wav",
+          "title": "Clap 030"
+        },
+        {
+          "file": "trap-kit/clap/clp-pyrex---loop_2-1.wav",
+          "title": "Clap 031"
+        },
+        {
+          "file": "trap-kit/clap/clp-pyrex---loop_2.wav",
+          "title": "Clap 032"
+        },
+        {
+          "file": "trap-kit/clap/db---claps-snares-27-1.wav",
+          "title": "Clap 033"
+        },
+        {
+          "file": "trap-kit/clap/db---claps-snares-27.wav",
+          "title": "Clap 034"
+        },
+        {
+          "file": "trap-kit/clap/ddb-clap-2-1.wav",
+          "title": "Clap 035"
+        },
+        {
+          "file": "trap-kit/clap/ddb-clap-2.wav",
+          "title": "Clap 036"
+        },
+        {
+          "file": "trap-kit/clap/ddw2-clap-1-1.wav",
+          "title": "Clap 037"
+        },
+        {
+          "file": "trap-kit/clap/ddw2-clap-1.wav",
+          "title": "Clap 038"
+        },
+        {
+          "file": "trap-kit/clap/ddw2-clap-2-1.wav",
+          "title": "Clap 039"
+        },
+        {
+          "file": "trap-kit/clap/ddw2-clap-2.wav",
+          "title": "Clap 040"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-1-1.wav",
+          "title": "Clap 041"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-1.wav",
+          "title": "Clap 042"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-10-1.wav",
+          "title": "Clap 043"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-10.wav",
+          "title": "Clap 044"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-2-1.wav",
+          "title": "Clap 045"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-2.wav",
+          "title": "Clap 046"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-3-1.wav",
+          "title": "Clap 047"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-3.wav",
+          "title": "Clap 048"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-4-1.wav",
+          "title": "Clap 049"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-4.wav",
+          "title": "Clap 050"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-5-1.wav",
+          "title": "Clap 051"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-5.wav",
+          "title": "Clap 052"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-6-1.wav",
+          "title": "Clap 053"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-6.wav",
+          "title": "Clap 054"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-7-1.wav",
+          "title": "Clap 055"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-7.wav",
+          "title": "Clap 056"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-8-1.wav",
+          "title": "Clap 057"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-8.wav",
+          "title": "Clap 058"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-9-1.wav",
+          "title": "Clap 059"
+        },
+        {
+          "file": "trap-kit/clap/deedotluger-clap-9.wav",
+          "title": "Clap 060"
+        },
+        {
+          "file": "trap-kit/clap/hard-clap-1.wav",
+          "title": "Clap 061"
+        },
+        {
+          "file": "trap-kit/clap/hard-clap.wav",
+          "title": "Clap 062"
+        },
+        {
+          "file": "trap-kit/clap/jb---claps-snares-28-1.wav",
+          "title": "Clap 063"
+        },
+        {
+          "file": "trap-kit/clap/jb---claps-snares-28.wav",
+          "title": "Clap 064"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-1-1.wav",
+          "title": "Clap 065"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-1.wav",
+          "title": "Clap 066"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-2-1.wav",
+          "title": "Clap 067"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-2.wav",
+          "title": "Clap 068"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-3-1.wav",
+          "title": "Clap 069"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-3.wav",
+          "title": "Clap 070"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-4-1.wav",
+          "title": "Clap 071"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-4.wav",
+          "title": "Clap 072"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-5-1.wav",
+          "title": "Clap 073"
+        },
+        {
+          "file": "trap-kit/clap/jc---clap-5.wav",
+          "title": "Clap 074"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-1-1.wav",
+          "title": "Clap 075"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-1.wav",
+          "title": "Clap 076"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-12-1.wav",
+          "title": "Clap 077"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-12.wav",
+          "title": "Clap 078"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-15-1.wav",
+          "title": "Clap 079"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-15.wav",
+          "title": "Clap 080"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-6-1.wav",
+          "title": "Clap 081"
+        },
+        {
+          "file": "trap-kit/clap/jc-clap-6.wav",
+          "title": "Clap 082"
+        },
+        {
+          "file": "trap-kit/clap/purps-clap-3-1.wav",
+          "title": "Clap 083"
+        },
+        {
+          "file": "trap-kit/clap/purps-clap-3.wav",
+          "title": "Clap 084"
+        },
+        {
+          "file": "trap-kit/clap/pyrex-clap-4-_2-1.wav",
+          "title": "Clap 085"
+        },
+        {
+          "file": "trap-kit/clap/pyrex-clap-4-_2.wav",
+          "title": "Clap 086"
+        },
+        {
+          "file": "trap-kit/clap/revclap-luckyfool-1.wav",
+          "title": "Clap 087"
+        },
+        {
+          "file": "trap-kit/clap/revclap-luckyfool.wav",
+          "title": "Clap 088"
+        },
+        {
+          "file": "trap-kit/clap/show-me-rev-clap-1.wav",
+          "title": "Clap 089"
+        },
+        {
+          "file": "trap-kit/clap/show-me-rev-clap.wav",
+          "title": "Clap 090"
+        },
+        {
+          "file": "trap-kit/clap/slap-clap-1.wav",
+          "title": "Clap 091"
+        },
+        {
+          "file": "trap-kit/clap/slap-clap.wav",
+          "title": "Clap 092"
+        },
+        {
+          "file": "trap-kit/clap/soft-clap-1.wav",
+          "title": "Clap 093"
+        },
+        {
+          "file": "trap-kit/clap/soft-clap.wav",
+          "title": "Clap 094"
+        },
+        {
+          "file": "trap-kit/clap/southside-clap-1.wav",
+          "title": "Clap 095"
+        },
+        {
+          "file": "trap-kit/clap/southside-clap.wav",
+          "title": "Clap 096"
+        },
+        {
+          "file": "trap-kit/clap/tarentino-clap-1.wav",
+          "title": "Clap 097"
+        },
+        {
+          "file": "trap-kit/clap/tarentino-clap.wav",
+          "title": "Clap 098"
+        },
+        {
+          "file": "trap-kit/clap/tm-88-clap-1.wav",
+          "title": "Clap 099"
+        },
+        {
+          "file": "trap-kit/clap/tm-88-clap.wav",
+          "title": "Clap 100"
+        },
+        {
+          "file": "trap-kit/clap/tm88-softclap-1.wav",
+          "title": "Clap 101"
+        },
+        {
+          "file": "trap-kit/clap/tm88-softclap.wav",
+          "title": "Clap 102"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-1-1.wav",
+          "title": "Clap 103"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-1.wav",
+          "title": "Clap 104"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-10-1.wav",
+          "title": "Clap 105"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-10.wav",
+          "title": "Clap 106"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-11-1.wav",
+          "title": "Clap 107"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-11.wav",
+          "title": "Clap 108"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-12-1.wav",
+          "title": "Clap 109"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-12.wav",
+          "title": "Clap 110"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-13-1.wav",
+          "title": "Clap 111"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-13.wav",
+          "title": "Clap 112"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-14-1.wav",
+          "title": "Clap 113"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-14.wav",
+          "title": "Clap 114"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-15-1.wav",
+          "title": "Clap 115"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-15.wav",
+          "title": "Clap 116"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-16-1.wav",
+          "title": "Clap 117"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-16.wav",
+          "title": "Clap 118"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-17-1.wav",
+          "title": "Clap 119"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-17.wav",
+          "title": "Clap 120"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-18-1.wav",
+          "title": "Clap 121"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-18.wav",
+          "title": "Clap 122"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-19-1.wav",
+          "title": "Clap 123"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-19.wav",
+          "title": "Clap 124"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-2-1.wav",
+          "title": "Clap 125"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-2.wav",
+          "title": "Clap 126"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-20-1.wav",
+          "title": "Clap 127"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-20.wav",
+          "title": "Clap 128"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-21-1.wav",
+          "title": "Clap 129"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-21.wav",
+          "title": "Clap 130"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-22-1.wav",
+          "title": "Clap 131"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-22.wav",
+          "title": "Clap 132"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-23-1.wav",
+          "title": "Clap 133"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-23.wav",
+          "title": "Clap 134"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-24-1.wav",
+          "title": "Clap 135"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-24.wav",
+          "title": "Clap 136"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-25-1.wav",
+          "title": "Clap 137"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-25.wav",
+          "title": "Clap 138"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-3-1.wav",
+          "title": "Clap 139"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-3.wav",
+          "title": "Clap 140"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-4-1.wav",
+          "title": "Clap 141"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-4.wav",
+          "title": "Clap 142"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-5-1.wav",
+          "title": "Clap 143"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-5.wav",
+          "title": "Clap 144"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-6-1.wav",
+          "title": "Clap 145"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-6.wav",
+          "title": "Clap 146"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-7-1.wav",
+          "title": "Clap 147"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-7.wav",
+          "title": "Clap 148"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-8-1.wav",
+          "title": "Clap 149"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-8.wav",
+          "title": "Clap 150"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-9-1.wav",
+          "title": "Clap 151"
+        },
+        {
+          "file": "trap-kit/clap/trapaholic-clap-9.wav",
+          "title": "Clap 152"
+        },
+        {
+          "file": "trap-kit/clap/vybelazyclap-1.wav",
+          "title": "Clap 153"
+        },
+        {
+          "file": "trap-kit/clap/vybelazyclap.wav",
+          "title": "Clap 154"
+        },
+        {
+          "file": "trap-kit/clap/yib-clap-1-1.wav",
+          "title": "Clap 155"
+        },
+        {
+          "file": "trap-kit/clap/yib-clap-1.wav",
+          "title": "Clap 156"
+        },
+        {
+          "file": "trap-kit/clap/zaytoven-snareclap-1.wav",
+          "title": "Clap 157"
+        },
+        {
+          "file": "trap-kit/clap/zaytoven-snareclap.wav",
+          "title": "Clap 158"
+        }
+      ]
+    },
+    {
+      "id": "hihat",
+      "label": "Hi-Hat",
+      "defaultPad": 3,
+      "samples": [
+        {
+          "file": "trap-kit/hihat/14-bouldercrest-2-1.wav",
+          "title": "Hi-Hat 001"
+        },
+        {
+          "file": "trap-kit/hihat/14-bouldercrest-2.wav",
+          "title": "Hi-Hat 002"
+        },
+        {
+          "file": "trap-kit/hihat/attack_hat16-1.wav",
+          "title": "Hi-Hat 003"
+        },
+        {
+          "file": "trap-kit/hihat/attack_hat16.wav",
+          "title": "Hi-Hat 004"
+        },
+        {
+          "file": "trap-kit/hihat/bedrock-hihat-1.wav",
+          "title": "Hi-Hat 005"
+        },
+        {
+          "file": "trap-kit/hihat/bedrock-hihat.wav",
+          "title": "Hi-Hat 006"
+        },
+        {
+          "file": "trap-kit/hihat/bwb-wav-7-hi-hat-16-1.wav",
+          "title": "Hi-Hat 007"
+        },
+        {
+          "file": "trap-kit/hihat/bwb-wav-7-hi-hat-16.wav",
+          "title": "Hi-Hat 008"
+        },
+        {
+          "file": "trap-kit/hihat/bz-redd-hihat-1.wav",
+          "title": "Hi-Hat 009"
+        },
+        {
+          "file": "trap-kit/hihat/bz-redd-hihat.wav",
+          "title": "Hi-Hat 010"
+        },
+        {
+          "file": "trap-kit/hihat/ddw-hat-1-1.wav",
+          "title": "Hi-Hat 011"
+        },
+        {
+          "file": "trap-kit/hihat/ddw-hat-1.wav",
+          "title": "Hi-Hat 012"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-1-1.wav",
+          "title": "Hi-Hat 013"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-1.wav",
+          "title": "Hi-Hat 014"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-10-1.wav",
+          "title": "Hi-Hat 015"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-10.wav",
+          "title": "Hi-Hat 016"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-2-1.wav",
+          "title": "Hi-Hat 017"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-2.wav",
+          "title": "Hi-Hat 018"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-3-1.wav",
+          "title": "Hi-Hat 019"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-3.wav",
+          "title": "Hi-Hat 020"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-4-1.wav",
+          "title": "Hi-Hat 021"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-4.wav",
+          "title": "Hi-Hat 022"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-5-1.wav",
+          "title": "Hi-Hat 023"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-5.wav",
+          "title": "Hi-Hat 024"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-6-1.wav",
+          "title": "Hi-Hat 025"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-6.wav",
+          "title": "Hi-Hat 026"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-7-1.wav",
+          "title": "Hi-Hat 027"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-7.wav",
+          "title": "Hi-Hat 028"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-8-1.wav",
+          "title": "Hi-Hat 029"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-8.wav",
+          "title": "Hi-Hat 030"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-9-1.wav",
+          "title": "Hi-Hat 031"
+        },
+        {
+          "file": "trap-kit/hihat/ddw2-hat-9.wav",
+          "title": "Hi-Hat 032"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-1-1.wav",
+          "title": "Hi-Hat 033"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-1.wav",
+          "title": "Hi-Hat 034"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-10-1.wav",
+          "title": "Hi-Hat 035"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-10.wav",
+          "title": "Hi-Hat 036"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-2-1.wav",
+          "title": "Hi-Hat 037"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-2.wav",
+          "title": "Hi-Hat 038"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-3-1.wav",
+          "title": "Hi-Hat 039"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-3.wav",
+          "title": "Hi-Hat 040"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-4-1.wav",
+          "title": "Hi-Hat 041"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-4.wav",
+          "title": "Hi-Hat 042"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-5-1.wav",
+          "title": "Hi-Hat 043"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-5.wav",
+          "title": "Hi-Hat 044"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-6-1.wav",
+          "title": "Hi-Hat 045"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-6.wav",
+          "title": "Hi-Hat 046"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-7-1.wav",
+          "title": "Hi-Hat 047"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-7.wav",
+          "title": "Hi-Hat 048"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-8-1.wav",
+          "title": "Hi-Hat 049"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-8.wav",
+          "title": "Hi-Hat 050"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-9-1.wav",
+          "title": "Hi-Hat 051"
+        },
+        {
+          "file": "trap-kit/hihat/deedotluger-hat-9.wav",
+          "title": "Hi-Hat 052"
+        },
+        {
+          "file": "trap-kit/hihat/drumma-boy-sound-8-_2-1.wav",
+          "title": "Hi-Hat 053"
+        },
+        {
+          "file": "trap-kit/hihat/drumma-boy-sound-8-_2.wav",
+          "title": "Hi-Hat 054"
+        },
+        {
+          "file": "trap-kit/hihat/hat_skool-1.wav",
+          "title": "Hi-Hat 055"
+        },
+        {
+          "file": "trap-kit/hihat/hat_skool.wav",
+          "title": "Hi-Hat 056"
+        },
+        {
+          "file": "trap-kit/hihat/hat-3-1.wav",
+          "title": "Hi-Hat 057"
+        },
+        {
+          "file": "trap-kit/hihat/hat-3.wav",
+          "title": "Hi-Hat 058"
+        },
+        {
+          "file": "trap-kit/hihat/hat-6-1.wav",
+          "title": "Hi-Hat 059"
+        },
+        {
+          "file": "trap-kit/hihat/hat-6.wav",
+          "title": "Hi-Hat 060"
+        },
+        {
+          "file": "trap-kit/hihat/hat16-1.wav",
+          "title": "Hi-Hat 061"
+        },
+        {
+          "file": "trap-kit/hihat/hat16-a-1.wav",
+          "title": "Hi-Hat 062"
+        },
+        {
+          "file": "trap-kit/hihat/hat16-a.wav",
+          "title": "Hi-Hat 063"
+        },
+        {
+          "file": "trap-kit/hihat/hat16.wav",
+          "title": "Hi-Hat 064"
+        },
+        {
+          "file": "trap-kit/hihat/hh---hihat-bouldercrest-1.wav",
+          "title": "Hi-Hat 065"
+        },
+        {
+          "file": "trap-kit/hihat/hh---hihat-bouldercrest.wav",
+          "title": "Hi-Hat 066"
+        },
+        {
+          "file": "trap-kit/hihat/hi-hat-5-1.wav",
+          "title": "Hi-Hat 067"
+        },
+        {
+          "file": "trap-kit/hihat/hi-hat-5.wav",
+          "title": "Hi-Hat 068"
+        },
+        {
+          "file": "trap-kit/hihat/hi-hat-trap-1.wav",
+          "title": "Hi-Hat 069"
+        },
+        {
+          "file": "trap-kit/hihat/hi-hat-trap.wav",
+          "title": "Hi-Hat 070"
+        },
+        {
+          "file": "trap-kit/hihat/hihat-bouldercrest-1.wav",
+          "title": "Hi-Hat 071"
+        },
+        {
+          "file": "trap-kit/hihat/hihat-bouldercrest.wav",
+          "title": "Hi-Hat 072"
+        },
+        {
+          "file": "trap-kit/hihat/hihat-pyrex-2-_2-1.wav",
+          "title": "Hi-Hat 073"
+        },
+        {
+          "file": "trap-kit/hihat/hihat-pyrex-2-_2.wav",
+          "title": "Hi-Hat 074"
+        },
+        {
+          "file": "trap-kit/hihat/hihat-pyrex-3-1.wav",
+          "title": "Hi-Hat 075"
+        },
+        {
+          "file": "trap-kit/hihat/hihat-pyrex-3.wav",
+          "title": "Hi-Hat 076"
+        },
+        {
+          "file": "trap-kit/hihat/hit-1-1.wav",
+          "title": "Hi-Hat 077"
+        },
+        {
+          "file": "trap-kit/hihat/hit-1.wav",
+          "title": "Hi-Hat 078"
+        },
+        {
+          "file": "trap-kit/hihat/hit-10-1.wav",
+          "title": "Hi-Hat 079"
+        },
+        {
+          "file": "trap-kit/hihat/hit-10.wav",
+          "title": "Hi-Hat 080"
+        },
+        {
+          "file": "trap-kit/hihat/k_hat16-1.wav",
+          "title": "Hi-Hat 081"
+        },
+        {
+          "file": "trap-kit/hihat/k_hat16.wav",
+          "title": "Hi-Hat 082"
+        },
+        {
+          "file": "trap-kit/hihat/lexlugerhihat_2-1.wav",
+          "title": "Hi-Hat 083"
+        },
+        {
+          "file": "trap-kit/hihat/lexlugerhihat_2.wav",
+          "title": "Hi-Hat 084"
+        },
+        {
+          "file": "trap-kit/hihat/lexlugerhihat-1.wav",
+          "title": "Hi-Hat 085"
+        },
+        {
+          "file": "trap-kit/hihat/lexlugerhihat.wav",
+          "title": "Hi-Hat 086"
+        },
+        {
+          "file": "trap-kit/hihat/lightsaber-hi-hat-1.wav",
+          "title": "Hi-Hat 087"
+        },
+        {
+          "file": "trap-kit/hihat/lightsaber-hi-hat.wav",
+          "title": "Hi-Hat 088"
+        },
+        {
+          "file": "trap-kit/hihat/lo-fi-closed-hat-2-1.wav",
+          "title": "Hi-Hat 089"
+        },
+        {
+          "file": "trap-kit/hihat/lo-fi-closed-hat-2.wav",
+          "title": "Hi-Hat 090"
+        },
+        {
+          "file": "trap-kit/hihat/major-trap-hat-2-1.wav",
+          "title": "Hi-Hat 091"
+        },
+        {
+          "file": "trap-kit/hihat/major-trap-hat-2.wav",
+          "title": "Hi-Hat 092"
+        },
+        {
+          "file": "trap-kit/hihat/mb-hi-hat-16-1.wav",
+          "title": "Hi-Hat 093"
+        },
+        {
+          "file": "trap-kit/hihat/mb-hi-hat-16.wav",
+          "title": "Hi-Hat 094"
+        },
+        {
+          "file": "trap-kit/hihat/not-decayed-hihat_5-1.wav",
+          "title": "Hi-Hat 095"
+        },
+        {
+          "file": "trap-kit/hihat/not-decayed-hihat_5.wav",
+          "title": "Hi-Hat 096"
+        },
+        {
+          "file": "trap-kit/hihat/pbs-hat_2-1.wav",
+          "title": "Hi-Hat 097"
+        },
+        {
+          "file": "trap-kit/hihat/pbs-hat_2.wav",
+          "title": "Hi-Hat 098"
+        },
+        {
+          "file": "trap-kit/hihat/pbs-hat-1.wav",
+          "title": "Hi-Hat 099"
+        },
+        {
+          "file": "trap-kit/hihat/pbs-hat.wav",
+          "title": "Hi-Hat 100"
+        },
+        {
+          "file": "trap-kit/hihat/ps2_hat-16-1.wav",
+          "title": "Hi-Hat 101"
+        },
+        {
+          "file": "trap-kit/hihat/ps2_hat-16.wav",
+          "title": "Hi-Hat 102"
+        },
+        {
+          "file": "trap-kit/hihat/psy-hat16-1.wav",
+          "title": "Hi-Hat 103"
+        },
+        {
+          "file": "trap-kit/hihat/psy-hat16.wav",
+          "title": "Hi-Hat 104"
+        },
+        {
+          "file": "trap-kit/hihat/shawty-redd-hat-1.wav",
+          "title": "Hi-Hat 105"
+        },
+        {
+          "file": "trap-kit/hihat/shawty-redd-hat.wav",
+          "title": "Hi-Hat 106"
+        },
+        {
+          "file": "trap-kit/hihat/soufside-hat-1.wav",
+          "title": "Hi-Hat 107"
+        },
+        {
+          "file": "trap-kit/hihat/soufside-hat.wav",
+          "title": "Hi-Hat 108"
+        },
+        {
+          "file": "trap-kit/hihat/ssohatclosed3-1.wav",
+          "title": "Hi-Hat 109"
+        },
+        {
+          "file": "trap-kit/hihat/ssohatclosed3.wav",
+          "title": "Hi-Hat 110"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats0-1.wav",
+          "title": "Hi-Hat 111"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats0.wav",
+          "title": "Hi-Hat 112"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats1-1.wav",
+          "title": "Hi-Hat 113"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats1.wav",
+          "title": "Hi-Hat 114"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats10-1.wav",
+          "title": "Hi-Hat 115"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats10.wav",
+          "title": "Hi-Hat 116"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats11-1.wav",
+          "title": "Hi-Hat 117"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats11.wav",
+          "title": "Hi-Hat 118"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats12-1.wav",
+          "title": "Hi-Hat 119"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats12.wav",
+          "title": "Hi-Hat 120"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats13-1.wav",
+          "title": "Hi-Hat 121"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats13.wav",
+          "title": "Hi-Hat 122"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats14-1.wav",
+          "title": "Hi-Hat 123"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats14.wav",
+          "title": "Hi-Hat 124"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats15-1.wav",
+          "title": "Hi-Hat 125"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats15.wav",
+          "title": "Hi-Hat 126"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats16-1.wav",
+          "title": "Hi-Hat 127"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats16.wav",
+          "title": "Hi-Hat 128"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats17-1.wav",
+          "title": "Hi-Hat 129"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats17.wav",
+          "title": "Hi-Hat 130"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats18-1.wav",
+          "title": "Hi-Hat 131"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats18.wav",
+          "title": "Hi-Hat 132"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats19-1.wav",
+          "title": "Hi-Hat 133"
+        },
+        {
+          "file": "trap-kit/hihat/t6-hats19.wav",
+          "title": "Hi-Hat 134"
+        },
+        {
+          "file": "trap-kit/hihat/trap-hat-2-1.wav",
+          "title": "Hi-Hat 135"
+        },
+        {
+          "file": "trap-kit/hihat/trap-hat-2.wav",
+          "title": "Hi-Hat 136"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-1-1.wav",
+          "title": "Hi-Hat 137"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-1.wav",
+          "title": "Hi-Hat 138"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-10-1.wav",
+          "title": "Hi-Hat 139"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-10.wav",
+          "title": "Hi-Hat 140"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-11-1.wav",
+          "title": "Hi-Hat 141"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-11.wav",
+          "title": "Hi-Hat 142"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-12-1.wav",
+          "title": "Hi-Hat 143"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-12.wav",
+          "title": "Hi-Hat 144"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-14-1.wav",
+          "title": "Hi-Hat 145"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-14.wav",
+          "title": "Hi-Hat 146"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-2-1.wav",
+          "title": "Hi-Hat 147"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-2.wav",
+          "title": "Hi-Hat 148"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-20-1.wav",
+          "title": "Hi-Hat 149"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-20.wav",
+          "title": "Hi-Hat 150"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-23-1.wav",
+          "title": "Hi-Hat 151"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-23.wav",
+          "title": "Hi-Hat 152"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-24-1.wav",
+          "title": "Hi-Hat 153"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-24.wav",
+          "title": "Hi-Hat 154"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-3-1.wav",
+          "title": "Hi-Hat 155"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-3.wav",
+          "title": "Hi-Hat 156"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-4-1.wav",
+          "title": "Hi-Hat 157"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-4.wav",
+          "title": "Hi-Hat 158"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-5-1.wav",
+          "title": "Hi-Hat 159"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-5.wav",
+          "title": "Hi-Hat 160"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-6-1.wav",
+          "title": "Hi-Hat 161"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-6.wav",
+          "title": "Hi-Hat 162"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-7-1.wav",
+          "title": "Hi-Hat 163"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-7.wav",
+          "title": "Hi-Hat 164"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-8-1.wav",
+          "title": "Hi-Hat 165"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-8.wav",
+          "title": "Hi-Hat 166"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-9-1.wav",
+          "title": "Hi-Hat 167"
+        },
+        {
+          "file": "trap-kit/hihat/trapaholic-hihat-9.wav",
+          "title": "Hi-Hat 168"
+        },
+        {
+          "file": "trap-kit/hihat/vybe809hihat-1.wav",
+          "title": "Hi-Hat 169"
+        },
+        {
+          "file": "trap-kit/hihat/vybe809hihat.wav",
+          "title": "Hi-Hat 170"
+        },
+        {
+          "file": "trap-kit/hihat/vybe809hihat2-1.wav",
+          "title": "Hi-Hat 171"
+        },
+        {
+          "file": "trap-kit/hihat/vybe809hihat2.wav",
+          "title": "Hi-Hat 172"
+        },
+        {
+          "file": "trap-kit/hihat/vybe809hihat3-1.wav",
+          "title": "Hi-Hat 173"
+        },
+        {
+          "file": "trap-kit/hihat/vybe809hihat3.wav",
+          "title": "Hi-Hat 174"
+        }
+      ]
+    },
+    {
+      "id": "open-hat",
+      "label": "Open Hat",
+      "defaultPad": 4,
+      "samples": [
+        {
+          "file": "trap-kit/open-hat/acd---hat-1.wav",
+          "title": "Open Hat 001"
+        },
+        {
+          "file": "trap-kit/open-hat/acd---hat.wav",
+          "title": "Open Hat 002"
+        },
+        {
+          "file": "trap-kit/open-hat/bz-redd-op-hat-1.wav",
+          "title": "Open Hat 003"
+        },
+        {
+          "file": "trap-kit/open-hat/bz-redd-op-hat.wav",
+          "title": "Open Hat 004"
+        },
+        {
+          "file": "trap-kit/open-hat/cl_ohh1-1.wav",
+          "title": "Open Hat 005"
+        },
+        {
+          "file": "trap-kit/open-hat/cl_ohh1.wav",
+          "title": "Open Hat 006"
+        },
+        {
+          "file": "trap-kit/open-hat/dd_hat16-1.wav",
+          "title": "Open Hat 007"
+        },
+        {
+          "file": "trap-kit/open-hat/dd_hat16.wav",
+          "title": "Open Hat 008"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-1-1.wav",
+          "title": "Open Hat 009"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-1.wav",
+          "title": "Open Hat 010"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-2-1.wav",
+          "title": "Open Hat 011"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-2.wav",
+          "title": "Open Hat 012"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-3-1.wav",
+          "title": "Open Hat 013"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-3.wav",
+          "title": "Open Hat 014"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-4-1.wav",
+          "title": "Open Hat 015"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-4.wav",
+          "title": "Open Hat 016"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-5-1.wav",
+          "title": "Open Hat 017"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-5.wav",
+          "title": "Open Hat 018"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-6-1.wav",
+          "title": "Open Hat 019"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-6.wav",
+          "title": "Open Hat 020"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-7-1.wav",
+          "title": "Open Hat 021"
+        },
+        {
+          "file": "trap-kit/open-hat/ddw2-open-hat-7.wav",
+          "title": "Open Hat 022"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-1-1.wav",
+          "title": "Open Hat 023"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-1.wav",
+          "title": "Open Hat 024"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-2-1.wav",
+          "title": "Open Hat 025"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-2.wav",
+          "title": "Open Hat 026"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-3-1.wav",
+          "title": "Open Hat 027"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-3.wav",
+          "title": "Open Hat 028"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-4-1.wav",
+          "title": "Open Hat 029"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-4.wav",
+          "title": "Open Hat 030"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-5-1.wav",
+          "title": "Open Hat 031"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-5.wav",
+          "title": "Open Hat 032"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-6-1.wav",
+          "title": "Open Hat 033"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-6.wav",
+          "title": "Open Hat 034"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-7-1.wav",
+          "title": "Open Hat 035"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-7.wav",
+          "title": "Open Hat 036"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-8-1.wav",
+          "title": "Open Hat 037"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-8.wav",
+          "title": "Open Hat 038"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-9-1.wav",
+          "title": "Open Hat 039"
+        },
+        {
+          "file": "trap-kit/open-hat/deedotluger-open-hat-9.wav",
+          "title": "Open Hat 040"
+        },
+        {
+          "file": "trap-kit/open-hat/hat_open_04-1.wav",
+          "title": "Open Hat 041"
+        },
+        {
+          "file": "trap-kit/open-hat/hat_open_04.wav",
+          "title": "Open Hat 042"
+        },
+        {
+          "file": "trap-kit/open-hat/hit-2-1.wav",
+          "title": "Open Hat 043"
+        },
+        {
+          "file": "trap-kit/open-hat/hit-2.wav",
+          "title": "Open Hat 044"
+        },
+        {
+          "file": "trap-kit/open-hat/me-open-hat---express-1.wav",
+          "title": "Open Hat 045"
+        },
+        {
+          "file": "trap-kit/open-hat/me-open-hat---express.wav",
+          "title": "Open Hat 046"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-1-1.wav",
+          "title": "Open Hat 047"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-1.wav",
+          "title": "Open Hat 048"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-2-1.wav",
+          "title": "Open Hat 049"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-2-2.wav",
+          "title": "Open Hat 050"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-2-3.wav",
+          "title": "Open Hat 051"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-2.wav",
+          "title": "Open Hat 052"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-3.wav",
+          "title": "Open Hat 053"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-4.wav",
+          "title": "Open Hat 054"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-5.wav",
+          "title": "Open Hat 055"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-88-1.wav",
+          "title": "Open Hat 056"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat-88.wav",
+          "title": "Open Hat 057"
+        },
+        {
+          "file": "trap-kit/open-hat/open-hat.wav",
+          "title": "Open Hat 058"
+        },
+        {
+          "file": "trap-kit/open-hat/openhat-tmog-lab-1.wav",
+          "title": "Open Hat 059"
+        },
+        {
+          "file": "trap-kit/open-hat/openhat-tmog-lab.wav",
+          "title": "Open Hat 060"
+        },
+        {
+          "file": "trap-kit/open-hat/ophat-1-1.wav",
+          "title": "Open Hat 061"
+        },
+        {
+          "file": "trap-kit/open-hat/ophat-1.wav",
+          "title": "Open Hat 062"
+        },
+        {
+          "file": "trap-kit/open-hat/percs-3-1.wav",
+          "title": "Open Hat 063"
+        },
+        {
+          "file": "trap-kit/open-hat/percs-3.wav",
+          "title": "Open Hat 064"
+        },
+        {
+          "file": "trap-kit/open-hat/percs-4-1.wav",
+          "title": "Open Hat 065"
+        },
+        {
+          "file": "trap-kit/open-hat/percs-4.wav",
+          "title": "Open Hat 066"
+        },
+        {
+          "file": "trap-kit/open-hat/vin_hat16-1.wav",
+          "title": "Open Hat 067"
+        },
+        {
+          "file": "trap-kit/open-hat/vin_hat16.wav",
+          "title": "Open Hat 068"
+        }
+      ]
+    },
+    {
+      "id": "perc",
+      "label": "Perc / Hits",
+      "defaultPad": 8,
+      "samples": [
+        {
+          "file": "trap-kit/perc/bz_sinoloa-hit-1.wav",
+          "title": "Perc 001"
+        },
+        {
+          "file": "trap-kit/perc/bz_sinoloa-hit.wav",
+          "title": "Perc 002"
+        },
+        {
+          "file": "trap-kit/perc/ddw2-orchestra-1-1.wav",
+          "title": "Perc 003"
+        },
+        {
+          "file": "trap-kit/perc/ddw2-orchestra-1.wav",
+          "title": "Perc 004"
+        },
+        {
+          "file": "trap-kit/perc/drumma-boy-brass-1.wav",
+          "title": "Perc 005"
+        },
+        {
+          "file": "trap-kit/perc/drumma-boy-brass.wav",
+          "title": "Perc 006"
+        },
+        {
+          "file": "trap-kit/perc/gpe---orch-hit-2-1.wav",
+          "title": "Perc 007"
+        },
+        {
+          "file": "trap-kit/perc/gpe---orch-hit-2.wav",
+          "title": "Perc 008"
+        },
+        {
+          "file": "trap-kit/perc/hit_ctim_c4-1.wav",
+          "title": "Perc 009"
+        },
+        {
+          "file": "trap-kit/perc/hit_ctim_c4.wav",
+          "title": "Perc 010"
+        },
+        {
+          "file": "trap-kit/perc/hit_ctim_f3-1.wav",
+          "title": "Perc 011"
+        },
+        {
+          "file": "trap-kit/perc/hit_ctim_f3.wav",
+          "title": "Perc 012"
+        },
+        {
+          "file": "trap-kit/perc/hits-brass-x-orch-1.wav",
+          "title": "Perc 013"
+        },
+        {
+          "file": "trap-kit/perc/hits-brass-x-orch.wav",
+          "title": "Perc 014"
+        },
+        {
+          "file": "trap-kit/perc/kc---epic-hit-1.wav",
+          "title": "Perc 015"
+        },
+        {
+          "file": "trap-kit/perc/kc---epic-hit.wav",
+          "title": "Perc 016"
+        },
+        {
+          "file": "trap-kit/perc/orch-12xxx_2-1.wav",
+          "title": "Perc 017"
+        },
+        {
+          "file": "trap-kit/perc/orch-12xxx_2.wav",
+          "title": "Perc 018"
+        },
+        {
+          "file": "trap-kit/perc/orchestral-stab-2-1.wav",
+          "title": "Perc 019"
+        },
+        {
+          "file": "trap-kit/perc/orchestral-stab-2.wav",
+          "title": "Perc 020"
+        },
+        {
+          "file": "trap-kit/perc/stab2-18-1.wav",
+          "title": "Perc 021"
+        },
+        {
+          "file": "trap-kit/perc/stab2-18.wav",
+          "title": "Perc 022"
+        },
+        {
+          "file": "trap-kit/perc/stab2-19-1.wav",
+          "title": "Perc 023"
+        },
+        {
+          "file": "trap-kit/perc/stab2-19.wav",
+          "title": "Perc 024"
+        },
+        {
+          "file": "trap-kit/perc/stab2-5-1.wav",
+          "title": "Perc 025"
+        },
+        {
+          "file": "trap-kit/perc/stab2-5.wav",
+          "title": "Perc 026"
+        },
+        {
+          "file": "trap-kit/perc/trumpets-brass-horns-1.wav",
+          "title": "Perc 027"
+        },
+        {
+          "file": "trap-kit/perc/trumpets-brass-horns.wav",
+          "title": "Perc 028"
+        },
+        {
+          "file": "trap-kit/perc/wasted-shot-1.wav",
+          "title": "Perc 029"
+        },
+        {
+          "file": "trap-kit/perc/wasted-shot.wav",
+          "title": "Perc 030"
+        }
+      ]
+    },
+    {
+      "id": "perc2",
+      "label": "Perc 2",
+      "defaultPad": 9,
+      "samples": [
+        {
+          "file": "trap-kit/perc2/03-perc-1.wav",
+          "title": "Perc 001"
+        },
+        {
+          "file": "trap-kit/perc2/03-perc.wav",
+          "title": "Perc 002"
+        },
+        {
+          "file": "trap-kit/perc2/bb---perc-orchestra-crash-1.wav",
+          "title": "Perc 003"
+        },
+        {
+          "file": "trap-kit/perc2/bb---perc-orchestra-crash.wav",
+          "title": "Perc 004"
+        },
+        {
+          "file": "trap-kit/perc2/bongo-4-1.wav",
+          "title": "Perc 005"
+        },
+        {
+          "file": "trap-kit/perc2/bongo-4.wav",
+          "title": "Perc 006"
+        },
+        {
+          "file": "trap-kit/perc2/bongo4-1.wav",
+          "title": "Perc 007"
+        },
+        {
+          "file": "trap-kit/perc2/bongo4-perc-1.wav",
+          "title": "Perc 008"
+        },
+        {
+          "file": "trap-kit/perc2/bongo4-perc.wav",
+          "title": "Perc 009"
+        },
+        {
+          "file": "trap-kit/perc2/bongo4.wav",
+          "title": "Perc 010"
+        },
+        {
+          "file": "trap-kit/perc2/bwb-vault-perc-dope-block-1.wav",
+          "title": "Perc 011"
+        },
+        {
+          "file": "trap-kit/perc2/bwb-vault-perc-dope-block.wav",
+          "title": "Perc 012"
+        },
+        {
+          "file": "trap-kit/perc2/cmperc2-1.wav",
+          "title": "Perc 013"
+        },
+        {
+          "file": "trap-kit/perc2/cmperc2.wav",
+          "title": "Perc 014"
+        },
+        {
+          "file": "trap-kit/perc2/ctm29tm-1.wav",
+          "title": "Perc 015"
+        },
+        {
+          "file": "trap-kit/perc2/ctm29tm.wav",
+          "title": "Perc 016"
+        },
+        {
+          "file": "trap-kit/perc2/d-block-sd-1.wav",
+          "title": "Perc 017"
+        },
+        {
+          "file": "trap-kit/perc2/d-block-sd.wav",
+          "title": "Perc 018"
+        },
+        {
+          "file": "trap-kit/perc2/ddw2-perc-1-1.wav",
+          "title": "Perc 019"
+        },
+        {
+          "file": "trap-kit/perc2/ddw2-perc-1.wav",
+          "title": "Perc 020"
+        },
+        {
+          "file": "trap-kit/perc2/ddw2-perc-2-1.wav",
+          "title": "Perc 021"
+        },
+        {
+          "file": "trap-kit/perc2/ddw2-perc-2.wav",
+          "title": "Perc 022"
+        },
+        {
+          "file": "trap-kit/perc2/ddw2-perc-3-1.wav",
+          "title": "Perc 023"
+        },
+        {
+          "file": "trap-kit/perc2/ddw2-perc-3.wav",
+          "title": "Perc 024"
+        },
+        {
+          "file": "trap-kit/perc2/destroy---blockperc-1.wav",
+          "title": "Perc 025"
+        },
+        {
+          "file": "trap-kit/perc2/destroy---blockperc.wav",
+          "title": "Perc 026"
+        },
+        {
+          "file": "trap-kit/perc2/dirty-block-1.wav",
+          "title": "Perc 027"
+        },
+        {
+          "file": "trap-kit/perc2/dirty-block.wav",
+          "title": "Perc 028"
+        },
+        {
+          "file": "trap-kit/perc2/drumma-snap.-1.wav",
+          "title": "Perc 029"
+        },
+        {
+          "file": "trap-kit/perc2/drumma-snap..wav",
+          "title": "Perc 030"
+        },
+        {
+          "file": "trap-kit/perc2/dy-trap-triangle-1-1.wav",
+          "title": "Perc 031"
+        },
+        {
+          "file": "trap-kit/perc2/dy-trap-triangle-1.wav",
+          "title": "Perc 032"
+        },
+        {
+          "file": "trap-kit/perc2/k.e-on-the-track-tom-5-1.wav",
+          "title": "Perc 033"
+        },
+        {
+          "file": "trap-kit/perc2/k.e-on-the-track-tom-5.wav",
+          "title": "Perc 034"
+        },
+        {
+          "file": "trap-kit/perc2/killa---perc-star-wars-1.wav",
+          "title": "Perc 035"
+        },
+        {
+          "file": "trap-kit/perc2/killa---perc-star-wars.wav",
+          "title": "Perc 036"
+        },
+        {
+          "file": "trap-kit/perc2/perc---bedrock-1.wav",
+          "title": "Perc 037"
+        },
+        {
+          "file": "trap-kit/perc2/perc---bedrock.wav",
+          "title": "Perc 038"
+        },
+        {
+          "file": "trap-kit/perc2/perc---pink-1.wav",
+          "title": "Perc 039"
+        },
+        {
+          "file": "trap-kit/perc2/perc---pink-hair-1.wav",
+          "title": "Perc 040"
+        },
+        {
+          "file": "trap-kit/perc2/perc---pink-hair.wav",
+          "title": "Perc 041"
+        },
+        {
+          "file": "trap-kit/perc2/perc---pink.wav",
+          "title": "Perc 042"
+        },
+        {
+          "file": "trap-kit/perc2/perc-1.wav",
+          "title": "Perc 043"
+        },
+        {
+          "file": "trap-kit/perc2/perc-bowling-1.wav",
+          "title": "Perc 044"
+        },
+        {
+          "file": "trap-kit/perc2/perc-bowling.wav",
+          "title": "Perc 045"
+        },
+        {
+          "file": "trap-kit/perc2/perc-pink-1.wav",
+          "title": "Perc 046"
+        },
+        {
+          "file": "trap-kit/perc2/perc-pink-2.wav",
+          "title": "Perc 047"
+        },
+        {
+          "file": "trap-kit/perc2/perc-pink-3.wav",
+          "title": "Perc 048"
+        },
+        {
+          "file": "trap-kit/perc2/perc-pink-toes-1.wav",
+          "title": "Perc 049"
+        },
+        {
+          "file": "trap-kit/perc2/perc-pink-toes.wav",
+          "title": "Perc 050"
+        },
+        {
+          "file": "trap-kit/perc2/perc-pink.wav",
+          "title": "Perc 051"
+        },
+        {
+          "file": "trap-kit/perc2/perc.wav",
+          "title": "Perc 052"
+        },
+        {
+          "file": "trap-kit/perc2/percs-6-1.wav",
+          "title": "Perc 053"
+        },
+        {
+          "file": "trap-kit/perc2/percs-6.wav",
+          "title": "Perc 054"
+        },
+        {
+          "file": "trap-kit/perc2/shawty-redd-sound-1.wav",
+          "title": "Perc 055"
+        },
+        {
+          "file": "trap-kit/perc2/shawty-redd-sound.wav",
+          "title": "Perc 056"
+        },
+        {
+          "file": "trap-kit/perc2/sledgren-x-deedotwill-perc-7-1.wav",
+          "title": "Perc 057"
+        },
+        {
+          "file": "trap-kit/perc2/sledgren-x-deedotwill-perc-7.wav",
+          "title": "Perc 058"
+        },
+        {
+          "file": "trap-kit/perc2/sticks-1.wav",
+          "title": "Perc 059"
+        },
+        {
+          "file": "trap-kit/perc2/sticks.wav",
+          "title": "Perc 060"
+        },
+        {
+          "file": "trap-kit/perc2/tim-1.wav",
+          "title": "Perc 061"
+        },
+        {
+          "file": "trap-kit/perc2/tim.wav",
+          "title": "Perc 062"
+        },
+        {
+          "file": "trap-kit/perc2/tm88-zayxtm88snare-1.wav",
+          "title": "Perc 063"
+        },
+        {
+          "file": "trap-kit/perc2/tm88-zayxtm88snare.wav",
+          "title": "Perc 064"
+        },
+        {
+          "file": "trap-kit/perc2/triangle_open-1.wav",
+          "title": "Perc 065"
+        },
+        {
+          "file": "trap-kit/perc2/triangle_open.wav",
+          "title": "Perc 066"
+        },
+        {
+          "file": "trap-kit/perc2/triangle-1.wav",
+          "title": "Perc 067"
+        },
+        {
+          "file": "trap-kit/perc2/triangle-2-1.wav",
+          "title": "Perc 068"
+        },
+        {
+          "file": "trap-kit/perc2/triangle-2.wav",
+          "title": "Perc 069"
+        },
+        {
+          "file": "trap-kit/perc2/triangle-4-1.wav",
+          "title": "Perc 070"
+        },
+        {
+          "file": "trap-kit/perc2/triangle-4.wav",
+          "title": "Perc 071"
+        },
+        {
+          "file": "trap-kit/perc2/triangle.wav",
+          "title": "Perc 072"
+        },
+        {
+          "file": "trap-kit/perc2/z-shaker-1.wav",
+          "title": "Perc 073"
+        },
+        {
+          "file": "trap-kit/perc2/z-shaker.wav",
+          "title": "Perc 074"
+        },
+        {
+          "file": "trap-kit/perc2/zaytoven-hats-n-perc-6-1.wav",
+          "title": "Perc 075"
+        },
+        {
+          "file": "trap-kit/perc2/zaytoven-hats-n-perc-6.wav",
+          "title": "Perc 076"
+        }
+      ]
+    },
+    {
+      "id": "cymbal",
+      "label": "Crash / Cymbal",
+      "defaultPad": 10,
+      "samples": [
+        {
+          "file": "trap-kit/cymbal/_bq_cymbal_icy-1.wav",
+          "title": "Cymbal 001"
+        },
+        {
+          "file": "trap-kit/cymbal/_bq_cymbal_icy.wav",
+          "title": "Cymbal 002"
+        },
+        {
+          "file": "trap-kit/cymbal/acd---orchestra-crash-1.wav",
+          "title": "Cymbal 003"
+        },
+        {
+          "file": "trap-kit/cymbal/acd---orchestra-crash.wav",
+          "title": "Cymbal 004"
+        },
+        {
+          "file": "trap-kit/cymbal/b.k-bangerz--orchestra-crash-1.wav",
+          "title": "Cymbal 005"
+        },
+        {
+          "file": "trap-kit/cymbal/b.k-bangerz--orchestra-crash.wav",
+          "title": "Cymbal 006"
+        },
+        {
+          "file": "trap-kit/cymbal/bp-cymbal-13-1.wav",
+          "title": "Cymbal 007"
+        },
+        {
+          "file": "trap-kit/cymbal/bp-cymbal-13.wav",
+          "title": "Cymbal 008"
+        },
+        {
+          "file": "trap-kit/cymbal/bq_cymbal_solid-1.wav",
+          "title": "Cymbal 009"
+        },
+        {
+          "file": "trap-kit/cymbal/bq_cymbal_solid.wav",
+          "title": "Cymbal 010"
+        },
+        {
+          "file": "trap-kit/cymbal/bwb-wave-2-cymbol-13-1.wav",
+          "title": "Cymbal 011"
+        },
+        {
+          "file": "trap-kit/cymbal/bwb-wave-2-cymbol-13.wav",
+          "title": "Cymbal 012"
+        },
+        {
+          "file": "trap-kit/cymbal/bwb-wmh-cymbols-13-1.wav",
+          "title": "Cymbal 013"
+        },
+        {
+          "file": "trap-kit/cymbal/bwb-wmh-cymbols-13.wav",
+          "title": "Cymbal 014"
+        },
+        {
+          "file": "trap-kit/cymbal/crash_01-1.wav",
+          "title": "Cymbal 015"
+        },
+        {
+          "file": "trap-kit/cymbal/crash_01.wav",
+          "title": "Cymbal 016"
+        },
+        {
+          "file": "trap-kit/cymbal/crash_lex-1.wav",
+          "title": "Cymbal 017"
+        },
+        {
+          "file": "trap-kit/cymbal/crash_lex.wav",
+          "title": "Cymbal 018"
+        },
+        {
+          "file": "trap-kit/cymbal/crash_orch-1.wav",
+          "title": "Cymbal 019"
+        },
+        {
+          "file": "trap-kit/cymbal/crash_orch.wav",
+          "title": "Cymbal 020"
+        },
+        {
+          "file": "trap-kit/cymbal/crash-cymbal-13-1.wav",
+          "title": "Cymbal 021"
+        },
+        {
+          "file": "trap-kit/cymbal/crash-cymbal-13.wav",
+          "title": "Cymbal 022"
+        },
+        {
+          "file": "trap-kit/cymbal/crash-orchestra-1.wav",
+          "title": "Cymbal 023"
+        },
+        {
+          "file": "trap-kit/cymbal/crash-orchestra.wav",
+          "title": "Cymbal 024"
+        },
+        {
+          "file": "trap-kit/cymbal/crash-orchperc-2-v1-1.wav",
+          "title": "Cymbal 025"
+        },
+        {
+          "file": "trap-kit/cymbal/crash-orchperc-2-v1.wav",
+          "title": "Cymbal 026"
+        },
+        {
+          "file": "trap-kit/cymbal/cym_9-1.wav",
+          "title": "Cymbal 027"
+        },
+        {
+          "file": "trap-kit/cymbal/cym_9.wav",
+          "title": "Cymbal 028"
+        },
+        {
+          "file": "trap-kit/cymbal/cym-909-crash-1.wav",
+          "title": "Cymbal 029"
+        },
+        {
+          "file": "trap-kit/cymbal/cym-909-crash.wav",
+          "title": "Cymbal 030"
+        },
+        {
+          "file": "trap-kit/cymbal/cym-909-ride-1.wav",
+          "title": "Cymbal 031"
+        },
+        {
+          "file": "trap-kit/cymbal/cym-909-ride.wav",
+          "title": "Cymbal 032"
+        },
+        {
+          "file": "trap-kit/cymbal/cym-bouldercrest-1.wav",
+          "title": "Cymbal 033"
+        },
+        {
+          "file": "trap-kit/cymbal/cym-bouldercrest.wav",
+          "title": "Cymbal 034"
+        },
+        {
+          "file": "trap-kit/cymbal/cymbal-13-1.wav",
+          "title": "Cymbal 035"
+        },
+        {
+          "file": "trap-kit/cymbal/cymbal-13-2.wav",
+          "title": "Cymbal 036"
+        },
+        {
+          "file": "trap-kit/cymbal/cymbal-13-3.wav",
+          "title": "Cymbal 037"
+        },
+        {
+          "file": "trap-kit/cymbal/cymbal-13.wav",
+          "title": "Cymbal 038"
+        },
+        {
+          "file": "trap-kit/cymbal/cymbal-14-1.wav",
+          "title": "Cymbal 039"
+        },
+        {
+          "file": "trap-kit/cymbal/cymbal-14.wav",
+          "title": "Cymbal 040"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw-crash-1.wav",
+          "title": "Cymbal 041"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw-crash.wav",
+          "title": "Cymbal 042"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw2-crash-1-1.wav",
+          "title": "Cymbal 043"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw2-crash-1.wav",
+          "title": "Cymbal 044"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw2-crash-2-1.wav",
+          "title": "Cymbal 045"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw2-crash-2.wav",
+          "title": "Cymbal 046"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw2-cymbal-1-1.wav",
+          "title": "Cymbal 047"
+        },
+        {
+          "file": "trap-kit/cymbal/ddw2-cymbal-1.wav",
+          "title": "Cymbal 048"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-crash-1-1.wav",
+          "title": "Cymbal 049"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-crash-1.wav",
+          "title": "Cymbal 050"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-crash-2-1.wav",
+          "title": "Cymbal 051"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-crash-2.wav",
+          "title": "Cymbal 052"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-crash-3-1.wav",
+          "title": "Cymbal 053"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-crash-3.wav",
+          "title": "Cymbal 054"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-cymbal-1-1.wav",
+          "title": "Cymbal 055"
+        },
+        {
+          "file": "trap-kit/cymbal/deedotluger-cymbal-1.wav",
+          "title": "Cymbal 056"
+        },
+        {
+          "file": "trap-kit/cymbal/hit-1.wav",
+          "title": "Cymbal 057"
+        },
+        {
+          "file": "trap-kit/cymbal/hit-9-1.wav",
+          "title": "Cymbal 058"
+        },
+        {
+          "file": "trap-kit/cymbal/hit-9.wav",
+          "title": "Cymbal 059"
+        },
+        {
+          "file": "trap-kit/cymbal/hit.wav",
+          "title": "Cymbal 060"
+        },
+        {
+          "file": "trap-kit/cymbal/jj---orch-crash-1.wav",
+          "title": "Cymbal 061"
+        },
+        {
+          "file": "trap-kit/cymbal/jj---orch-crash.wav",
+          "title": "Cymbal 062"
+        },
+        {
+          "file": "trap-kit/cymbal/js_cym_14-1.wav",
+          "title": "Cymbal 063"
+        },
+        {
+          "file": "trap-kit/cymbal/js_cym_14.wav",
+          "title": "Cymbal 064"
+        },
+        {
+          "file": "trap-kit/cymbal/official-trap-crashes-4-1.wav",
+          "title": "Cymbal 065"
+        },
+        {
+          "file": "trap-kit/cymbal/official-trap-crashes-4.wav",
+          "title": "Cymbal 066"
+        },
+        {
+          "file": "trap-kit/cymbal/orch-crash-1.wav",
+          "title": "Cymbal 067"
+        },
+        {
+          "file": "trap-kit/cymbal/orch-crash.wav",
+          "title": "Cymbal 068"
+        },
+        {
+          "file": "trap-kit/cymbal/orchestra-crash-1.wav",
+          "title": "Cymbal 069"
+        },
+        {
+          "file": "trap-kit/cymbal/orchestra-crash.wav",
+          "title": "Cymbal 070"
+        },
+        {
+          "file": "trap-kit/cymbal/orchestral-crash-1.wav",
+          "title": "Cymbal 071"
+        },
+        {
+          "file": "trap-kit/cymbal/orchestral-crash.wav",
+          "title": "Cymbal 072"
+        },
+        {
+          "file": "trap-kit/cymbal/rev-crash-1.wav",
+          "title": "Cymbal 073"
+        },
+        {
+          "file": "trap-kit/cymbal/rev-crash.wav",
+          "title": "Cymbal 074"
+        },
+        {
+          "file": "trap-kit/cymbal/str_crsh2-1.wav",
+          "title": "Cymbal 075"
+        },
+        {
+          "file": "trap-kit/cymbal/str_crsh2.wav",
+          "title": "Cymbal 076"
+        },
+        {
+          "file": "trap-kit/cymbal/svrric---cymbals-13-1.wav",
+          "title": "Cymbal 077"
+        },
+        {
+          "file": "trap-kit/cymbal/svrric---cymbals-13.wav",
+          "title": "Cymbal 078"
+        },
+        {
+          "file": "trap-kit/cymbal/trap-crash-1-1.wav",
+          "title": "Cymbal 079"
+        },
+        {
+          "file": "trap-kit/cymbal/trap-crash-1.wav",
+          "title": "Cymbal 080"
+        },
+        {
+          "file": "trap-kit/cymbal/trap-crash-2-1.wav",
+          "title": "Cymbal 081"
+        },
+        {
+          "file": "trap-kit/cymbal/trap-crash-2.wav",
+          "title": "Cymbal 082"
+        },
+        {
+          "file": "trap-kit/cymbal/trap-crash-3.wav",
+          "title": "Cymbal 083"
+        },
+        {
+          "file": "trap-kit/cymbal/trap-crash.wav",
+          "title": "Cymbal 084"
+        },
+        {
+          "file": "trap-kit/cymbal/upgrade-2-cymbol-13-1.wav",
+          "title": "Cymbal 085"
+        },
+        {
+          "file": "trap-kit/cymbal/upgrade-2-cymbol-13.wav",
+          "title": "Cymbal 086"
+        },
+        {
+          "file": "trap-kit/cymbal/vybe809cymbal2-1.wav",
+          "title": "Cymbal 087"
+        },
+        {
+          "file": "trap-kit/cymbal/vybe809cymbal2.wav",
+          "title": "Cymbal 088"
+        },
+        {
+          "file": "trap-kit/cymbal/vybeempirecymbal-1.wav",
+          "title": "Cymbal 089"
+        },
+        {
+          "file": "trap-kit/cymbal/vybeempirecymbal.wav",
+          "title": "Cymbal 090"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-13-1.wav",
+          "title": "Cymbal 091"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-13.wav",
+          "title": "Cymbal 092"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-14-1.wav",
+          "title": "Cymbal 093"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-14.wav",
+          "title": "Cymbal 094"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-2-1.wav",
+          "title": "Cymbal 095"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-2.wav",
+          "title": "Cymbal 096"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-9-1.wav",
+          "title": "Cymbal 097"
+        },
+        {
+          "file": "trap-kit/cymbal/zay-cym-9.wav",
+          "title": "Cymbal 098"
+        }
+      ]
+    },
+    {
+      "id": "fx",
+      "label": "Riser / FX",
+      "defaultPad": 12,
+      "samples": [
+        {
+          "file": "trap-kit/fx/02-fx-1.wav",
+          "title": "FX 001"
+        },
+        {
+          "file": "trap-kit/fx/02-fx.wav",
+          "title": "FX 002"
+        },
+        {
+          "file": "trap-kit/fx/26d1fx1d-1.wav",
+          "title": "FX 003"
+        },
+        {
+          "file": "trap-kit/fx/26d1fx1d.wav",
+          "title": "FX 004"
+        },
+        {
+          "file": "trap-kit/fx/60d2fx2d-1.wav",
+          "title": "FX 005"
+        },
+        {
+          "file": "trap-kit/fx/60d2fx2d.wav",
+          "title": "FX 006"
+        },
+        {
+          "file": "trap-kit/fx/bwb-fx-rise-6-after-effect-1.wav",
+          "title": "FX 007"
+        },
+        {
+          "file": "trap-kit/fx/bwb-fx-rise-6-after-effect.wav",
+          "title": "FX 008"
+        },
+        {
+          "file": "trap-kit/fx/crystal-bell-1.wav",
+          "title": "FX 009"
+        },
+        {
+          "file": "trap-kit/fx/crystal-bell.wav",
+          "title": "FX 010"
+        },
+        {
+          "file": "trap-kit/fx/cyborg-riser-1.wav",
+          "title": "FX 011"
+        },
+        {
+          "file": "trap-kit/fx/cyborg-riser.wav",
+          "title": "FX 012"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-1-1.wav",
+          "title": "FX 013"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-1.wav",
+          "title": "FX 014"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-2-1.wav",
+          "title": "FX 015"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-2.wav",
+          "title": "FX 016"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-3-1.wav",
+          "title": "FX 017"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-3.wav",
+          "title": "FX 018"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-4-1.wav",
+          "title": "FX 019"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-4.wav",
+          "title": "FX 020"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-5-1.wav",
+          "title": "FX 021"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-5.wav",
+          "title": "FX 022"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-6-1.wav",
+          "title": "FX 023"
+        },
+        {
+          "file": "trap-kit/fx/deedotluger-sfx-6.wav",
+          "title": "FX 024"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-1.wav",
+          "title": "FX 025"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-2-1.wav",
+          "title": "FX 026"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-2.wav",
+          "title": "FX 027"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-3-1.wav",
+          "title": "FX 028"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-3.wav",
+          "title": "FX 029"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-1.wav",
+          "title": "FX 030"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-2-1.wav",
+          "title": "FX 031"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-2.wav",
+          "title": "FX 032"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-3-1.wav",
+          "title": "FX 033"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-3.wav",
+          "title": "FX 034"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-4-1.wav",
+          "title": "FX 035"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-4.wav",
+          "title": "FX 036"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-5-1.wav",
+          "title": "FX 037"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect-5.wav",
+          "title": "FX 038"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-effect.wav",
+          "title": "FX 039"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-hit-1.wav",
+          "title": "FX 040"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-hit.wav",
+          "title": "FX 041"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-riser-1.wav",
+          "title": "FX 042"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-riser.wav",
+          "title": "FX 043"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-shot-sso-1.wav",
+          "title": "FX 044"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-shot-sso.wav",
+          "title": "FX 045"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-sound-149-_2-1.wav",
+          "title": "FX 046"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-sound-149-_2.wav",
+          "title": "FX 047"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-sound-149-_27-1.wav",
+          "title": "FX 048"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy-sound-149-_27.wav",
+          "title": "FX 049"
+        },
+        {
+          "file": "trap-kit/fx/drumma-boy.wav",
+          "title": "FX 050"
+        },
+        {
+          "file": "trap-kit/fx/effect-11---1-1.wav",
+          "title": "FX 051"
+        },
+        {
+          "file": "trap-kit/fx/effect-11---1.wav",
+          "title": "FX 052"
+        },
+        {
+          "file": "trap-kit/fx/effect-28-1.wav",
+          "title": "FX 053"
+        },
+        {
+          "file": "trap-kit/fx/effect-28.wav",
+          "title": "FX 054"
+        },
+        {
+          "file": "trap-kit/fx/effect-29-1.wav",
+          "title": "FX 055"
+        },
+        {
+          "file": "trap-kit/fx/effect-29.wav",
+          "title": "FX 056"
+        },
+        {
+          "file": "trap-kit/fx/fx_stomp-1.wav",
+          "title": "FX 057"
+        },
+        {
+          "file": "trap-kit/fx/fx_stomp.wav",
+          "title": "FX 058"
+        },
+        {
+          "file": "trap-kit/fx/fx_tubularbells-1.wav",
+          "title": "FX 059"
+        },
+        {
+          "file": "trap-kit/fx/fx_tubularbells.wav",
+          "title": "FX 060"
+        },
+        {
+          "file": "trap-kit/fx/fx---guncock-1.wav",
+          "title": "FX 061"
+        },
+        {
+          "file": "trap-kit/fx/fx---guncock.wav",
+          "title": "FX 062"
+        },
+        {
+          "file": "trap-kit/fx/fx---stomp-1-1.wav",
+          "title": "FX 063"
+        },
+        {
+          "file": "trap-kit/fx/fx---stomp-1.wav",
+          "title": "FX 064"
+        },
+        {
+          "file": "trap-kit/fx/fx---stomp-3-1.wav",
+          "title": "FX 065"
+        },
+        {
+          "file": "trap-kit/fx/fx---stomp-3.wav",
+          "title": "FX 066"
+        },
+        {
+          "file": "trap-kit/fx/fx---sweet-chaos-1.wav",
+          "title": "FX 067"
+        },
+        {
+          "file": "trap-kit/fx/fx---sweet-chaos.wav",
+          "title": "FX 068"
+        },
+        {
+          "file": "trap-kit/fx/fx---sync-long-1.wav",
+          "title": "FX 069"
+        },
+        {
+          "file": "trap-kit/fx/fx---sync-long.wav",
+          "title": "FX 070"
+        },
+        {
+          "file": "trap-kit/fx/fx-1.wav",
+          "title": "FX 071"
+        },
+        {
+          "file": "trap-kit/fx/fx-12-drumma-boy-1.wav",
+          "title": "FX 072"
+        },
+        {
+          "file": "trap-kit/fx/fx-12-drumma-boy.wav",
+          "title": "FX 073"
+        },
+        {
+          "file": "trap-kit/fx/fx-17-drumma-boy-1.wav",
+          "title": "FX 074"
+        },
+        {
+          "file": "trap-kit/fx/fx-17-drumma-boy.wav",
+          "title": "FX 075"
+        },
+        {
+          "file": "trap-kit/fx/fx-2.wav",
+          "title": "FX 076"
+        },
+        {
+          "file": "trap-kit/fx/fx-29-1.wav",
+          "title": "FX 077"
+        },
+        {
+          "file": "trap-kit/fx/fx-29.wav",
+          "title": "FX 078"
+        },
+        {
+          "file": "trap-kit/fx/fx-3.wav",
+          "title": "FX 079"
+        },
+        {
+          "file": "trap-kit/fx/fx-4.wav",
+          "title": "FX 080"
+        },
+        {
+          "file": "trap-kit/fx/fx-5.wav",
+          "title": "FX 081"
+        },
+        {
+          "file": "trap-kit/fx/fx-6.wav",
+          "title": "FX 082"
+        },
+        {
+          "file": "trap-kit/fx/fx-7.wav",
+          "title": "FX 083"
+        },
+        {
+          "file": "trap-kit/fx/fx-classic-1.wav",
+          "title": "FX 084"
+        },
+        {
+          "file": "trap-kit/fx/fx-classic.wav",
+          "title": "FX 085"
+        },
+        {
+          "file": "trap-kit/fx/fx-drumma-boy-1.wav",
+          "title": "FX 086"
+        },
+        {
+          "file": "trap-kit/fx/fx-drumma-boy.wav",
+          "title": "FX 087"
+        },
+        {
+          "file": "trap-kit/fx/fx.wav",
+          "title": "FX 088"
+        },
+        {
+          "file": "trap-kit/fx/guncock-1.wav",
+          "title": "FX 089"
+        },
+        {
+          "file": "trap-kit/fx/guncock.wav",
+          "title": "FX 090"
+        },
+        {
+          "file": "trap-kit/fx/guncock01-1.wav",
+          "title": "FX 091"
+        },
+        {
+          "file": "trap-kit/fx/guncock01.wav",
+          "title": "FX 092"
+        },
+        {
+          "file": "trap-kit/fx/guncock02-1.wav",
+          "title": "FX 093"
+        },
+        {
+          "file": "trap-kit/fx/guncock02.wav",
+          "title": "FX 094"
+        },
+        {
+          "file": "trap-kit/fx/hit-1.wav",
+          "title": "FX 095"
+        },
+        {
+          "file": "trap-kit/fx/hit.wav",
+          "title": "FX 096"
+        },
+        {
+          "file": "trap-kit/fx/lex_luger_fx_grim_scar_riser-1.wav",
+          "title": "FX 097"
+        },
+        {
+          "file": "trap-kit/fx/lex_luger_fx_grim_scar_riser.wav",
+          "title": "FX 098"
+        },
+        {
+          "file": "trap-kit/fx/lex_luger_fx_reverse_snare_riser-1.wav",
+          "title": "FX 099"
+        },
+        {
+          "file": "trap-kit/fx/lex_luger_fx_reverse_snare_riser.wav",
+          "title": "FX 100"
+        },
+        {
+          "file": "trap-kit/fx/lexlugercashregister-1.wav",
+          "title": "FX 101"
+        },
+        {
+          "file": "trap-kit/fx/lexlugercashregister.wav",
+          "title": "FX 102"
+        },
+        {
+          "file": "trap-kit/fx/ll_fx_tag_line-1.wav",
+          "title": "FX 103"
+        },
+        {
+          "file": "trap-kit/fx/ll_fx_tag_line.wav",
+          "title": "FX 104"
+        },
+        {
+          "file": "trap-kit/fx/ll_riser_pink-1.wav",
+          "title": "FX 105"
+        },
+        {
+          "file": "trap-kit/fx/ll_riser_pink.wav",
+          "title": "FX 106"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-0018-1.wav",
+          "title": "FX 107"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-0018.wav",
+          "title": "FX 108"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-0019-1.wav",
+          "title": "FX 109"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-0019.wav",
+          "title": "FX 110"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-003-1.wav",
+          "title": "FX 111"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-003.wav",
+          "title": "FX 112"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-0030-1.wav",
+          "title": "FX 113"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-0030.wav",
+          "title": "FX 114"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-004-1.wav",
+          "title": "FX 115"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-004.wav",
+          "title": "FX 116"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-007-1.wav",
+          "title": "FX 117"
+        },
+        {
+          "file": "trap-kit/fx/mfx_up-007.wav",
+          "title": "FX 118"
+        },
+        {
+          "file": "trap-kit/fx/nice-effect-sso-1.wav",
+          "title": "FX 119"
+        },
+        {
+          "file": "trap-kit/fx/nice-effect-sso.wav",
+          "title": "FX 120"
+        },
+        {
+          "file": "trap-kit/fx/pink-noise-1.wav",
+          "title": "FX 121"
+        },
+        {
+          "file": "trap-kit/fx/pink-noise.wav",
+          "title": "FX 122"
+        },
+        {
+          "file": "trap-kit/fx/revclap-flux-1.wav",
+          "title": "FX 123"
+        },
+        {
+          "file": "trap-kit/fx/revclap-flux.wav",
+          "title": "FX 124"
+        },
+        {
+          "file": "trap-kit/fx/riser-2-drumma-boy-1.wav",
+          "title": "FX 125"
+        },
+        {
+          "file": "trap-kit/fx/riser-2-drumma-boy.wav",
+          "title": "FX 126"
+        },
+        {
+          "file": "trap-kit/fx/riser-3-drumma-boy-1.wav",
+          "title": "FX 127"
+        },
+        {
+          "file": "trap-kit/fx/riser-3-drumma-boy.wav",
+          "title": "FX 128"
+        },
+        {
+          "file": "trap-kit/fx/star-wars-shot-1.wav",
+          "title": "FX 129"
+        },
+        {
+          "file": "trap-kit/fx/star-wars-shot.wav",
+          "title": "FX 130"
+        },
+        {
+          "file": "trap-kit/fx/time-clock-1.wav",
+          "title": "FX 131"
+        },
+        {
+          "file": "trap-kit/fx/time-clock.wav",
+          "title": "FX 132"
+        },
+        {
+          "file": "trap-kit/fx/time-clock2-1.wav",
+          "title": "FX 133"
+        },
+        {
+          "file": "trap-kit/fx/time-clock2.wav",
+          "title": "FX 134"
+        },
+        {
+          "file": "trap-kit/fx/zaytoven-bell-1.wav",
+          "title": "FX 135"
+        },
+        {
+          "file": "trap-kit/fx/zaytoven-bell.wav",
+          "title": "FX 136"
+        }
+      ]
+    },
+    {
+      "id": "extra",
+      "label": "Extra",
+      "defaultPad": 13,
+      "samples": [
+        {
+          "file": "trap-kit/extra/big-orcha-4-1.wav",
+          "title": "Extra 001"
+        },
+        {
+          "file": "trap-kit/extra/big-orcha-4.wav",
+          "title": "Extra 002"
+        },
+        {
+          "file": "trap-kit/extra/brothers-1.wav",
+          "title": "Extra 003"
+        },
+        {
+          "file": "trap-kit/extra/brothers.wav",
+          "title": "Extra 004"
+        },
+        {
+          "file": "trap-kit/extra/drich-trumpets-brass-horns-190-1.wav",
+          "title": "Extra 005"
+        },
+        {
+          "file": "trap-kit/extra/drich-trumpets-brass-horns-190.wav",
+          "title": "Extra 006"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-saw-1.wav",
+          "title": "Extra 007"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-saw-2-1.wav",
+          "title": "Extra 008"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-saw-2.wav",
+          "title": "Extra 009"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-saw.wav",
+          "title": "Extra 010"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-strings-1.wav",
+          "title": "Extra 011"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-strings-2-1.wav",
+          "title": "Extra 012"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-strings-2.wav",
+          "title": "Extra 013"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-strings.wav",
+          "title": "Extra 014"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-synth-1.wav",
+          "title": "Extra 015"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-synth-2-1.wav",
+          "title": "Extra 016"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-synth-2.wav",
+          "title": "Extra 017"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-synth.wav",
+          "title": "Extra 018"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-trumbone-1.wav",
+          "title": "Extra 019"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-trumbone.wav",
+          "title": "Extra 020"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-whistle-1.wav",
+          "title": "Extra 021"
+        },
+        {
+          "file": "trap-kit/extra/drumma-boy-whistle.wav",
+          "title": "Extra 022"
+        },
+        {
+          "file": "trap-kit/extra/heaven-1-1.wav",
+          "title": "Extra 023"
+        },
+        {
+          "file": "trap-kit/extra/heaven-1.wav",
+          "title": "Extra 024"
+        },
+        {
+          "file": "trap-kit/extra/kl---12---legends-choir-crew---140-bpm---a-minor-1.wav",
+          "title": "Extra 025"
+        },
+        {
+          "file": "trap-kit/extra/kl---12---legends-choir-crew---140-bpm---a-minor.wav",
+          "title": "Extra 026"
+        },
+        {
+          "file": "trap-kit/extra/quincy_jones_-_fat_poppadaddy-1.wav",
+          "title": "Extra 027"
+        },
+        {
+          "file": "trap-kit/extra/quincy_jones_-_fat_poppadaddy.wav",
+          "title": "Extra 028"
+        },
+        {
+          "file": "trap-kit/extra/zaytoven-pianos-26-1.wav",
+          "title": "Extra 029"
+        },
+        {
+          "file": "trap-kit/extra/zaytoven-pianos-26.wav",
+          "title": "Extra 030"
+        },
+        {
+          "file": "trap-kit/extra/zaytoven-sound-99-1.wav",
+          "title": "Extra 031"
+        },
+        {
+          "file": "trap-kit/extra/zaytoven-sound-99.wav",
+          "title": "Extra 032"
+        }
+      ]
+    },
+    {
+      "id": "vox",
+      "label": "Vox",
+      "defaultPad": 14,
+      "samples": [
+        {
+          "file": "trap-kit/vox/14-bouldercrest-partial.1-1.wav",
+          "title": "Vox 001"
+        },
+        {
+          "file": "trap-kit/vox/14-bouldercrest-partial.1.wav",
+          "title": "Vox 002"
+        },
+        {
+          "file": "trap-kit/vox/bwb-the-wave-vox-21-1.wav",
+          "title": "Vox 003"
+        },
+        {
+          "file": "trap-kit/vox/bwb-the-wave-vox-21.wav",
+          "title": "Vox 004"
+        },
+        {
+          "file": "trap-kit/vox/bwb-wav-7-vox-21-1.wav",
+          "title": "Vox 005"
+        },
+        {
+          "file": "trap-kit/vox/bwb-wav-7-vox-21.wav",
+          "title": "Vox 006"
+        },
+        {
+          "file": "trap-kit/vox/bwb-wave-4-vox-21-1.wav",
+          "title": "Vox 007"
+        },
+        {
+          "file": "trap-kit/vox/bwb-wave-4-vox-21.wav",
+          "title": "Vox 008"
+        },
+        {
+          "file": "trap-kit/vox/bwb-wmh-vox-21-1.wav",
+          "title": "Vox 009"
+        },
+        {
+          "file": "trap-kit/vox/bwb-wmh-vox-21.wav",
+          "title": "Vox 010"
+        },
+        {
+          "file": "trap-kit/vox/bz-work-chant-1.wav",
+          "title": "Vox 011"
+        },
+        {
+          "file": "trap-kit/vox/bz-work-chant.wav",
+          "title": "Vox 012"
+        },
+        {
+          "file": "trap-kit/vox/crowd-1-1.wav",
+          "title": "Vox 013"
+        },
+        {
+          "file": "trap-kit/vox/crowd-1.wav",
+          "title": "Vox 014"
+        },
+        {
+          "file": "trap-kit/vox/crowd-2-1.wav",
+          "title": "Vox 015"
+        },
+        {
+          "file": "trap-kit/vox/crowd-2.wav",
+          "title": "Vox 016"
+        },
+        {
+          "file": "trap-kit/vox/crowd-3.wav",
+          "title": "Vox 017"
+        },
+        {
+          "file": "trap-kit/vox/crowd-chant-1.wav",
+          "title": "Vox 018"
+        },
+        {
+          "file": "trap-kit/vox/crowd-chant.wav",
+          "title": "Vox 019"
+        },
+        {
+          "file": "trap-kit/vox/crowd.wav",
+          "title": "Vox 020"
+        },
+        {
+          "file": "trap-kit/vox/ddw2-chant-1-1.wav",
+          "title": "Vox 021"
+        },
+        {
+          "file": "trap-kit/vox/ddw2-chant-1.wav",
+          "title": "Vox 022"
+        },
+        {
+          "file": "trap-kit/vox/ddw2-chant-2-1.wav",
+          "title": "Vox 023"
+        },
+        {
+          "file": "trap-kit/vox/ddw2-chant-2.wav",
+          "title": "Vox 024"
+        },
+        {
+          "file": "trap-kit/vox/lequie-vox-21-1.wav",
+          "title": "Vox 025"
+        },
+        {
+          "file": "trap-kit/vox/lequie-vox-21.wav",
+          "title": "Vox 026"
+        },
+        {
+          "file": "trap-kit/vox/nmv3---vox-21-1-1.wav",
+          "title": "Vox 027"
+        },
+        {
+          "file": "trap-kit/vox/nmv3---vox-21-1.wav",
+          "title": "Vox 028"
+        },
+        {
+          "file": "trap-kit/vox/ps2_vox-21-1.wav",
+          "title": "Vox 029"
+        },
+        {
+          "file": "trap-kit/vox/ps2_vox-21.wav",
+          "title": "Vox 030"
+        },
+        {
+          "file": "trap-kit/vox/shawty-redd-chant-1.wav",
+          "title": "Vox 031"
+        },
+        {
+          "file": "trap-kit/vox/shawty-redd-chant.wav",
+          "title": "Vox 032"
+        },
+        {
+          "file": "trap-kit/vox/tm88-zaysvox-1.wav",
+          "title": "Vox 033"
+        },
+        {
+          "file": "trap-kit/vox/tm88-zaysvox.wav",
+          "title": "Vox 034"
+        },
+        {
+          "file": "trap-kit/vox/trapaholic-chant---crowd-1.wav",
+          "title": "Vox 035"
+        },
+        {
+          "file": "trap-kit/vox/trapaholic-chant---crowd.wav",
+          "title": "Vox 036"
+        },
+        {
+          "file": "trap-kit/vox/um_yeah-1.wav",
+          "title": "Vox 037"
+        },
+        {
+          "file": "trap-kit/vox/um_yeah.wav",
+          "title": "Vox 038"
+        },
+        {
+          "file": "trap-kit/vox/upgrade-2-vox-21-ahhh-1.wav",
+          "title": "Vox 039"
+        },
+        {
+          "file": "trap-kit/vox/upgrade-2-vox-21-ahhh.wav",
+          "title": "Vox 040"
+        },
+        {
+          "file": "trap-kit/vox/vox-1.wav",
+          "title": "Vox 041"
+        },
+        {
+          "file": "trap-kit/vox/vox-21-1.wav",
+          "title": "Vox 042"
+        },
+        {
+          "file": "trap-kit/vox/vox-21.wav",
+          "title": "Vox 043"
+        },
+        {
+          "file": "trap-kit/vox/vox-blocka-1.wav",
+          "title": "Vox 044"
+        },
+        {
+          "file": "trap-kit/vox/vox-blocka.wav",
+          "title": "Vox 045"
+        },
+        {
+          "file": "trap-kit/vox/vox.wav",
+          "title": "Vox 046"
+        },
+        {
+          "file": "trap-kit/vox/wavy-vox-21-1.wav",
+          "title": "Vox 047"
+        },
+        {
+          "file": "trap-kit/vox/wavy-vox-21.wav",
+          "title": "Vox 048"
+        },
+        {
+          "file": "trap-kit/vox/zay-vox-21-1.wav",
+          "title": "Vox 049"
+        },
+        {
+          "file": "trap-kit/vox/zay-vox-21.wav",
+          "title": "Vox 050"
+        },
+        {
+          "file": "trap-kit/vox/zaytiggy-46-1.wav",
+          "title": "Vox 051"
+        },
+        {
+          "file": "trap-kit/vox/zaytiggy-46.wav",
+          "title": "Vox 052"
+        },
+        {
+          "file": "trap-kit/vox/zaytoven-chant-1-1.wav",
+          "title": "Vox 053"
+        },
+        {
+          "file": "trap-kit/vox/zaytoven-chant-1.wav",
+          "title": "Vox 054"
+        },
+        {
+          "file": "trap-kit/vox/zaytoven-chant-2.wav",
+          "title": "Vox 055"
+        },
+        {
+          "file": "trap-kit/vox/zaytoven-chant.wav",
+          "title": "Vox 056"
+        }
+      ]
+    },
+    {
+      "id": "tag",
+      "label": "Tag",
+      "defaultPad": 14,
+      "samples": [
+        {
+          "file": "trap-kit/tag/acd---lexlugercomic-1.wav",
+          "title": "Tag 001"
+        },
+        {
+          "file": "trap-kit/tag/acd---lexlugercomic.wav",
+          "title": "Tag 002"
+        },
+        {
+          "file": "trap-kit/tag/acd---lexlugerfemale-1.wav",
+          "title": "Tag 003"
+        },
+        {
+          "file": "trap-kit/tag/acd---lexlugerfemale.wav",
+          "title": "Tag 004"
+        },
+        {
+          "file": "trap-kit/tag/lexlugercomic-1.wav",
+          "title": "Tag 005"
+        },
+        {
+          "file": "trap-kit/tag/lexlugercomic.wav",
+          "title": "Tag 006"
+        },
+        {
+          "file": "trap-kit/tag/lexlugerfemale-1.wav",
+          "title": "Tag 007"
+        },
+        {
+          "file": "trap-kit/tag/lexlugerfemale.wav",
+          "title": "Tag 008"
+        },
+        {
+          "file": "trap-kit/tag/sb-fx-5-1.wav",
+          "title": "Tag 009"
+        },
+        {
+          "file": "trap-kit/tag/sb-fx-5.wav",
+          "title": "Tag 010"
+        },
+        {
+          "file": "trap-kit/tag/soufside-emblem-nigga_4-1.wav",
+          "title": "Tag 011"
+        },
+        {
+          "file": "trap-kit/tag/soufside-emblem-nigga_4.wav",
+          "title": "Tag 012"
+        },
+        {
+          "file": "trap-kit/tag/tagg-1.wav",
+          "title": "Tag 013"
+        },
+        {
+          "file": "trap-kit/tag/tagg-2-1.wav",
+          "title": "Tag 014"
+        },
+        {
+          "file": "trap-kit/tag/tagg-2.wav",
+          "title": "Tag 015"
+        },
+        {
+          "file": "trap-kit/tag/tagg-3-1.wav",
+          "title": "Tag 016"
+        },
+        {
+          "file": "trap-kit/tag/tagg-3.wav",
+          "title": "Tag 017"
+        },
+        {
+          "file": "trap-kit/tag/tagg.wav",
+          "title": "Tag 018"
+        },
+        {
+          "file": "trap-kit/tag/taynlugertag-1.wav",
+          "title": "Tag 019"
+        },
+        {
+          "file": "trap-kit/tag/taynlugertag.wav",
+          "title": "Tag 020"
+        }
+      ]
+    }
+  ],
+  "builtAt": "2026-05-17T04:34:45.444Z"
+}

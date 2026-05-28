@@ -1,4 +1,4 @@
-import { useMasterClock, LOOP_BAR_OPTIONS, PPQ, type QuantizeValue, type LoopModuleId } from '@/app/context/MasterClockContext';
+import { useMasterClock, LOOP_BAR_OPTIONS, PPQ, type QuantizeValue } from '@/app/context/MasterClockContext';
 import type { ScreenId } from '@/app/components/NavigationSidebar';
 
 import { Play, Square, Pause, Circle, Repeat, SkipBack, Save, Plus, Trash2, Settings } from 'lucide-react';
@@ -33,8 +33,6 @@ export default function TitleBar({
   const {
     transport,
     play, pause, stop, record, seekToTick,
-    syncDrums, setSyncDrums, syncPiano, setSyncPiano,
-    syncArr, setSyncArr, syncMix, setSyncMix,
     metronomeEnabled, setMetronomeEnabled,
     midiClockEnabled, setMidiClockEnabled,
     countInEnabled, setCountInEnabled,
@@ -48,7 +46,6 @@ export default function TitleBar({
     loopSection,
     loopStartBar,
     loopEndBar,
-    activeLoopModule,
     quantize, setQuantize,
     channelLevels, channelVolumes,
   } = useMasterClock();
@@ -60,23 +57,17 @@ export default function TitleBar({
   const isRunning   = isPlaying || isRecording;
   /** Play button shows Pause whenever transport is moving (incl. record / count-in). */
   const transportNeedsPause = isPlaying || isRecording || isCounting;
-  const allSynced   = syncDrums && syncPiano && syncArr && syncMix;
 
   const masterLevel = Math.min(1, Object.entries(channelLevels).reduce((sum, [id, lvl]) => {
     const vol = (channelVolumes[Number(id)] ?? 80) / 100;
     return sum + lvl * vol * 0.08;
   }, 0));
-  const LOOP_MODULE_LABELS: Record<LoopModuleId, string> = {
-    'creation-station': 'CREATION STATION',
-    'piano-roll': 'PIANO ROLL',
-    'studio-editor': 'STUDIO EDITOR',
-    'master-arranger': 'MASTER ARRANGER',
-  };
   const loopDisabledScreens: ScreenId[] = [
     'vocal-lab',
     'ai-song',
     'ai-pattern',
     'melody-transcription',
+    'harmony-match',
     'my-projects',
     'export',
     'studio-editor-2',
@@ -181,66 +172,99 @@ export default function TitleBar({
 
   return (
     <div
-      className="flex items-center gap-2 px-3 py-1 select-none shrink-0 overflow-x-auto"
+      className="flex items-center gap-2 px-3 py-1 select-none w-full min-w-0"
       style={{ background: '#0a0a0a', borderBottom: '2px solid #1a1a1a', height: 72, minHeight: 72 }}
     >
-      {/* Logo */}
-      <div className="flex items-center mr-1 shrink-0 -ml-3">
+      {/* Logo — Da Music Box | Gen-DAW ··· Hybrid */}
+      <div className="flex items-center shrink-0 mr-2">
         <div
-          className="shrink-0"
           style={{
-            height: 40,
-            width: 154,
+            height: 44,
             borderRadius: 6,
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            padding: '0 7px',
+            justifyContent: 'flex-start',
+            gap: 12,
+            padding: '0 12px',
             border: '1px solid #00E5FF44',
-            background: 'linear-gradient(180deg, #0b1018 0%, #090d14 100%)',
+            background: 'linear-gradient(90deg, #0b1018 0%, #0d1520 55%, #0b1018 100%)',
+            boxShadow: 'inset 0 1px 0 rgba(99,230,255,0.12), 0 0 20px rgba(0,229,255,0.06)',
+            whiteSpace: 'nowrap',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, alignItems: 'center', textAlign: 'center' }}>
-            <span
-              className="font-bold tracking-wide whitespace-nowrap"
-              style={{
-                fontSize: 17,
-                letterSpacing: 0.4,
-                color: '#63e6ff',
-                textShadow: '0 0 8px rgba(99,230,255,0.35)',
-              }}
-            >
-              Da Music Box
-            </span>
-            <span
-              className="font-bold tracking-wide whitespace-nowrap"
-              style={{
-                fontSize: 12,
-                color: '#9defff',
-                marginTop: 1,
-                textShadow: '0 0 6px rgba(99,230,255,0.25)',
-              }}
-            >
-              <span style={{ fontSize: 13 }}>Gen</span>/DAW-
-              <span
-                style={{
-                  fontFamily: 'Orbitron, "Audiowide", "Exo 2", "Rajdhani", sans-serif',
-                  fontWeight: 800,
-                  letterSpacing: 0.6,
-                  fontStyle: 'italic',
-                  color: '#00F5FF',
-                  WebkitTextStroke: '0',
-                  textShadow: 'none',
-                }}
-              >
-                Hybrid
-              </span>
-            </span>
-          </div>
+          <span
+            className="font-bold whitespace-nowrap shrink-0"
+            style={{
+              fontFamily: 'Orbitron, "Audiowide", "Exo 2", "Rajdhani", sans-serif',
+              fontWeight: 800,
+              fontSize: 21,
+              letterSpacing: 1.4,
+              background: 'linear-gradient(135deg, #fff8ec 0%, #ffe082 42%, #ffb74d 78%, #ff8a65 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              filter: 'drop-shadow(0 0 10px rgba(255, 183, 77, 0.45))',
+            }}
+          >
+            Da Music Box
+          </span>
+          <span
+            aria-hidden
+            style={{
+              width: 1,
+              height: 26,
+              flexShrink: 0,
+              background:
+                'linear-gradient(180deg, transparent 0%, rgba(94, 200, 232, 0.5) 45%, rgba(255, 183, 77, 0.35) 55%, transparent 100%)',
+            }}
+          />
+          <span
+            className="font-bold whitespace-nowrap shrink-0"
+            style={{
+              fontFamily: 'Orbitron, "Audiowide", "Exo 2", "Rajdhani", sans-serif',
+              fontWeight: 700,
+              fontSize: 15,
+              letterSpacing: 4,
+              color: '#9defff',
+              textShadow: '0 0 8px rgba(99,230,255,0.28)',
+            }}
+          >
+            Gen-DAW
+          </span>
+          <span
+            aria-hidden
+            style={{
+              width: 1,
+              height: 26,
+              flexShrink: 0,
+              marginLeft: 2,
+              background:
+                'linear-gradient(180deg, transparent 0%, rgba(255, 183, 77, 0.4) 50%, transparent 100%)',
+            }}
+          />
+          <span
+            className="font-bold whitespace-nowrap shrink-0"
+            style={{
+              fontFamily: 'Orbitron, "Audiowide", "Exo 2", "Rajdhani", sans-serif',
+              fontWeight: 800,
+              letterSpacing: 5,
+              fontStyle: 'italic',
+              fontSize: 16,
+              background: 'linear-gradient(135deg, #fff8ec 0%, #ffe082 42%, #ffb74d 78%, #ff8a65 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              filter: 'drop-shadow(0 0 8px rgba(255, 183, 77, 0.4))',
+            }}
+          >
+            Hybrid
+          </span>
         </div>
       </div>
 
-      <div className="w-px h-8 shrink-0 self-center mt-px ml-2" style={{ background: '#2a2a2a' }} />
+      {/* Transport + tools — flush right; logo box stays snug on the left */}
+      <div className="flex items-center gap-2 shrink-0 ml-auto overflow-x-auto">
+      <div className="w-px h-8 shrink-0 self-center" style={{ background: '#2a2a2a' }} />
 
       {/* ── Transport — same 32×32 + border treatment as Settings; active = solid fills like MET/MIDI ── */}
       <div className="flex items-center gap-1 shrink-0">
@@ -466,13 +490,6 @@ export default function TitleBar({
             {loopSection}
           </span>
         )}
-        <span
-          className="px-1.5 h-7 rounded text-xs font-bold flex items-center"
-          style={{ background: '#111', color: '#888', border: '1px solid #2a2a2a' }}
-          title="Module currently using top loop controls"
-        >
-          {LOOP_MODULE_LABELS[activeLoopModule]}
-        </span>
       </div>
 
       {/* ── Quantize ── */}
@@ -705,24 +722,6 @@ export default function TitleBar({
 
       <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
 
-      {/* ── Module sync ── */}
-      <div className="flex items-center gap-1 shrink-0">
-        {([
-          { label: 'DRUMS', val: syncDrums, set: setSyncDrums },
-          { label: 'PIANO', val: syncPiano, set: setSyncPiano },
-          { label: 'ARR',   val: syncArr,   set: setSyncArr   },
-          { label: 'MIX',   val: syncMix,   set: setSyncMix   },
-        ] as const).map(({ label, val, set }) => (
-          <button key={label} onClick={() => set(!val)} className="px-2 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70"
-            style={{ background: val ? '#1a1a2a' : '#111', color: val ? '#00E5FF' : '#444', border: `1px solid ${val ? '#00E5FF44' : '#222'}` }}>
-            {label}
-          </button>
-        ))}
-        {allSynced && <span className="text-xs font-bold ml-1 shrink-0" style={{ color: '#00E5FF' }}>⬡ SYNC</span>}
-      </div>
-
-      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
-
       {/* ── Project Management ── */}
       <div className="flex items-center gap-1 shrink-0">
         <button onClick={handleSaveAll} title="Save all work (Ctrl+S)"
@@ -783,13 +782,14 @@ export default function TitleBar({
       )}
 
       {/* ── Status dot ── */}
-      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         <div className="w-2 h-2 rounded-full shrink-0"
           style={{ background: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a',
             boxShadow: isPlaying ? '0 0 6px #00ff88' : isRecording ? '0 0 6px #ff4444' : 'none' }} />
         <span className="font-mono" style={{ color: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a', fontSize: 9 }}>
           {isRecording ? 'REC' : isPlaying ? 'PLAY' : 'STOP'}
         </span>
+      </div>
       </div>
     </div>
   );

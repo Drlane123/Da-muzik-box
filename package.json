@@ -15,7 +15,8 @@
 		"link-server": "node scripts/link-server.cjs",
 		"link-server:stub": "node -e \"process.env.LINK_STUB='1';require('./scripts/link-server.cjs')\"",
 		"export": "npm run build && npm run package-export",
-		"package-export": "node scripts/export.js"
+		"package-export": "node scripts/export.js",
+		"build:sound-families": "node scripts/build-sound-families.mjs"
 	},
 	"keywords": [
 		"daw",
@@ -44,10 +45,12 @@
 		"class-variance-authority": "0.7.0",
 		"clsx": "2.1.1",
 		"lucide-react": "0.446.0",
+		"midi-file": "^1.2.4",
 		"react": "19.2.1",
 		"react-day-picker": "^9.7.0",
 		"react-dom": "19.2.1",
 		"react-icons": "~5.5.0",
+		"smplr": "^0.26.0",
 		"tailwind-merge": "2.5.2",
 		"vite": "^5.4.21"
 	},
@@ -60,6 +63,7 @@
 		"@types/react": "19.2.1",
 		"@types/react-dom": "19.2.1",
 		"autoprefixer": "10.4.20",
+		"classic-level": "^3.0.0",
 		"eslint": "9.11.1",
 		"eslint-plugin-react-hooks": "5.1.0-rc.0",
 		"eslint-plugin-react-refresh": "0.4.12",
@@ -67,6 +71,7 @@
 		"express-ws": "^5.0.2",
 		"globals": "15.9.0",
 		"jsdom": "^28.1.0",
+		"playwright": "^1.60.0",
 		"postcss": "8.4.47",
 		"tailwindcss": "3.4.13",
 		"typescript": "5.5.3",

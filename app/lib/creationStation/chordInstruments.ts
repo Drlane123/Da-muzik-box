@@ -29,6 +29,7 @@
 
 export type ChordInstrumentCategory =
   | 'Piano'
+  | 'Piano+Strings'
   | 'Keys'
   | 'Strings'
   | 'Pad'
@@ -41,6 +42,8 @@ export type ChordInstrumentCategory =
 export type ChordInstrumentId =
   | 'piano-grand'
   | 'piano-upright'
+  | 'piano-strings-ballad'
+  | 'piano-strings-cinema'
   | 'epiano-rhodes'
   | 'organ'
   | 'strings-warm'
@@ -221,6 +224,112 @@ function pianoUprightVoice(args: ScheduleNoteArgs): GainNode[] {
   startStop(sparkle, startTime, startTime + 0.35);
 
   return [env];
+}
+
+/** Piano + Strings (Ballad) — soft grand attack with warm strings underneath. */
+function pianoStringsBalladVoice(args: ScheduleNoteArgs): GainNode[] {
+  const { ctx, destination, midi, startTime, sustainSec } = args;
+  const velocity = args.velocity ?? 1;
+  const fund = midiToFreq(midi);
+
+  const pianoPeak = 0.095 * velocity;
+  const pianoDecay = Math.min(2.0, Math.max(0.75, sustainSec * 0.9));
+  const pianoEnv = ctx.createGain();
+  const pianoLpf = ctx.createBiquadFilter();
+  pianoLpf.type = 'lowpass';
+  pianoLpf.frequency.value = 4000;
+  pianoLpf.Q.value = 0.45;
+  pianoEnv.connect(pianoLpf).connect(destination);
+  applyPercussiveEnv(pianoEnv, startTime, pianoPeak, 0.008, pianoDecay);
+  const pianoStop = startTime + 0.008 + pianoDecay + 0.05;
+
+  const pianoBody = ctx.createOscillator();
+  pianoBody.type = 'triangle';
+  pianoBody.frequency.value = fund;
+  pianoBody.connect(pianoEnv);
+  startStop(pianoBody, startTime, pianoStop);
+
+  const pianoHarm = ctx.createOscillator();
+  const pianoHarmGain = ctx.createGain();
+  pianoHarm.type = 'sine';
+  pianoHarm.frequency.value = fund * 2;
+  pianoHarmGain.gain.value = 0.28;
+  pianoHarm.connect(pianoHarmGain).connect(pianoEnv);
+  startStop(pianoHarm, startTime, pianoStop);
+
+  const strPeak = 0.062 * velocity;
+  const strEnv = ctx.createGain();
+  const strLpf = ctx.createBiquadFilter();
+  strLpf.type = 'lowpass';
+  strLpf.frequency.value = 2600;
+  strLpf.Q.value = 0.55;
+  strEnv.connect(strLpf).connect(destination);
+  applySustainedEnv(strEnv, startTime, strPeak, 0.34, sustainSec, 0.38);
+  const strStop = startTime + Math.max(sustainSec, 0.35) + 0.42;
+
+  for (const cents of [-8, 0, 8]) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = fund;
+    osc.detune.value = cents;
+    osc.connect(strEnv);
+    startStop(osc, startTime, strStop);
+  }
+
+  const lfo = ctx.createOscillator();
+  const lfoGain = ctx.createGain();
+  lfo.type = 'sine';
+  lfo.frequency.value = 4.5;
+  lfoGain.gain.value = 0.005;
+  lfo.connect(lfoGain).connect(strEnv.gain);
+  startStop(lfo, startTime, strStop);
+
+  return [pianoEnv, strEnv];
+}
+
+/** Piano + Strings (Cinema) — bright piano strike with sweeping strings. */
+function pianoStringsCinemaVoice(args: ScheduleNoteArgs): GainNode[] {
+  const { ctx, destination, midi, startTime, sustainSec } = args;
+  const velocity = args.velocity ?? 1;
+  const fund = midiToFreq(midi);
+
+  const pianoPeak = 0.085 * velocity;
+  const pianoDecay = Math.min(1.7, Math.max(0.65, sustainSec * 0.8));
+  const pianoEnv = ctx.createGain();
+  const pianoLpf = ctx.createBiquadFilter();
+  pianoLpf.type = 'lowpass';
+  pianoLpf.frequency.value = 5200;
+  pianoEnv.connect(pianoLpf).connect(destination);
+  applyPercussiveEnv(pianoEnv, startTime, pianoPeak, 0.006, pianoDecay);
+  const pianoStop = startTime + 0.006 + pianoDecay + 0.05;
+
+  const pianoBody = ctx.createOscillator();
+  pianoBody.type = 'triangle';
+  pianoBody.frequency.value = fund;
+  pianoBody.connect(pianoEnv);
+  startStop(pianoBody, startTime, pianoStop);
+
+  const strPeak = 0.058 * velocity;
+  const strEnv = ctx.createGain();
+  const strLpf = ctx.createBiquadFilter();
+  strLpf.type = 'lowpass';
+  strLpf.frequency.setValueAtTime(850, startTime);
+  strLpf.frequency.linearRampToValueAtTime(3400, startTime + 0.65);
+  strLpf.Q.value = 0.5;
+  strEnv.connect(strLpf).connect(destination);
+  applySustainedEnv(strEnv, startTime, strPeak, 0.62, sustainSec, 0.5);
+  const strStop = startTime + Math.max(sustainSec, 0.45) + 0.55;
+
+  for (const cents of [-11, -4, 4, 11]) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = fund;
+    osc.detune.value = cents;
+    osc.connect(strEnv);
+    startStop(osc, startTime, strStop);
+  }
+
+  return [pianoEnv, strEnv];
 }
 
 /** Electric Piano (Rhodes-style) — sine fundamental + bell harmonic that
@@ -646,6 +755,8 @@ function synthLeadVoice(args: ScheduleNoteArgs): GainNode[] {
 export const CHORD_INSTRUMENTS: readonly ChordInstrument[] = [
   { id: 'piano-grand',    label: 'Grand Piano',    category: 'Piano',   glyph: '♟', description: 'Full, ringing grand piano — the default chord voice.', scheduleNote: pianoGrandVoice },
   { id: 'piano-upright',  label: 'Upright Piano',  category: 'Piano',   glyph: '♟', description: 'Brighter, tighter upright — cuts through a busy mix.',  scheduleNote: pianoUprightVoice },
+  { id: 'piano-strings-ballad', label: 'Piano & Strings (Ballad)', category: 'Piano+Strings', glyph: '♟♪', description: 'Soft piano with warm strings that swell underneath — slow ballads.', scheduleNote: pianoStringsBalladVoice },
+  { id: 'piano-strings-cinema', label: 'Piano & Strings (Cinema)', category: 'Piano+Strings', glyph: '♟♪', description: 'Bright piano strike with sweeping film-score strings.', scheduleNote: pianoStringsCinemaVoice },
   { id: 'epiano-rhodes',  label: 'Electric Piano', category: 'Keys',    glyph: '♬', description: 'Rhodes-style EP with the classic bell-tine attack.',    scheduleNote: epianoRhodesVoice },
   { id: 'organ',          label: 'Drawbar Organ',  category: 'Keys',    glyph: '♬', description: 'Hammond-flavored drawbar organ — held, no decay.',      scheduleNote: organVoice },
   { id: 'strings-warm',   label: 'Warm Strings',   category: 'Strings', glyph: '♪', description: 'Three-voice string ensemble with subtle vibrato.',      scheduleNote: stringsWarmVoice },

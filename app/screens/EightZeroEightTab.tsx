@@ -1,8 +1,40 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ChevronLeft, Pause, Play, SkipBack, Square } from 'lucide-react';
 import type { ChordMode, ChordSymbol } from '@/app/lib/creationStation/chordBuilder';
-import { chordSymbolToMidi, chordSymbolToName, MODE_LABELS } from '@/app/lib/creationStation/chordBuilder';
+import {
+  chordSymbolToMidi,
+  chordSymbolToName,
+  chordSymbolToRootMidi,
+  coerceChordSymbolForMode,
+  MODE_LABELS,
+} from '@/app/lib/creationStation/chordBuilder';
 import { readChordSync } from '@/app/lib/chordBuilderSync';
+import {
+  compute808LabLoopBeats,
+  LAB808_ROOTS_IMPORTED_EVENT,
+  manualRollNotesFrom808Import,
+  midiTo808RollOctave,
+  read808LabImportedRoots,
+  snap808LabLoopBars,
+} from '@/app/lib/creationStation/lab808ChordRoots';
+import { lab808BassCreatedName, lab808TrapKickCreatedName } from '@/app/lib/creationStation/lab808KickCatalog';
+import {
+  formatLab808KickDisplayLabel,
+  lab808BpmInputStyle,
+  lab808BtnGhost,
+  lab808BtnMini,
+  lab808FilterRangeStyle,
+  lab808FxLabel,
+  lab808LevelRangeStyle,
+  lab808RollChordNoteFont,
+  lab808Select,
+  lab808ToolbarBpmRow,
+  lab808ToolbarLabel,
+  lab808TransportButtonStyle,
+  LAB808_TRANSPORT_BTN,
+  LAB808_TRANSPORT_BTN_PLAY,
+  LAB808_TRANSPORT_ICON,
+} from '@/app/lib/creationStation/lab808UiTheme';
 import {
   BASS_LOW_BASS_ORDER,
   BASS_LOW_BASS_PRESETS,
@@ -68,15 +100,15 @@ function resolveAnchorMidi(
   anchor: EightZeroEightAnchor,
   octaveShift: number,
 ): number | null {
-  /** `(baseOctave+1)*12+key` — use `0` so roots sit low (sub/kick register); OCTAVE shifts from there. */
-  const m = chordSymbolToMidi(symbol as ChordSymbol, keyRoot, mode, 0);
-  if (!m?.length) return null;
+  const sym = coerceChordSymbolForMode(symbol as ChordSymbol, mode);
+  const root = chordSymbolToRootMidi(sym, keyRoot, mode, 0);
+  if (root == null) return null;
+  if (anchor === 'root') return Math.max(0, root + octaveShift * 12);
+  const m = chordSymbolToMidi(sym, keyRoot, mode, 0);
+  if (!m?.length) return Math.max(0, root + octaveShift * 12);
   const sorted = [...m].sort((a, b) => a - b);
   let note: number;
   switch (anchor) {
-    case 'root':
-      note = m[0]!;
-      break;
     case 'third':
       note = m[1] ?? m[0]!;
       break;
@@ -145,26 +177,8 @@ const btnPrimary: CSSProperties = {
   fontSize: 12,
   cursor: 'pointer',
 };
-const btnGhost: CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 8,
-  border: '1px solid #3f3f46',
-  background: '#18181b',
-  color: '#d4d4d8',
-  fontWeight: 800,
-  fontSize: 12,
-  cursor: 'pointer',
-};
-const btnMini: CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: 6,
-  border: '1px solid #52525b',
-  background: '#27272f',
-  color: '#fde68a',
-  fontWeight: 800,
-  fontSize: 11,
-  cursor: 'pointer',
-};
+const btnGhost = lab808BtnGhost;
+const btnMini = lab808BtnMini;
 
 /** Horizontal zoom — 808 Lab uses larger beat cells than Chord Builder. */
 const PX_PER_BEAT_BASE = LAB808_PIANO_PX_PER_BEAT;
@@ -188,7 +202,7 @@ const ROLL_EMPTY_TAP_MAX_PX = 8;
 /** Key preview hold — kick = short thump; bass = longer 808 line. */
 const KEY_PREVIEW_HOLD_BEATS_KICK = 1;
 const KEY_PREVIEW_HOLD_BEATS_BASS = 2;
-/** Chord-sync progression blocks on the roll (off while building 808 hits on the grid). */
+/** Roots arrive via "Roots → 808" command as `manualRollNotes` (not live overlay). */
 const SHOW_SYNC_CHORD_NOTES_ON_ROLL = false;
 
 type ManualRollNote = { id: string; startBeat: number; midi: number; durBeats: number };
@@ -214,6 +228,7 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
   const [quantize, setQuantize] = useState<Lab808Quantize>('1/16');
   const [rollLowOct, setRollLowOct] = useState(LAB808_OCTAVE_LOW_DEFAULT);
   const [rollHighOct, setRollHighOct] = useState(LAB808_OCTAVE_HIGH_DEFAULT);
+  const [import808Hint, setImport808Hint] = useState<string | null>(null);
 
   const rollAreaRef = useRef<HTMLDivElement | null>(null);
   const rollPlaylineRef = useRef<HTMLDivElement | null>(null);
@@ -449,8 +464,8 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
     vp.scrollTop = Math.max(0, c2Idx * rollRowH - rollRowH * 2);
   }, [labPanel, rollRowH, rollRows]);
 
-  const noteMinW = Math.max(16, Math.floor(pxPerBeat * 0.7));
-  const noteMinH = Math.max(12, rollRowH - 4);
+  const noteMinW = Math.max(22, Math.floor(pxPerBeat * 0.7));
+  const noteMinH = Math.max(18, rollRowH - 2);
 
   const rootChordLabel = useMemo(
     () =>
@@ -462,6 +477,102 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
           },
     [sync, mode],
   );
+
+  const roll808BpmRef = useRef(roll808Bpm);
+  roll808BpmRef.current = roll808Bpm;
+  const manualRollNotesRef = useRef(manualRollNotes);
+  manualRollNotesRef.current = manualRollNotes;
+
+  const lab808LoopBeats = useMemo(
+    () =>
+      compute808LabLoopBeats({
+        syncBlocks: sync?.blocks ?? null,
+        manualNotes: manualRollNotes,
+      }),
+    [sync?.blocks, manualRollNotes],
+  );
+  const lab808LoopBars = useMemo(
+    () => Math.max(1, Math.ceil(lab808LoopBeats / BEATS_PER_BAR)),
+    [lab808LoopBeats],
+  );
+  const lab808LoopBeatsRef = useRef(lab808LoopBeats);
+  lab808LoopBeatsRef.current = lab808LoopBeats;
+
+  const transport808FiredRef = useRef<Set<string>>(new Set());
+
+  const applyImported808Roots = useCallback(() => {
+    const payload = read808LabImportedRoots();
+    if (!payload?.notes?.length) return;
+    const notes = manualRollNotesFrom808Import(payload);
+    setManualRollNotes(notes);
+    setRoll808BpmOverride(null);
+    if (typeof payload.octaveShift === 'number') setOctaveShift(payload.octaveShift);
+    const minOct = Math.min(...notes.map((n) => midiTo808RollOctave(n.midi)));
+    const maxOct = Math.max(...notes.map((n) => midiTo808RollOctave(n.midi)));
+    setRollLowOct((lo) => Math.min(lo, Math.max(LAB808_OCTAVE_MIN, minOct)));
+    setRollHighOct((hi) => Math.max(hi, Math.min(LAB808_OCTAVE_MAX, maxOct)));
+    const src =
+      payload.source === 'chord-sequencer' ? 'Chord/Bass Sequencer' : 'Chord Builder';
+    setImport808Hint(
+      `Loaded ${payload.notes.length} root${payload.notes.length === 1 ? '' : 's'} from ${src} · ${payload.progressionName}`,
+    );
+  }, []);
+
+  useEffect(() => {
+    applyImported808Roots();
+    const onImport = () => applyImported808Roots();
+    window.addEventListener(LAB808_ROOTS_IMPORTED_EVENT, onImport);
+    return () => window.removeEventListener(LAB808_ROOTS_IMPORTED_EVENT, onImport);
+  }, [applyImported808Roots]);
+
+  useEffect(() => {
+    if (!isScreenActive) return;
+    applyImported808Roots();
+  }, [isScreenActive, applyImported808Roots]);
+
+  useEffect(() => {
+    if (!import808Hint) return;
+    const t = window.setTimeout(() => setImport808Hint(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [import808Hint]);
+
+  useEffect(() => {
+    const needBars = snap808LabLoopBars(lab808LoopBars);
+    const timelineOpt = ROLL_TIMELINE_BAR_OPTIONS.find((o) => o >= needBars) ?? 32;
+    setRollTimelineBars((prev) => (timelineOpt > prev ? timelineOpt : prev));
+  }, [lab808LoopBars]);
+
+  const scheduleRoll808OnTransport = useCallback(
+    (quarterBeat: number, spb: number, ctx: AudioContext, when: number) => {
+      const notes = manualRollNotesRef.current;
+      if (!notes.length) return;
+      const stepTol = (4 / Math.max(1, spb)) * 0.55;
+      const loopLen = Math.max(1e-6, lab808LoopBeatsRef.current);
+      const loopCycle = Math.floor(Math.max(0, quarterBeat) / loopLen);
+      const posInLoop = ((quarterBeat % loopLen) + loopLen) % loopLen;
+      for (const n of notes) {
+        if (Math.abs(posInLoop - n.startBeat) >= stepTol) continue;
+        const key = `${n.id}:${loopCycle}`;
+        if (transport808FiredRef.current.has(key)) continue;
+        transport808FiredRef.current.add(key);
+        playEightZeroEight(ctx, when, n.midi, playbackPresetRef.current, velocity, {
+          holdBeats: n.durBeats,
+          bpm: roll808BpmRef.current,
+          kickKeyboardMap: true,
+          kickMonophonic: true,
+          velocity01: 0.88,
+          soundLane,
+          filterFx: lab808FilterRef.current,
+        });
+      }
+    },
+    [soundLane, velocity],
+  );
+
+  const onLabDeckTransportChange = useCallback((state: Lab808DeckTransportState) => {
+    setLabDeckTransport(state);
+    if (state === 'stopped') transport808FiredRef.current.clear();
+  }, []);
 
   const playHit = useCallback(
     (midi: number, stepIdx?: number, opts?: { holdBeats?: number; velocity01?: number }) => {
@@ -502,16 +613,16 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
     const hits: Hit[] = [];
     let beatCursor = 0;
     if (sync?.blocks?.length) {
-      sync.blocks.forEach((b, i) => {
-        const base = resolveAnchorMidi(b.chord, sync.keyRoot, mode, anchor, octaveShift);
-        const midi = base == null ? null : (rollPitchOverride[i] ?? base);
-        if (midi != null) {
-          const shift = noteStartShiftBeats[i] ?? 0;
+    sync.blocks.forEach((b, i) => {
+      const base = resolveAnchorMidi(b.chord, sync.keyRoot, mode, anchor, octaveShift);
+      const midi = base == null ? null : (rollPitchOverride[i] ?? base);
+      if (midi != null) {
+        const shift = noteStartShiftBeats[i] ?? 0;
           const tHit = tBase + (beatCursor + shift) / bps;
           hits.push({ t: tHit, midi, holdBeats: noteDurBeats[i] ?? DEFAULT_NOTE_BEATS });
-        }
-        beatCursor += b.durationBeats;
-      });
+      }
+      beatCursor += b.durationBeats;
+    });
     }
     for (const n of manualRollNotes) {
       hits.push({ t: tBase + n.startBeat / bps, midi: n.midi, holdBeats: n.durBeats });
@@ -691,22 +802,22 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
 
   const beginResize = useCallback(
     (e: React.PointerEvent, stepIdx: number) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (e.button !== 0) return;
-      const dur = noteDurBeats[stepIdx] ?? DEFAULT_NOTE_BEATS;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    const dur = noteDurBeats[stepIdx] ?? DEFAULT_NOTE_BEATS;
       const row = rollData[stepIdx];
       const shift = noteStartShiftBeats[stepIdx] ?? 0;
       const startBeatAbs = row != null ? row.startBeat + shift : 0;
       resizeRef.current = { idx: stepIdx, startClientX: e.clientX, startDur: dur, startBeatAbs };
-      const el = e.currentTarget as HTMLElement;
-      resizeTouchSurfaceRef.current = el;
-      el.style.touchAction = 'none';
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        /* */
-      }
+    const el = e.currentTarget as HTMLElement;
+    resizeTouchSurfaceRef.current = el;
+    el.style.touchAction = 'none';
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* */
+    }
     },
     [noteDurBeats, noteStartShiftBeats, rollData],
   );
@@ -889,15 +1000,7 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
     [],
   );
 
-  const miniSelectStyle: CSSProperties = {
-    padding: '2px 4px',
-    borderRadius: 4,
-    border: '1px solid #3f3f46',
-    background: '#12121a',
-    color: '#e4e4e7',
-    fontSize: 8,
-    fontWeight: 800,
-  };
+  const miniSelectStyle = lab808Select;
 
   const hasRollTweaks =
     manualRollNotes.length > 0 ||
@@ -907,20 +1010,20 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
 
   return (
     <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: CB_PIANO_BG, color: '#d0d0d0', fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: `1px solid ${CB_PIANO_MINT_BORDER}`, background: 'rgba(8,8,12,0.98)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${CB_PIANO_MINT_BORDER}`, background: 'rgba(8,8,12,0.98)', flexShrink: 0 }}>
         {embedded && onBack && (
-          <button type="button" onClick={onBack} style={{ ...btnGhost, padding: '6px 10px' }}>
-            <ChevronLeft size={16} /> Back
+          <button type="button" onClick={onBack} style={btnGhost}>
+            <ChevronLeft size={20} /> Back
           </button>
         )}
-        <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: '-0.02em', color: '#f0f0f0' }}>808 LAB</span>
-        <span style={{ fontSize: 9, fontWeight: 700, color: '#555', letterSpacing: '0.1em' }}>PIANO ROLL</span>
+        <span style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-0.02em', color: '#f0f0f0' }}>808 LAB</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#555', letterSpacing: '0.1em' }}>PIANO ROLL</span>
       </div>
-      <div style={{ display: 'flex', gap: 6, padding: '4px 10px', borderBottom: `1px solid ${CB_PIANO_MINT_BORDER}`, background: 'rgba(8,8,12,0.98)', flexShrink: 0 }}>
-        <button type="button" onClick={() => setLabPanel('808-roll')} style={{ ...btnMini, padding: '3px 10px', fontSize: 10, borderColor: labPanel === '808-roll' ? CB_PIANO_MINT_BORDER : '#1a1a1a', background: labPanel === '808-roll' ? CB_PIANO_MINT_BG : 'transparent', color: labPanel === '808-roll' ? CB_PIANO_MINT : '#3a3a3a' }}>
+      <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${CB_PIANO_MINT_BORDER}`, background: 'rgba(8,8,12,0.98)', flexShrink: 0 }}>
+        <button type="button" onClick={() => setLabPanel('808-roll')} style={{ ...btnMini, padding: '10px 16px', fontSize: 14, borderColor: labPanel === '808-roll' ? CB_PIANO_MINT_BORDER : '#1a1a1a', background: labPanel === '808-roll' ? CB_PIANO_MINT_BG : 'transparent', color: labPanel === '808-roll' ? CB_PIANO_MINT : '#3a3a3a' }}>
           808 Lab
         </button>
-        <button type="button" onClick={() => setLabPanel('drum-machine')} style={{ ...btnMini, padding: '3px 10px', fontSize: 10, borderColor: labPanel === 'drum-machine' ? '#22c55e55' : '#1a1a1a', background: labPanel === 'drum-machine' ? '#052e16' : 'transparent', color: labPanel === 'drum-machine' ? '#86efac' : '#3a3a3a' }}>
+        <button type="button" onClick={() => setLabPanel('drum-machine')} style={{ ...btnMini, padding: '10px 16px', fontSize: 14, borderColor: labPanel === 'drum-machine' ? '#22c55e55' : '#1a1a1a', background: labPanel === 'drum-machine' ? '#052e16' : 'transparent', color: labPanel === 'drum-machine' ? '#86efac' : '#3a3a3a' }}>
           Drum machine
         </button>
       </div>
@@ -928,77 +1031,67 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ flex: 1, display: labPanel === '808-roll' ? 'flex' : 'none', flexDirection: 'column', padding: '2px 4px', minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
           <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', borderRadius: 0, border: `1px solid ${CB_PIANO_MINT_BORDER}`, overflow: 'hidden', background: CB_PIANO_BG }}>
-              <div style={{ fontSize: 9, fontWeight: 800, color: '#8a8a98', padding: '4px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.30)', flexShrink: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6, letterSpacing: '0.06em' }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#8a8a98', padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.30)', flexShrink: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, letterSpacing: '0.06em' }}>
                 <span style={{ flex: '1 1 140px', minWidth: 0, lineHeight: 1.35 }}>
                   {nSemitones} keys · {rollRows[nSemitones - 1]}–{rollRows[0]}
+                  {import808Hint ? (
+                    <span style={{ color: CB_PIANO_MINT }}> · {import808Hint}</span>
+                  ) : manualRollNotes.length > 0 ? (
+                    <span style={{ color: CB_PIANO_MINT }}> · {manualRollNotes.length} root hits on roll</span>
+                  ) : (
+                    <span style={{ color: '#52525b' }}>
+                      {' '}
+                      · Chord Builder: click <strong style={{ color: '#ca8a04' }}>Roots → 808</strong>
+                    </span>
+                  )}
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }} title="808 Lab MPC transport (same clock as Drum machine tab)">
-                  <button
-                    type="button"
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: '6px 10px', borderRadius: 8, background: '#0a0a0e', border: '1px solid #2a2a32' }} title="808 Lab MPC transport (same clock as Drum machine tab)">
+          <button
+            type="button"
                     onClick={() => lab808DeckTransportRef.current?.transportSeekStart()}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 28,
-                      height: 28,
-                      flexShrink: 0,
-                      border: 'none',
-                      borderRadius: 6,
-                      background: '#101014',
-                      color: '#8aa0b5',
-                      cursor: 'pointer',
-                    }}
+                    style={{ ...lab808TransportButtonStyle(), width: LAB808_TRANSPORT_BTN, height: LAB808_TRANSPORT_BTN }}
                     title="Return to start"
                   >
-                    <SkipBack size={14} />
-                  </button>
+                    <SkipBack size={LAB808_TRANSPORT_ICON} />
+          </button>
                   <button
                     type="button"
                     onClick={() => lab808DeckTransportRef.current?.transportStop()}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 28,
-                      height: 28,
-                      flexShrink: 0,
-                      border: 'none',
-                      borderRadius: 6,
-                      background: '#101014',
-                      color: '#8aa0b5',
-                      cursor: 'pointer',
-                    }}
+                    style={{ ...lab808TransportButtonStyle(), width: LAB808_TRANSPORT_BTN, height: LAB808_TRANSPORT_BTN }}
                     title="Stop"
                   >
-                    <Square size={14} />
+                    <Square size={LAB808_TRANSPORT_ICON} />
                   </button>
                   <button
                     type="button"
                     onClick={() => lab808DeckTransportRef.current?.transportTogglePlayPause()}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 34,
-                      height: 28,
-                      flexShrink: 0,
-                      border: 'none',
-                      borderRadius: 6,
+            style={{
+                      ...lab808TransportButtonStyle(labDeckTransport === 'playing'),
+                      width: LAB808_TRANSPORT_BTN_PLAY,
+                      height: LAB808_TRANSPORT_BTN,
                       background:
                         labDeckTransport === 'playing'
                           ? 'rgba(0, 229, 255, 0.18)'
                           : 'linear-gradient(145deg, #1e3a5f, #122032)',
                       color: labDeckTransport === 'playing' ? '#5eead4' : '#cffafe',
-                      cursor: 'pointer',
                     }}
                     title={labDeckTransport === 'playing' ? 'Pause' : 'Play'}
                   >
-                    {labDeckTransport === 'playing' ? <Pause size={14} /> : <Play size={14} />}
+                    {labDeckTransport === 'playing' ? <Pause size={LAB808_TRANSPORT_ICON} /> : <Play size={LAB808_TRANSPORT_ICON} />}
                   </button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#94a3b8', fontWeight: 800 }}>
+                  {sync?.blocks?.length ? (
+                    <button
+                      type="button"
+                      onClick={() => playProgression()}
+                      style={{ ...btnMini, marginLeft: 4 }}
+                      title="Preview chord roots once (no drums)"
+                    >
+                      ▶ Chords
+                    </button>
+                  ) : null}
+              </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+                  <label style={lab808ToolbarLabel}>
                     Bars
                     <select
                       value={rollTimelineBars}
@@ -1013,8 +1106,8 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                       ))}
                     </select>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#94a3b8', fontWeight: 800 }}>
-                    BPM
+                  <div style={lab808ToolbarBpmRow}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#94a3b8', flexShrink: 0 }}>BPM</span>
                     <input
                       type="number"
                       min={40}
@@ -1026,26 +1119,24 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                         if (!Number.isFinite(v)) return;
                         setRoll808BpmOverride(Math.max(40, Math.min(220, v)));
                       }}
-                      style={{ ...miniSelectStyle, width: 44, MozAppearance: 'textfield' }}
+                      style={lab808BpmInputStyle()}
                       title="808 Lab tempo (preview hits + MPC transport base)"
                     />
-                    <button
-                      type="button"
+          <button
+            type="button"
                       onClick={() => setRoll808BpmOverride(null)}
                       disabled={roll808BpmOverride == null}
-                      style={{
+            style={{
                         ...btnMini,
-                        padding: '2px 6px',
-                        fontSize: 8,
                         opacity: roll808BpmOverride == null ? 0.35 : 1,
                         cursor: roll808BpmOverride == null ? 'default' : 'pointer',
                       }}
                       title={roll808BpmOverride == null ? 'Already following Chord Builder / lab BPM' : 'Use BPM from Chord Builder sync (or fallback)'}
                     >
                       Sync
-                    </button>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#94a3b8', fontWeight: 800 }}>
+          </button>
+                  </div>
+                  <label style={lab808ToolbarLabel}>
                     Quant
                     <select
                       value={quantize}
@@ -1058,9 +1149,9 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                           {q}
                         </option>
                       ))}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#94a3b8', fontWeight: 800 }}>
+              </select>
+            </label>
+                  <label style={lab808ToolbarLabel}>
                     Lo
                     <select
                       value={rollLowOct}
@@ -1078,10 +1169,10 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                         </option>
                       ))}
                     </select>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#94a3b8', fontWeight: 800 }}>
+            </label>
+                  <label style={lab808ToolbarLabel}>
                     Hi
-                    <select
+              <select
                       value={rollHighOct}
                       onChange={(e) => {
                         const v = +e.target.value;
@@ -1094,45 +1185,46 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                       {octaveOptions.map((o) => (
                         <option key={o} value={o}>
                           C{o}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <span style={{ fontSize: 8, color: '#52525b' }}>step {quantizeStep.toFixed(3)}b</span>
+                  </option>
+                ))}
+              </select>
+            </label>
+                  <span style={{ fontSize: 12, color: '#52525b', fontWeight: 700 }}>step {quantizeStep.toFixed(3)}b</span>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, width: '100%' }}>
-                  <button type="button" onClick={() => setSoundLane('kick')} style={{ ...btnMini, padding: '2px 6px', fontSize: 8, borderColor: soundLane === 'kick' ? '#ca8a04' : '#52525b', background: soundLane === 'kick' ? '#422006' : '#27272f', color: soundLane === 'kick' ? '#fde68a' : '#a1a1aa' }}>Kick</button>
-                  <button type="button" onClick={() => setSoundLane('bass')} style={{ ...btnMini, padding: '2px 6px', fontSize: 8, borderColor: soundLane === 'bass' ? '#22c55e' : '#52525b', background: soundLane === 'bass' ? '#052e16' : '#27272f', color: soundLane === 'bass' ? '#86efac' : '#a1a1aa' }}>Bass</button>
-                  <select
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, width: '100%' }}>
+                  <button type="button" onClick={() => setSoundLane('kick')} style={{ ...btnMini, borderColor: soundLane === 'kick' ? '#ca8a04' : '#52525b', background: soundLane === 'kick' ? '#422006' : '#27272f', color: soundLane === 'kick' ? '#fde68a' : '#a1a1aa' }}>Kick</button>
+                  <button type="button" onClick={() => setSoundLane('bass')} style={{ ...btnMini, borderColor: soundLane === 'bass' ? '#22c55e' : '#52525b', background: soundLane === 'bass' ? '#052e16' : '#27272f', color: soundLane === 'bass' ? '#86efac' : '#a1a1aa' }}>Bass</button>
+              <select
                     value={soundLane === 'kick' ? trapKickPresetId : bassPresetId}
                     onChange={(e) => {
                       const v = e.target.value;
                       if (soundLane === 'kick') setTrapKickPresetId(v as TrapHold808PresetId);
                       else setBassPresetId(v as BassLowBassPresetId);
                     }}
-                    style={{ padding: '2px 4px', borderRadius: 4, border: '1px solid #3f3f46', background: '#12121a', color: '#e4e4e7', fontSize: 8, fontWeight: 800, maxWidth: 128 }}
+                    style={{ ...lab808Select, minWidth: 160, maxWidth: 200 }}
                   >
                     {soundLane === 'kick'
                       ? TRAP_HOLD_808_ORDER.map((id) => (
                           <option key={id} value={id}>
-                            {TRAP_HOLD_808_PRESETS[id].label}
+                            {formatLab808KickDisplayLabel(lab808TrapKickCreatedName(id))}
                           </option>
                         ))
                       : BASS_LOW_BASS_ORDER.map((id) => (
                           <option key={id} value={id}>
-                            {BASS_LOW_BASS_PRESETS[id].label}
+                            {formatLab808KickDisplayLabel(lab808BassCreatedName(id))}
                           </option>
                         ))}
-                  </select>
-                  <input type="range" min={0.35} max={1} step={0.02} value={velocity} onChange={(e) => setVelocity(+e.target.value)} title="Level" style={{ width: 52, accentColor: '#ca8a04' }} />
-                  <span style={{ fontSize: 8, color: '#52525b' }}>HP</span>
-                  <input type="range" min={0} max={8000} step={10} value={lab808HpHz < 25 ? 0 : lab808HpHz} onChange={(e) => { const v = +e.target.value; setLab808HpHz(v < 25 ? 0 : v); }} style={{ width: 44, accentColor: '#7cf4c6' }} />
-                  <span style={{ fontSize: 8, color: '#52525b' }}>LP</span>
-                  <input type="range" min={200} max={20000} step={50} value={lab808LpHz >= 200 && lab808LpHz < 19900 ? lab808LpHz : 20000} onChange={(e) => { const v = +e.target.value; setLab808LpHz(v >= 19900 ? 0 : v); }} style={{ width: 44, accentColor: '#7cf4c6' }} />
+              </select>
+                  <span style={{ ...lab808FxLabel, color: '#ca8a04' }}>Lvl</span>
+                  <input type="range" min={0.35} max={1} step={0.02} value={velocity} onChange={(e) => setVelocity(+e.target.value)} title="Level" style={lab808LevelRangeStyle} />
+                  <span style={lab808FxLabel}>HP</span>
+                  <input type="range" min={0} max={8000} step={10} value={lab808HpHz < 25 ? 0 : lab808HpHz} onChange={(e) => { const v = +e.target.value; setLab808HpHz(v < 25 ? 0 : v); }} style={lab808FilterRangeStyle('#7cf4c6')} title="High-pass filter" />
+                  <span style={lab808FxLabel}>LP</span>
+                  <input type="range" min={200} max={20000} step={50} value={lab808LpHz >= 200 && lab808LpHz < 19900 ? lab808LpHz : 20000} onChange={(e) => { const v = +e.target.value; setLab808LpHz(v >= 19900 ? 0 : v); }} style={lab808FilterRangeStyle('#7cf4c6')} title="Low-pass filter" />
                   {hasRollTweaks && (
-                    <button
-                      type="button"
-                      onClick={() => {
+            <button
+              type="button"
+              onClick={() => {
                         setRollPitchOverride({});
                         setManualRollNotes([]);
                         setNoteDurBeats(() => {
@@ -1146,25 +1238,25 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                           return next;
                         });
                       }}
-                      style={{ ...btnMini, padding: '2px 6px', fontSize: 8 }}
+                      style={btnMini}
                     >
                       Reset
-                    </button>
+            </button>
                   )}
-                </div>
-              </div>
-              <div
-                ref={rollViewportRef}
-                style={{
-                  flex: 1,
-                  minHeight: 0,
-                  minWidth: 0,
+            </div>
+            </div>
+            <div
+              ref={rollViewportRef}
+              style={{
+                flex: 1,
+                minHeight: 0,
+                minWidth: 0,
                   overflowX: 'auto',
                   overflowY: rollScrollsVertically ? 'auto' : 'hidden',
-                  overscrollBehavior: 'contain',
-                  WebkitOverflowScrolling: 'touch',
-                }}
-              >
+                overscrollBehavior: 'contain',
+                WebkitOverflowScrolling: 'touch',
+              }}
+            >
                 <div style={{ display: 'flex', flexDirection: 'column', minWidth: rollWidth, flexShrink: 0 }}>
                 <div
                   style={{ ...cbPianoRulerStyle(ROLL_METRICS), minWidth: rollWidth, cursor: 'pointer' }}
@@ -1209,22 +1301,22 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                               velocity01: pointerStrikeVelocity(e),
                             });
                           }}
-                          style={{
+                    style={{
                             ...cbPianoKeyCellStyle(ROLL_METRICS),
-                            height: rollRowH,
+                      height: rollRowH,
                             opacity: dim ? 0.45 : 1,
                           }}
                         >
                           <div style={cbPianoKeyFaceStyle(midi, isRoot, ROLL_METRICS)}>{cbPianoKeyLabel(midi)}</div>
                         </button>
-                      </div>
+                  </div>
                     );
                   })}
-                </div>
-                <div
-                  ref={rollAreaRef}
-                  style={{
-                    position: 'relative',
+              </div>
+              <div
+                ref={rollAreaRef}
+                style={{
+                  position: 'relative',
                     zIndex: 1,
                     width: rollGridMinW,
                     minWidth: rollGridMinW,
@@ -1232,23 +1324,23 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                     height: rollHeight,
                     flex: '0 0 auto',
                     overflow: 'hidden',
-                    touchAction: 'pan-x pan-y',
-                  }}
-                >
-                  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                  touchAction: 'pan-x pan-y',
+                }}
+              >
+                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     {rollRows.map((noteName, j) => {
                       const midi = cbPianoNoteNameToMidi(noteName);
-                      const top = j * rollRowH;
-                      const rk = sync && ((midi - sync.keyRoot) % 12 + 12) % 12 === 0;
+                    const top = j * rollRowH;
+                    const rk = sync && ((midi - sync.keyRoot) % 12 + 12) % 12 === 0;
                       const inScale = sync != null && isInScalePitch(midi, sync.keyRoot, mode);
                       const rowBase = cbPianoGridRowStyle(midi);
-                      return (
-                        <div
+                    return (
+                      <div
                           key={noteName}
-                          style={{
-                            position: 'absolute',
-                            top,
-                            height: rollRowH,
+                        style={{
+                          position: 'absolute',
+                          top,
+                          height: rollRowH,
                             ...rowBase,
                             borderBottom: rk
                               ? '1px solid rgba(124,244,198,0.22)'
@@ -1260,22 +1352,22 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                               : inScale
                                 ? 'rgba(124,244,198,0.06)'
                                 : rowBase.background,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                     {quantGridBeats.map((beat, gi) => {
                       const isBar = isQuantizeBarLine(beat, BEATS_PER_BAR);
                       const isBeat = isQuantizeBeatLine(beat);
-                      return (
-                        <div
+                    return (
+                      <div
                           key={`${beat}-${gi}`}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            height: rollHeight,
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          height: rollHeight,
                             left: beat * pxPerBeat,
                             width: 1,
                             marginLeft: isBar ? -1 : 0,
@@ -1285,11 +1377,11 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                                 ? 'rgba(124,244,198,0.12)'
                                 : 'rgba(255,255,255,0.04)',
                             opacity: 1,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
+                        }}
+                      />
+                    );
+                  })}
+                </div>
                   <div
                     style={{ position: 'absolute', inset: 0, zIndex: 1, touchAction: 'pan-x pan-y', cursor: 'crosshair' }}
                     onPointerDown={(e) => {
@@ -1304,100 +1396,100 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                   />
                   {SHOW_SYNC_CHORD_NOTES_ON_ROLL &&
                     rollData.map((r) => {
-                    if (r.midi == null) return null;
+                  if (r.midi == null) return null;
                     const rowTop = rollTopPxForMidi(r.midi);
                     if (rowTop == null) return null;
-                    const dur = noteDurBeats[r.i] ?? DEFAULT_NOTE_BEATS;
-                    const shift = noteStartShiftBeats[r.i] ?? 0;
+                  const dur = noteDurBeats[r.i] ?? DEFAULT_NOTE_BEATS;
+                  const shift = noteStartShiftBeats[r.i] ?? 0;
                     const top = rowTop;
-                    const left = (r.startBeat + shift) * pxPerBeat + 1;
-                    const w = Math.max(noteMinW, dur * pxPerBeat - 2);
-                    const h = Math.max(noteMinH, rollRowH - 2);
-                    const tw = rollPitchOverride[r.i] != null || shift !== 0;
-                    const bodyW = Math.max(8, w - RESIZE_HANDLE_W);
-                    return (
+                  const left = (r.startBeat + shift) * pxPerBeat + 1;
+                  const w = Math.max(noteMinW, dur * pxPerBeat - 2);
+                  const h = Math.max(noteMinH, rollRowH - 2);
+                  const tw = rollPitchOverride[r.i] != null || shift !== 0;
+                  const bodyW = Math.max(8, w - RESIZE_HANDLE_W);
+                  return (
+                    <div
+                      key={r.i}
+                      role="button"
+                      tabIndex={0}
+                      onPointerEnter={(e) => {
+                        if (e.buttons !== 0) return;
+                        auditionHover(r.i, r.midi!);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          playHit(r.midi!, r.i);
+                        }
+                      }}
+                      style={{
+                        position: 'absolute',
+                          zIndex: 2,
+                        left,
+                        top: top + Math.max(0, (rollRowH - h) / 2),
+                        width: w,
+                        height: h,
+                      borderRadius: 6,
+                        border: tw ? '2px solid #22d3ee' : '1px solid #15803d',
+                        background: '#0f172a',
+                        boxShadow: tw ? '0 0 12px rgba(34,211,238,0.45)' : '0 0 10px rgba(74,222,128,0.35)',
+                        display: 'flex',
+                        flexDirection: 'row',
+                        alignItems: 'stretch',
+                        overflow: 'hidden',
+                        opacity: isScreenActive === false ? 0.75 : 1,
+                        userSelect: 'none',
+                      }}
+                    >
                       <div
-                        key={r.i}
-                        role="button"
-                        tabIndex={0}
-                        onPointerEnter={(e) => {
-                          if (e.buttons !== 0) return;
-                          auditionHover(r.i, r.midi!);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            playHit(r.midi!, r.i);
+                        onPointerDown={(e) => beginNoteDrag(e, r.i, r.midi!, r.startBeat)}
+                        onLostPointerCapture={(e) => {
+                          const t = e.currentTarget as HTMLElement;
+                          if (dragTouchSurfaceRef.current === t) {
+                            dragTouchSurfaceRef.current = null;
+                            t.style.touchAction = '';
                           }
+                          dragRef.current = null;
                         }}
                         style={{
-                          position: 'absolute',
-                          zIndex: 2,
-                          left,
-                          top: top + Math.max(0, (rollRowH - h) / 2),
-                          width: w,
-                          height: h,
-                          borderRadius: 6,
-                          border: tw ? '2px solid #22d3ee' : '1px solid #15803d',
-                          background: '#0f172a',
-                          boxShadow: tw ? '0 0 12px rgba(34,211,238,0.45)' : '0 0 10px rgba(74,222,128,0.35)',
+                          width: bodyW,
+                          cursor: 'grab',
                           display: 'flex',
-                          flexDirection: 'row',
-                          alignItems: 'stretch',
-                          overflow: 'hidden',
-                          opacity: isScreenActive === false ? 0.75 : 1,
-                          userSelect: 'none',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                            ...lab808RollChordNoteFont,
+                          color: '#052e16',
+                          background: tw ? 'linear-gradient(180deg,#6ee7b7,#0f766e)' : 'linear-gradient(180deg,#4ade80,#166534)',
+                          minWidth: 0,
+                            padding: '2px 4px',
                         }}
                       >
-                        <div
-                          onPointerDown={(e) => beginNoteDrag(e, r.i, r.midi!, r.startBeat)}
-                          onLostPointerCapture={(e) => {
-                            const t = e.currentTarget as HTMLElement;
-                            if (dragTouchSurfaceRef.current === t) {
-                              dragTouchSurfaceRef.current = null;
-                              t.style.touchAction = '';
-                            }
-                            dragRef.current = null;
-                          }}
-                          style={{
-                            width: bodyW,
-                            cursor: 'grab',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 12,
-                            fontWeight: 900,
-                            color: '#052e16',
-                            background: tw ? 'linear-gradient(180deg,#6ee7b7,#0f766e)' : 'linear-gradient(180deg,#4ade80,#166534)',
-                            minWidth: 0,
-                          }}
-                        >
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 2px' }}>
-                            {dur >= 4 ? r.chord : ''}
-                            {dur < 4 && dur > 1 ? `${dur}b` : ''}
-                          </span>
-                        </div>
-                        <div
-                          onPointerDown={(e) => beginResize(e, r.i)}
-                          onLostPointerCapture={(e) => {
-                            const t = e.currentTarget as HTMLElement;
-                            if (resizeTouchSurfaceRef.current === t) {
-                              resizeTouchSurfaceRef.current = null;
-                              t.style.touchAction = '';
-                            }
-                            resizeRef.current = null;
-                          }}
-                          style={{
-                            width: RESIZE_HANDLE_W,
-                            flexShrink: 0,
-                            cursor: 'ew-resize',
-                            background: 'linear-gradient(180deg,#14532d,#052e16)',
-                            borderLeft: '1px solid rgba(0,0,0,0.35)',
-                          }}
-                        />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>
+                          {dur >= 4 ? r.chord : ''}
+                          {dur < 4 && dur > 1 ? `${dur}b` : ''}
+                        </span>
                       </div>
-                    );
-                  })}
+                      <div
+                        onPointerDown={(e) => beginResize(e, r.i)}
+                        onLostPointerCapture={(e) => {
+                          const t = e.currentTarget as HTMLElement;
+                          if (resizeTouchSurfaceRef.current === t) {
+                            resizeTouchSurfaceRef.current = null;
+                            t.style.touchAction = '';
+                          }
+                          resizeRef.current = null;
+                        }}
+                        style={{
+                          width: RESIZE_HANDLE_W,
+                          flexShrink: 0,
+                          cursor: 'ew-resize',
+                          background: 'linear-gradient(180deg,#14532d,#052e16)',
+                          borderLeft: '1px solid rgba(0,0,0,0.35)',
+                        }}
+                      />
+                    </div>
+                  );
+                })}
                   {manualRollNotes.map((n) => {
                     const dur = n.durBeats;
                     const rowTop = rollTopPxForMidi(n.midi);
@@ -1461,14 +1553,14 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: 12,
-                            fontWeight: 900,
+                            ...lab808RollChordNoteFont,
                             minWidth: 0,
+                            padding: '2px 4px',
                             ...cbPianoManualNoteBodyStyle(),
                           }}
                         >
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 2px' }}>{midiToLabel(n.midi)}</span>
-                        </div>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>{midiToLabel(n.midi)}</span>
+              </div>
                         <div
                           onPointerDown={(e) => beginManualResize(e, n)}
                           onLostPointerCapture={(e) => {
@@ -1486,7 +1578,7 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                             ...cbPianoManualNoteResizeStyle(),
                           }}
                         />
-                      </div>
+            </div>
                     );
                   })}
                   <div
@@ -1506,7 +1598,7 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
                     }}
                     aria-hidden
                   />
-                </div>
+          </div>
                 </div>
                 </div>
               </div>
@@ -1519,10 +1611,12 @@ export default function EightZeroEightTab({ embedded, isScreenActive, onBack, ge
             transportKeepAlive={labPanel === '808-roll'}
             rollPlaylineRef={rollPlaylineRef}
             rollPxPerBeat={pxPerBeat}
-            onTransportChange={setLabDeckTransport}
+            onTransportQuarterBeat={scheduleRoll808OnTransport}
+            onTransportChange={onLabDeckTransportChange}
             isScreenActive={isScreenActive}
             getAudioContext={getAudioContext}
             labStripBpm={roll808Bpm}
+            suggestedLoopBars={lab808LoopBars}
           />
         </div>
       </div>

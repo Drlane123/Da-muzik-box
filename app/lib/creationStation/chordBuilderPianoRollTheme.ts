@@ -89,6 +89,22 @@ export function cbPianoMidiToNoteName(midi: number): string {
   return `${NOTE_NAMES[pc]}${oct}`;
 }
 
+/** Row on the chord roll keyboard (C3–C6); tolerates ±1 MIDI for rounding. */
+export function chordRollRowForMidi(midi: number): number {
+  const exact = CB_PIANO_ROWS.indexOf(cbPianoMidiToNoteName(midi));
+  if (exact >= 0) return exact;
+  let best = -1;
+  let dist = 999;
+  for (let i = 0; i < CB_PIANO_ROWS.length; i++) {
+    const d = Math.abs(cbPianoNoteNameToMidi(CB_PIANO_ROWS[i]!) - midi);
+    if (d < dist) {
+      dist = d;
+      best = i;
+    }
+  }
+  return dist <= 1 ? best : -1;
+}
+
 export function cbPianoIsBlackKey(midi: number): boolean {
   const pc = ((midi % 12) + 12) % 12;
   return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10;
@@ -181,24 +197,38 @@ export function cbPianoKeyFaceStyle(
   midi: number,
   isActive = false,
   m: PianoRollMetrics = CB_PIANO_METRICS,
+  isBassRoot = false,
 ): CSSProperties {
   const isBlack = cbPianoIsBlackKey(midi);
   const isC = cbPianoIsCRow(midi);
+  const pressed = isActive;
+  const baseBlackBg = 'linear-gradient(180deg, #25252e 0%, #0e0e14 100%)';
+  const baseWhiteBg = 'linear-gradient(180deg, #e5e5ec 0%, #b6b6c0 100%)';
+  const rootBlackBg = 'linear-gradient(180deg, #2e2a22 0%, #14120e 100%)';
+  const rootWhiteBg = 'linear-gradient(180deg, #f0ead0 0%, #c8c0a8 100%)';
+  const baseShadow = isBlack
+    ? 'inset 0 -1px 1px rgba(0,0,0,0.6), inset -1px 0 1px rgba(0,0,0,0.4)'
+    : 'inset 0 -1px 1px rgba(0,0,0,0.18), inset -1px 0 1px rgba(0,0,0,0.10)';
+  const rootShadow = `inset 0 0 0 2px rgba(253,230,138,0.5), ${baseShadow}`;
   return {
     position: 'relative',
     height: '100%',
     minHeight: m.rowH,
     width: isBlack ? pianoBlackKeyW(m) : pianoWhiteKeyW(m),
-    background: isActive
+    background: pressed
       ? `linear-gradient(180deg, ${CB_PIANO_MINT} 0%, rgba(124,244,198,0.70) 100%)`
-      : isBlack
-        ? 'linear-gradient(180deg, #25252e 0%, #0e0e14 100%)'
-        : 'linear-gradient(180deg, #e5e5ec 0%, #b6b6c0 100%)',
-    boxShadow: isActive
+      : isBassRoot
+        ? isBlack
+          ? rootBlackBg
+          : rootWhiteBg
+        : isBlack
+          ? baseBlackBg
+          : baseWhiteBg,
+    boxShadow: pressed
       ? `0 0 6px ${CB_PIANO_MINT}, inset 0 0 0 1px rgba(255,255,255,0.4)`
-      : isBlack
-        ? 'inset 0 -1px 1px rgba(0,0,0,0.6), inset -1px 0 1px rgba(0,0,0,0.4)'
-        : 'inset 0 -1px 1px rgba(0,0,0,0.18), inset -1px 0 1px rgba(0,0,0,0.10)',
+      : isBassRoot
+        ? rootShadow
+        : baseShadow,
     borderRadius: '0 3px 3px 0',
     borderTop: isBlack ? 'none' : '1px solid rgba(255,255,255,0.45)',
     borderBottom: isBlack ? '1px solid #000' : isC ? '1px solid #4a4a54' : '1px solid rgba(0,0,0,0.25)',
@@ -208,7 +238,7 @@ export function cbPianoKeyFaceStyle(
     paddingRight: Math.max(5, Math.round(m.labelW * 0.07)),
     fontSize: pianoKeyLabelFontSize(m, isC),
     fontWeight: isC ? 800 : 700,
-    color: isActive ? '#0a0a0e' : isBlack ? '#9a9aa6' : '#1a1a22',
+    color: pressed ? '#0a0a0e' : isBassRoot ? '#fde68a' : isBlack ? '#9a9aa6' : '#1a1a22',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     letterSpacing: 0.2,
     transition: 'background 80ms linear, box-shadow 80ms linear',

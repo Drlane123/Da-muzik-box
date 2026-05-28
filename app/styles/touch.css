@@ -1,0 +1,95 @@
+/**
+ * Touchscreen / stylus optimizations (active when `html.touch-coarse` is set).
+ * Works with `installTouchPointerBridge()` for legacy mouse handlers.
+ */
+
+html.touch-coarse {
+  /* Faster taps; less accidental double-tap zoom on controls */
+  touch-action: manipulation;
+}
+
+/* Scroll regions: allow one-finger pan */
+html.touch-coarse .overflow-auto,
+html.touch-coarse .overflow-x-auto,
+html.touch-coarse .overflow-y-auto,
+html.touch-coarse [data-touch-scroll] {
+  touch-action: pan-x pan-y;
+}
+
+/* Drags (faders, playhead, trim, resize) — opt in with data-touch-drag */
+html.touch-coarse [data-touch-drag] {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Slightly larger tap targets without breaking every dense toolbar */
+html.touch-coarse button:not(.touch-compact),
+html.touch-coarse [role='button']:not(.touch-compact) {
+  min-height: 36px;
+  min-width: 36px;
+}
+
+/* Sequencer step cells stay grid-sized; bridge still delivers mousedown for paint/drag */
+html.touch-coarse button.touch-compact {
+  min-height: unset;
+  min-width: unset;
+}
+
+html.touch-coarse input[type='range'] {
+  min-height: 32px;
+}
+
+html.touch-coarse input[type='checkbox'],
+html.touch-coarse input[type='radio'] {
+  min-width: 22px;
+  min-height: 22px;
+}
+
+/* Beat Lab sampler pads — pad hits already use pointer bridge + click */
+html.touch-coarse .cs-pad-hit {
+  touch-action: manipulation;
+}
+
+/* Prevent text selection while painting notes / automation on touch */
+/**
+ * Groove Lab 8-bar song bank — thick, easy-to-grab scrollbar (Windows / Cursor preview).
+ */
+.groove-song-bank-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #3b82f6 #0a1018;
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar {
+  width: 18px;
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar-track {
+  background: #0a1018;
+  border-left: 1px solid #1e3a5f;
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #60a5fa, #2563eb);
+  border: 3px solid #0a1018;
+  border-radius: 10px;
+  min-height: 56px;
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #93c5fd, #3b82f6);
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar-button:single-button {
+  height: 22px;
+  background: #112240;
+  border-left: 1px solid #1e3a5f;
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar-button:single-button:vertical:decrement {
+  border-bottom: 1px solid #1e3a5f;
+}
+
+.groove-song-bank-scroll::-webkit-scrollbar-button:single-button:vertical:increment {
+  border-top: 1px solid #1e3a5f;
+}

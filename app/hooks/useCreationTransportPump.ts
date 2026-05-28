@@ -1,15 +1,13 @@
 import { useEffect } from 'react';
 import type { MutableRefObject, RefObject } from 'react';
 
-import { resolveBeatLabAudioContext } from '@/app/lib/creationStation/beatLabStepScheduler';
 import {
-  beatAtSessionTime,
-  setCreationBeatLabTransportRunning,
-} from '@/app/lib/creationStation/creationTransportSync';
-import { smoothSchedNow, updateSchedAnchor } from '@/app/lib/studio/se2TransportClock';
-
-/** Must match `creationTransportSystem` lookahead cadence (DAW sync rules). */
-const CREATION_LOOKAHEAD_INTERVAL_MS = 25;
+  BEAT_LAB_LOOKAHEAD_INTERVAL_MS,
+  beatLabDisplayBeatFromAudioClock,
+} from '@/app/lib/creationStation/beatLabSe2TransportEngine';
+import { resolveBeatLabAudioContext } from '@/app/lib/creationStation/beatLabStepScheduler';
+import { setCreationBeatLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
+import { updateSchedAnchor } from '@/app/lib/studio/se2TransportClock';
 
 const fallbackSchedAnchorTimeRef = { current: 0 };
 const fallbackSchedAnchorPerfRef = { current: 0 };
@@ -30,6 +28,8 @@ export type CreationTransportPumpRefs = {
   /** Optional — Beat Lab passes these for `smoothSchedNow`; other screens omit. */
   schedAnchorTimeRef?: MutableRefObject<number>;
   schedAnchorPerfRef?: MutableRefObject<number>;
+  /** Beat Lab — clamp `bDisplay` like SE2 `totalBeatsRef`. */
+  totalBeatsRef?: MutableRefObject<number>;
 };
 
 export type CreationTransportPumpOptions = {
@@ -58,6 +58,7 @@ export function useCreationTransportPump(
     lastScheduledQuarterRef,
     schedAnchorTimeRef,
     schedAnchorPerfRef,
+    totalBeatsRef,
   } = refs;
   const { isScreenActive, getOrCreateAudioContext, refillRef, onFrameRef, onAudioContextRebuiltRef } =
     options;
@@ -80,12 +81,17 @@ export function useCreationTransportPump(
         if (schedAnchorTimeRef && schedAnchorPerfRef) {
           updateSchedAnchor(ctx, sat, sap);
         }
-        const t =
-          schedAnchorTimeRef && sat.current > 0
-            ? smoothSchedNow(sat, sap, ctx)
-            : Math.max(0, ctx.currentTime);
-        const b = beatAtSessionTime(t, sessionStartRef.current, originBeatRef.current, bpmRef.current);
-        onFrameRef.current(b);
+        const tb = totalBeatsRef?.current ?? Number.POSITIVE_INFINITY;
+        const bDisplay = beatLabDisplayBeatFromAudioClock(
+          ctx,
+          { schedAnchorTimeRef: sat, schedAnchorPerfRef: sap },
+          sessionStartRef.current,
+          originBeatRef.current,
+          bpmRef.current,
+          tb,
+        );
+        displayBeatRef.current = bDisplay;
+        onFrameRef.current(bDisplay);
       }
       raf = requestAnimationFrame(tick);
     };
@@ -102,6 +108,7 @@ export function useCreationTransportPump(
     onFrameRef,
     schedAnchorTimeRef,
     schedAnchorPerfRef,
+    totalBeatsRef,
   ]);
 
   /**
@@ -144,7 +151,7 @@ export function useCreationTransportPump(
       runRefill();
     };
     tick();
-    const id = window.setInterval(tick, CREATION_LOOKAHEAD_INTERVAL_MS);
+    const id = window.setInterval(tick, BEAT_LAB_LOOKAHEAD_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [
     isScreenActive,

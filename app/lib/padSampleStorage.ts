@@ -32,8 +32,8 @@ export type StoredPadSample = {
   /** Display name (file / library name) — shown in sampler + Beat Lab sequencer lane. */
   label?: string;
   /**
-   * Optional “source BPM” for simple session sync (tape-style pitch+speed via Web Audio playbackRate).
-   * When set: rate = clamp(projectBpm / rootBpm). Omit or clear to play file at native speed (best for one-shots).
+   * Optional “source BPM” for the pad SRC-BPM control (preview only).
+   * Does **not** retune samples when the main project tempo changes — only pad fine-tune / pitch does.
    */
   rootBpm?: number;
   /** High-pass Hz; omit or low value = off. */
@@ -48,6 +48,32 @@ export type StoredPadSample = {
   samplerFineSemi?: number;
   /** 0…1 trigger snap / transient punch (optional). */
   samplerTriggerSnap?: number;
+  /** Insert FX rack — drive (0…1). */
+  samplerFxDrive?: number;
+  samplerFxEqOn?: boolean;
+  samplerFxEqLowDb?: number;
+  samplerFxEqMidDb?: number;
+  samplerFxEqHighDb?: number;
+  samplerFxEqLowHz?: number;
+  samplerFxEqMidHz?: number;
+  samplerFxEqHighHz?: number;
+  samplerFxEqMidQ?: number;
+  samplerFxCompOn?: boolean;
+  samplerFxCompThrDb?: number;
+  samplerFxCompRatio?: number;
+  samplerFxCompAttack?: number;
+  samplerFxCompRelease?: number;
+  samplerFxCompKnee?: number;
+  samplerFxCompMakeupDb?: number;
+  samplerFxDelayOn?: boolean;
+  samplerFxDelaySync?: boolean;
+  samplerFxDelayNote?: string;
+  samplerFxDelayMs?: number;
+  samplerFxDelayFb?: number;
+  samplerFxDelayMix?: number;
+  samplerFxReverbOn?: boolean;
+  samplerFxReverbMix?: number;
+  samplerFxReverbDecay?: number;
 };
 
 export type PadSampleStore = Record<string, StoredPadSample>;

@@ -56,3 +56,40 @@ export function readChordSync(): ChordBuilderSyncData | null {
     return null;
   }
 }
+
+/** Total length of a synced progression loop in quarter-note beats. */
+export function chordSyncLoopLengthBeats(blocks: ChordSyncBlock[]): number {
+  return blocks.reduce((sum, b) => sum + Math.max(0, b.durationBeats), 0);
+}
+
+/** Which chord block is active at `beat` (loops). */
+export function chordBlockAtBeat(
+  blocks: ChordSyncBlock[],
+  beat: number,
+): { index: number; startBeat: number; block: ChordSyncBlock } | null {
+  const len = chordSyncLoopLengthBeats(blocks);
+  if (len <= 0) return null;
+  const pos = ((beat % len) + len) % len;
+  let acc = 0;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    const start = acc;
+    if (pos >= start && pos < start + block.durationBeats) {
+      return { index: i, startBeat: start, block };
+    }
+    acc += block.durationBeats;
+  }
+  return null;
+}
+
+/** True when `beat` is on the first quarter of a chord block (within tolerance). */
+export function isChordBlockDownbeat(
+  blocks: ChordSyncBlock[],
+  beat: number,
+  epsilon = 0.02,
+): boolean {
+  const hit = chordBlockAtBeat(blocks, beat);
+  if (!hit) return false;
+  const pos = ((beat % chordSyncLoopLengthBeats(blocks)) + chordSyncLoopLengthBeats(blocks)) % chordSyncLoopLengthBeats(blocks);
+  return pos - hit.startBeat < epsilon;
+}

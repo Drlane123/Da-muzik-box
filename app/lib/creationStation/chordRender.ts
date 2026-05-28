@@ -12,6 +12,12 @@
  * `decodeAudioData` or persist via `StoredPadSample`.
  */
 import { chordSymbolToMidi, type ChordMode, type ChordSymbol } from './chordBuilder';
+import type { ChordVoicingSize } from './chordVoicing';
+import type { ChordArpSettings } from './chordArpeggiator';
+import { DEFAULT_CHORD_ARP } from './chordArpeggiator';
+import { createChordFxBus, DEFAULT_CHORD_BUILDER_FX, type ChordBuilderFxSettings } from './chordBuilderFx';
+import { scheduleVoicedChordPlayback } from './chordBuilderPlayback';
+import { buildVoicedMidiSet, type SmartVoicingOptions } from './smartChordVoicing';
 import {
   DEFAULT_CHORD_INSTRUMENT_ID,
   getChordInstrument,
@@ -37,6 +43,14 @@ export interface ChordRenderArgs {
   /** Which Sound Bank voice to render with. Falls back to Grand Piano if
    *  the id is missing/unknown (defensive — same default as audition). */
   instrumentId?: ChordInstrumentId;
+  /** Keys per chord — 3 (triad) through 7 (full extensions). Default 5. */
+  chordVoicingSize?: ChordVoicingSize;
+  smartVoicing?: boolean;
+  spread?: number;
+  arp?: ChordArpSettings;
+  fx?: ChordBuilderFxSettings;
+  /** Transpose rendered chords by this many octaves (−2…+2 typical). */
+  octaveShift?: number;
 }
 
 export interface ChordRenderResult {
@@ -75,6 +89,28 @@ export interface SongRenderArgs {
   sampleRate?: number;
   /** Sound Bank voice used for every section. */
   instrumentId?: ChordInstrumentId;
+  chordVoicingSize?: ChordVoicingSize;
+  smartVoicing?: boolean;
+  spread?: number;
+  arp?: ChordArpSettings;
+  fx?: ChordBuilderFxSettings;
+  octaveShift?: number;
+}
+
+function octaveDelta(args: { octaveShift?: number }): number {
+  return (args.octaveShift ?? 0) * 12;
+}
+
+function renderVoicingOpts(args: {
+  chordVoicingSize?: ChordVoicingSize;
+  smartVoicing?: boolean;
+  spread?: number;
+}): Partial<SmartVoicingOptions> {
+  return {
+    size: args.chordVoicingSize ?? 5,
+    smartVoicing: args.smartVoicing ?? true,
+    spread: args.spread ?? 55,
+  };
 }
 
 /** Build the OfflineAudioContext, schedule every chord, render to PCM, encode WAV. */
@@ -113,25 +149,23 @@ export async function renderChordTimelineToWav(
   // Resolve the voice ONCE outside the loop. Every chord shares the same
   // instrument; the per-note graph is built fresh inside `scheduleNote`.
   const instrument = getChordInstrument(args.instrumentId ?? DEFAULT_CHORD_INSTRUMENT_ID);
+  const voicingOpts = renderVoicingOpts(args);
+  const arp = args.arp ?? DEFAULT_CHORD_ARP;
+  const fx = args.fx ?? DEFAULT_CHORD_BUILDER_FX;
+  const fxBus = createChordFxBus(offline, offline.destination);
+  fxBus.update(fx);
+  const dest = fxBus.input;
 
+  const oct = octaveDelta(args);
   for (const { chord, barIdx } of filled) {
-    const midis = chordSymbolToMidi(chord, args.keyRoot, args.mode, 4);
+    const midis = buildVoicedMidiSet(chord, args.keyRoot, args.mode, voicingOpts);
     if (!midis || midis.length === 0) continue;
+    const shifted = oct === 0 ? midis : midis.map((m) => m + oct);
     const start = barIdx * secPerBar;
-    // Hold for ~95% of the chord's bar window — the last 5% rings out as
-    // a short release so chord changes don't click. Matches the audition
-    // path which uses `1.0` sustain for single-bar previews.
     const sustain = barsPerChord * secPerBar * 0.95;
-    for (const midi of midis) {
-      instrument.scheduleNote({
-        ctx: offline,
-        destination: offline.destination,
-        midi,
-        startTime: start,
-        sustainSec: sustain,
-      });
-    }
+    scheduleVoicedChordPlayback(instrument, offline, dest, shifted, start, sustain, bpm, arp, fx);
   }
+  fxBus.dispose();
 
   const rendered = await offline.startRendering();
   const channels: Float32Array[] = [];
@@ -204,20 +238,23 @@ export async function renderSongToWav(args: SongRenderArgs): Promise<ChordRender
   // ~10 MB, which is fine for a one-shot download).
   const offline = new OfflineAudioContext(1, totalFrames, sampleRate);
   const instrument = getChordInstrument(args.instrumentId ?? DEFAULT_CHORD_INSTRUMENT_ID);
+  const voicingOpts = renderVoicingOpts(args);
+  const arp = args.arp ?? DEFAULT_CHORD_ARP;
+  const fx = args.fx ?? DEFAULT_CHORD_BUILDER_FX;
+  const fxBus = createChordFxBus(offline, offline.destination);
+  fxBus.update(fx);
+  const dest = fxBus.input;
+  let prev: ChordSymbol | null = null;
+  const oct = octaveDelta(args);
 
   for (const ev of events) {
-    const midis = chordSymbolToMidi(ev.chord, args.keyRoot, args.mode, 4);
+    const midis = buildVoicedMidiSet(ev.chord, args.keyRoot, args.mode, voicingOpts, prev);
+    prev = ev.chord;
     if (!midis || midis.length === 0) continue;
-    for (const midi of midis) {
-      instrument.scheduleNote({
-        ctx: offline,
-        destination: offline.destination,
-        midi,
-        startTime: ev.start,
-        sustainSec: ev.sustain,
-      });
-    }
+    const shifted = oct === 0 ? midis : midis.map((m) => m + oct);
+    scheduleVoicedChordPlayback(instrument, offline, dest, shifted, ev.start, ev.sustain, bpm, arp, fx);
   }
+  fxBus.dispose();
 
   const rendered = await offline.startRendering();
   const channels: Float32Array[] = [];

@@ -8,8 +8,8 @@
  * Creation Station transport (new):
  * - **Audio master**: `AudioContext.currentTime` + lookahead refill.
  * - **Monotonic step clock**: `nextStepBeat` + `nextStepTime` advance in lockstep after scheduling.
- * - **No audible catch-up**: overdue quarters are skipped (step clock fast-forwards to audio time).
- *   Emitting overdue steps at `ctx.currentTime` caused silence-then-burst / off-tempo drum piles.
+ * - **Limited catch-up**: a few overdue in-session quarters are still scheduled (near `ctSnap`)
+ *   so pad hits are not dropped when the UI thread hiccups; very late steps are fast-forwarded.
  * - **SE2 chain rule**: `chain = ctSnap + SE2_AUDIO_START_FLOOR_SEC`, each event
  *   `t0 = max(tGrid, chain)`, then `chain = t0 + METRO_NODE_EPS` (see project DAW sync rules).
  *
@@ -39,6 +39,9 @@ export type CreationTransportRefillOpts = {
 };
 
 export const CREATION_MAX_SCHEDULE_PER_CALL = 256;
+
+/** Max overdue quarters emitted per refill before fast-forward (avoids huge bursts). */
+export const CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL = 16;
 
 export interface CreationTransportClockRefs {
   nextStepBeatRef: MutableRefObject<number>;
@@ -94,6 +97,25 @@ export function reanchorNextStepWhileStopped(
 }
 
 /**
+ * Map a pattern step column → `AudioContext` time from the live session anchor.
+ * Use this for MIDI-roll voices (chords / bass) so they cannot drift from `nextStepBeat`
+ * corrections while still looking correct on the piano roll grid.
+ */
+export function creationPatternColAudioTime(
+  colInPattern: number,
+  subdiv: number,
+  spb: number,
+  sessionStart: number,
+  originBeat: number,
+  patternStartBeat: number,
+): number {
+  if (sessionStart <= 0) return 0;
+  const s = Math.max(1, Math.round(subdiv));
+  const globalBeat = patternStartBeat + colInPattern / s;
+  return sessionStart + (globalBeat - originBeat) * spb;
+}
+
+/**
  * Keep `nextStepBeat` / `nextStepTime` tied to the audio session clock. Drift (BPM change, heavy
  * frames, loop wrap) can leave the scheduler far ahead (silence) or behind (burst at `currentTime`).
  */
@@ -122,12 +144,12 @@ function alignCreationTransportStepClock(
   }
 
   const maxAheadBeats = Math.ceil(CREATION_SCHEDULE_AHEAD_SEC / spb) + 4;
-  if (k < kAudio - 1 || k > kAudio + maxAheadBeats || tGrid > ctSnap + CREATION_SCHEDULE_AHEAD_SEC + spb * 2) {
+  const farBehind = k + CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL < kAudio;
+  if (farBehind || k > kAudio + maxAheadBeats || tGrid > ctSnap + CREATION_SCHEDULE_AHEAD_SEC + spb * 2) {
     k = kAudio;
     tGrid = sessionStart + (k - origin) * spb;
   } else if (tGrid < ctSnap - spb * 0.125) {
-    /** More than ~1/8 beat behind audio — catch up without resetting on every boundary touch. */
-    k = kAudio;
+    /** Lagging grid time — keep `k`, re-derive `tGrid` so refill can emit catch-up hits. */
     tGrid = sessionStart + (k - origin) * spb;
   }
 
@@ -154,13 +176,31 @@ export function refillCreationTransportLookahead(
   let { k, tGrid } = alignCreationTransportStepClock(ctSnap, spb, refs);
 
   const scheduleFloor = ctSnap + chainFloor;
-  /** Strict `<` — `tGrid === scheduleFloor` is beat-0 at `sessionStart`; `<=` skipped it → silence then burst. */
+  const sessionStart = refs.sessionStartRef.current;
+  const origin = refs.originBeatRef.current;
+  let n = 0;
+  let catchUpQuarters = 0;
+  /**
+   * Strict `<` for beat-0 at `sessionStart` (`<=` skipped beat-0 → silence then burst).
+   * In-session steps before `scheduleFloor` are scheduled here so pad hits are not silently dropped.
+   */
+  while (tGrid < scheduleFloor && catchUpQuarters < CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL) {
+    if (sessionStart > 0 && tGrid >= sessionStart - 1e-6) {
+      const t0 = Math.max(tGrid, chain);
+      if (!fireStep(k, t0, ctx)) break;
+      chain = t0 + CREATION_METRO_NODE_EPS_SEC;
+      refs.lastScheduledQuarterRef.current = k;
+      catchUpQuarters += 1;
+      n += 1;
+    }
+    k += 1;
+    tGrid = sessionStart + (k - origin) * spb;
+  }
   while (tGrid < scheduleFloor) {
     k += 1;
     tGrid = sessionStart + (k - origin) * spb;
   }
 
-  let n = 0;
   while (n < CREATION_MAX_SCHEDULE_PER_CALL) {
     if (tGrid >= horizon) break;
     const t0 = Math.max(tGrid, chain);

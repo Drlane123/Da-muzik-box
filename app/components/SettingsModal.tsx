@@ -6,6 +6,8 @@ import {
   enumerateAudioDevices,
   getAudioOutputSupport,
 } from '@/app/lib/audioRouting';
+import { isTouchLikeDevice } from '@/app/lib/touch/touchDevice';
+import type { TouchInputMode } from '@/app/lib/touch/touchDevice';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -190,6 +192,38 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               }
               className="w-4 h-4 cursor-pointer"
             />
+          </div>
+
+          {/* Touch input */}
+          <div className="border border-gray-700 rounded-lg p-3 space-y-3">
+            <span className="text-sm font-semibold text-gray-200">Touch mode</span>
+            <p className="text-xs text-gray-500">
+              Optimizes the app for touchscreens and stylus (Beat Lab grid paint, faders, transport,
+              piano rolls). Uses a pointer bridge so existing controls work with your finger or pen.
+            </p>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Touch optimizations</label>
+              <select
+                value={settings.touchInput}
+                onChange={(e) =>
+                  updateSetting('touchInput', e.target.value as TouchInputMode)
+                }
+                className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 text-sm"
+              >
+                <option value="auto">Auto — on when this PC has touch</option>
+                <option value="on">Always on</option>
+                <option value="off">Off — mouse / trackpad only</option>
+              </select>
+            </div>
+            <p className="text-[10px] text-gray-600">
+              {settings.touchInput === 'auto'
+                ? isTouchLikeDevice()
+                  ? 'Touch hardware detected — optimizations are active.'
+                  : 'No touch hardware detected — using standard mouse UI until you choose Always on.'
+                : settings.touchInput === 'on'
+                  ? 'Touch mode is forced on (useful on touch laptops or for testing).'
+                  : 'Touch mode is off — grids and drags expect mouse or trackpad.'}
+            </p>
           </div>
 
           {/* Audio I/O — browser-supported routing only */}

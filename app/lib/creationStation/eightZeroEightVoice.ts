@@ -1,3 +1,6 @@
+import { resolveGrooveLabAudioDest } from '@/app/lib/creationStation/grooveLabAudio';
+import { getSharedAudioOutput } from '@/app/lib/creationStation/sharedAudioOutput';
+
 export type EightZeroEightWave = 'sine' | 'triangle' | 'square';
 
 export interface EightZeroEightPresetDef {
@@ -122,6 +125,181 @@ export const BASS_LOW_BASS_PRESETS = {
   warmTriangle: { label: 'Warm triangle', sweepStartHz: 110, sweepMs: 42, bodyDecaySec: 0.86, subLevel: 0.92, clickLevel: 0.08, mainWave: 'triangle', filterLpHz: 4100 },
   softSquareLow: { label: 'Soft square low', sweepStartHz: 120, sweepMs: 39, bodyDecaySec: 0.78, subLevel: 0.9, clickLevel: 0.1, mainWave: 'square', filterLpHz: 3600, drive: 0.12 },
   filterSweepSine: { label: 'Filter sweep sine', sweepStartHz: 128, sweepMs: 36, bodyDecaySec: 0.84, subLevel: 0.94, clickLevel: 0.06, mainWave: 'sine', filterLpHz: 2400 },
+  /** Fingerstyle / electric bass guitar — pluck attack, mid decay, guitar-range filter. */
+  gtrFinger: {
+    label: 'Fingerstyle electric',
+    sweepStartHz: 145,
+    sweepMs: 28,
+    bodyDecaySec: 0.68,
+    subLevel: 0.9,
+    clickLevel: 0.28,
+    mainWave: 'triangle',
+    filterLpHz: 4500,
+    filterHpHz: 32,
+  },
+  gtrPick: {
+    label: 'Pick rock bass',
+    sweepStartHz: 155,
+    sweepMs: 24,
+    bodyDecaySec: 0.62,
+    subLevel: 0.88,
+    clickLevel: 0.34,
+    mainWave: 'triangle',
+    filterLpHz: 4000,
+    drive: 0.1,
+  },
+  gtrFunk: {
+    label: 'Funk slap',
+    sweepStartHz: 168,
+    sweepMs: 20,
+    bodyDecaySec: 0.52,
+    subLevel: 0.86,
+    clickLevel: 0.38,
+    mainWave: 'triangle',
+    filterLpHz: 5200,
+  },
+  gtrUpright: {
+    label: 'Upright jazz',
+    sweepStartHz: 128,
+    sweepMs: 34,
+    bodyDecaySec: 0.72,
+    subLevel: 0.92,
+    clickLevel: 0.22,
+    mainWave: 'sine',
+    filterLpHz: 3200,
+    filterHpHz: 30,
+  },
+  gtrMuted: {
+    label: 'Muted palm',
+    sweepStartHz: 138,
+    sweepMs: 26,
+    bodyDecaySec: 0.56,
+    subLevel: 0.88,
+    clickLevel: 0.3,
+    mainWave: 'triangle',
+    filterLpHz: 2400,
+    filterHpHz: 28,
+  },
+  gtrReggae: {
+    label: 'Reggae upstroke',
+    sweepStartHz: 132,
+    sweepMs: 30,
+    bodyDecaySec: 0.64,
+    subLevel: 0.9,
+    clickLevel: 0.24,
+    mainWave: 'sine',
+    filterLpHz: 3800,
+  },
+  gtrAcoustic: {
+    label: 'Acoustic bass',
+    sweepStartHz: 122,
+    sweepMs: 32,
+    bodyDecaySec: 0.66,
+    subLevel: 0.92,
+    clickLevel: 0.26,
+    mainWave: 'triangle',
+    filterLpHz: 3400,
+  },
+  gtrChorus: {
+    label: 'Chorus bass',
+    sweepStartHz: 118,
+    sweepMs: 30,
+    bodyDecaySec: 0.74,
+    subLevel: 0.9,
+    clickLevel: 0.23,
+    mainWave: 'triangle',
+    filterLpHz: 4800,
+    drive: 0.06,
+  },
+  /** Moog-style monosynth bass — square + drive + low-pass sweep. */
+  moogMini: {
+    label: 'Minimoog bass',
+    sweepStartHz: 92,
+    sweepMs: 52,
+    bodyDecaySec: 0.78,
+    subLevel: 0.9,
+    clickLevel: 0.14,
+    mainWave: 'square',
+    filterLpHz: 1650,
+    drive: 0.32,
+  },
+  moogTaurus: {
+    label: 'Taurus pedal',
+    sweepStartHz: 85,
+    sweepMs: 58,
+    bodyDecaySec: 0.9,
+    subLevel: 0.92,
+    clickLevel: 0.1,
+    mainWave: 'square',
+    filterLpHz: 1350,
+    drive: 0.38,
+  },
+  moogClassic: {
+    label: 'Classic Moog',
+    sweepStartHz: 98,
+    sweepMs: 48,
+    bodyDecaySec: 0.72,
+    subLevel: 0.88,
+    clickLevel: 0.12,
+    mainWave: 'square',
+    filterLpHz: 1900,
+    drive: 0.28,
+  },
+  moogFilter: {
+    label: 'Filter sweep Moog',
+    sweepStartHz: 115,
+    sweepMs: 62,
+    bodyDecaySec: 0.85,
+    subLevel: 0.91,
+    clickLevel: 0.08,
+    mainWave: 'square',
+    filterLpHz: 1100,
+    drive: 0.25,
+  },
+  moogDisco: {
+    label: 'Disco Moog',
+    sweepStartHz: 108,
+    sweepMs: 44,
+    bodyDecaySec: 0.58,
+    subLevel: 0.86,
+    clickLevel: 0.18,
+    mainWave: 'square',
+    filterLpHz: 2100,
+    drive: 0.3,
+  },
+  moogBrass: {
+    label: 'Brass Moog',
+    sweepStartHz: 112,
+    sweepMs: 40,
+    bodyDecaySec: 0.64,
+    subLevel: 0.87,
+    clickLevel: 0.15,
+    mainWave: 'square',
+    filterLpHz: 2400,
+    drive: 0.22,
+  },
+  moogRubber: {
+    label: 'Rubber Moog',
+    sweepStartHz: 78,
+    sweepMs: 68,
+    bodyDecaySec: 0.96,
+    subLevel: 0.94,
+    clickLevel: 0.09,
+    mainWave: 'square',
+    filterLpHz: 1050,
+    drive: 0.42,
+  },
+  moogFatSub: {
+    label: 'Fat Moog sub',
+    sweepStartHz: 72,
+    sweepMs: 72,
+    bodyDecaySec: 1.02,
+    subLevel: 0.96,
+    clickLevel: 0.07,
+    mainWave: 'square',
+    filterLpHz: 880,
+    drive: 0.4,
+  },
 } as const satisfies Record<string, EightZeroEightPresetDef>;
 
 export type BassLowBassPresetId = keyof typeof BASS_LOW_BASS_PRESETS;
@@ -418,7 +596,7 @@ export function playEightZeroEight(
   const kickBus = kickMap ? ctx.createGain() : null;
   if (kickBus) {
     kickBus.gain.value = 1;
-    kickBus.connect(ctx.destination);
+    kickBus.connect(resolveGrooveLabAudioDest(ctx));
   }
 
   const master = ctx.createGain();
@@ -432,7 +610,7 @@ export function playEightZeroEight(
   } else {
     master.gain.exponentialRampToValueAtTime(0.0001, tEnd);
   }
-  const outDest = kickBus ?? ctx.destination;
+  const outDest = kickBus ?? resolveGrooveLabAudioDest(ctx);
 
   const stoppable: AudioScheduledSourceNode[] = [];
 

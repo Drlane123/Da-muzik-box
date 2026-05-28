@@ -1,0 +1,63 @@
+---
+description: Beat Lab CH 17–32 — standalone synth lanes (Logic-style). Build real synth first; harmony and full timing lock are separate phases.
+globs: app/screens/CreationStationScreen.tsx,app/lib/creationStation/beatLabMelodic*,app/lib/creationStation/beatLabSynth*,app/lib/creationStation/chordBuilderBeatLabImport.ts,app/components/creation/BeatLabMelodic*,app/components/creation/BeatLabSynth*,app/components/creation/BeatLabMixerPanel.tsx
+alwaysApply: true
+---
+
+# Beat Lab — sixteen synth channels (CH 17–32) — STANDALONE
+
+Reference model: **Logic Pro** instrument lanes — the **synth section has its own setup**, separate from pads, harmony tools, and audio-analysis features.
+
+## Channel map (locked)
+
+| Beat Lab | Lanes | Mixer | Role |
+|----------|-------|-------|------|
+| GRID pads | 0–15 | CH 1–16 | Samples / drums |
+| SYNTH / ROLL melodic | 16–31 | **CH 17–32** | **Dedicated synth lanes** |
+
+One lane → one mixer strip → one voice engine instance. Do not collapse lanes or share one global “synth bus” preset across all sixteen.
+
+## What the synth is (current build phase)
+
+- **Keep** the existing piano rolls: `BeatLabPianoRoll` (ROLL), `BeatLabSynthPianoRoll` (SYNTH).
+- **Replace / augment** GM soundfont playback (`smplr` in `beatLabMelodicSoundfont.ts`) with a **real Web Audio synthesizer** — oscillators, filter, ADSR, macros; Vital-*inspired* depth over time, not a Vital clone in v1.
+- Playback seam: **`scheduleBeatLabMelodicNote`** (and preview helpers) — introduce a `BeatLabMelodicVoiceEngine` abstraction; soundfont remains optional fallback during migration.
+- Route each voice through **channel volume, pan, and meters** on its mixer CH (same as pads).
+
+## What is NOT part of the synth engine
+
+- **Chord Builder / harmony** — already exists; **do not merge** its graph, presets, or UI into the sixteen-channel synth engine.
+- **Audio → chord / bassline suggestions** (Logic-style) — **only when the user loads audio**; separate pipeline, not wired into oscillator/mod matrix code.
+- **`chordInstruments.ts`** — Chord Builder preview only; do not import it as the Beat Lab transport engine (patterns may be reused, not shared runtime state).
+
+Harmony **feeds MIDI into lanes** via import (`chordBuilderBeatLabImport.ts`); the **synth engine only renders notes** on CH 17–32.
+
+## Timing — build synth first, lock later
+
+- **Pads + Beat Lab transport** stay under `beat-lab-se2-transport-lock.mdc` — do not break verified metronome/playhead sync for CH 1–16.
+- **Melodic / SYNTH scheduling** may keep an **experimental or separate timing path** while the synth engine is built. User will choose the best combined behavior **after** real synth voices work.
+- **Do not** force full transport unification, Chord Builder clock coupling, or SE2 linking as a prerequisite for synth work.
+- **Do not** modify `StudioEditor2Screen.tsx` (see `se2-read-only-reference.mdc`).
+
+When syncing later: one shared `AudioContext`, Beat Lab lookahead, lane notes from `midiRoll` — chosen implementation wins; until then, prefer **working synth sound** over premature clock refactors.
+
+## Scope
+
+- **Creation Station / Beat Lab only** — sixteen synth channels live here, not in SE2 or global master transport slaves.
+- Chord Builder may **send MIDI to SYNTH** and export elsewhere later; synth engine stays **local to Beat Lab**.
+
+## Forbidden (until user asks otherwise)
+
+- Treating CH 17–32 as “more GM piano samples” with no synth engine path
+- Wiring Chord Builder harmony analysis or `chordInstruments` preview into the synth voice graph
+- Coupling synth mod matrix to audio-stem / chord-detection code
+- Importing or syncing Beat Lab synth transport to SE2 or shared master playhead ticks
+- Changing pad transport constants or SE2 to “fix” synth timing — fix synth lane code only
+
+## Implementation order (user-approved)
+
+1. **Engine + presets + macros** per lane (CH 17–32), piano roll unchanged  
+2. **Mixer + real audio** on each strip  
+3. **Timing lock** with Beat Lab transport (after synth sounds right)  
+4. **Harmony / audio analysis** on load — separate feature, not synth core  
+5. Deeper modulation (LFO / mod matrix) — after v1 engine proves out
