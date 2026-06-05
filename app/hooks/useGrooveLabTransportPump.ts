@@ -7,6 +7,7 @@ import {
   updateSchedAnchor,
 } from '@/app/lib/creationStation/grooveLabSe2TransportEngine';
 import { setGrooveLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
+import { tickGrooveLabChannelMeters } from '@/app/lib/creationStation/grooveLabChannelMeters';
 
 const fallbackSchedAnchorTimeRef = { current: 0 };
 const fallbackSchedAnchorPerfRef = { current: 0 };
@@ -66,6 +67,9 @@ export function useGrooveLabTransportPump(
     const tick = () => {
       const ctx =
         ctxRef.current && ctxRef.current.state !== 'closed' ? ctxRef.current : null;
+      if (ctx) {
+        tickGrooveLabChannelMeters(ctx.currentTime, runningRef.current);
+      }
       if (runningRef.current && ctx) {
         setGrooveLabTransportRunning(true);
         if (ctx.state === 'suspended') {
@@ -125,7 +129,10 @@ export function useGrooveLabTransportPump(
         refillRef.current(ctx, Math.max(0, ctx.currentTime));
       };
       if (ctx.state === 'suspended') {
-        void ctx.resume().catch(() => {});
+        void ctx.resume().then(runRefill).catch(() => {
+          if (ctx.state === 'running') runRefill();
+        });
+        return;
       }
       runRefill();
     };

@@ -13,8 +13,17 @@ import {
   GROOVE_LAB_CHORD_ROLL_MIDI_MIN,
   grooveLabClampBassRootMidi,
   grooveLabClampChordRollMidi,
+  grooveLabClampMelodyMidi,
+  grooveLabDedupeMelodyHitsBySlot,
   grooveLabInferBassRootFromChordMidis,
+  grooveLabClampGuitarMidi,
+  grooveLabIsChordStackMidi,
+  grooveLabIsGuitarMidi,
+  grooveLabIsMelodyMidi,
+  grooveLabIsMelodyChannelPitch,
   grooveLabLiftChordsAboveBass,
+  grooveLabRepitchChordHitsToRnBRange,
+  grooveLabSanitizeMelodyChannelHit,
 } from '@/app/lib/creationStation/grooveLabPitch';
 import {
   orchidNoteOnsets,
@@ -70,7 +79,7 @@ export function collapseGrooveChordHitsToBarDownbeats(
   const byBarMidi = new Map<number, Map<number, GrooveRollHit>>();
   for (const h of hits) {
     const midi = Math.round(h.midi);
-    if (!Number.isFinite(midi) || midi < GROOVE_LAB_CHORD_ROLL_MIDI_MIN) continue;
+    if (!Number.isFinite(midi) || !grooveLabIsChordStackMidi(midi)) continue;
     const headSlot = grooveLabBarDownbeatSlot(h.slot);
     const bar = Math.floor(headSlot / GROOVE_LAB_SLOTS_PER_BAR);
     if (!byBarMidi.has(bar)) byBarMidi.set(bar, new Map());
@@ -79,7 +88,12 @@ export function collapseGrooveChordHitsToBarDownbeats(
     barMap.set(midi, {
       slot: headSlot,
       midi,
-      sustainSlots: Math.max(h.sustainSlots, prev?.sustainSlots ?? 0),
+      sustainSlots: Math.max(
+        1,
+        GROOVE_LAB_SLOTS_PER_BAR,
+        h.sustainSlots,
+        prev?.sustainSlots ?? 0,
+      ),
       vel: Math.max(prev?.vel ?? 0, h.vel ?? 0.88),
     });
   }
@@ -135,6 +149,24 @@ export function normalizeGrooveBarCount(n: number): GrooveLabBarCount {
 
 export function grooveLabTotalSlots(barCount: number): number {
   return normalizeGrooveBarCount(barCount) * GROOVE_LAB_SLOTS_PER_BAR;
+}
+
+/**
+ * Match the loop length to where green chords actually live (8-bar GrooveChord sketch
+ * with a 4-bar transport preset was only filling half the melody).
+ */
+export function grooveLabInferComposerBarCount(
+  chordHits: readonly { slot: number }[],
+  loopBarCount: number,
+): GrooveLabBarCount {
+  const floor = normalizeGrooveBarCount(loopBarCount);
+  if (chordHits.length === 0) return floor;
+  let maxSlot = 0;
+  for (const h of chordHits) {
+    if (h.slot > maxSlot) maxSlot = h.slot;
+  }
+  const barsFromSlots = grooveLabBarIndexForSlot(maxSlot) + 1;
+  return normalizeGrooveBarCount(Math.max(floor, barsFromSlots));
 }
 
 export function grooveLabBarIndexForSlot(slot: number): number {
@@ -193,17 +225,117 @@ export function sanitizeGrooveLabHits(hits: GrooveRollHit[], barCount: number): 
   return [...byPitch.values()];
 }
 
-/** Green chord channel — drop sub-C1 junk; snap stacks to bar downbeats (matches transport + Beat Lab import). */
+/** Amber melody channel — C5–C6 only; never lift subs/chords into this lane. */
+export function sanitizeGrooveLabMelodyChannelHits(
+  hits: GrooveRollHit[],
+  barCount: number,
+): GrooveRollHit[] {
+  const lane = hits
+    .filter((h) => grooveLabIsMelodyMidi(h.midi))
+    .map((h) => ({ ...h, midi: grooveLabClampMelodyMidi(h.midi) }));
+  return grooveLabDedupeMelodyHitsBySlot(sanitizeGrooveLabHits(lane, barCount));
+}
+
+/** Green chord channel — drop sub-C1 junk; snap stacks to bar downbeats (roll display / import). */
 export function sanitizeGrooveLabChordChannelHits(
   hits: GrooveRollHit[],
   barCount: number,
 ): GrooveRollHit[] {
   return collapseGrooveChordHitsToBarDownbeats(
     sanitizeGrooveLabHits(
-      hits.filter((h) => h.midi >= GROOVE_LAB_BASS_MIDI_MIN),
+      grooveLabRepitchChordHitsToRnBRange(
+        hits.filter((h) => grooveLabIsChordStackMidi(h.midi)),
+      ),
       barCount,
     ),
   );
+}
+
+/** Guitar channel — G3–A4 mono lane. */
+export function grooveLabDedupeGuitarHitsBySlot(hits: readonly GrooveRollHit[]): GrooveRollHit[] {
+  const bySlot = new Map<number, GrooveRollHit>();
+  for (const h of hits) {
+    if (!grooveLabIsGuitarMidi(h.midi)) continue;
+    const norm = { ...h, midi: grooveLabClampGuitarMidi(h.midi) };
+    const prev = bySlot.get(norm.slot);
+    if (!prev || norm.midi > prev.midi) bySlot.set(norm.slot, norm);
+  }
+  return [...bySlot.values()].sort((a, b) => a.slot - b.slot || a.midi - b.midi);
+}
+
+/** Cap sustain for mono guitar lane — one note per column. */
+export function grooveLabTrimGuitarHitsMonophonic(hits: readonly GrooveRollHit[]): GrooveRollHit[] {
+  const deduped = grooveLabDedupeGuitarHitsBySlot(hits);
+  const out = deduped.map((h) => ({ ...h }));
+  for (let i = 0; i < out.length; i++) {
+    const cur = out[i]!;
+    const next = out[i + 1];
+    if (next) {
+      const gap = next.slot - cur.slot;
+      if (gap > 1) cur.sustainSlots = Math.min(cur.sustainSlots, Math.max(1, gap - 1));
+      else cur.sustainSlots = 1;
+    }
+  }
+  return out;
+}
+
+export function sanitizeGrooveLabGuitarChannelHits(
+  hits: GrooveRollHit[],
+  barCount: number,
+): GrooveRollHit[] {
+  const lane = hits
+    .filter((h) => grooveLabIsGuitarMidi(h.midi))
+    .map((h) => ({ ...h, midi: grooveLabClampGuitarMidi(h.midi) }));
+  return grooveLabDedupeGuitarHitsBySlot(sanitizeGrooveLabHits(lane, barCount));
+}
+
+/** Even chord columns inside a bar (0 … slotsPerBar-1), snapped to quantize. */
+export function grooveLabProgressionSlotInBar(
+  stepIndex: number,
+  slotsPerBar: number,
+  stepsPerBar: number,
+  snapStep: number,
+): number {
+  if (stepsPerBar <= 1) return 0;
+  const raw = Math.floor((stepIndex * slotsPerBar) / stepsPerBar);
+  const snapped = Math.floor(raw / snapStep) * snapStep;
+  return Math.max(0, Math.min(slotsPerBar - snapStep, snapped));
+}
+
+/**
+ * Transport + playback — keep each chord column’s grid slot (do not collapse a bar to one downbeat).
+ */
+export function grooveLabChordHitsForTransport(
+  hits: readonly GrooveRollHit[],
+  barCount: number,
+  quantize: GrooveLabQuantize = GROOVE_LAB_QUANTIZE_DEFAULT,
+): GrooveRollHit[] {
+  const snapStep = grooveLabSlotsPerCell(quantize);
+  const lane = sanitizeGrooveLabHits(
+    grooveLabRepitchChordHitsToRnBRange(
+      hits.filter((h) => grooveLabIsChordStackMidi(h.midi)),
+    ),
+    barCount,
+  );
+  const byCol = new Map<number, Map<number, GrooveRollHit>>();
+  for (const h of lane) {
+    const col = snapGrooveSlot(h.slot, quantize, barCount);
+    const midi = Math.round(h.midi);
+    const colMap = byCol.get(col) ?? new Map<number, GrooveRollHit>();
+    const prev = colMap.get(midi);
+    colMap.set(midi, {
+      slot: col,
+      midi,
+      sustainSlots: Math.max(snapStep, h.sustainSlots, prev?.sustainSlots ?? 0),
+      vel: Math.max(prev?.vel ?? 0, h.vel ?? 0.88),
+    });
+    byCol.set(col, colMap);
+  }
+  const out: GrooveRollHit[] = [];
+  for (const colMap of byCol.values()) {
+    for (const hit of colMap.values()) out.push(hit);
+  }
+  return out.sort((a, b) => a.slot - b.slot || a.midi - b.midi);
 }
 
 function normalizeHit(raw: LegacyGrooveRollHit, maxSlot: number): GrooveRollHit | null {
@@ -308,6 +440,103 @@ export function grooveLabChordAnchorsFromHits(
   return anchors.sort((a, b) => a.slot - b.slot);
 }
 
+/**
+ * One attack per chord change — left edge of the green stack (min slot in a strum group).
+ * Use for guitar lick drops and any “hit with the chord” placement.
+ */
+export function grooveLabChordAttackColumns(
+  chordHits: readonly GrooveRollHit[],
+  opts: {
+    keyRoot: number;
+    mode: ChordMode;
+    referenceMidi?: number;
+    quantize?: GrooveLabQuantize;
+  },
+): { slot: number; rootMidi: number }[] {
+  const ref = opts.referenceMidi ?? GROOVE_LAB_ROOT_MIDI;
+  const strumGap = Math.max(
+    4,
+    grooveLabSlotsPerCell(opts.quantize ?? GROOVE_LAB_QUANTIZE_DEFAULT) * 2,
+  );
+  const green = chordHits
+    .filter((h) => grooveLabIsChordStackMidi(h.midi))
+    .slice()
+    .sort((a, b) => a.slot - b.slot || a.midi - b.midi);
+  if (green.length === 0) return [];
+
+  type Group = { minSlot: number; maxSlot: number; midis: number[] };
+  const groups: Group[] = [];
+
+  for (const h of green) {
+    const last = groups[groups.length - 1];
+    const sameBar =
+      last != null &&
+      Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR) ===
+        Math.floor(last.minSlot / GROOVE_LAB_SLOTS_PER_BAR);
+    const sameAttack = last != null && sameBar && h.slot - last.maxSlot <= strumGap;
+    if (!sameAttack) {
+      groups.push({ minSlot: h.slot, maxSlot: h.slot, midis: [Math.round(h.midi)] });
+    } else {
+      last!.maxSlot = Math.max(last!.maxSlot, h.slot);
+      last!.minSlot = Math.min(last!.minSlot, h.slot);
+      last!.midis.push(Math.round(h.midi));
+    }
+  }
+
+  return groups.map((g) => ({
+    slot: g.minSlot,
+    rootMidi:
+      opts.keyRoot != null && opts.mode != null
+        ? grooveLabInferBassRootFromChordMidis(g.midis, opts.keyRoot, opts.mode, ref)
+        : grooveLabClampBassRootMidi(Math.min(...g.midis), ref),
+  }));
+}
+
+/** Green stacks grouped for transport — one block chord per attack at the leftmost slot. */
+export function grooveLabChordAttackStacks(
+  chordHits: readonly GrooveRollHit[],
+  opts?: { quantize?: GrooveLabQuantize },
+): { slot: number; midis: number[]; sustainSlots: number; vel: number }[] {
+  const strumGap = Math.max(
+    4,
+    grooveLabSlotsPerCell(opts.quantize ?? GROOVE_LAB_QUANTIZE_DEFAULT) * 2,
+  );
+  const green = chordHits
+    .filter((h) => grooveLabIsChordStackMidi(h.midi))
+    .slice()
+    .sort((a, b) => a.slot - b.slot || a.midi - b.midi);
+  if (green.length === 0) return [];
+
+  type Group = { minSlot: number; maxSlot: number; hits: GrooveRollHit[] };
+  const groups: Group[] = [];
+
+  for (const h of green) {
+    const last = groups[groups.length - 1];
+    const sameBar =
+      last != null &&
+      Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR) ===
+        Math.floor(last.minSlot / GROOVE_LAB_SLOTS_PER_BAR);
+    const sameAttack = last != null && sameBar && h.slot - last.maxSlot <= strumGap;
+    if (!sameAttack) {
+      groups.push({ minSlot: h.slot, maxSlot: h.slot, hits: [h] });
+    } else {
+      last!.maxSlot = Math.max(last!.maxSlot, h.slot);
+      last!.minSlot = Math.min(last!.minSlot, h.slot);
+      last!.hits.push(h);
+    }
+  }
+
+  return groups.map((g) => {
+    const midis = [...new Set(g.hits.map((h) => Math.round(h.midi)))].sort((a, b) => a - b);
+    return {
+      slot: g.minSlot,
+      midis,
+      sustainSlots: Math.max(...g.hits.map((h) => h.sustainSlots)),
+      vel: Math.max(...g.hits.map((h) => h.vel ?? 0.88)),
+    };
+  });
+}
+
 /** Harmony root active at `slot` (latest anchor at or before this column). */
 export function grooveLabBassRootAtSlot(
   slot: number,
@@ -410,41 +639,90 @@ export function grooveLabLockChordsToSeparateChannel(
   return [...kept, ...columns];
 }
 
-export function grooveLabPickChordChannel(bassChannel: number, preferred?: number): number {
+export function grooveLabPickChordChannel(preferred?: number): number {
   const ids = grooveLabChannelIds();
+  if (preferred != null && ids.includes(preferred)) return preferred;
+  return ids[0] ?? CHORD_BASS_SEQ_CHANNEL_BASE;
+}
+
+function grooveLabIsTakenChannel(
+  ch: number,
+  taken: readonly number[],
+): boolean {
+  return taken.some((t) => t === ch);
+}
+
+export function grooveLabPickMelodyChannel(
+  chordChannel: number,
+  preferred?: number,
+  sampleChannel?: number,
+): number {
+  const ids = grooveLabChannelIds();
+  const taken = [chordChannel, sampleChannel].filter((c): c is number => c != null);
   if (
     preferred != null &&
-    preferred !== bassChannel &&
+    !grooveLabIsTakenChannel(preferred, taken) &&
     ids.includes(preferred)
   ) {
     return preferred;
   }
-  return ids.find((c) => c !== bassChannel) ?? bassChannel;
+  return ids.find((c) => !grooveLabIsTakenChannel(c, taken)) ?? ids[1] ?? ids[0]!;
 }
 
-export function grooveLabPickMelodyChannel(
-  bassChannel: number,
+export function grooveLabPickGuitarChannel(
   chordChannel: number,
+  melodyChannel: number,
+  preferred?: number,
+  sampleChannel?: number,
+): number {
+  const ids = grooveLabChannelIds();
+  const taken = [chordChannel, melodyChannel, sampleChannel].filter(
+    (c): c is number => c != null,
+  );
+  if (
+    preferred != null &&
+    !grooveLabIsTakenChannel(preferred, taken) &&
+    ids.includes(preferred)
+  ) {
+    return preferred;
+  }
+  return (
+    ids.find((c) => !grooveLabIsTakenChannel(c, taken)) ?? ids[2] ?? ids[0]!
+  );
+}
+
+export function grooveLabPickSampleChannel(
+  chordChannel: number,
+  melodyChannel: number,
+  guitarChannel: number,
   preferred?: number,
 ): number {
   const ids = grooveLabChannelIds();
-  const used = new Set([bassChannel, chordChannel]);
-  if (preferred != null && !used.has(preferred) && ids.includes(preferred)) {
+  const taken = [chordChannel, melodyChannel, guitarChannel];
+  if (
+    preferred != null &&
+    !grooveLabIsTakenChannel(preferred, taken) &&
+    ids.includes(preferred)
+  ) {
     return preferred;
   }
-  return ids.find((c) => !used.has(c)) ?? bassChannel;
+  return (
+    ids.find((c) => !grooveLabIsTakenChannel(c, taken)) ?? ids[3] ?? ids[0]!
+  );
 }
 
+/** Default CHORD + GROOVE LEAD + GUITAR + SAMPLE lanes (CH 33–48). */
 export function grooveLabDefaultLayerChannels(): {
-  bass: number;
   chord: number;
   melody: number;
+  guitar: number;
+  sample: number;
 } {
-  const ids = grooveLabChannelIds();
-  const bass = ids[0] ?? CHORD_BASS_SEQ_CHANNEL_BASE;
-  const chord = grooveLabPickChordChannel(bass);
-  const melody = grooveLabPickMelodyChannel(bass, chord);
-  return { bass, chord, melody };
+  const chord = grooveLabPickChordChannel();
+  const melody = grooveLabPickMelodyChannel(chord);
+  const guitar = grooveLabPickGuitarChannel(chord, melody);
+  const sample = grooveLabPickSampleChannel(chord, melody, guitar);
+  return { chord, melody, guitar, sample };
 }
 
 /** Bass root + Orchid chord voicing at one grid column (Telepathic Orchid: bass drives, chord follows). */

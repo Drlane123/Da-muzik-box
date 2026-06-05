@@ -93,6 +93,21 @@ function fxTailEstimateSec(v: BeatLabBassSynthVoiceParams): number {
   return tail;
 }
 
+/** Transport-scheduled voices only — cleared on Beat Lab Stop (not keyboard preview). */
+const beatLabSynthV2TransportStoppers = new Set<() => void>();
+
+/** Cut bass/V2 notes queued by transport lookahead (~3s ahead). */
+export function haltBeatLabSynthV2TransportVoices(): void {
+  for (const stop of beatLabSynthV2TransportStoppers) {
+    try {
+      stop();
+    } catch {
+      /* */
+    }
+  }
+  beatLabSynthV2TransportStoppers.clear();
+}
+
 function attachSynthV2MeterTap(
   ctx: AudioContext,
   dryBus: GainNode,
@@ -256,6 +271,8 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
 
   const unisonN = Math.max(1, Math.min(6, Math.round(v.unisonVoices)));
   const detuneSpread = v.unisonDetuneCents;
+  const voiceOscs: OscillatorNode[] = [];
+  const voiceSrcs: AudioBufferSourceNode[] = [];
 
   const spawnOsc = (
     wave: BeatLabBassSynthVoiceParams['osc1Wave'],
@@ -289,6 +306,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
       g.gain.setValueAtTime((level * peak) / unisonN, when);
       o.connect(g);
       g.connect(oscMix);
+      voiceOscs.push(o);
       o.start(when);
       o.stop(noteEnd + rel + 0.02);
     }
@@ -319,6 +337,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     sg.gain.setValueAtTime(v.subLevel * peak * 0.95, when);
     sub.connect(sg);
     sg.connect(oscMix);
+    voiceOscs.push(sub);
     sub.start(when);
     sub.stop(noteEnd + rel + 0.02);
   }
@@ -335,6 +354,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     ng.gain.setValueAtTime(v.noiseLevel * peak * 0.28, when);
     noise.connect(ng);
     ng.connect(oscMix);
+    voiceSrcs.push(noise);
     noise.start(when);
     noise.stop(noteEnd + rel + 0.02);
   }
@@ -429,6 +449,36 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     when,
     noteEnd + rel + fxTailEstimateSec(v),
   );
+
+  const stopTransportVoice = () => {
+    beatLabSynthV2TransportStoppers.delete(stopTransportVoice);
+    const t = ctx.currentTime;
+    for (const o of voiceOscs) {
+      try {
+        o.stop(t);
+        o.disconnect();
+      } catch {
+        /* */
+      }
+    }
+    for (const s of voiceSrcs) {
+      try {
+        s.stop(t);
+        s.disconnect();
+      } catch {
+        /* */
+      }
+    }
+    try {
+      amp.gain.cancelScheduledValues(t);
+      amp.gain.setValueAtTime(0.0001, t);
+      dryBus.gain.cancelScheduledValues(t);
+      dryBus.gain.setValueAtTime(0, t);
+    } catch {
+      /* */
+    }
+  };
+  beatLabSynthV2TransportStoppers.add(stopTransportVoice);
 }
 
 export function previewBeatLabSynthV2Note(

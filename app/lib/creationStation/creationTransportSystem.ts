@@ -144,8 +144,11 @@ function alignCreationTransportStepClock(
   }
 
   const maxAheadBeats = Math.ceil(CREATION_SCHEDULE_AHEAD_SEC / spb) + 4;
-  const farBehind = k + CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL < kAudio;
-  if (farBehind || k > kAudio + maxAheadBeats || tGrid > ctSnap + CREATION_SCHEDULE_AHEAD_SEC + spb * 2) {
+  /*
+   * Never jump `k` forward over unplayed quarters (farBehind fast-forward caused audible skips).
+   * Lookahead refill catch-up schedules overdue steps; only reset runaway *ahead* state.
+   */
+  if (k > kAudio + maxAheadBeats || tGrid > ctSnap + CREATION_SCHEDULE_AHEAD_SEC + spb * 2) {
     k = kAudio;
     tGrid = sessionStart + (k - origin) * spb;
   } else if (tGrid < ctSnap - spb * 0.125) {
@@ -227,17 +230,19 @@ export function refillCreationMetronome(
   isRunning: () => boolean,
   isMetroOn: () => boolean,
   opts?: CreationTransportRefillOpts,
+  totalBeats = Number.POSITIVE_INFINITY,
 ): void {
   if (!isRunning() || !isMetroOn()) return;
 
   const origin = refs.originBeatRef.current;
   const sessionStart = refs.sessionStartRef.current;
   const horizon = ctSnap + CREATION_SCHEDULE_AHEAD_SEC;
+  const tb = Math.max(0, totalBeats);
   const chainFloor = opts?.loopContinuation ? CREATION_LOOP_CHAIN_FLOOR_SEC : SE2_AUDIO_START_FLOOR_SEC;
   let chain = ctSnap + chainFloor;
   let n = 0;
 
-  while (true) {
+  while (refs.nextMetroKRef.current <= tb) {
     const tNextQuarter = sessionStart + (refs.nextMetroKRef.current + 1 - origin) * spb;
     if (tNextQuarter > ctSnap) break;
     refs.nextMetroKRef.current += 1;
@@ -245,6 +250,7 @@ export function refillCreationMetronome(
 
   while (n < CREATION_MAX_METRO_SCHEDULE_PER_CALL) {
     const k = refs.nextMetroKRef.current;
+    if (k > tb) break;
     const tGrid = sessionStart + (k - origin) * spb;
     if (tGrid >= horizon) break;
     const t0 = Math.max(tGrid, chain);

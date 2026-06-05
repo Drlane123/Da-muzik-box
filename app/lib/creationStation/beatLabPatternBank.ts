@@ -35,10 +35,19 @@ export const BEAT_LAB_PATTERN_BANKS: readonly BeatLabPatternBankCategory[] = [
   { id: 'techno', label: 'Techno', genres: ['Techno'] },
 ] as const;
 
+/** Auto-generated trap templates — hidden once Signature Trap Series ships. */
+const TRAP_LEGACY_EXPANDED_IDS = new Set(
+  Array.from({ length: 13 }, (_, i) => `trap-${18 + i}`),
+);
+
 export function getBeatLabDrumPresets(bankId: BeatLabPatternBankId): PatternPreset[] {
   const cat = BEAT_LAB_PATTERN_BANKS.find((b) => b.id === bankId);
   if (!cat) return [];
-  return DRUM_PATTERN_PRESETS.filter((p) => cat.genres.includes(p.genre));
+  const presets = DRUM_PATTERN_PRESETS.filter((p) => cat.genres.includes(p.genre));
+  if (bankId === 'trap') {
+    return presets.filter((p) => !TRAP_LEGACY_EXPANDED_IDS.has(p.id));
+  }
+  return presets;
 }
 
 export function countBeatLabDrumPresets(bankId: BeatLabPatternBankId): number {
@@ -54,14 +63,18 @@ export function beatLabPatternBankCategoryLabel(id: BeatLabPatternBankId): strin
   return BEAT_LAB_PATTERN_BANKS.find((b) => b.id === id)?.label ?? id;
 }
 
-/** Tile one bar of preset steps across `totalCols` columns. */
+/** Hand-crafted presets use one bar of 16th-note steps (16 cells per 4/4 bar). */
+export const BEAT_LAB_PRESET_STEPS_PER_BAR = 16;
+
+/** Tile one bar of preset steps across `totalCols` columns at the current grid resolution. */
 export function presetToBeatLabDrums(
   preset: PatternPreset,
-  opts: { totalCols: number },
+  opts: { totalCols: number; gridStepsPerBar: number; presetStepsPerBar?: number },
 ): boolean[][] {
   const cols = Math.max(1, opts.totalCols);
+  const presetSpb = Math.max(1, opts.presetStepsPerBar ?? preset.pattern[0]?.length ?? BEAT_LAB_PRESET_STEPS_PER_BAR);
+  const gridSpb = Math.max(1, opts.gridStepsPerBar);
   const out: boolean[][] = Array.from({ length: 16 }, () => Array(cols).fill(false));
-  const baseLen = preset.pattern[0]?.length ?? 16;
 
   for (let presetRow = 0; presetRow < preset.pattern.length; presetRow++) {
     const labRow = PRESET_TO_BEAT_LAB_ROW[presetRow];
@@ -69,8 +82,12 @@ export function presetToBeatLabDrums(
     const src = preset.pattern[presetRow];
     if (!src) continue;
     const dst = out[labRow]!;
-    for (let c = 0; c < cols; c++) {
-      if (src[c % baseLen]) dst[c] = true;
+    for (let ps = 0; ps < src.length; ps++) {
+      if (!src[ps]) continue;
+      const stepInBar = Math.min(gridSpb - 1, Math.round((ps * gridSpb) / presetSpb));
+      for (let c = stepInBar; c < cols; c += gridSpb) {
+        dst[c] = true;
+      }
     }
   }
 

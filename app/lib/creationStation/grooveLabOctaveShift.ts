@@ -1,8 +1,9 @@
 import {
   GROOVE_LAB_BASS_MIDI_MAX,
   GROOVE_LAB_BASS_MIDI_MIN,
-  GROOVE_LAB_CHORD_HARMONY_MIDI_MIN,
   grooveLabClampMelodyMidi,
+  grooveLabDedupeMelodyHitsBySlot,
+  grooveLabIsChordStackMidi,
   grooveLabIsMelodyMidi,
   grooveLabTransposeChordHitsOctave,
   type GrooveLabRollNote,
@@ -18,12 +19,7 @@ export const GROOVE_LAB_ROLL_OCTAVE_OPTS: GrooveLabTransposeChordOctaveOpts = {
   lowFloorMidi: 24,
 };
 
-export function grooveLabIsChordStackMidi(midi: number): boolean {
-  const m = Math.round(midi);
-  if (grooveLabIsBassSubMidi(m)) return false;
-  if (grooveLabIsMelodyMidi(m)) return false;
-  return m >= GROOVE_LAB_CHORD_HARMONY_MIDI_MIN;
-}
+export { grooveLabIsChordStackMidi } from '@/app/lib/creationStation/grooveLabPitch';
 
 function dedupeRollHits<T extends GrooveLabRollNote>(hits: readonly T[]): T[] {
   const byKey = new Map<string, T>();
@@ -53,16 +49,17 @@ export function grooveLabTransposeMelodyHitsOctave(
   dir: 1 | -1,
 ): GrooveRollHit[] {
   const delta = dir * 12;
-  const out: GrooveRollHit[] = [];
+  const rest: GrooveRollHit[] = [];
+  const melody: GrooveRollHit[] = [];
   for (const h of hits) {
     if (!grooveLabIsMelodyMidi(h.midi)) {
-      out.push(h);
+      rest.push(h);
       continue;
     }
     const next = grooveLabClampMelodyMidi(h.midi + delta);
-    out.push(next === h.midi ? h : { ...h, midi: next });
+    melody.push(next === h.midi ? h : { ...h, midi: next });
   }
-  return dedupeRollHits(out);
+  return [...rest, ...grooveLabDedupeMelodyHitsBySlot(melody)];
 }
 
 /** Shift blue 808 sub roots only (C1–C3). */

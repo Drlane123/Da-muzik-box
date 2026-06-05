@@ -4,11 +4,14 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ChordBuilderPianoRoll } from '@/app/components/creation/ChordBuilderPianoRoll';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
-import type {
-  BeatLabImportedChordRail,
-  ChordBuilderRollEdits,
+import {
+  beatLabStepsPerBar,
+  snapBeatLabChordNotesToBarDownbeats,
+  type BeatLabImportedChordRail,
+  type ChordBuilderRollEdits,
 } from '@/app/lib/creationStation/chordBuilderBeatLabImport';
 import {
+  beatLabChordRailToPreviewEvents,
   beatLabLaneNotesToChordRollModel,
   beatLabQuarterColToStepCol,
   beatLabStepColToQuarterCol,
@@ -47,7 +50,49 @@ import {
   chordRollRowForMidi,
 } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
 
-/** All lit roll cells on one quarter column (chord stack) for drag-move. */
+/** One pitch per pitch-class — avoids duplicate key lights from stacked octaves. */
+function dedupeMidisByPitchClass(midis: number[]): number[] {
+  const byPc = new Map<number, number>();
+  for (const m of midis) {
+    const pc = ((Math.round(m) % 12) + 12) % 12;
+    const prev = byPc.get(pc);
+    if (prev == null || m < prev) byPc.set(pc, Math.round(m));
+  }
+  return [...byPc.values()].sort((a, b) => a - b);
+}
+
+/** MIDI pitches lit on the piano keyboard for one quarter column (chord stack). */
+function midisAtQuarterCol(
+  col: number,
+  previewEvents: ReadonlyArray<{ midi: number; col: number }>,
+  edits: ChordBuilderRollEdits,
+): number[] {
+  const midis: number[] = [];
+  const seen = new Set<number>();
+  for (const { midi, col: c } of previewEvents) {
+    if (c !== col) continue;
+    const row = chordRollRowForMidi(midi);
+    if (row < 0) continue;
+    const key = `${row},${col}`;
+    if (edits.removed.has(key)) continue;
+    if (seen.has(midi)) continue;
+    seen.add(midi);
+    midis.push(midi);
+  }
+  for (const key of edits.added) {
+    const [rStr, cStr] = key.split(',');
+    if (parseInt(cStr ?? '-1', 10) !== col) continue;
+    const row = parseInt(rStr ?? '-1', 10);
+    const name = CB_PIANO_ROWS[row];
+    if (!name) continue;
+    const midi = cbPianoNoteNameToMidi(name);
+    if (midi <= 0 || seen.has(midi)) continue;
+    seen.add(midi);
+    midis.push(midi);
+  }
+  return dedupeMidisByPitchClass(midis);
+}
+
 function litCellKeysAtQuarterCol(
   col: number,
   previewEvents: ReadonlyArray<{ midi: number; col: number }>,
@@ -85,6 +130,8 @@ export type BeatLabSynthPianoRollProps = {
   playheadStepCol: number;
   isPlaying: boolean;
   playheadElRef: React.RefObject<HTMLDivElement | null>;
+  /** NEW SYNTH v2 — stable playhead mount; transport WAAPI only (no React playheadCol). */
+  playheadMountOnly?: boolean;
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   playingMidis: ReadonlySet<number>;
   onNotesChange: (lane: number, nextLaneNotes: BeatLabMidiNote[]) => void;
@@ -104,6 +151,8 @@ export type BeatLabSynthPianoRollProps = {
   onEditGestureStart?: () => void;
   onEditGestureEnd?: () => void;
   onGridCellFocus?: (stepCol: number) => void;
+  /** Flash full chord stack on the piano keys (grid click / audition). */
+  onPreviewHarmonyMidis?: (midis: number[]) => void;
   disabled?: boolean;
   /** NEW SYNTH: harmony lane uses piano-roll bank; bass uses panel presets. */
   engineVariant?: 'soundfont' | 'v2';
@@ -127,6 +176,7 @@ export function BeatLabSynthPianoRoll({
   playheadStepCol,
   isPlaying,
   playheadElRef,
+  playheadMountOnly = false,
   scrollContainerRef,
   playingMidis,
   onNotesChange,
@@ -151,6 +201,7 @@ export function BeatLabSynthPianoRoll({
   v2PianoInstrumentId,
   onV2PianoInstrumentChange,
   chordRail = null,
+  onPreviewHarmonyMidis,
 }: BeatLabSynthPianoRollProps) {
   const isV2 = engineVariant === 'v2';
   const pianoId = normalizeBeatLabSynth2PianoInstrument(v2PianoInstrumentId);
@@ -159,15 +210,37 @@ export function BeatLabSynthPianoRoll({
   const totalBars = Math.max(1, Math.ceil(patternCols / stepColsPerBar));
   const totalQuarterCols = totalBars * colsPerBar;
 
-  const { previewEvents, edits: initialEdits } = useMemo(
-    () => beatLabLaneNotesToChordRollModel(notes, lane, subdiv, totalQuarterCols, beatsPerBar, colsPerBar),
-    [notes, lane, subdiv, totalQuarterCols, beatsPerBar, colsPerBar],
-  );
+  const snappedLaneNotes = useMemo(() => {
+    const spb = beatLabStepsPerBar(subdiv, beatsPerBar, colsPerBar);
+    return snapBeatLabChordNotesToBarDownbeats(
+      notes.filter((n) => n.lane === lane),
+      { stepsPerBar: spb, patternCols: patternCols, preserveMultiBarLen: true },
+    );
+  }, [notes, lane, subdiv, beatsPerBar, colsPerBar, patternCols]);
 
   const blockSpans = useMemo(
-    () => chordBlockSpansFromBeatLabLaneNotes(notes, lane, subdiv, beatsPerBar, colsPerBar),
-    [notes, lane, subdiv, beatsPerBar, colsPerBar],
+    () => chordBlockSpansFromBeatLabLaneNotes(snappedLaneNotes, lane, subdiv, beatsPerBar, colsPerBar),
+    [snappedLaneNotes, lane, subdiv, beatsPerBar, colsPerBar],
   );
+
+  const { previewEvents, edits: initialEdits } = useMemo(() => {
+    const model = beatLabLaneNotesToChordRollModel(
+      snappedLaneNotes,
+      lane,
+      subdiv,
+      totalQuarterCols,
+      beatsPerBar,
+      colsPerBar,
+      blockSpans,
+    );
+    if (model.previewEvents.length > 0 || !chordRail) return model;
+    const fromRail = beatLabChordRailToPreviewEvents(chordRail, totalQuarterCols, colsPerBar);
+    if (fromRail.length === 0) return model;
+    return {
+      previewEvents: fromRail,
+      edits: { added: new Set<string>(), removed: new Set<string>(), lengths: new Map() },
+    };
+  }, [snappedLaneNotes, lane, subdiv, totalQuarterCols, beatsPerBar, colsPerBar, blockSpans, chordRail]);
 
   const [rollEdits, setRollEdits] = useState<ChordBuilderRollEdits>(initialEdits);
   const undoGestureRef = useRef(false);
@@ -232,10 +305,21 @@ export function BeatLabSynthPianoRoll({
   }, [onEditGestureEnd]);
 
   const playheadQuarterCol = beatLabStepColToQuarterCol(playheadStepCol, subdiv, beatsPerBar, colsPerBar);
-  /** While playing, WAAPI owns the playline — do not push new `playheadCol` into React every transport tick. */
+  /** v2: WAAPI owns playhead — freeze React column. Legacy: hold column while playing. */
   const playheadQuarterColRef = useRef(playheadQuarterCol);
-  if (!isPlaying) playheadQuarterColRef.current = playheadQuarterCol;
-  const playheadColForRoll = isPlaying ? playheadQuarterColRef.current : playheadQuarterCol;
+  if (!isPlaying && !playheadMountOnly) playheadQuarterColRef.current = playheadQuarterCol;
+  const playheadColForRoll = playheadMountOnly
+    ? playheadQuarterColRef.current
+    : isPlaying
+      ? playheadQuarterColRef.current
+      : playheadQuarterCol;
+  /** Soft voicing glow only when stopped — during play, transport pulse drives key lights. */
+  const chordVoicingMidis = useMemo(() => {
+    if (isPlaying || playheadMountOnly) return new Set<number>();
+    const midis = midisAtQuarterCol(playheadQuarterCol, previewEvents, rollEdits);
+    return new Set(midis);
+  }, [isPlaying, playheadQuarterCol, previewEvents, rollEdits]);
+
   const brushMode = beatLabToolUsesDrumBrush(editTool);
   const eraseMode = editTool === 'erase';
 
@@ -284,22 +368,44 @@ export function BeatLabSynthPianoRoll({
     [beatsPerBar, colsPerBar, onGridCellFocus, subdiv],
   );
 
+  const previewChordAtCol = useCallback(
+    (col: number, focusRow?: number) => {
+      let midis = midisAtQuarterCol(col, previewEvents, rollEdits);
+      if (midis.length === 0 && focusRow != null) {
+        const name = CB_PIANO_ROWS[focusRow];
+        if (name) {
+          const midi = cbPianoNoteNameToMidi(name);
+          if (midi > 0) midis = [midi];
+        }
+      }
+      if (midis.length === 0) return;
+      if (onPreviewHarmonyMidis) onPreviewHarmonyMidis(midis);
+      else for (const midi of midis) onPreviewMidi(lane, midi);
+    },
+    [lane, onPreviewHarmonyMidis, onPreviewMidi, previewEvents, rollEdits],
+  );
+
   const previewRowMidi = useCallback(
-    (row: number) => {
+    (row: number, col?: number) => {
+      if (col != null) {
+        previewChordAtCol(col, row);
+        return;
+      }
       const name = CB_PIANO_ROWS[row];
       if (!name) return;
       const midi = cbPianoNoteNameToMidi(name);
       if (midi > 0) onPreviewMidi(lane, midi);
     },
-    [lane, onPreviewMidi],
+    [lane, onPreviewMidi, previewChordAtCol],
   );
 
   const sustainMidi = useCallback(
     (midi: number) => {
-      /** V2 piano roll: always piano bank preview — never bass V2 sustain. */
-      if (midi > 0) onPreviewMidi(lane, midi);
+      if (midi <= 0) return;
+      if (isV2 && onSustainMidi) onSustainMidi(lane, midi);
+      else onPreviewMidi(lane, midi);
     },
-    [lane, onPreviewMidi],
+    [isV2, lane, onSustainMidi, onPreviewMidi],
   );
 
   const releaseHeldMidi = useCallback(
@@ -349,9 +455,9 @@ export function BeatLabSynthPianoRoll({
         audition = true;
       }
       commitEdits(next);
-      if (audition) previewRowMidi(row);
+      if (audition) previewChordAtCol(col, row);
     },
-    [brushMode, commitEdits, disabled, eraseMode, focusStepCol, previewRowMidi, rollEdits],
+    [brushMode, commitEdits, disabled, eraseMode, focusStepCol, previewChordAtCol, rollEdits],
   );
 
   const slot = beatLabMelodicSlotIndex(lane);
@@ -574,6 +680,7 @@ export function BeatLabSynthPianoRoll({
           playheadCol={playheadColForRoll}
           dragTargetBar={null}
           playingMidis={playingMidis}
+          chordVoicingMidis={chordVoicingMidis}
           manualAdded={rollEdits.added}
           manualRemoved={rollEdits.removed}
           noteLengths={rollEdits.lengths}
@@ -603,7 +710,7 @@ export function BeatLabSynthPianoRoll({
             : undefined
         }
         onBrushStrokeEnd={brushMode ? () => { brushPaintRef.current = null; } : undefined}
-        onAuditionCell={brushMode ? undefined : (row) => previewRowMidi(row)}
+        onAuditionCell={brushMode ? (row, col) => previewChordAtCol(col, row) : undefined}
         onToggleNote={(row, col, isAuto, isLit) => {
           if (brushMode) return;
           applyToggle(row, col, isAuto, Boolean(isLit));
@@ -642,7 +749,7 @@ export function BeatLabSynthPianoRoll({
               if (len != null) next.lengths.set(toKey, len);
             }
             commitEdits(next);
-            previewRowMidi(toRow);
+            previewChordAtCol(toCol, toRow);
           }}
           onResizeNote={(row, col, len) => {
             if (disabled) return;
@@ -676,8 +783,9 @@ export function BeatLabSynthPianoRoll({
         }
           sizeMode="normal"
           onSizeModeChange={() => {}}
-        isPlaying={isPlaying}
+        isPlaying={playheadMountOnly ? false : isPlaying}
         playheadElRef={playheadElRef}
+        playheadVariant={playheadMountOnly ? 'groove-mount' : 'default'}
         scrollContainerRef={scrollContainerRef}
         headerTitle="SYNTH PIANO ROLL"
           headerHint="same grid as Chord Builder · click / drag ruler = playhead · click cell = note · drag = move · drag right edge = length"

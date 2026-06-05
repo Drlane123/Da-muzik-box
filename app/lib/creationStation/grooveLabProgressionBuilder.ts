@@ -11,7 +11,6 @@ import {
 } from '@/app/lib/creationStation/grooveLabPitch';
 import {
   GROOVE_LAB_SLOTS_PER_BAR,
-  grooveLabBarDownbeatSlot,
   grooveLabSlotsPerCell,
   grooveLabStackChordHitsAtSlot,
   normalizeGrooveBarCount,
@@ -199,9 +198,8 @@ export function progressionStepsToGrooveHits(
       return { message: `Could not read chord “${step.label}”. Try C, Am, F, G7, Dm7…` };
     }
     const durBeats = Math.max(0.25, step.beats);
-    const startBar = Math.floor(beat / beatsPerBar);
-    const rawSlot = startBar * GROOVE_LAB_SLOTS_PER_BAR;
-    const slot = grooveLabBarDownbeatSlot(snapGrooveSlot(rawSlot, opts.quantize, barCount));
+    const rawSlot = progressionSlotForBeat(beat, durBeats, beatsPerBar);
+    const slot = snapGrooveSlot(rawSlot, opts.quantize, barCount);
     const durSlots = Math.max(
       cellStep,
       Math.round(durBeats * SLOTS_PER_BEAT),
@@ -232,7 +230,7 @@ export function progressionStepsToGrooveHits(
 
   const snapHits = (list: GrooveRollHit[]) =>
     list.map((h) => {
-      const slot = grooveLabBarDownbeatSlot(snapGrooveSlot(h.slot, opts.quantize, barCount));
+      const slot = snapGrooveSlot(h.slot, opts.quantize, barCount);
       return {
         ...h,
         slot,

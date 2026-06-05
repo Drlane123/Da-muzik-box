@@ -9,6 +9,8 @@ import {
   useState,
   type CSSProperties,
   type ForwardedRef,
+  type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
 import { ChevronLeft, ChevronRight, Pause, Play, SkipBack, Square } from 'lucide-react';
@@ -25,6 +27,8 @@ import {
 } from '@/app/lib/creationStation/labMpcKits';
 import { LAB_MPC_DRUM_PRESETS, labMpcDrumPresetById } from '@/app/lib/creationStation/labMpcDrumPresets';
 import { beatAtSessionTime } from '@/app/lib/creationStation/creationTransportSync';
+import { readLab808GrooveClock } from '@/app/lib/creationStation/lab808GrooveClock';
+import { GROOVE_LAB_SLOTS_PER_BAR } from '@/app/lib/creationStation/grooveLabRoll';
 import {
   refillCreationTransportLookahead,
   resetCreationTransportStepClock,
@@ -42,15 +46,50 @@ import {
 } from '@/app/lib/creationStation/creationPlaylineWapi';
 import { snap808LabLoopBars } from '@/app/lib/creationStation/lab808ChordRoots';
 import {
+  CB_PIANO_BG,
+  CB_PIANO_MINT,
+  CB_PIANO_MINT_BORDER,
+  CB_PIANO_MINT_BG,
+  LAB808_PIANO_LABEL_W,
+  LAB808_PIANO_PX_PER_BEAT,
+  LAB808_PIANO_PX_PER_BEAT_MIN,
+  LAB808_PIANO_RULER_H,
+  LAB808_PIANO_ROW_H,
+} from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
+import {
+  labMpcCellInRegion,
+  labMpcDuplicateRegion,
+  labMpcEraseRegion,
+  labMpcExtractClip,
+  labMpcPasteClip,
+  labMpcRegionFromPoints,
+  labMpcRegionHasHits,
+  type LabMpcGridRegion,
+  type LabMpcPatternClip,
+} from '@/app/lib/creationStation/labMpcPatternEdit';
+import {
   lab808BpmInputStyle,
   lab808BtnGhost,
   lab808BtnPrimary,
+  lab808RollActionBtnStyle,
+  lab808RollBpmInputStyle,
+  lab808RollSelect,
+  lab808RollToolbarLabel,
+  lab808RollTransportButtonStyle,
+  lab808RollTransportCluster,
   lab808Select,
   lab808TransportButtonStyle,
+  LAB808_ROLL_TRANSPORT_BTN,
+  LAB808_ROLL_TRANSPORT_H,
+  LAB808_ROLL_TRANSPORT_ICON,
+  LAB808_ROLL_TRANSPORT_PLAY_W,
   LAB808_TRANSPORT_BTN,
   LAB808_TRANSPORT_BTN_PLAY,
   LAB808_TRANSPORT_ICON,
 } from '@/app/lib/creationStation/lab808UiTheme';
+import { GrooveLabExportStrip } from '@/app/components/creation/GrooveLabExportStrip';
+import type { Lab808DrumExportSnapshot } from '@/app/lib/creationStation/lab808Export';
+import { lab808PatternHasHits } from '@/app/lib/creationStation/lab808Export';
 
 /** Mirrors Creation Station `LocalTransportState` for the MPC deck (no count-in / record). */
 export type Lab808DeckTransportState = 'stopped' | 'playing' | 'paused';
@@ -62,27 +101,63 @@ export interface EightZeroEightLabDrumMachineProps {
   active: boolean;
   /** When true while `active` is false (808 piano-roll tab), transport + lookahead keep running — mirrors MPC clock on the roll. */
   transportKeepAlive?: boolean;
+  /** Show the 16-lane drum step roll (808 Lab drum kits bank). */
+  sequencerVisible?: boolean;
+  /** Trim chrome — kit picker lives on the pad deck; shared transport on kick/bass roll. */
+  embeddedIn808Lab?: boolean;
+  /** Master gain for scheduled + preview hits (separate from 808 kick/bass roll level). */
+  masterLevel?: number;
+  mpcKitId?: LabMpcKitId;
+  onMpcKitIdChange?: (id: LabMpcKitId) => void;
   /** Optional piano-roll playhead element — driven by same WAPI timeline as MPC playline (step beats × quarter spacing). */
   rollPlaylineRef?: RefObject<HTMLElement | null>;
   /** Live px-per-quarter-note from the piano roll (updated when zoom changes). */
   rollPxPerBeat?: number;
+  /** Full piano-roll timeline in quarter beats (808 kick/bass tab). */
+  rollLayoutBeats?: number;
+  /** Musical loop length in quarter beats — playhead loops seamlessly here. */
+  rollLoopBeats?: number;
   /** When set, expands the MPC loop to at least this many bars (chord progression / roll length). */
   suggestedLoopBars?: number;
   /**
    * Called for each scheduled transport step — `quarterBeat` is piano-roll beats
    * (4/4 quarters); `spb` is MPC steps-per-bar for tolerance math.
    */
-  onTransportQuarterBeat?: (
-    quarterBeat: number,
-    spb: number,
+  /** Exact audio-time refill for locked chord roots (Groove grid or MPC session). */
+  onRefillLockedRoots?: (
     ctx: AudioContext,
-    when: number,
+    ctSnap: number,
+    mpc: {
+      sessionStart: number;
+      originStepBeat: number;
+      stepSpb: number;
+      stepsPerBar: number;
+    },
   ) => void;
+  /** When true, MPC play anchors to `readLab808GrooveClock()` (Session Link / PLAY → Groove). */
+  alignTransportToGrooveClock?: boolean;
+  /** After Groove-aligned play starts — prime beat-0 roots that mirror play would miss. */
+  onAfterGrooveAlignedPlay?: (ctx: AudioContext) => void;
   /** Notify parent when transport changes so the roll toolbar can mirror controls. */
   onTransportChange?: (state: Lab808DeckTransportState) => void;
+  /** rAF — piano-roll quarter-beat position while transport runs (root pad / note glow). */
+  onRollDisplayQuarterBeatRef?: MutableRefObject<((quarterBeat: number) => void) | undefined>;
   isScreenActive?: boolean;
   getAudioContext: () => AudioContext | null;
   labStripBpm: number;
+  /** When set, drum roll uses this BPM (808 LINK — kick/bass + drums same tempo). */
+  linkedPlaybackBpm?: number;
+  /** Shared with Kick/Bass roll — lit Sync when user synced or typed a custom BPM. */
+  labBpmOverrideActive?: boolean;
+  onLabBpmSyncReset?: () => void;
+  onLabBpmOverride?: (bpm: number) => void;
+  drumExportBusy?: boolean;
+  drumExportStatus?: string | null;
+  onDrumExportMidi?: () => void;
+  onDrumExportWav?: () => void | Promise<void>;
+  onDrumExportToPad?: () => void;
+  drumPadExportEnabled?: boolean;
+  drumPadPickerOpen?: boolean;
 }
 
 export interface Lab808DrumTransportHandle {
@@ -91,6 +166,7 @@ export interface Lab808DrumTransportHandle {
   transportSeekToRollQuarterBeat: (beat: number) => void;
   transportStop: () => void;
   transportTogglePlayPause: () => void;
+  getDrumExportSnapshot: () => Lab808DrumExportSnapshot;
 }
 
 type MpcQuant = 'beat' | 'eighth' | 'sixteenth' | 'thirtysecond' | 'triplet_eighth' | 'triplet_sixteenth';
@@ -187,24 +263,78 @@ function rollPlaylineColW(pxPerQuarter: number, spb: number): number {
   return Math.max(1, (4 / Math.max(1, spb)) * Math.max(1, pxPerQuarter));
 }
 
+/** MPC transport step (one grid column) → 808 kick/bass quarter beat. */
+function mpcStepBeatToQuarterBeat(stepBeat: number, spb: number): number {
+  return (stepBeat * 4) / Math.max(1, spb);
+}
+
+function quarterBeatInLoop(quarterBeat: number, loopLen: number): number {
+  const len = Math.max(1e-6, loopLen);
+  return ((quarterBeat % len) + len) % len;
+}
+
 const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMachine(
   {
     active,
     transportKeepAlive = false,
+    sequencerVisible = true,
+    embeddedIn808Lab = false,
+    masterLevel = 1,
+    mpcKitId: mpcKitIdProp,
+    onMpcKitIdChange,
     rollPlaylineRef,
     rollPxPerBeat = 52,
+    rollLayoutBeats = 16,
+    rollLoopBeats = 16,
     suggestedLoopBars,
-    onTransportQuarterBeat,
+    onRefillLockedRoots,
+    alignTransportToGrooveClock = false,
+    onAfterGrooveAlignedPlay,
     onTransportChange,
+    onRollDisplayQuarterBeatRef,
     isScreenActive,
     getAudioContext,
     labStripBpm,
+    linkedPlaybackBpm,
+    labBpmOverrideActive = false,
+    onLabBpmSyncReset,
+    onLabBpmOverride,
+    drumExportBusy = false,
+    drumExportStatus = null,
+    onDrumExportMidi,
+    onDrumExportWav,
+    onDrumExportToPad,
+    drumPadExportEnabled = false,
+    drumPadPickerOpen = false,
   }: EightZeroEightLabDrumMachineProps,
   ref: ForwardedRef<Lab808DrumTransportHandle>,
 ) {
   const deckPumpActive = active || transportKeepAlive;
+  const embedCompact = embeddedIn808Lab && sequencerVisible;
+  /** Match 808 Kick / Bass roll metrics — larger ruler, lanes, and step cells (scroll when needed). */
+  const barStripH = embedCompact ? LAB808_PIANO_RULER_H : MPC_BAR_STRIP_MIN_H;
+  const tickRowH = embedCompact ? 20 : MPC_TICK_ROW_H;
+  const gridRulerTotalPx = barStripH + tickRowH;
+  const laneRailPx = embedCompact ? LAB808_PIANO_LABEL_W : MPC_LANE_RAIL_PX;
 
-  const [mpcKitId, setMpcKitId] = useState<LabMpcKitId>('trapDark');
+  /** Embed toolbar matches Groove Lab / Beat Lab piano-roll chip sizes. */
+  const embedToolBtn: CSSProperties = embedCompact
+    ? lab808RollActionBtnStyle('#27272f', '#fde68a', '#52525b')
+    : btnGhost;
+  const embedSelect: CSSProperties = embedCompact ? lab808RollSelect : selectStyle;
+  const embedToolbarLabel: CSSProperties = embedCompact ? lab808RollToolbarLabel : { fontSize: 13, fontWeight: 800, color: '#71717a' };
+  const embedTransportBtn = embedCompact ? LAB808_ROLL_TRANSPORT_BTN : LAB808_TRANSPORT_BTN;
+  const embedTransportPlay = embedCompact ? LAB808_ROLL_TRANSPORT_PLAY_W : LAB808_TRANSPORT_BTN_PLAY;
+  const embedTransportH = embedCompact ? LAB808_ROLL_TRANSPORT_H : LAB808_TRANSPORT_BTN;
+  const embedTransportIcon = embedCompact ? LAB808_ROLL_TRANSPORT_ICON : LAB808_TRANSPORT_ICON;
+  const embedTransportBtnStyle = embedCompact ? lab808RollTransportButtonStyle : lab808TransportButtonStyle;
+  const embedBpmInputStyle = embedCompact ? lab808RollBpmInputStyle : lab808BpmInputStyle;
+
+  const [mpcKitIdInner, setMpcKitIdInner] = useState<LabMpcKitId>('trapDark');
+  const mpcKitId = mpcKitIdProp ?? mpcKitIdInner;
+  const setMpcKitId = onMpcKitIdChange ?? setMpcKitIdInner;
+  const masterLevelRef = useRef(masterLevel);
+  masterLevelRef.current = masterLevel;
   const [mpcKitSearch, setMpcKitSearch] = useState('');
   const [mpcBars, setMpcBars] = useState<(typeof MPC_BAR_LOOP_OPTIONS)[number]>(4);
 
@@ -222,6 +352,17 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
   const [drumPlayhead, setDrumPlayhead] = useState(0);
   const [drumPlayReverse, setDrumPlayReverse] = useState(false);
   const [mpcDrumBpmOverride, setMpcDrumBpmOverride] = useState<number | null>(null);
+
+  /** Match 808 Kick/Bass transport Sync — gray until synced or manual BPM; lit when override active. */
+  const drumSyncActive = embeddedIn808Lab ? labBpmOverrideActive : mpcDrumBpmOverride != null;
+  const resetDrumBpmSync = useCallback(() => {
+    if (embeddedIn808Lab) {
+      onLabBpmSyncReset?.();
+    } else {
+      setMpcDrumBpmOverride(null);
+    }
+  }, [embeddedIn808Lab, onLabBpmSyncReset]);
+
   const [presetLoadKitAndBpm, setPresetLoadKitAndBpm] = useState(true);
   const [presetMenuKey, setPresetMenuKey] = useState(0);
   const [mpcEditPad, setMpcEditPad] = useState(0);
@@ -238,6 +379,20 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
   const mpcSeqViewportRef = useRef<HTMLDivElement | null>(null);
   const mpcStepPaintRef = useRef<{ target: boolean } | null>(null);
+  const mpcClipboardRef = useRef<LabMpcPatternClip | null>(null);
+  const mpcContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const mpcSelectDragRef = useRef<{
+    active: boolean;
+    anchorRow: number;
+    anchorCol: number;
+  } | null>(null);
+  const mpcPastePendingRef = useRef(false);
+  const [mpcSelection, setMpcSelection] = useState<LabMpcGridRegion | null>(null);
+  const [mpcContextMenu, setMpcContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [mpcPastePending, setMpcPastePending] = useState(false);
+  const [mpcGridTool, setMpcGridTool] = useState<'draw' | 'erase'>('draw');
+  const [mpcClipboardReady, setMpcClipboardReady] = useState(false);
+  mpcPastePendingRef.current = mpcPastePending;
   const drumPlayReverseRef = useRef(drumPlayReverse);
   const labMpcTransportRef = useRef<LabMpcTransportState>('stopped');
   /** When true, `playing` → `paused` cleanup mirrors Beat Lab `pauseTransport` (keep session). */
@@ -248,6 +403,8 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
    */
   const labMpcSkipNextStoppedPlaylineSyncRef = useRef(false);
   const drumBpmRef = useRef(120);
+  const barLoopCountRef = useRef(4);
+  const mpcBankSlotRef = useRef<'A' | 'B'>('A');
   const drumSpbRef = useRef(16);
   const drumPlayheadRef = useRef(0);
   const mpcPatternRef = useRef<boolean[][]>(mpcPatternA);
@@ -287,15 +444,26 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
   const pattern = mpcBankSlot === 'A' ? mpcPatternA : mpcPatternB;
   const setPattern = mpcBankSlot === 'A' ? setMpcPatternA : setMpcPatternB;
+  const drumExportHasHits = useMemo(() => lab808PatternHasHits(pattern), [pattern]);
 
   drumPlayReverseRef.current = drumPlayReverse;
   mpcPatternRef.current = pattern;
   mpcKitIdRef.current = mpcKitId;
   mpcPadFxRef.current = { tune: mpcPadTuneSemi, lp: mpcPadLpHz, drive: mpcPadDrive, level: mpcPadLevel };
 
-  const drumPlaybackBpm = Math.max(40, Math.min(220, mpcDrumBpmOverride ?? Math.round(labStripBpm)));
+  const drumPlaybackBpm = Math.max(
+    40,
+    Math.min(
+      220,
+      linkedPlaybackBpm != null
+        ? Math.round(linkedPlaybackBpm)
+        : mpcDrumBpmOverride ?? Math.round(labStripBpm),
+    ),
+  );
   drumBpmRef.current = drumPlaybackBpm;
   drumSpbRef.current = spb;
+  barLoopCountRef.current = barLoopCount;
+  mpcBankSlotRef.current = mpcBankSlot;
   drumPlayheadRef.current = drumPlayhead;
   mpcTransportBpmRef.current = (drumPlaybackBpm * Math.max(1, spb)) / 4;
   labMpcTransportRef.current = labMpcTransport;
@@ -306,36 +474,67 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     return LAB_MPC_KIT_LIST.filter((k) => `${k.title} ${k.id} ${k.era}`.toLowerCase().includes(q));
   }, [mpcKitSearch]);
 
-  /** Size step columns so the full loop fits the viewport; shrink if needed so the last bar is never clipped. */
+  /** Step width when grid stretches to fill the viewport (808 Lab embed). */
+  const mpcStretchGrid = embedCompact && seqViewportW > 0;
+
   const cellSize = useMemo(() => {
-    const gutter = 8;
-    const availForSteps = Math.max(0, seqViewportW - MPC_LANE_RAIL_PX - gutter);
+    const gutter = embedCompact ? 12 : 8;
+    const availForSteps = Math.max(0, seqViewportW - laneRailPx - gutter);
     if (mpcSteps <= 0) return MPC_MIN_CELL_PX;
     let raw = Math.floor(availForSteps / mpcSteps);
-    raw = Math.min(52, Math.max(MPC_MIN_CELL_PX, raw));
+    raw = Math.min(embedCompact ? 64 : 52, Math.max(MPC_MIN_CELL_PX, raw));
     while (raw > MPC_MIN_CELL_PX && mpcSteps * raw > availForSteps) {
       raw -= 1;
     }
     return raw;
-  }, [seqViewportW, mpcSteps]);
+  }, [embedCompact, seqViewportW, mpcSteps, laneRailPx]);
 
-  cellSizeRef.current = cellSize;
+  const mpcEffectiveColW = useMemo(() => {
+    if (!mpcStretchGrid) return cellSize;
+    const gutter = 12;
+    const avail = Math.max(0, seqViewportW - laneRailPx - gutter);
+    return Math.max(MPC_MIN_CELL_PX, avail / Math.max(1, mpcSteps));
+  }, [mpcStretchGrid, seqViewportW, laneRailPx, mpcSteps, cellSize]);
 
-  /** Step numbers 1…N — readable; cell width still drives size. */
+  cellSizeRef.current = mpcEffectiveColW;
+
+  const mpcLaneColTemplate = mpcStretchGrid
+    ? `${laneRailPx}px repeat(${mpcSteps}, minmax(8px, 1fr))`
+    : `${laneRailPx}px repeat(${mpcSteps}, ${cellSize}px)`;
+  const mpcGridRowWidth = mpcStretchGrid ? '100%' : 'max-content';
+  /** Step index `s` (0-based) → grid column (lane rail = col 1). */
+  const mpcStepGridCol = (step: number) => step + 2;
+  /** Bar index `bi` (0-based) → grid column start (lane rail = col 1). */
+  const mpcBarGridColStart = (bi: number) => bi * spb + 2;
+
   const tickStepFontPx = useMemo(() => {
-    return Math.max(4, Math.min(7, Math.round(cellSize * 0.32)));
-  }, [cellSize]);
+    const w = mpcStretchGrid ? mpcEffectiveColW : cellSize;
+    if (embedCompact) return Math.max(9, Math.min(12, Math.round(w * 0.4)));
+    return Math.max(4, Math.min(7, Math.round(w * 0.32)));
+  }, [cellSize, embedCompact, mpcEffectiveColW, mpcStretchGrid]);
 
-  /** Pad lane height: divide remaining viewport among 16 rows (min 8px so the grid always fits vertically). */
   const mpcLaneRowH = useMemo(() => {
-    const inner = seqViewportH > 0 ? seqViewportH - MPC_GRID_RULER_TOTAL_PX : 0;
-    if (inner < 32) return 22;
+    const measuredH = seqViewportH > 48 ? seqViewportH : embedCompact ? 380 : 320;
+    const inner = Math.max(0, measuredH - gridRulerTotalPx);
     const raw = Math.floor(inner / LAB_MPC_PAD_COUNT);
+    if (embedCompact) {
+      return Math.max(18, Math.min(40, raw));
+    }
     return Math.max(8, Math.min(30, raw));
-  }, [seqViewportH]);
+  }, [seqViewportH, gridRulerTotalPx, embedCompact]);
 
-  const onTransportQuarterBeatRef = useRef(onTransportQuarterBeat);
-  onTransportQuarterBeatRef.current = onTransportQuarterBeat;
+  const mpcStepOnBg = embedCompact
+    ? `linear-gradient(180deg, rgba(124, 244, 198, 0.72), rgba(124, 244, 198, 0.32))`
+    : 'linear-gradient(180deg,#22c55e,#14532d)';
+  const mpcStepOffBg = embedCompact ? '#0a0a10' : '#0f0f14';
+  const mpcKitTitle = useMemo(() => labMpcKitMeta(mpcKitId)?.title ?? mpcKitId, [mpcKitId]);
+
+  const onRefillLockedRootsRef = useRef(onRefillLockedRoots);
+  onRefillLockedRootsRef.current = onRefillLockedRoots;
+  const alignToGrooveClockRef = useRef(alignTransportToGrooveClock);
+  alignToGrooveClockRef.current = alignTransportToGrooveClock;
+  const onAfterGrooveAlignedPlayRef = useRef(onAfterGrooveAlignedPlay);
+  onAfterGrooveAlignedPlayRef.current = onAfterGrooveAlignedPlay;
 
   const fireLabMpcStep = useCallback((k: number, idealGridT: number, ctx: AudioContext) => {
     const pat = mpcPatternRef.current;
@@ -346,18 +545,14 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     const k0 = kStartRef.current;
     const d = k - k0;
     const col = rev ? ((k0 - d) % steps + steps) % steps : ((k0 + d) % steps) % steps;
-    const ctSnap = ctx.currentTime;
-    const whenSnap = Math.max(idealGridT, ctSnap + 0.001);
-    const spb = drumSpbRef.current;
-    const quarterBeat = (k * 4) / Math.max(1, spb);
-    onTransportQuarterBeatRef.current?.(quarterBeat, spb, ctx, whenSnap);
+    const whenSnap = Math.max(idealGridT, ctx.currentTime + 0.001);
     for (let row = 0; row < LAB_MPC_PAD_COUNT; row += 1) {
       if (pat[row]?.[col]) {
         playLabMpcPad(ctx, kit, row, whenSnap, 0.95, {
           tuneSemi: fx.tune[row] ?? 0,
           lpCutoffHz: fx.lp[row] ?? 20000,
           drive: fx.drive[row] ?? 0,
-          level: fx.level[row] ?? 1,
+          level: (fx.level[row] ?? 1) * masterLevelRef.current,
         });
       }
     }
@@ -380,32 +575,75 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
       fireLabMpcStep,
       () => runningRef.current,
     );
+    const sess = sessionStartRef.current;
+    if (sess > 0) {
+      onRefillLockedRootsRef.current?.(ctx, ctSnap, {
+        sessionStart: sess,
+        originStepBeat: originBeatRef.current,
+        stepSpb,
+        stepsPerBar: drumSpbRef.current,
+      });
+    }
   }, [fireLabMpcStep]);
 
   refillLabMpcScheduleRef.current = refillLabMpcSchedule;
 
   const rollPxBeatSyncRef = useRef(rollPxPerBeat);
   rollPxBeatSyncRef.current = rollPxPerBeat;
+  const rollLayoutBeatsRef = useRef(rollLayoutBeats);
+  rollLayoutBeatsRef.current = rollLayoutBeats;
+  const rollLoopBeatsRef = useRef(rollLoopBeats);
+  rollLoopBeatsRef.current = rollLoopBeats;
+  /** 808 kick/bass piano roll — quarter-beat playhead (not MPC step columns). */
+  const mirror808KickBassRoll = rollPlaylineRef != null;
 
   const launchLabMpcPlaylineWapiNow = useCallback(
     (beatNow: number, play: boolean) => {
       const el = labMpcDrumPlaylineRef.current;
       const pianoEl = rollPlaylineRef?.current ?? null;
       if (!el && !pianoEl) return;
+      const ctx = ctxRef.current;
+      const leadSec = LAB_MPC_PLAYLINE_WAPI_LEAD_SEC + labMpcPlaylineOutputDacLeadSec(ctx);
+      const wapiRefs = {
+          drumAnimRef: labMpcDrumPlaylineAnimRef,
+          pianoAnimRef: labMpcPianoPlaylineAnimRef,
+          drumQuantGlowAnimRef: labMpcQuantGlowAnimRef,
+      };
+
+      if (mirror808KickBassRoll && pianoEl && !el) {
+        const spb = drumSpbRef.current;
+        const quarterBeat = mpcStepBeatToQuarterBeat(beatNow, spb);
+        const loopLen = Math.max(1e-6, rollLoopBeatsRef.current);
+        const layoutLen = Math.max(loopLen, rollLayoutBeatsRef.current);
+        const rollBpm = Math.max(1, drumBpmRef.current);
+        const qbLoop = quarterBeatInLoop(quarterBeat, loopLen);
+        const beatForWapi = play ? qbLoop + leadSec * (rollBpm / 60) : qbLoop;
+        launchCreationPlaylineWapi(wapiRefs, {
+          drumEl: null,
+          pianoEl,
+          drumQuantGlowEl: null,
+          beatNow: beatForWapi,
+          play,
+          bpm: rollBpm,
+          subdiv: 1,
+          pcols: Math.max(1, Math.ceil(layoutLen)),
+          drumColW: 1,
+          pianoColW: Math.max(1, rollPxBeatSyncRef.current),
+          loopOn: true,
+          loopStartBeat: 0,
+          loopEndBeat: loopLen,
+          playMode: 'chainAB',
+          immediateCompositorStart: play,
+        });
+        return;
+      }
+
       const cw = Math.max(1, cellSizeRef.current);
       const pcw = rollPlaylineColW(rollPxPerBeat, drumSpbRef.current);
       const pc = Math.max(1, mpcPatternRef.current[0]?.length ?? 1);
       const bpmR = Math.max(1, mpcTransportBpmRef.current);
-      const ctx = ctxRef.current;
-      const leadSec = LAB_MPC_PLAYLINE_WAPI_LEAD_SEC + labMpcPlaylineOutputDacLeadSec(ctx);
       const beatForWapi = play ? beatNow + leadSec * (bpmR / 60) : beatNow;
-      launchCreationPlaylineWapi(
-        {
-          drumAnimRef: labMpcDrumPlaylineAnimRef,
-          pianoAnimRef: labMpcPianoPlaylineAnimRef,
-          drumQuantGlowAnimRef: labMpcQuantGlowAnimRef,
-        },
-        {
+      launchCreationPlaylineWapi(wapiRefs, {
           drumEl: el,
           pianoEl,
           drumQuantGlowEl: null,
@@ -420,10 +658,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           loopStartBeat: 0,
           loopEndBeat: 0,
           playMode: 'chainAB',
+      });
         },
-      );
-    },
-    [rollPlaylineRef, rollPxPerBeat],
+    [mirror808KickBassRoll, rollPlaylineRef, rollPxPerBeat],
   );
 
   /** Seek transport + playheads to fractional step-beat `nb` (same units as `displayBeatRef`). */
@@ -523,7 +760,6 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     setDrumPlayhead(col);
     const elStop = labMpcDrumPlaylineRef.current;
     const pelStop = rollPlaylineRef?.current ?? null;
-    const pcwStop = rollPlaylineColW(rollPxBeatSyncRef.current, drumSpbRef.current);
     if (elStop || pelStop) {
       cancelCreationPlaylineWapi(
         {
@@ -535,6 +771,29 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
         pelStop,
         null,
       );
+      if (mirror808KickBassRoll && pelStop && !elStop) {
+        const spbStop = drumSpbRef.current;
+        const qb = mpcStepBeatToQuarterBeat(b, spbStop);
+        const loopLen = Math.max(1e-6, rollLoopBeatsRef.current);
+        const layoutLen = Math.max(loopLen, rollLayoutBeatsRef.current);
+        const rollBpm = Math.max(1, drumBpmRef.current);
+        const qbLine = rev ? qb : qb + leadSec * (rollBpm / 60);
+        setCreationPlaylineTransformStatic({
+          drumEl: null,
+          pianoEl: pelStop,
+          drumQuantGlowEl: null,
+          beatNow: qbLine,
+          subdiv: 1,
+          pcols: Math.max(1, Math.ceil(layoutLen)),
+          drumColW: 1,
+          pianoColW: Math.max(1, rollPxBeatSyncRef.current),
+          loopOn: true,
+          loopStartBeat: 0,
+          loopEndBeat: loopLen,
+          playMode: 'chainAB',
+        });
+      } else {
+        const pcwStop = rollPlaylineColW(rollPxBeatSyncRef.current, drumSpbRef.current);
       setCreationPlaylineTransformStatic({
         drumEl: elStop,
         pianoEl: pelStop,
@@ -549,9 +808,10 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
         loopEndBeat: 0,
         playMode: 'chainAB',
       });
+      }
     }
     labMpcSkipNextStoppedPlaylineSyncRef.current = true;
-  }, []);
+  }, [mirror808KickBassRoll, rollPlaylineRef]);
 
   useImperativeHandle(
     ref,
@@ -580,6 +840,25 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
         labMpcPauseRequestedRef.current = false;
         setLabMpcTransport('playing');
       },
+      getDrumExportSnapshot: (): Lab808DrumExportSnapshot => {
+        const pat = mpcPatternRef.current.map((row) => row.slice());
+        const fx = mpcPadFxRef.current;
+        return {
+          pattern: pat,
+          kitId: mpcKitIdRef.current,
+          bpm: drumBpmRef.current,
+          stepsPerBar: drumSpbRef.current,
+          barCount: barLoopCountRef.current,
+          masterLevel: masterLevelRef.current,
+          padFx: {
+            tuneSemi: fx.tune.slice(),
+            lpCutoffHz: fx.lp.slice(),
+            drive: fx.drive.slice(),
+            level: fx.level.slice(),
+          },
+          bankSlot: mpcBankSlotRef.current,
+        };
+      },
     }),
     [labMpcSeekColumn0, labMpcSeekToStepBeat, syncLabMpcFullStop],
   );
@@ -593,6 +872,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
   onFrameRef.current = (bDisplay: number) => {
     if (!runningRef.current) return;
+    const spbFrame = drumSpbRef.current;
+    const quarterBeat = bDisplay * (Math.max(1, spbFrame) / 4);
+    onRollDisplayQuarterBeatRef?.current?.(quarterBeat);
     if (!drumPlayReverseRef.current) return;
     const el = labMpcDrumPlaylineRef.current;
     const pel = rollPlaylineRef?.current ?? null;
@@ -608,7 +890,12 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
       el.style.transform = `translate3d(${x}px, 0, 0)`;
     }
     if (pel) {
-      const x = colF * pcw - CREATION_PIANO_PLAYLINE_CENTER_X;
+      const spbFrame = drumSpbRef.current;
+      const pcw = mirror808KickBassRoll
+        ? Math.max(1, rollPxBeatSyncRef.current)
+        : rollPlaylineColW(rollPxBeatSyncRef.current, spbFrame);
+      const qb = mpcStepBeatToQuarterBeat(bDisplay, spbFrame);
+      const x = (mirror808KickBassRoll ? qb : colF) * pcw - CREATION_PIANO_PLAYLINE_CENTER_X;
       pel.style.willChange = 'transform';
       pel.style.transform = `translate3d(${x}px, 0, 0)`;
     }
@@ -616,7 +903,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
   useLayoutEffect(() => {
     const el = mpcSeqViewportRef.current;
-    if (!el) return;
+    if (!el || !sequencerVisible) return;
     const apply = () => {
       setSeqViewportW(el.clientWidth);
       setSeqViewportH(el.clientHeight);
@@ -625,7 +912,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     ro.observe(el);
     apply();
     return () => ro.disconnect();
-  }, [active]);
+  }, [active, sequencerVisible]);
 
   useEffect(() => {
     const onUp = () => {
@@ -662,11 +949,11 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
   }, [active, mpcKitId, getAudioContext]);
 
   useEffect(() => {
-    if (isScreenActive === false && labMpcTransport === 'playing') {
+    if (isScreenActive === false && !transportKeepAlive && labMpcTransport === 'playing') {
       labMpcPauseRequestedRef.current = true;
       setLabMpcTransport('paused');
     }
-  }, [isScreenActive, labMpcTransport]);
+  }, [isScreenActive, transportKeepAlive, labMpcTransport]);
 
   useEffect(() => {
     if (active || transportKeepAlive) return;
@@ -694,10 +981,21 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     }
     ctxRef.current = ctx;
     const tCapture = Math.max(0, ctx.currentTime);
-    const origin = Math.max(0, displayBeatRef.current);
+    let origin = Math.max(0, displayBeatRef.current);
+    let sessionStart = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+    if (alignToGrooveClockRef.current) {
+      const gc = readLab808GrooveClock();
+      if (gc && gc.sessionStart > 0) {
+        sessionStart = gc.sessionStart;
+        const slotsPerBeat = GROOVE_LAB_SLOTS_PER_BAR / 4;
+        const originQuarter = gc.originSlot / Math.max(1, slotsPerBeat);
+        const gridSpb = drumSpbRef.current;
+        origin = (originQuarter * gridSpb) / 4;
+      }
+    }
     originBeatRef.current = origin;
     displayBeatRef.current = origin;
-    sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+    sessionStartRef.current = sessionStart;
     const stepSpb = 60 / Math.max(1, mpcTransportBpmRef.current);
     const k0 = Math.ceil(origin - 1e-8);
     nextStepBeatRef.current = k0;
@@ -707,9 +1005,20 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     runningRef.current = true;
     void ctx.resume().catch(() => {});
     refillLabMpcScheduleRef.current(ctx, tCapture);
+    if (alignToGrooveClockRef.current) {
+      queueMicrotask(() => {
+        if (!runningRef.current) return;
+        const c = ctxRef.current;
+        if (!c || c.state === 'closed') return;
+        const ct = Math.max(0, c.currentTime);
+        onAfterGrooveAlignedPlayRef.current?.(c);
+        refillLabMpcScheduleRef.current(c, ct);
+      });
+    }
     const tPost = Math.max(0, ctx.currentTime);
     const beatLaunch = beatAtSessionTime(tPost, sessionStartRef.current, originBeatRef.current, mpcTransportBpmRef.current);
     displayBeatRef.current = beatLaunch;
+    launchLabMpcPlaylineWapiNow(beatLaunch, true);
     return () => {
       if (labMpcPauseRequestedRef.current) {
         labMpcPauseRequestedRef.current = false;
@@ -766,7 +1075,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
       lastScheduledQuarterRef,
     },
     {
-      isScreenActive: deckPumpActive && isScreenActive !== false,
+      isScreenActive: deckPumpActive,
       isPlaying: labMpcTransport === 'playing',
       getOrCreateAudioContext: getOrCreateLabMpcCtx,
       refillRef: refillLabMpcScheduleRef,
@@ -800,7 +1109,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     const b = beatAtSessionTime(t, sessionStartRef.current, originBeatRef.current, mpcTransportBpmRef.current);
     displayBeatRef.current = b;
     launchLabMpcPlaylineWapiNow(b, true);
-  }, [labMpcTransport, deckPumpActive, drumPlayReverse, cellSize, mpcSteps, drumPlaybackBpm, spb, rollPxPerBeat, launchLabMpcPlaylineWapiNow]);
+  }, [labMpcTransport, deckPumpActive, drumPlayReverse, cellSize, mpcSteps, drumPlaybackBpm, spb, rollPxPerBeat, rollLayoutBeats, rollLoopBeats, launchLabMpcPlaylineWapiNow]);
 
   useEffect(() => {
     if (labMpcTransport !== 'stopped') return;
@@ -812,7 +1121,6 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     const el = labMpcDrumPlaylineRef.current;
     const pel = rollPlaylineRef?.current ?? null;
     if (!el && !pel) return;
-    const pcw = rollPlaylineColW(rollPxBeatSyncRef.current, drumSpbRef.current);
     cancelCreationPlaylineWapi(
       {
         drumAnimRef: labMpcDrumPlaylineAnimRef,
@@ -823,8 +1131,31 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
       pel,
       null,
     );
+    if (mirror808KickBassRoll && pel && !el) {
+      const b = displayBeatRef.current;
+      const spbStop = drumSpbRef.current;
+      const qb = mpcStepBeatToQuarterBeat(b, spbStop);
+      const loopLen = Math.max(1e-6, rollLoopBeatsRef.current);
+      const layoutLen = Math.max(loopLen, rollLayoutBeatsRef.current);
+      setCreationPlaylineTransformStatic({
+        drumEl: null,
+        pianoEl: pel,
+        drumQuantGlowEl: null,
+        beatNow: qb,
+        subdiv: 1,
+        pcols: Math.max(1, Math.ceil(layoutLen)),
+        drumColW: 1,
+        pianoColW: Math.max(1, rollPxBeatSyncRef.current),
+        loopOn: true,
+        loopStartBeat: 0,
+        loopEndBeat: loopLen,
+        playMode: 'chainAB',
+      });
+      return;
+    }
     displayBeatRef.current = drumPlayhead;
     originBeatRef.current = drumPlayhead;
+    const pcw = rollPlaylineColW(rollPxBeatSyncRef.current, drumSpbRef.current);
     setCreationPlaylineTransformStatic({
       drumEl: el,
       pianoEl: pel,
@@ -839,7 +1170,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
       loopEndBeat: 0,
       playMode: 'chainAB',
     });
-  }, [drumPlayhead, mpcSteps, cellSize, labMpcTransport]);
+  }, [drumPlayhead, mpcSteps, cellSize, labMpcTransport, mirror808KickBassRoll, rollPlaylineRef]);
 
   const goMpcKitDelta = useCallback((d: number) => {
     const i = kitIndex(mpcKitId);
@@ -856,6 +1187,67 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
     [setPattern],
   );
 
+  const closeMpcContextMenu = useCallback(() => setMpcContextMenu(null), []);
+
+  const resolveMpcActionRegion = useCallback((): LabMpcGridRegion | null => {
+    if (mpcSelection && labMpcRegionHasHits(pattern, mpcSelection)) return mpcSelection;
+    if (mpcSelection) return mpcSelection;
+    const col = Math.max(0, Math.min(mpcSteps - 1, drumPlayhead));
+    return labMpcRegionFromPoints(0, col, LAB_MPC_PAD_COUNT - 1, col, LAB_MPC_PAD_COUNT, mpcSteps);
+  }, [mpcSelection, pattern, mpcSteps, drumPlayhead]);
+
+  const copyMpcSelection = useCallback(() => {
+    const region = resolveMpcActionRegion();
+    if (!region || !labMpcRegionHasHits(pattern, region)) return false;
+    mpcClipboardRef.current = labMpcExtractClip(pattern, region);
+    setMpcClipboardReady(true);
+    return true;
+  }, [pattern, resolveMpcActionRegion]);
+
+  const pasteMpcClipboardAt = useCallback(
+    (destRow0: number, destCol0: number) => {
+      const clip = mpcClipboardRef.current;
+      if (!clip) return false;
+      const col = Math.max(0, Math.min(mpcSteps - clip.w, destCol0));
+      const row = Math.max(0, Math.min(LAB_MPC_PAD_COUNT - clip.h, destRow0));
+      setPattern((prev) => labMpcPasteClip(prev, clip, row, col));
+      setMpcSelection({
+        row0: row,
+        row1: row + clip.h - 1,
+        col0: col,
+        col1: col + clip.w - 1,
+      });
+      setMpcPastePending(false);
+      return true;
+    },
+    [mpcSteps, setPattern],
+  );
+
+  const pasteMpcClipboard = useCallback(() => {
+    if (!mpcClipboardRef.current) return false;
+    const region = mpcSelection;
+    const destCol = region?.col0 ?? Math.max(0, Math.min(mpcSteps - 1, drumPlayhead));
+    const destRow = region?.row0 ?? 0;
+    return pasteMpcClipboardAt(destRow, destCol);
+  }, [drumPlayhead, mpcSelection, mpcSteps, pasteMpcClipboardAt]);
+
+  const duplicateMpcSelection = useCallback(() => {
+    const region = resolveMpcActionRegion();
+    if (!region || !labMpcRegionHasHits(pattern, region)) return false;
+    const result = labMpcDuplicateRegion(pattern, region, mpcSteps);
+    if (!result) return false;
+    setPattern(() => result.pattern);
+    setMpcSelection(result.region);
+    return true;
+  }, [pattern, mpcSteps, resolveMpcActionRegion, setPattern]);
+
+  const eraseMpcSelection = useCallback(() => {
+    const region = mpcSelection;
+    if (!region) return false;
+    setPattern((prev) => labMpcEraseRegion(prev, region));
+    return true;
+  }, [mpcSelection, setPattern]);
+
   const auditionPad = useCallback(
     (row: number) => {
       const ctx = getAudioContext();
@@ -867,7 +1259,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           tuneSemi: mpcPadTuneSemi[row],
           lpCutoffHz: mpcPadLpHz[row],
           drive: mpcPadDrive[row],
-          level: mpcPadLevel[row],
+          level: mpcPadLevel[row] * masterLevelRef.current,
         });
       });
     },
@@ -875,13 +1267,56 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
   );
 
   const onMpcStepPointerDown = useCallback(
-    (row: number, col: number, cur: boolean) => {
+    (e: ReactPointerEvent<HTMLButtonElement>, row: number, col: number, cur: boolean) => {
+      if (e.button === 2) {
+        e.preventDefault();
+        if (!labMpcCellInRegion(mpcSelection, row, col)) {
+          setMpcSelection(
+            labMpcRegionFromPoints(row, col, row, col, LAB_MPC_PAD_COUNT, mpcSteps),
+          );
+        }
+        setMpcContextMenu({ x: e.clientX, y: e.clientY });
+        return;
+      }
+      closeMpcContextMenu();
+      if (mpcPastePendingRef.current && e.button === 0) {
+        e.preventDefault();
+        pasteMpcClipboardAt(row, col);
+        return;
+      }
+      if (e.shiftKey && e.button === 0) {
+        e.preventDefault();
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* */
+        }
+        mpcSelectDragRef.current = { active: true, anchorRow: row, anchorCol: col };
+        setMpcSelection(
+          labMpcRegionFromPoints(row, col, row, col, LAB_MPC_PAD_COUNT, mpcSteps),
+        );
+        mpcStepPaintRef.current = null;
+        return;
+      }
+      if (mpcGridTool === 'erase' && e.button === 0) {
+        applyMpcStepCell(row, col, false);
+        mpcStepPaintRef.current = { target: false };
+        return;
+      }
       const next = !cur;
       applyMpcStepCell(row, col, next);
       mpcStepPaintRef.current = { target: next };
       if (next) auditionPad(row);
     },
-    [applyMpcStepCell, auditionPad],
+    [
+      applyMpcStepCell,
+      auditionPad,
+      closeMpcContextMenu,
+      mpcGridTool,
+      mpcSelection,
+      mpcSteps,
+      pasteMpcClipboardAt,
+    ],
   );
 
   const applyDrumPreset = useCallback(
@@ -903,28 +1338,181 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
   const onMpcStepPointerEnter = useCallback(
     (row: number, col: number) => {
+      const sel = mpcSelectDragRef.current;
+      if (sel?.active) {
+        setMpcSelection(
+          labMpcRegionFromPoints(
+            sel.anchorRow,
+            sel.anchorCol,
+            row,
+            col,
+            LAB_MPC_PAD_COUNT,
+            mpcSteps,
+          ),
+        );
+        return;
+      }
       const p = mpcStepPaintRef.current;
       if (!p) return;
       applyMpcStepCell(row, col, p.target);
     },
-    [applyMpcStepCell],
+    [applyMpcStepCell, mpcSteps],
+  );
+
+  useEffect(() => {
+    const endSelectDrag = () => {
+      mpcSelectDragRef.current = null;
+      mpcStepPaintRef.current = null;
+    };
+    window.addEventListener('pointerup', endSelectDrag);
+    window.addEventListener('pointercancel', endSelectDrag);
+    return () => {
+      window.removeEventListener('pointerup', endSelectDrag);
+      window.removeEventListener('pointercancel', endSelectDrag);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sequencerVisible) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'c') {
+        if (copyMpcSelection()) e.preventDefault();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'v') {
+        if (mpcClipboardRef.current) {
+          e.preventDefault();
+          if (!pasteMpcClipboard()) setMpcPastePending(true);
+        }
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'd') {
+        if (duplicateMpcSelection()) e.preventDefault();
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (eraseMpcSelection()) e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [
+    copyMpcSelection,
+    duplicateMpcSelection,
+    eraseMpcSelection,
+    pasteMpcClipboard,
+    sequencerVisible,
+  ]);
+
+  useEffect(() => {
+    if (!mpcContextMenu) return;
+    const close = (e: PointerEvent) => {
+      const menu = mpcContextMenuRef.current;
+      if (menu?.contains(e.target as Node)) return;
+      closeMpcContextMenu();
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('blur', close);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('blur', close);
+    };
+  }, [closeMpcContextMenu, mpcContextMenu]);
+
+  const mpcActionBtn = embedCompact ? embedToolBtn : btnGhost;
+  const mpcEditBtn = (active?: boolean): CSSProperties => ({
+    ...mpcActionBtn,
+    borderColor: active ? '#ca8a04' : '#3f3f46',
+    background: active ? 'color-mix(in srgb, #ca8a04 18%, #12121a)' : undefined,
+  });
+
+  const mpcEditToolbar = (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          if (mpcSelection && labMpcRegionHasHits(pattern, mpcSelection)) {
+            eraseMpcSelection();
+          } else {
+            setMpcGridTool((t) => (t === 'erase' ? 'draw' : 'erase'));
+          }
+        }}
+        style={mpcEditBtn(mpcGridTool === 'erase')}
+        title="Erase selection (Delete) or erase-brush — click steps to remove hits"
+      >
+        Erase
+      </button>
+      <button
+        type="button"
+        onClick={() => copyMpcSelection()}
+        style={mpcActionBtn}
+        title="Copy selection (Ctrl+C) — Shift+drag to highlight"
+      >
+        Copy
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (!pasteMpcClipboard()) setMpcPastePending(true);
+        }}
+        style={mpcEditBtn(mpcPastePending)}
+        disabled={!mpcClipboardReady}
+        title={
+          mpcClipboardReady
+            ? 'Paste (Ctrl+V) — then click top-left cell, or pastes at playhead'
+            : 'Copy a region first'
+        }
+      >
+        Paste
+      </button>
+      <button
+        type="button"
+        onClick={() => duplicateMpcSelection()}
+        style={mpcActionBtn}
+        title="Duplicate to next empty block (Ctrl+D)"
+      >
+        Duplicate
+      </button>
+    </>
   );
 
   const loadState = getLabMpcKitLoadState(mpcKitId);
 
   return (
     <div
-      style={{
-        padding: '10px 12px',
+      style={
+        sequencerVisible
+          ? {
+              padding: embeddedIn808Lab ? 0 : '10px 12px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
-        flex: 1,
+              gap: embeddedIn808Lab ? 0 : 10,
+              flex: '1 1 0',
         minHeight: 0,
+              height: embeddedIn808Lab ? '100%' : undefined,
         minWidth: 0,
         overflow: 'hidden',
-      }}
+              border: embeddedIn808Lab ? `1px solid ${CB_PIANO_MINT_BORDER}` : undefined,
+              background: embeddedIn808Lab ? CB_PIANO_BG : undefined,
+              color: embeddedIn808Lab ? '#d0d0d0' : undefined,
+              fontFamily: embeddedIn808Lab ? "'Inter', system-ui, sans-serif" : undefined,
+            }
+          : {
+              position: 'absolute',
+              width: 0,
+              height: 0,
+              overflow: 'hidden',
+              pointerEvents: 'none',
+            }
+      }
+      aria-hidden={!sequencerVisible}
     >
+      {sequencerVisible ? (
+        <>
+      {!embeddedIn808Lab ? (
       <div style={{ fontSize: 12, lineHeight: 1.35, color: '#94a3b8', flexShrink: 0 }}>
         Purple = bar · ruler 1…N per bar.
         {loadState === 'loading' && (
@@ -934,7 +1522,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
         )}
         {loadState === 'failed' && <span style={{ marginLeft: 8, color: '#f87171' }}>Kit load failed — retry from kit list</span>}
       </div>
+      ) : null}
 
+      {!embeddedIn808Lab ? (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <button type="button" aria-label="Previous kit" onClick={() => goMpcKitDelta(-1)} style={btnGhost}>
@@ -974,10 +1564,243 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           </select>
         )}
       </div>
+      ) : null}
 
+      {embedCompact ? (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            flexShrink: 0,
+            padding: '6px 10px',
+            margin: 0,
+            borderBottom: '1px solid rgba(255,255,255,0.05)',
+            background: 'rgba(0,0,0,0.30)',
+            letterSpacing: '0.04em',
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', width: '100%' }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: '#8a8a98',
+              flex: '1 1 140px',
+              minWidth: 120,
+              lineHeight: 1.35,
+            }}
+          >
+            <span style={{ color: CB_PIANO_MINT }}>Drum step roll</span>
+            {loadState === 'loading' ? (
+              <span style={{ color: '#fcd34d' }} key={mpcKitUiTick}>
+                {' '}
+                · Loading…
+              </span>
+            ) : null}
+          </span>
+          <div
+            style={
+              embedCompact
+                ? { ...lab808RollTransportCluster, background: '#0a0a0e', border: '1px solid #2a2a32', boxShadow: 'none' }
+                : {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    background: '#0a0a0e',
+                    border: '1px solid #2a2a32',
+                    flexShrink: 0,
+                  }
+            }
+            title="808 Lab MPC transport (same clock as Kick/Bass roll)"
+          >
+            <button
+              type="button"
+              onClick={() => labMpcSeekColumn0()}
+              style={{ ...embedTransportBtnStyle(), width: embedTransportBtn, height: embedTransportH }}
+              title="Start"
+            >
+              <SkipBack size={embedTransportIcon} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                labMpcPauseRequestedRef.current = false;
+                if (labMpcTransport === 'paused') syncLabMpcFullStop();
+                setLabMpcTransport('stopped');
+              }}
+              style={{ ...embedTransportBtnStyle(), width: embedTransportBtn, height: embedTransportH }}
+              title="Stop"
+            >
+              <Square size={embedTransportIcon} fill={embedCompact ? 'currentColor' : undefined} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (labMpcTransport === 'playing') {
+                  labMpcPauseRequestedRef.current = true;
+                  setLabMpcTransport('paused');
+                  return;
+                }
+                labMpcPauseRequestedRef.current = false;
+                setLabMpcTransport('playing');
+              }}
+              style={{
+                ...embedTransportBtnStyle(labMpcTransport === 'playing'),
+                width: embedTransportPlay,
+                height: embedTransportH,
+                ...(embedCompact
+                  ? {}
+                  : {
+                      background:
+                        labMpcTransport === 'playing'
+                          ? 'rgba(0, 229, 255, 0.18)'
+                          : 'linear-gradient(145deg, #1e3a5f, #122032)',
+                      color: labMpcTransport === 'playing' ? '#5eead4' : '#cffafe',
+                    }),
+              }}
+              title={labMpcTransport === 'playing' ? 'Pause' : 'Play'}
+            >
+              {labMpcTransport === 'playing' ? (
+                <Pause size={embedTransportIcon} fill={embedCompact ? 'currentColor' : undefined} />
+              ) : (
+                <Play size={embedTransportIcon} fill={embedCompact ? 'currentColor' : undefined} />
+              )}
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+          <label style={embedToolbarLabel}>
+            Bars
+            <select
+              value={mpcBars}
+              onChange={(e) => setMpcBars(+e.target.value as (typeof MPC_BAR_LOOP_OPTIONS)[number])}
+              style={embedSelect}
+            >
+              {MPC_BAR_LOOP_OPTIONS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={embedToolbarLabel}>
+            Quant
+            <select value={mpcQuant} onChange={(e) => setMpcQuant(e.target.value as MpcQuant)} style={embedSelect}>
+              <option value="beat">1/4</option>
+              <option value="eighth">1/8</option>
+              <option value="sixteenth">1/16</option>
+              <option value="thirtysecond">1/32</option>
+              <option value="triplet_eighth">1/8t</option>
+              <option value="triplet_sixteenth">1/16t</option>
+            </select>
+          </label>
+          <button type="button" onClick={() => setMpcBankSlot('A')} style={mpcBankSlot === 'A' ? btnPrimary : embedToolBtn}>
+            A
+          </button>
+          <button type="button" onClick={() => setMpcBankSlot('B')} style={mpcBankSlot === 'B' ? btnPrimary : embedToolBtn}>
+            B
+          </button>
+          <label style={embedToolbarLabel}>
+            BPM
+            <input
+              type="number"
+              min={40}
+              max={220}
+              value={Math.round(labStripBpm)}
+              readOnly={embeddedIn808Lab ? false : mpcDrumBpmOverride == null}
+              onChange={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!Number.isFinite(v)) return;
+                const clamped = Math.max(40, Math.min(220, v));
+                if (embeddedIn808Lab && onLabBpmOverride) {
+                  onLabBpmOverride(clamped);
+                } else {
+                  setMpcDrumBpmOverride(clamped);
+                }
+              }}
+              onClick={() => {
+                if (!embeddedIn808Lab && mpcDrumBpmOverride == null) {
+                  setMpcDrumBpmOverride(Math.max(40, Math.min(220, Math.round(labStripBpm))));
+                }
+              }}
+              style={embedBpmInputStyle({
+                readOnly: embeddedIn808Lab ? false : mpcDrumBpmOverride == null,
+              })}
+              title={
+                embeddedIn808Lab
+                  ? '808 Lab tempo (shared with Kick/Bass when 808 LINK is on)'
+                  : 'Tap to edit local drum BPM; Sync resets to lab BPM'
+              }
+            />
+          </label>
+          <button
+            type="button"
+            onClick={resetDrumBpmSync}
+            disabled={!drumSyncActive}
+            style={{
+              ...embedToolBtn,
+              opacity: drumSyncActive ? 1 : 0.35,
+              cursor: drumSyncActive ? 'pointer' : 'default',
+            }}
+            title={
+              drumSyncActive
+                ? 'Reset to auto tempo (808 LINK shares with Kick/Bass)'
+                : 'Following auto tempo — pick BPM → target and SYNC in pad header, or type a custom BPM'
+            }
+          >
+            Sync
+          </button>
+          </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: embedCompact ? 6 : 10, alignItems: 'center', width: '100%' }}>
+          <button
+            type="button"
+            onClick={() => setDrumPlayReverse((r) => !r)}
+            style={{ ...embedToolBtn, borderColor: drumPlayReverse ? '#22c55e' : '#3f3f46' }}
+            title="Reverse play direction"
+          >
+            {drumPlayReverse ? 'Rev' : 'Fwd'}
+          </button>
+          {mpcEditToolbar}
+          <button
+            type="button"
+            onClick={() => {
+              setPattern(() => emptyGrid(mpcSteps));
+              setDrumPlayhead(0);
+              setMpcSelection(null);
+            }}
+            style={embedToolBtn}
+            title="Clear entire bank pattern"
+          >
+            Clear
+          </button>
+          {onDrumExportMidi || onDrumExportWav || onDrumExportToPad ? (
+            <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+              <GrooveLabExportStrip
+                toolbarInline
+                showExportLabel
+                widerButtons
+                busy={drumExportBusy}
+                status={drumExportStatus}
+                hasChords={drumExportHasHits}
+                hasRollNotes={drumExportHasHits}
+                onExportMidi={onDrumExportMidi}
+                onExportWav={onDrumExportWav}
+                onExportToPad={onDrumExportToPad}
+                padExportEnabled={drumPadExportEnabled}
+                padPickerOpen={drumPadPickerOpen}
+              />
+            </div>
+          ) : null}
+          </div>
+        </div>
+      ) : (
+        <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>LOOP (BARS)</span>
+          <span style={embedToolbarLabel}>LOOP (BARS)</span>
           <select
             value={mpcBars}
             onChange={(e) => setMpcBars(+e.target.value as (typeof MPC_BAR_LOOP_OPTIONS)[number])}
@@ -992,7 +1815,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           </select>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>QUANT (DAW)</span>
+          <span style={embedToolbarLabel}>QUANT (DAW)</span>
           <select value={mpcQuant} onChange={(e) => setMpcQuant(e.target.value as MpcQuant)} style={selectStyle}>
             <option value="beat">1/4 — 4 columns between each Bar line</option>
             <option value="eighth">1/8 — 8 columns between each Bar line</option>
@@ -1017,7 +1840,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', flexShrink: 0 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: '#71717a' }}>BPM</span>
+          <span style={embedToolbarLabel}>BPM</span>
           <input
             type="number"
             min={40}
@@ -1033,7 +1856,16 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             title={mpcDrumBpmOverride == null ? 'Following lab BPM — click Edit local BPM to change' : 'Local drum BPM'}
           />
         </label>
-        <button type="button" onClick={() => setMpcDrumBpmOverride(null)} style={btnGhost}>
+        <button
+          type="button"
+          onClick={resetDrumBpmSync}
+          disabled={!drumSyncActive}
+          style={{
+            ...btnGhost,
+            opacity: drumSyncActive ? 1 : 0.35,
+            cursor: drumSyncActive ? 'pointer' : 'default',
+          }}
+        >
           Sync lab BPM
         </button>
         <button type="button" onClick={() => setMpcDrumBpmOverride(Math.max(40, Math.min(220, Math.round(labStripBpm))))} style={btnGhost}>
@@ -1051,31 +1883,27 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             background: '#0a0a0e',
             border: '1px solid #2a2a32',
           }}
-          title="808 Lab MPC transport (mirrors Beat Lab)"
+          title="808 Lab drum roll transport"
         >
           <button
             type="button"
-            onClick={() => {
-              labMpcSeekColumn0();
-            }}
-            style={{ ...lab808TransportButtonStyle(), width: LAB808_TRANSPORT_BTN, height: LAB808_TRANSPORT_BTN }}
+            onClick={() => labMpcSeekColumn0()}
+            style={{ ...lab808TransportButtonStyle(), width: embedTransportBtn, height: embedTransportBtn }}
             title="Return to start"
           >
-            <SkipBack size={LAB808_TRANSPORT_ICON} />
+            <SkipBack size={embedTransportIcon} />
           </button>
           <button
             type="button"
             onClick={() => {
               labMpcPauseRequestedRef.current = false;
-              if (labMpcTransport === 'paused') {
-                syncLabMpcFullStop();
-              }
+              if (labMpcTransport === 'paused') syncLabMpcFullStop();
               setLabMpcTransport('stopped');
             }}
-            style={{ ...lab808TransportButtonStyle(), width: LAB808_TRANSPORT_BTN, height: LAB808_TRANSPORT_BTN }}
+            style={{ ...lab808TransportButtonStyle(), width: embedTransportBtn, height: embedTransportBtn }}
             title="Stop"
           >
-            <Square size={LAB808_TRANSPORT_ICON} />
+            <Square size={embedTransportIcon} />
           </button>
           <button
             type="button"
@@ -1090,8 +1918,8 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             }}
             style={{
               ...lab808TransportButtonStyle(labMpcTransport === 'playing'),
-              width: LAB808_TRANSPORT_BTN_PLAY,
-              height: LAB808_TRANSPORT_BTN,
+              width: embedTransportPlay,
+              height: embedTransportBtn,
               background:
                 labMpcTransport === 'playing'
                   ? 'rgba(0, 229, 255, 0.18)'
@@ -1100,15 +1928,9 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               boxShadow:
                 labMpcTransport === 'playing' ? 'inset 0 0 0 1px rgba(94,234,212,0.35)' : '0 0 18px rgba(0,229,255,0.12)',
             }}
-            title={
-              labMpcTransport === 'playing'
-                ? 'Pause playback'
-                : labMpcTransport === 'paused'
-                  ? 'Resume'
-                  : 'Play'
-            }
+            title={labMpcTransport === 'playing' ? 'Pause' : 'Play'}
           >
-            {labMpcTransport === 'playing' ? <Pause size={LAB808_TRANSPORT_ICON} /> : <Play size={LAB808_TRANSPORT_ICON} />}
+            {labMpcTransport === 'playing' ? <Pause size={embedTransportIcon} /> : <Play size={embedTransportIcon} />}
           </button>
         </div>
         <button
@@ -1118,61 +1940,87 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
         >
           {drumPlayReverse ? '◀ Rev on' : '▶ Fwd'}
         </button>
+        {mpcEditToolbar}
         <button
           type="button"
           onClick={() => {
             setPattern(() => emptyGrid(mpcSteps));
             setDrumPlayhead(0);
+            setMpcSelection(null);
           }}
           style={btnGhost}
+          title="Clear entire bank pattern"
         >
           Clear bank
         </button>
       </div>
+        </>
+      )}
 
       <div
         ref={mpcSeqViewportRef}
         style={{
-          flex: '1 1 auto',
-          minHeight: 220,
+          flex: '1 1 0',
+          minHeight: embedCompact ? 340 : 220,
+          height: embedCompact ? '100%' : undefined,
           minWidth: 0,
-          overflowX: 'auto',
+          overflowX: embedCompact ? 'hidden' : 'auto',
           overflowY: 'auto',
           overscrollBehavior: 'contain',
           scrollbarGutter: 'stable',
-          borderRadius: 10,
-          border: '1px solid #2a2a32',
-          background: '#08080c',
+          borderRadius: embedCompact ? 0 : 10,
+          border: embedCompact ? 'none' : '1px solid #2a2a32',
+          background: embedCompact ? CB_PIANO_BG : '#08080c',
         }}
       >
         <div
           style={{
             position: 'relative',
-            display: 'inline-flex',
+            display: 'flex',
             flexDirection: 'column',
-            alignItems: 'flex-start',
-            minWidth: '100%',
+            alignItems: 'stretch',
+            width: mpcGridRowWidth,
+            minWidth: mpcStretchGrid ? '100%' : '100%',
           }}
         >
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${mpcSteps}, ${cellSize}px)`,
+              gridTemplateColumns: mpcLaneColTemplate,
               columnGap: 0,
               rowGap: 0,
-              width: 'max-content',
-              paddingLeft: MPC_LANE_RAIL_PX,
-              boxSizing: 'content-box',
-              minHeight: MPC_BAR_STRIP_MIN_H,
-              height: MPC_BAR_STRIP_MIN_H,
-              paddingBottom: 0,
+              width: mpcGridRowWidth,
+              boxSizing: 'border-box',
+              minHeight: barStripH,
+              height: barStripH,
               alignItems: 'stretch',
             }}
           >
+            <div
+              aria-hidden
+              style={{
+                gridColumn: 1,
+                gridRow: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: embedCompact ? 9 : 8,
+                fontWeight: 900,
+                letterSpacing: '0.08em',
+                color: '#52525b',
+                borderRight: embedCompact ? `1px solid ${CB_PIANO_MINT_BORDER}` : '1px solid #27272f',
+                background: '#12121a',
+              }}
+            >
+              BAR
+            </div>
             {Array.from({ length: barLoopCount }, (_, bi) => {
               const barNum = bi + 1;
-              const barBigFs = Math.min(11, Math.max(8, Math.round(cellSize * 0.38)));
-              const colStart = bi * spb + 1;
+              const barW = mpcStretchGrid ? mpcEffectiveColW : cellSize;
+              const barBigFs = embedCompact
+                ? Math.min(13, Math.max(10, Math.round(barW * 0.42)))
+                : Math.min(11, Math.max(8, Math.round(barW * 0.38)));
+              const colStart = mpcBarGridColStart(bi);
               return (
                 <button
                   key={`bar-${bi}`}
@@ -1181,8 +2029,8 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                   style={{
                     gridColumn: `${colStart} / span ${spb}`,
                     gridRow: 1,
-                    height: MPC_BAR_STRIP_MIN_H,
-                    minHeight: MPC_BAR_STRIP_MIN_H,
+                    height: barStripH,
+                    minHeight: barStripH,
                     minWidth: 0,
                     fontWeight: 800,
                     color: '#a1a1aa',
@@ -1203,13 +2051,22 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                       style={{
                         fontSize: barBigFs,
                         fontWeight: 900,
-                        color: '#fde68a',
+                        color: embedCompact ? CB_PIANO_MINT : '#fde68a',
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
                       {barNum}
                     </span>
-                    <span style={{ fontSize: 6, fontWeight: 800, color: '#71717a', letterSpacing: '0.04em' }}>bar</span>
+                    <span
+                      style={{
+                        fontSize: embedCompact ? 8 : 6,
+                        fontWeight: 800,
+                        color: '#71717a',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      bar
+                    </span>
                   </span>
                 </button>
               );
@@ -1218,17 +2075,25 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: `repeat(${mpcSteps}, ${cellSize}px)`,
+              gridTemplateColumns: mpcLaneColTemplate,
               columnGap: 0,
               rowGap: 0,
-              width: 'max-content',
-              paddingLeft: MPC_LANE_RAIL_PX,
-              boxSizing: 'content-box',
-              height: MPC_TICK_ROW_H,
-              minHeight: MPC_TICK_ROW_H,
+              width: mpcGridRowWidth,
+              boxSizing: 'border-box',
+              height: tickRowH,
+              minHeight: tickRowH,
               alignItems: 'stretch',
             }}
           >
+            <div
+              aria-hidden
+              style={{
+                gridColumn: 1,
+                gridRow: 1,
+                borderRight: embedCompact ? `1px solid ${CB_PIANO_MINT_BORDER}` : '1px solid #27272f',
+                background: '#12121a',
+              }}
+            />
             {Array.from({ length: mpcSteps }, (_, s) => {
               const stpb = stepsPerBeat(spb);
               const atBeat = s % stpb === 0;
@@ -1238,11 +2103,11 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                 <div
                   key={`tick-${s}`}
                   style={{
-                    gridColumn: s + 1,
+                    gridColumn: mpcStepGridCol(s),
                     gridRow: 1,
                     width: '100%',
                     minWidth: 0,
-                    height: MPC_TICK_ROW_H,
+                    height: tickRowH,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1252,7 +2117,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                     boxSizing: 'border-box',
                     fontVariantNumeric: 'tabular-nums',
                     overflow: 'hidden',
-                    color: atBeat ? '#fde68a' : '#52525b',
+                    color: atBeat ? (embedCompact ? CB_PIANO_MINT : '#fde68a') : '#52525b',
                     borderTop: `1px solid ${DRUM_GRID_CELL_BASE}`,
                     borderRight: `1px solid ${DRUM_GRID_CELL_BASE}`,
                     borderBottom: `1px solid ${DRUM_GRID_CELL_BASE}`,
@@ -1269,10 +2134,10 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               key={`lane-${row}`}
               style={{
                 display: 'grid',
-                gridTemplateColumns: `${MPC_LANE_RAIL_PX}px repeat(${mpcSteps}, ${cellSize}px)`,
+                gridTemplateColumns: mpcLaneColTemplate,
                 columnGap: 0,
                 rowGap: 0,
-                width: 'max-content',
+                width: mpcGridRowWidth,
                 alignItems: 'stretch',
                 borderTop: '1px solid #1c1c24',
               }}
@@ -1290,14 +2155,14 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                   minWidth: 0,
                   minHeight: mpcLaneRowH,
                   height: mpcLaneRowH,
-                  padding: '2px 6px',
-                  fontSize: 9,
+                  padding: embedCompact ? '4px 8px' : '2px 6px',
+                  fontSize: embedCompact ? 10 : 9,
                   fontWeight: mpcEditPad === row ? 900 : 700,
                   textAlign: 'left',
                   border: 'none',
-                  borderRight: '1px solid #27272f',
-                  background: mpcEditPad === row ? '#1e293b' : '#12121a',
-                  color: mpcEditPad === row ? '#fde68a' : '#a1a1aa',
+                  borderRight: embedCompact ? `1px solid ${CB_PIANO_MINT_BORDER}` : '1px solid #27272f',
+                  background: mpcEditPad === row ? 'rgba(124,244,198,0.12)' : '#12121a',
+                  color: mpcEditPad === row ? CB_PIANO_MINT : '#a1a1aa',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -1309,17 +2174,25 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               </button>
               {Array.from({ length: mpcSteps }, (_, col) => {
                 const on = !!pattern[row]?.[col];
+                const inSel = labMpcCellInRegion(mpcSelection, row, col);
                 return (
                   <button
                     key={`c-${row}-${col}`}
                     type="button"
+                    onContextMenu={(e) => e.preventDefault()}
                     onPointerDown={(e) => {
+                      if (e.button !== 2) {
+                        try {
                       e.currentTarget.setPointerCapture(e.pointerId);
-                      onMpcStepPointerDown(row, col, on);
+                        } catch {
+                          /* */
+                        }
+                      }
+                      onMpcStepPointerDown(e, row, col, on);
                     }}
                     onPointerEnter={() => onMpcStepPointerEnter(row, col)}
                     style={{
-                      gridColumn: col + 2,
+                      gridColumn: mpcStepGridCol(col),
                       gridRow: 1,
                       width: '100%',
                       minWidth: 0,
@@ -1332,8 +2205,11 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                       borderRight: `1px solid ${DRUM_GRID_CELL_BASE}`,
                       borderBottom: `1px solid ${DRUM_GRID_CELL_BASE}`,
                       borderLeft: drumGridLeftBorder(col, spb),
-                      background: on ? 'linear-gradient(180deg,#22c55e,#14532d)' : '#0f0f14',
-                      cursor: 'crosshair',
+                      background: on ? mpcStepOnBg : mpcStepOffBg,
+                      boxShadow: inSel
+                        ? `inset 0 0 0 2px ${embedCompact ? CB_PIANO_MINT : '#38bdf8'}`
+                        : undefined,
+                      cursor: mpcPastePending ? 'copy' : mpcGridTool === 'erase' ? 'cell' : 'crosshair',
                     }}
                   />
                 );
@@ -1344,7 +2220,11 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             const ph = Math.max(0, Math.min(mpcSteps - 1, drumPlayhead));
             const atBarStart = labMpcTransport === 'stopped' && ph % spb === 0;
             const w = labMpcTransport === 'playing' ? 2 : atBarStart ? 3 : 2;
-            const boxShadow = labMpcTransport === 'playing'
+            const boxShadow = embedCompact
+              ? labMpcTransport === 'playing'
+                ? `0 0 10px rgba(124, 244, 198, 0.85)`
+                : '0 0 8px rgba(124, 244, 198, 0.55)'
+              : labMpcTransport === 'playing'
               ? '0 0 8px rgba(74,222,128,0.75)'
               : atBarStart
                 ? '0 0 12px rgba(74,222,128,0.95), 0 0 2px rgba(255,255,255,0.35)'
@@ -1357,10 +2237,12 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
                   position: 'absolute',
                   pointerEvents: 'none',
                   top: 0,
-                  left: MPC_LANE_RAIL_PX,
+                  left: laneRailPx,
                   width: w,
                   bottom: 0,
-                  background: 'linear-gradient(180deg, #d9f99d 0%, #4ade80 35%, #22c55e 100%)',
+                  background: embedCompact
+                    ? `linear-gradient(180deg, ${CB_PIANO_MINT} 0%, rgba(124, 244, 198, 0.55) 100%)`
+                    : 'linear-gradient(180deg, #d9f99d 0%, #4ade80 35%, #22c55e 100%)',
                   boxShadow,
                   zIndex: 5,
                   transition: labMpcTransport === 'playing' ? 'none' : 'transform 70ms ease-out, width 70ms ease-out, box-shadow 70ms ease-out',
@@ -1371,6 +2253,67 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
         </div>
       </div>
 
+      {mpcContextMenu ? (
+        <div
+          ref={mpcContextMenuRef}
+          role="menu"
+          style={{
+            position: 'fixed',
+            left: mpcContextMenu.x,
+            top: mpcContextMenu.y,
+            zIndex: 10000,
+            minWidth: 148,
+            padding: 4,
+            borderRadius: 8,
+            border: '1px solid #3f3f46',
+            background: '#18181b',
+            boxShadow: '0 8px 28px rgba(0,0,0,0.55)',
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {(
+            [
+              ['Copy', () => copyMpcSelection()],
+              ['Paste', () => pasteMpcClipboard() || setMpcPastePending(true)],
+              ['Duplicate', () => duplicateMpcSelection()],
+              ['Erase', () => eraseMpcSelection()],
+            ] as const
+          ).map(([label, run]) => (
+            <button
+              key={label}
+              type="button"
+              role="menuitem"
+              disabled={label === 'Paste' && !mpcClipboardReady}
+              onClick={() => {
+                run();
+                closeMpcContextMenu();
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                textAlign: 'left',
+                padding: '8px 10px',
+                border: 'none',
+                borderRadius: 6,
+                background: 'transparent',
+                color: '#e4e4e7',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: label === 'Paste' && !mpcClipboardReady ? 'not-allowed' : 'pointer',
+                opacity: label === 'Paste' && !mpcClipboardReady ? 0.45 : 1,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <div style={{ fontSize: 10, color: '#71717a', padding: '4px 10px 2px', lineHeight: 1.35 }}>
+            Shift+drag to select · Paste click places
+          </div>
+        </div>
+      ) : null}
+
+      {!embedCompact ? (
+        <>
       <div
         title="Presets are 4 bars @ 1/16. Uncheck = pattern only; Sync / Edit local BPM for tempo."
         style={{
@@ -1538,12 +2481,16 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           </button>
         </div>
       </div>
+        </>
+      ) : null}
 
-      {labMpcKitMeta(mpcKitId) && (
+      {labMpcKitMeta(mpcKitId) && !embeddedIn808Lab && (
         <div style={{ fontSize: 11, color: '#52525b' }}>
           {labMpcKitMeta(mpcKitId)!.era} · {filteredKits.length} kits match filter
         </div>
       )}
+        </>
+      ) : null}
     </div>
   );
 });

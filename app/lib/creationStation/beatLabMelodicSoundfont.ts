@@ -160,6 +160,9 @@ function channelVolumeGain(ch: number, channelVolumes: Record<number, number>): 
 const instrumentCache = new Map<string, Promise<SmplrSoundfont>>();
 /** Resolved instruments — transport can `start()` synchronously (no await microtask slip). */
 const instrumentReady = new Map<string, SmplrSoundfont>();
+/** smplr `start()` stop handles — cut on Beat Lab Stop (lookahead queues ~3s ahead). */
+const activeMelodicTransportStops = new Set<() => void>();
+let melodicTransportEpoch = 0;
 const loadProgressListeners = new Set<(loaded: number, total: number) => void>();
 
 let warmupStarted = false;
@@ -253,12 +256,51 @@ function startMelodicVoiceAt(
   const vel = beatLabMelodicOutputVelocity(opts.velocity, volGain, opts.instrumentGain ?? 1);
   pulseMelodicChannelMeter(ctx, opts.lane, vel, opts.channelVolumes, when);
   const dur = Math.max(0.04, opts.durationSec);
-  return inst.start({
+  const rawStop = inst.start({
     note: Math.max(0, Math.min(127, Math.round(opts.midi))),
     velocity: vel,
     time: when,
     duration: dur,
   });
+  const wrappedStop = () => {
+    activeMelodicTransportStops.delete(wrappedStop);
+    try {
+      rawStop();
+    } catch {
+      /* already stopped */
+    }
+  };
+  activeMelodicTransportStops.add(wrappedStop);
+  return wrappedStop;
+}
+
+/** Stop queued GM/smplr transport notes (Stop/Pause — not keyboard preview). */
+export function haltBeatLabMelodicTransportNotes(): void {
+  melodicTransportEpoch += 1;
+  for (const stop of activeMelodicTransportStops) {
+    try {
+      stop();
+    } catch {
+      /* */
+    }
+  }
+  activeMelodicTransportStops.clear();
+  /** smplr Scheduler queue — ~3s of undispatched `start()` events Beat Lab lookahead fills. */
+  if (cacheCtx) {
+    try {
+      transportSchedulerByCtx.get(cacheCtx)?.stop();
+    } catch {
+      /* */
+    }
+  }
+  /** Cut any voices already handed to Web Audio (scheduler.stop() does not touch these). */
+  for (const inst of instrumentReady.values()) {
+    try {
+      inst.stop();
+    } catch {
+      /* */
+    }
+  }
 }
 
 export function getBeatLabMelodicInstrument(
@@ -418,14 +460,17 @@ export function scheduleBeatLabMelodicNote(
       console.warn('[Beat Lab SYNTH] sync schedule failed:', instId, err);
     }
   }
+  const epoch = melodicTransportEpoch;
   /** Async load after the grid time causes late "hesitate then hit" — never play stale hits. */
   void getBeatLabMelodicInstrument(ctx, instId)
     .then((inst) => {
+      if (melodicTransportEpoch !== epoch) return;
       if (whenLocked < ctx.currentTime - 0.04) return;
       startMelodicVoiceAt(ctx, inst, opts, Math.max(whenLocked, ctx.currentTime + 0.001));
     })
     .catch((err) => {
       console.warn('[Beat Lab SYNTH] schedule note failed:', opts.instrumentId, err);
+      if (melodicTransportEpoch !== epoch) return;
       if (whenLocked < ctx.currentTime - 0.04) return;
       playMelodicFallbackBeep(
         ctx,

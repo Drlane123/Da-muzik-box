@@ -1,13 +1,18 @@
 /**
- * Groove Lab — 16-channel mixer (CH 33–48 · SUB / CHORD / MELODY work lanes).
+ * Groove Lab — 16-channel mixer (CH 33–48 · CHORD · GROOVE LEAD · work lanes).
  */
-import React, { useCallback, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SlidersHorizontal, X } from 'lucide-react';
 
 import {
   CHORD_BASS_SEQ_CHANNEL_BASE,
   CHORD_BASS_SEQ_CHANNEL_COUNT,
 } from '@/app/lib/creationStation/chordBassSequencerSession';
+import {
+  GrooveStyleTCapVolumeFader,
+  GrooveStyleTCapPanFader,
+  GrooveStyleTCapVolumeFaderStyles,
+} from '@/app/components/creation/GrooveStyleTCapVolumeFader';
 
 const PAN_STORAGE_KEY = 'groove-lab-channel-pans-v1';
 const GROOVE_MIXER_ACCENT = '#86efac';
@@ -52,25 +57,25 @@ function windowPansRef(): Record<number, number> {
 
 function stripAccent(
   ch: number,
-  bassChannel?: number,
   chordChannel?: number,
   melodyChannel?: number,
+  guitarChannel?: number,
 ): string {
-  if (ch === bassChannel) return '#93c5fd';
   if (ch === chordChannel) return '#86efac';
   if (ch === melodyChannel) return '#fbbf24';
+  if (guitarChannel != null && ch === guitarChannel) return '#f59e0b';
   return GROOVE_MIXER_ACCENT;
 }
 
 function stripSubtitle(
   ch: number,
-  bassChannel?: number,
   chordChannel?: number,
   melodyChannel?: number,
+  guitarChannel?: number,
 ): string {
-  if (ch === bassChannel) return 'SUB';
   if (ch === chordChannel) return 'CHORD';
-  if (ch === melodyChannel) return 'MELODY';
+  if (ch === melodyChannel) return 'GROOVE LEAD';
+  if (guitarChannel != null && ch === guitarChannel) return 'GUITAR';
   return `Lane ${ch - CHORD_BASS_SEQ_CHANNEL_BASE + 1}`;
 }
 
@@ -92,7 +97,6 @@ function GrooveLabChannelStrip({
   onPanChange: (v: number) => void;
 }) {
   const faderH = 140;
-  const fillPct = Math.max(0, Math.min(100, vol));
 
   return (
     <div
@@ -142,60 +146,20 @@ function GrooveLabChannelStrip({
         style={{
           position: 'relative',
           height: faderH,
+          display: 'flex',
+          alignItems: 'stretch',
+          justifyContent: 'center',
           borderRadius: 4,
-          background: 'rgba(0,0,0,0.35)',
-          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05)',
+          background: 'rgba(0,0,0,0.2)',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.04)',
         }}
       >
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: 10,
-            bottom: 14,
-            width: 3,
-            transform: 'translateX(-50%)',
-            borderRadius: 2,
-            background: '#0a0a12',
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,1)',
-          }}
-        />
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 14,
-            width: 3,
-            height: `${fillPct}%`,
-            maxHeight: 'calc(100% - 24px)',
-            transform: 'translateX(-50%)',
-            borderRadius: 2,
-            background: accent,
-            opacity: 0.55,
-            transition: 'height 0.04s',
-          }}
-        />
-        <input
-          type="range"
-          aria-label={`Channel ${ch} volume`}
-          min={0}
-          max={100}
-          step={1}
-          value={vol}
-          onChange={(e) => onVolumeChange(Number(e.target.value))}
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: '50%',
-            width: faderH - 20,
-            height: 32,
-            transform: 'translate(-50%, -50%) rotate(-90deg)',
-            accentColor: accent,
-            cursor: 'pointer',
-            zIndex: 2,
-          }}
+        <GrooveStyleTCapVolumeFader
+          channelId={ch}
+          volume={vol}
+          accent={accent}
+          onVolumeChange={onVolumeChange}
+          style={{ height: '100%', minHeight: faderH - 12, width: 22 }}
         />
       </div>
 
@@ -213,15 +177,11 @@ function GrooveLabChannelStrip({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={{ fontSize: 9, fontWeight: 800, color: '#6f7e8e', textAlign: 'center' }}>PAN</span>
-        <input
-          type="range"
-          aria-label={`Channel ${ch} pan`}
-          min={-100}
-          max={100}
-          step={1}
-          value={pan}
-          onChange={(e) => onPanChange(Number(e.target.value))}
-          style={{ width: '100%', accentColor: accent, cursor: 'pointer' }}
+        <GrooveStyleTCapPanFader
+          channelId={ch}
+          pan={pan}
+          accent={accent}
+          onPanChange={onPanChange}
         />
         <div style={{ fontSize: 9, fontWeight: 800, color: '#9aacbc', textAlign: 'center' }}>
           {pan === 0 ? 'C' : pan > 0 ? `R${pan}` : `L${-pan}`}
@@ -236,9 +196,9 @@ export type GrooveLabMixerPanelProps = {
   onClose: () => void;
   channelVolumes: Record<number, number>;
   setChannelVolume: (chId: number, volume: number) => void;
-  bassChannel?: number;
   chordChannel?: number;
   melodyChannel?: number;
+  guitarChannel?: number;
 };
 
 export function GrooveLabMixerPanel({
@@ -246,10 +206,11 @@ export function GrooveLabMixerPanel({
   onClose,
   channelVolumes,
   setChannelVolume,
-  bassChannel,
   chordChannel,
   melodyChannel,
+  guitarChannel,
 }: GrooveLabMixerPanelProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [panByCh, setPanByCh] = useState<Record<number, number>>({});
 
   const mergePansFromWindowAndStorage = useCallback(() => {
@@ -275,7 +236,34 @@ export function GrooveLabMixerPanel({
   useLayoutEffect(() => {
     if (!open) return;
     mergePansFromWindowAndStorage();
+    const el = scrollRef.current;
+    if (el) el.scrollLeft = 0;
   }, [open, mergePansFromWindowAndStorage]);
+
+  const channelIds = useMemo(
+    () =>
+      Array.from(
+        { length: CHORD_BASS_SEQ_CHANNEL_COUNT },
+        (_, i) => CHORD_BASS_SEQ_CHANNEL_BASE + i,
+      ),
+    [],
+  );
+
+  const workLaneIds = useMemo(() => {
+    const ids: number[] = [];
+    if (chordChannel != null) ids.push(chordChannel);
+    if (melodyChannel != null) ids.push(melodyChannel);
+    if (guitarChannel != null) ids.push(guitarChannel);
+    return ids;
+  }, [chordChannel, melodyChannel, guitarChannel]);
+
+  const extraLaneIds = useMemo(
+    () =>
+      channelIds.filter(
+        (ch) => ch !== chordChannel && ch !== melodyChannel && ch !== guitarChannel,
+      ),
+    [channelIds, chordChannel, melodyChannel, guitarChannel],
+  );
 
   const setPanForChannel = useCallback((chId: number, pan: number) => {
     const clamped = Math.max(-100, Math.min(100, Math.round(pan)));
@@ -287,14 +275,23 @@ export function GrooveLabMixerPanel({
     });
   }, []);
 
-  const channelIds = useMemo(
-    () =>
-      Array.from(
-        { length: CHORD_BASS_SEQ_CHANNEL_COUNT },
-        (_, i) => CHORD_BASS_SEQ_CHANNEL_BASE + i,
-      ),
-    [],
-  );
+  const renderStrip = (ch: number) => {
+    const vol = channelVolumes[ch] ?? 80;
+    const accent = stripAccent(ch, chordChannel, melodyChannel, guitarChannel);
+    const subtitle = stripSubtitle(ch, chordChannel, melodyChannel, guitarChannel);
+    return (
+      <GrooveLabChannelStrip
+        key={ch}
+        ch={ch}
+        accent={accent}
+        subtitle={subtitle}
+        vol={vol}
+        pan={panByCh[ch] ?? 0}
+        onVolumeChange={(v) => setChannelVolume(ch, v)}
+        onPanChange={(p) => setPanForChannel(ch, p)}
+      />
+    );
+  };
 
   if (!open) return null;
 
@@ -310,6 +307,7 @@ export function GrooveLabMixerPanel({
         minWidth: 520,
       }}
     >
+      <GrooveStyleTCapVolumeFaderStyles />
       <div
         style={{
           display: 'flex',
@@ -328,7 +326,7 @@ export function GrooveLabMixerPanel({
               GROOVE LAB MIXER
             </div>
             <div style={{ fontSize: 11, color: '#8a9aa4', marginTop: 3, lineHeight: 1.35 }}>
-              16 channels · CH 33–48 · SUB · CHORD · MELODY work lanes
+              CHORD · GROOVE LEAD pinned left · scroll → for CH 36–48 work lanes
             </div>
           </div>
         </div>
@@ -358,32 +356,43 @@ export function GrooveLabMixerPanel({
         </div>
       </div>
 
-      <div
-        style={{
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          WebkitOverflowScrolling: 'touch',
-          minHeight: 240,
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', gap: 8, padding: 14 }}>
-          {channelIds.map((ch) => {
-            const vol = channelVolumes[ch] ?? 80;
-            const accent = stripAccent(ch, bassChannel, chordChannel, melodyChannel);
-            const subtitle = stripSubtitle(ch, bassChannel, chordChannel, melodyChannel);
-            return (
-              <GrooveLabChannelStrip
-                key={ch}
-                ch={ch}
-                accent={accent}
-                subtitle={subtitle}
-                vol={vol}
-                pan={panByCh[ch] ?? 0}
-                onVolumeChange={(v) => setChannelVolume(ch, v)}
-                onPanChange={(p) => setPanForChannel(ch, p)}
-              />
-            );
-          })}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', minHeight: 240 }}>
+        <div
+          style={{
+            flex: '0 0 auto',
+            display: 'flex',
+            flexDirection: 'row',
+            gap: 8,
+            padding: '14px 10px 14px 14px',
+            borderRight: '1px solid rgba(134, 239, 172, 0.28)',
+            background: 'rgba(34, 197, 94, 0.06)',
+          }}
+        >
+          {workLaneIds.map((ch) => renderStrip(ch))}
+        </div>
+        <div
+          ref={scrollRef}
+          className="groove-lab-mixer-scroll"
+          style={{
+            flex: '1 1 auto',
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            WebkitOverflowScrolling: 'touch',
+            minWidth: 0,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'stretch',
+              gap: 8,
+              padding: '14px 14px 14px 10px',
+              width: 'max-content',
+            }}
+          >
+            {extraLaneIds.map((ch) => renderStrip(ch))}
+          </div>
         </div>
       </div>
     </div>

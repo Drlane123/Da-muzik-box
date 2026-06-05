@@ -10,6 +10,9 @@ import {
 } from '@/app/lib/padSampleStorage';
 
 export type BeatLabProducerKitId =
+  | 'trapDarkVault'
+  | 'trapSlabAtl'
+  | 'trapTrunk808'
   | 'brassTrap'
   | 'long808Hits'
   | 'trapClapStack'
@@ -28,6 +31,7 @@ export type BeatLabProducerKitId =
   | 'mudFloor';
 
 const SMPLDSNDS_BASE = 'https://smpldsnds.github.io/drum-machines';
+const BUNDLED_SAMPLE_BASE = '/samples/sound-families/';
 
 export const BEAT_LAB_PRODUCER_KIT_ATTRIBUTION =
   'Drum one-shots: smpldsnds/drum-machines (public domain).';
@@ -35,7 +39,10 @@ export const BEAT_LAB_PRODUCER_KIT_ATTRIBUTION =
 export interface BeatLabProducerPadDef {
   /** Beat Lab pad 0–15 (Kick … SUB BASS). */
   pad: number;
-  relUrl: string;
+  /** smpldsnds CDN path (when `localFile` is omitted). */
+  relUrl?: string;
+  /** Bundled WAV under `public/samples/sound-families/` — offline trap kits. */
+  localFile?: string;
   /** Shown in sampler + sequencer lane. */
   label: string;
   /** Optional punch / tune shaping when the kit loads. */
@@ -53,6 +60,26 @@ export interface BeatLabProducerKitMeta {
 function u(rel: string): string {
   return `${SMPLDSNDS_BASE}/${rel}`;
 }
+
+function padDefUrl(def: BeatLabProducerPadDef): string {
+  if (def.localFile) {
+    return `${BUNDLED_SAMPLE_BASE}${def.localFile.replace(/^\//, '')}`;
+  }
+  if (!def.relUrl) throw new Error(`Pad ${def.pad} missing relUrl/localFile`);
+  return u(def.relUrl);
+}
+
+/** Pattern Bank + default banks A–H — flagship kit order (Trap → R&B → Dance). */
+export const BEAT_LAB_FLAGSHIP_KIT_ORDER: readonly BeatLabProducerKitId[] = [
+  'trapDarkVault',
+  'trapSlabAtl',
+  'trapTrunk808',
+  'smoothRnb',
+  'rnbVelvetBloom',
+  'rnbNeoStack',
+  'houseDrive',
+  'clubPocket',
+] as const;
 
 const LOUD_KICK: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.38, fineSemi: 0 };
 const LOUD_SUB: Partial<PadSamplerPlaybackOpts> = {
@@ -98,6 +125,72 @@ const LONG_808_SUB: Partial<PadSamplerPlaybackOpts> = {
 const CLICK_808: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.4, fineSemi: 0 };
 const CLAP_HIT: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.36 };
 const CLAP_STACK: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.32 };
+
+/**
+ * Flagship trap kits — bundled Lex-style one-shots (public/samples/sound-families/trap-kit/).
+ * Pad map: Kick / Snare / Clap / CH / OH / TomHi / TomLo / Rim / Perc×2 / Crash / Ride / Shaker / Cow / Snap / SUB.
+ */
+const KIT_TRAP_DARK_VAULT: readonly BeatLabProducerPadDef[] = [
+  { pad: 0, localFile: 'trap-kit/kick/heavy-kick-lv1.wav', label: 'Dark kick', sampler: HEAVY_KICK },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Trap snare', sampler: PUNCH_SNARE },
+  { pad: 2, localFile: 'trap-kit/clap/trapaholic-clap-1-1.wav', label: 'Clap main', sampler: CLAP_HIT },
+  { pad: 3, localFile: 'trap-kit/hihat/trapaholic-hihat-3.wav', label: 'CH tight' },
+  { pad: 4, localFile: 'trap-kit/open-hat/ddw2-open-hat-6-1.wav', label: 'Open hat' },
+  { pad: 5, localFile: 'trap-kit/808-sub/deedotluger-808-1.wav', label: '808 body', sampler: LONG_808_BODY },
+  { pad: 6, localFile: 'trap-kit/kick/rack-kick.wav', label: 'Click kick', sampler: CLICK_808 },
+  { pad: 7, localFile: 'trap-kit/snare/snare-54.wav', label: 'Rim snap', sampler: { triggerSnap: 0.32 } },
+  { pad: 8, localFile: 'trap-kit/perc2/percs-6.wav', label: 'Perc hit' },
+  { pad: 9, localFile: 'trap-kit/clap/deedotluger-clap-5.wav', label: 'Clap stack', sampler: CLAP_STACK },
+  { pad: 10, localFile: 'trap-kit/cymbal/crash_lex-1.wav', label: 'Crash' },
+  { pad: 11, localFile: 'trap-kit/cymbal/ddw2-crash-1.wav', label: 'Cym ride' },
+  { pad: 12, localFile: 'trap-kit/perc2/bongo4-1.wav', label: 'Shaker perc' },
+  { pad: 13, localFile: 'trap-kit/cymbal/trap-crash-3.wav', label: 'Accent' },
+  { pad: 14, localFile: 'trap-kit/snare/solidasssnare.wav', label: 'Snap snare', sampler: { triggerSnap: 0.28 } },
+  {
+    pad: 15,
+    localFile: 'trap-kit/808-sub/system-in-da-trunk-bass-1.wav',
+    label: '808 SUB',
+    sampler: LONG_808_SUB,
+  },
+];
+
+const KIT_TRAP_SLAB_ATL: readonly BeatLabProducerPadDef[] = [
+  { pad: 0, localFile: 'trap-kit/kick/kick-atl.wav', label: 'ATL kick', sampler: HEAVY_KICK },
+  { pad: 1, localFile: 'trap-kit/snare/deedotluger-snare-6-1.wav', label: 'Slab snare', sampler: PUNCH_SNARE },
+  { pad: 2, localFile: 'trap-kit/clap/jc---clap-2-1.wav', label: 'Clap', sampler: CLAP_HIT },
+  { pad: 3, localFile: 'trap-kit/hihat/ddw2-hat-1.wav', label: 'CH' },
+  { pad: 4, localFile: 'trap-kit/open-hat/ddw2-open-hat-1-1.wav', label: 'OH' },
+  { pad: 5, localFile: 'trap-kit/808-sub/808-atl.wav', label: '808 ATL', sampler: LONG_808_BODY },
+  { pad: 6, localFile: 'trap-kit/kick/drumma-boy-kick.wav', label: 'Kick layer', sampler: CLICK_808 },
+  { pad: 7, localFile: 'trap-kit/snare/snare-6.wav', label: 'Rim' },
+  { pad: 8, localFile: 'trap-kit/perc/stab2-19-1.wav', label: 'Perc stab' },
+  { pad: 9, localFile: 'trap-kit/clap/deedotluger-clap-3-1.wav', label: 'Clap 2', sampler: CLAP_STACK },
+  { pad: 10, localFile: 'trap-kit/cymbal/deedotluger-crash-3-1.wav', label: 'Crash' },
+  { pad: 11, localFile: 'trap-kit/cymbal/zay-cym-13.wav', label: 'Ride' },
+  { pad: 12, localFile: 'trap-kit/hihat/trapaholic-hihat-20.wav', label: 'Hat shake' },
+  { pad: 13, localFile: 'trap-kit/perc/hit_ctim_c4-1.wav', label: 'Cow hit' },
+  { pad: 14, localFile: 'trap-kit/snare/trapaholic-snare-13-1.wav', label: 'Snap', sampler: { triggerSnap: 0.26 } },
+  { pad: 15, localFile: 'trap-kit/808-sub/ll_808_g_cyborg.wav', label: '808 SUB', sampler: LONG_808_SUB },
+];
+
+const KIT_TRAP_TRUNK_808: readonly BeatLabProducerPadDef[] = [
+  { pad: 0, localFile: 'trap-kit/kick/deedotluger-kick-7.wav', label: '808 kick', sampler: LONG_808_KICK },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare-2-1.wav', label: 'Trap snare', sampler: PUNCH_SNARE },
+  { pad: 2, localFile: 'trap-kit/clap/trapaholic-clap-14-1.wav', label: 'Clap', sampler: CLAP_HIT },
+  { pad: 3, localFile: 'trap-kit/hihat/trapaholic-hihat-23.wav', label: 'CH' },
+  { pad: 4, localFile: 'trap-kit/open-hat/deedotluger-open-hat-6.wav', label: 'OH' },
+  { pad: 5, localFile: 'trap-kit/808-sub/deedotluger-808-13.wav', label: '808 long', sampler: LONG_808_BODY },
+  { pad: 6, localFile: 'trap-kit/kick/cts_kick2.wav', label: 'Kick click', sampler: CLICK_808 },
+  { pad: 7, localFile: 'trap-kit/snare/new-snare.wav', label: 'Rim hit' },
+  { pad: 8, localFile: 'trap-kit/fx/cyborg-riser.wav', label: 'FX rise' },
+  { pad: 9, localFile: 'trap-kit/clap/trapaholic-clap-21-1.wav', label: 'Clap stack', sampler: CLAP_STACK },
+  { pad: 10, localFile: 'trap-kit/cymbal/orch-crash-1.wav', label: 'Crash' },
+  { pad: 11, localFile: 'trap-kit/cymbal/b.k-bangerz--orchestra-crash.wav', label: 'Orch cym' },
+  { pad: 12, localFile: 'trap-kit/hihat/shawty-redd-hat-1.wav', label: 'Shaker hat' },
+  { pad: 13, localFile: 'trap-kit/perc2/triangle-2-1.wav', label: 'Bell perc' },
+  { pad: 14, localFile: 'trap-kit/snare/drumma-boy-snare.wav', label: 'Snap sn', sampler: { triggerSnap: 0.28 } },
+  { pad: 15, localFile: 'trap-kit/808-sub/trunk-808-1.wav', label: '808 SUB', sampler: LONG_808_SUB },
+];
 
 /**
  * Brass Trap — trap drum-folder layout: long 808 on kick + sub, claps, snare, hats, hits.
@@ -449,6 +542,54 @@ const KIT_MUD_FLOOR: readonly BeatLabProducerPadDef[] = [
 
 const KITS: readonly BeatLabProducerKitMeta[] = [
   {
+    id: 'trapDarkVault',
+    title: 'Trap · Dark Vault',
+    tribute: 'Built-in dark trap — heavy kick, trunk 808, stacked claps.',
+    pads: KIT_TRAP_DARK_VAULT,
+  },
+  {
+    id: 'trapSlabAtl',
+    title: 'Trap · ATL Slab',
+    tribute: 'ATL-style slab trap — punch kick, cyborg sub, crisp hats.',
+    pads: KIT_TRAP_SLAB_ATL,
+  },
+  {
+    id: 'trapTrunk808',
+    title: 'Trap · Trunk 808',
+    tribute: 'Trunk-rattle 808s — long sub tails for modern trap patterns.',
+    pads: KIT_TRAP_TRUNK_808,
+  },
+  {
+    id: 'smoothRnb',
+    title: 'R&B · Smooth Pocket',
+    tribute: 'Soft knock + ghosts — Pocket Session crew (R&B pattern pair).',
+    pads: KIT_SMOOTH_RNB,
+  },
+  {
+    id: 'rnbVelvetBloom',
+    title: 'R&B · Velvet Bloom',
+    tribute: 'Silk hats + pocket kick — Velvet Bloom crew.',
+    pads: KIT_RNB_VELVET_BLOOM,
+  },
+  {
+    id: 'rnbNeoStack',
+    title: 'R&B · Neo Stack',
+    tribute: 'Neo-soul body + shaker air — Neon Stack Sessions.',
+    pads: KIT_RNB_NEO_STACK,
+  },
+  {
+    id: 'houseDrive',
+    title: 'Dance · House Drive',
+    tribute: 'Four-on-pocket + slick hats — Night Avenue house stack.',
+    pads: KIT_HOUSE_DRIVE,
+  },
+  {
+    id: 'clubPocket',
+    title: 'Dance · Club Pocket',
+    tribute: 'Thanks, Lowline Bounce — for the pocket and the bounce.',
+    pads: KIT_CLUB_POCKET,
+  },
+  {
     id: 'brassTrap',
     title: 'Brass Trap',
     tribute: 'Long 808s + claps + hits — built-in crew pack.',
@@ -471,36 +612,6 @@ const KITS: readonly BeatLabProducerKitMeta[] = [
     title: 'Trap Analog Room',
     tribute: '808 drums + analog toms/congas — for perc-forward trap grooves.',
     pads: KIT_TRAP_ANALOG_ROOM,
-  },
-  {
-    id: 'clubPocket',
-    title: 'Club Pocket',
-    tribute: 'Thanks, Lowline Bounce — for the pocket and the bounce.',
-    pads: KIT_CLUB_POCKET,
-  },
-  {
-    id: 'smoothRnb',
-    title: 'Smooth R&B Pocket',
-    tribute: 'Soft knock + ghosts — Pocket Session crew (R&B pattern pair).',
-    pads: KIT_SMOOTH_RNB,
-  },
-  {
-    id: 'rnbVelvetBloom',
-    title: 'R&B Velvet Bloom',
-    tribute: 'Silk hats + pocket kick — Velvet Bloom crew.',
-    pads: KIT_RNB_VELVET_BLOOM,
-  },
-  {
-    id: 'rnbNeoStack',
-    title: 'R&B Neo Stack',
-    tribute: 'Neo-soul body + shaker air — Neon Stack Sessions.',
-    pads: KIT_RNB_NEO_STACK,
-  },
-  {
-    id: 'houseDrive',
-    title: 'House Drive',
-    tribute: 'Four-on-pocket + slick hats — Night Avenue house stack.',
-    pads: KIT_HOUSE_DRIVE,
   },
   {
     id: 'nightSub',
@@ -579,8 +690,15 @@ function mergeSamplerOpts(partial?: Partial<PadSamplerPlaybackOpts>): PadSampler
   };
 }
 
-/** Fetch + decode all pads for a crew kit. Skips failed URLs. */
-export async function loadBeatLabProducerKitPads(
+type ProducerKitCacheEntry = {
+  state: 'loading' | 'ready' | 'failed';
+  pads: LoadedBeatLabProducerPad[];
+  readyPromise: Promise<LoadedBeatLabProducerPad[]>;
+};
+
+const producerKitCache = new Map<BeatLabProducerKitId, ProducerKitCacheEntry>();
+
+async function fetchProducerKitPadsUncached(
   id: BeatLabProducerKitId,
   ctx: BaseAudioContext,
 ): Promise<LoadedBeatLabProducerPad[]> {
@@ -590,7 +708,7 @@ export async function loadBeatLabProducerKitPads(
   await Promise.all(
     meta.pads.map(async (def) => {
       try {
-        const buffer = await fetchAndDecode(u(def.relUrl), ctx);
+        const buffer = await fetchAndDecode(padDefUrl(def), ctx);
         out.push({
           pad: def.pad,
           buffer,
@@ -604,4 +722,42 @@ export async function loadBeatLabProducerKitPads(
   );
   out.sort((a, b) => a.pad - b.pad);
   return out;
+}
+
+function startLoadProducerKit(id: BeatLabProducerKitId, ctx: BaseAudioContext): ProducerKitCacheEntry {
+  const entry: ProducerKitCacheEntry = {
+    state: 'loading',
+    pads: [],
+    readyPromise: Promise.resolve([]),
+  };
+  producerKitCache.set(id, entry);
+  entry.readyPromise = (async () => {
+    const pads = await fetchProducerKitPadsUncached(id, ctx);
+    entry.pads = pads;
+    entry.state = pads.length > 0 ? 'ready' : 'failed';
+    if (entry.state === 'failed') producerKitCache.delete(id);
+    return pads;
+  })();
+  return entry;
+}
+
+/** Fetch + decode all pads for a crew kit (cached in memory after first load). */
+export function ensureBeatLabProducerKitLoaded(
+  id: BeatLabProducerKitId,
+  ctx: BaseAudioContext,
+): Promise<LoadedBeatLabProducerPad[]> {
+  const cached = producerKitCache.get(id);
+  if (cached) {
+    if (cached.state === 'ready') return Promise.resolve(cached.pads);
+    return cached.readyPromise;
+  }
+  return startLoadProducerKit(id, ctx).readyPromise;
+}
+
+/** @deprecated Prefer {@link ensureBeatLabProducerKitLoaded} — same behavior, uses cache. */
+export async function loadBeatLabProducerKitPads(
+  id: BeatLabProducerKitId,
+  ctx: BaseAudioContext,
+): Promise<LoadedBeatLabProducerPad[]> {
+  return ensureBeatLabProducerKitLoaded(id, ctx);
 }

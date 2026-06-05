@@ -21,6 +21,9 @@
  */
 
 import { BEATLAB_EXPANDED_DRUM_PRESETS } from '@/app/lib/patternPresetsBeatLabExpandedDrums';
+import { BEAT_LAB_FLAGSHIP_DRUM_PATTERNS } from '@/app/lib/creationStation/beatLabFlagshipPatternPresets';
+import { BEAT_LAB_SIGNATURE_TRAP_PATTERNS } from '@/app/lib/creationStation/beatLabSignatureTrapPatterns';
+import { beatLabTrapTransportBpmFromProducer } from '@/app/lib/creationStation/beatLabTrapTempo';
 
 const R = 8;   // rows
 const S = 16;  // steps per bar
@@ -86,16 +89,28 @@ const DRUM_PRESET_BPM: Readonly<Record<string, number>> = {
   'dance-9': 120, 'dance-10': 130, 'dance-11': 124, 'dance-12': 128,
   'dance-13': 122, 'dance-14': 124,
   'country-1': 112,
+  'trap-flag-dark-vault': 140, 'trap-flag-atl-slab': 142, 'trap-flag-trunk808': 145,
+  'rnb-flag-smooth': 88, 'rnb-flag-velvet': 90, 'rnb-flag-neo': 94,
+  'dance-flag-house': 124, 'dance-flag-club': 126, 'dance-flag-lift': 128,
 };
 
-/** Resolve and clamp the tempo Beat Lab should use when loading a preset. */
-export function getPatternPresetBpm(preset: PatternPreset): number {
+/** Resolve producer-grid / authored tempo (before trap half-time conversion). */
+export function getPatternPresetProducerGridBpm(preset: PatternPreset): number {
   const raw =
     preset.bpm ??
     (preset.role === 'drums' ? DRUM_PRESET_BPM[preset.id] : undefined) ??
     GENRE_DEFAULT_BPM[preset.genre] ??
     120;
   return Math.max(40, Math.min(240, Math.round(raw)));
+}
+
+/** Resolve and clamp the tempo Beat Lab transport uses when loading a preset. */
+export function getPatternPresetBpm(preset: PatternPreset): number {
+  const producer = getPatternPresetProducerGridBpm(preset);
+  if (preset.genre === 'Trap' && preset.role === 'drums') {
+    return beatLabTrapTransportBpmFromProducer(producer);
+  }
+  return producer;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -845,8 +860,13 @@ const BEATLAB_EXPANDED_DRUMS_AS_PATTERN: PatternPreset[] = BEATLAB_EXPANDED_DRUM
   role: 'drums' as const,
 }));
 
-/** Core + Beat Lab expansions — single drum list for Pattern Bank & preset browser. */
-const ALL_DRUM_PATTERN_SRC: PatternPreset[] = [...DRUM_PRESETS, ...BEATLAB_EXPANDED_DRUMS_AS_PATTERN];
+/** Core + signature trap + flagship kit pairs + Beat Lab expansions — single drum list for Pattern Bank. */
+const ALL_DRUM_PATTERN_SRC: PatternPreset[] = [
+  ...BEAT_LAB_SIGNATURE_TRAP_PATTERNS,
+  ...BEAT_LAB_FLAGSHIP_DRUM_PATTERNS,
+  ...DRUM_PRESETS,
+  ...BEATLAB_EXPANDED_DRUMS_AS_PATTERN,
+];
 
 /** All hand-crafted drum grids for Beat Lab Pattern Bank + AI Pattern. */
 export const DRUM_PATTERN_PRESETS: ReadonlyArray<PatternPreset> = ALL_DRUM_PATTERN_SRC;

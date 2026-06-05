@@ -832,6 +832,19 @@ export function generateMelodyPattern(
   return grid;
 }
 
+/** Curated 16th-note rhythm template for Groove Lab melody / riff composer. */
+export function groovePatternMelodyRhythm(style: string, seed: number): readonly number[] {
+  const styleId = normalizeStyle(style);
+  const rng = mulberry32(seed);
+  const rhythms = MELODY_RHYTHMS[styleId];
+  return rhythms[Math.floor(rng() * rhythms.length)]!;
+}
+
+/** Scale-degree row pool paired with {@link groovePatternMelodyRhythm}. */
+export function groovePatternMelodyDegreePool(style: string): readonly number[] {
+  return NOTE_POOLS[normalizeStyle(style)];
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // Pad / Strings / Brass generator
 // ──────────────────────────────────────────────────────────────────────

@@ -1,33 +1,62 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { GrooveOctaveShiftButtons } from '@/app/components/creation/GrooveOctaveShiftButtons';
 import type { GrooveComposerPart } from '@/app/lib/creationStation/grooveComposerEngine';
-import { GROOVE_LAB_808_SUBROOTS_BANK_LABEL } from '@/app/lib/creationStation/grooveLabBranding';
+import { loadGuitarLickManifest } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
 import { GROOVE_LAB_REGISTER_LABELS } from '@/app/lib/creationStation/grooveLabPitch';
-import type { GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
-import { GROOVE_LAB_BASS_SOUND_GROUPS, GROOVE_LAB_BASS_SOUNDS } from '@/app/lib/creationStation/grooveLabBassSounds';
+import { GROOVE_LAB_QUANTIZE_OPTIONS, type GrooveLabQuantize } from '@/app/lib/creationStation/grooveLabRoll';
+import {
+  getGrooveLabSampleLickGroup,
+  GROOVE_LAB_LEAD_SOUND_GROUPS,
+  GROOVE_LAB_LEAD_SOUNDS,
+  GROOVE_LAB_RNB_SINE_GLIDE_MS,
+  GROOVE_LAB_RNB_SINE_LFO_DEPTH_CENTS,
+  GROOVE_LAB_RNB_SINE_LFO_RATE_HZ,
+  GROOVE_LAB_RNB_SINE_UI_ENABLED,
+  grooveLabSampleLickLabel,
+  type GrooveLabAnyLeadSoundId,
+} from '@/app/lib/creationStation/grooveLabLeadSounds';
 
 export interface GrooveLabComposerPanelProps {
   grooveBranding?: boolean;
-  /** Preview timbre for melody/riff/arp (guitar / pluck presets). */
-  melodySoundId: GrooveLabBassSoundId;
-  onMelodySoundChange: (id: GrooveLabBassSoundId) => void;
+  /** Preview timbre for melody/riff/arp (guitar / pluck / sample lick presets). */
+  melodySoundId: GrooveLabAnyLeadSoundId;
+  onMelodySoundChange: (id: GrooveLabAnyLeadSoundId) => void;
   complexity: number;
   onComplexityChange: (v: number) => void;
+  melodyRate: GrooveLabQuantize;
+  onMelodyRateChange?: (v: GrooveLabQuantize) => void;
+  riffRate: GrooveLabQuantize;
+  onRiffRateChange?: (v: GrooveLabQuantize) => void;
+  arpRate: GrooveLabQuantize;
+  onArpRateChange?: (v: GrooveLabQuantize) => void;
+  wahAmount?: number;
+  onWahAmountChange?: (v: number) => void;
+  wahRateHz?: number;
+  onWahRateHzChange?: (v: number) => void;
+  drive?: number;
+  onDriveChange?: (v: number) => void;
+  distortion?: number;
+  onDistortionChange?: (v: number) => void;
+  glideMs?: number;
+  onGlideMsChange?: (v: number) => void;
+  lfoRateHz?: number;
+  onLfoRateHzChange?: (v: number) => void;
+  lfoDepthCents?: number;
+  onLfoDepthCentsChange?: (v: number) => void;
+  melodyGridEnabled?: boolean;
+  onMelodyGridEnabledChange?: (on: boolean) => void;
+  riffGridEnabled?: boolean;
+  onRiffGridEnabledChange?: (on: boolean) => void;
+  linkedChordVolume?: number;
+  onLinkedChordVolumeChange?: (v: number) => void;
   onGeneratePart: (part: GrooveComposerPart) => void;
   onLockChords: () => void;
   chordColumnCount: number;
   melodyNoteCount: number;
-  subRootNoteCount?: number;
-  onClearAllSubRoots?: () => void;
-  onSubOctaveDown?: () => void;
-  onSubOctaveUp?: () => void;
   melodyLayerNoteCount?: number;
+  onClearAllMelody?: () => void;
   onMelodyOctaveDown?: () => void;
   onMelodyOctaveUp?: () => void;
-  onRegenerateSubGuide?: () => void;
-  onAuditionSubGuide?: () => void;
-  onPushSubGuideToRoll?: () => void;
-  subGuideStepCount?: number;
 }
 
 const selectStyle: CSSProperties = {
@@ -58,25 +87,58 @@ export function GrooveLabComposerPanel({
   onMelodySoundChange,
   complexity,
   onComplexityChange,
+  melodyRate,
+  onMelodyRateChange,
+  riffRate,
+  onRiffRateChange,
+  arpRate,
+  onArpRateChange,
+  wahAmount = 0.55,
+  onWahAmountChange,
+  wahRateHz = 2.2,
+  onWahRateHzChange,
+  drive = 0.3,
+  onDriveChange,
+  distortion = 0.22,
+  onDistortionChange,
+  glideMs = GROOVE_LAB_RNB_SINE_GLIDE_MS,
+  onGlideMsChange,
+  lfoRateHz = GROOVE_LAB_RNB_SINE_LFO_RATE_HZ,
+  onLfoRateHzChange,
+  lfoDepthCents = GROOVE_LAB_RNB_SINE_LFO_DEPTH_CENTS,
+  onLfoDepthCentsChange,
+  melodyGridEnabled = true,
+  onMelodyGridEnabledChange,
+  riffGridEnabled = false,
+  onRiffGridEnabledChange,
+  linkedChordVolume = 0.75,
+  onLinkedChordVolumeChange,
   onGeneratePart,
   onLockChords,
   chordColumnCount,
   melodyNoteCount,
-  subRootNoteCount = 0,
-  onClearAllSubRoots,
-  onSubOctaveDown,
-  onSubOctaveUp,
   melodyLayerNoteCount = 0,
+  onClearAllMelody,
   onMelodyOctaveDown,
   onMelodyOctaveUp,
-  onRegenerateSubGuide,
-  onAuditionSubGuide,
-  onPushSubGuideToRoll,
-  subGuideStepCount = 0,
 }: GrooveLabComposerPanelProps) {
   const chordBrand = grooveBranding ? 'Groove' : 'Orchid';
   const hasChords = chordColumnCount > 0;
   const disabled = !hasChords;
+  const [soundGroups, setSoundGroups] = useState(() => [...GROOVE_LAB_LEAD_SOUND_GROUPS]);
+
+  useEffect(() => {
+    void loadGuitarLickManifest().then(() => {
+      const sampleGroup = getGrooveLabSampleLickGroup();
+      if (sampleGroup.ids.length === 0) return;
+      setSoundGroups([...GROOVE_LAB_LEAD_SOUND_GROUPS, sampleGroup]);
+    });
+  }, []);
+
+  const leadSoundLabel = (id: GrooveLabAnyLeadSoundId): string => {
+    const synth = GROOVE_LAB_LEAD_SOUNDS.find((x) => x.id === id);
+    return synth?.label ?? grooveLabSampleLickLabel(id) ?? id;
+  };
 
   return (
     <div
@@ -100,22 +162,19 @@ export function GrooveLabComposerPanel({
           SOUND
           <select
             value={melodySoundId}
-            onChange={(e) => onMelodySoundChange(e.target.value as GrooveLabBassSoundId)}
+            onChange={(e) => onMelodySoundChange(e.target.value as GrooveLabAnyLeadSoundId)}
             style={selectStyle}
             title="Melody / riff preview timbre"
           >
-            {GROOVE_LAB_BASS_SOUND_GROUPS.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.ids.map((id) => {
-                    const s = GROOVE_LAB_BASS_SOUNDS.find((x) => x.id === id);
-                    return (
-                      <option key={id} value={id}>
-                        {s?.label ?? id}
-                      </option>
-                    );
-                  })}
-                </optgroup>
-              ))}
+            {soundGroups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.ids.map((id) => (
+                  <option key={id} value={id}>
+                    {leadSoundLabel(id)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 8, color: '#6b7280' }}>
@@ -130,7 +189,157 @@ export function GrooveLabComposerPanel({
           />
           <span style={{ color: '#fbbf24', fontWeight: 800, minWidth: 24 }}>{Math.round(complexity * 100)}%</span>
         </label>
+        <button
+          type="button"
+          onClick={() => onMelodyGridEnabledChange?.(!melodyGridEnabled)}
+          style={{
+            ...btnStyle(melodyGridEnabled ? '#fde68a' : '#9ca3af', melodyGridEnabled ? '#ca8a04aa' : '#374151'),
+            padding: '3px 8px',
+            fontSize: 7,
+          }}
+          title={
+            melodyGridEnabled
+              ? 'Fast subdivided melody (uses MELODY RATE below)'
+              : 'Simple melody — one note per chord, no 16th runs'
+          }
+        >
+          MELODY GRID {melodyGridEnabled ? 'ON' : 'OFF'}
+        </button>
+        {melodyGridEnabled ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#6b7280' }}>
+            MELODY RATE
+            <select
+              value={melodyRate}
+              onChange={(e) => onMelodyRateChange?.(e.target.value as GrooveLabQuantize)}
+              style={selectStyle}
+              title="Subdivision when you press MELODY"
+            >
+              {GROOVE_LAB_QUANTIZE_OPTIONS.map((q) => (
+                <option key={`melody-${q}`} value={q}>
+                  {q}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onRiffGridEnabledChange?.(!riffGridEnabled)}
+          style={{
+            ...btnStyle(riffGridEnabled ? '#fcd34d' : '#9ca3af', riffGridEnabled ? '#eab308aa' : '#374151'),
+            padding: '3px 8px',
+            fontSize: 7,
+          }}
+          title="Enable riff generator subdivisions"
+        >
+          RIFF GRID {riffGridEnabled ? 'ON' : 'OFF'}
+        </button>
+        {riffGridEnabled ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#6b7280' }}>
+            RIFF RATE
+            <select
+              value={riffRate}
+              onChange={(e) => onRiffRateChange?.(e.target.value as GrooveLabQuantize)}
+              style={selectStyle}
+              title="Subdivision when you press RIFF"
+            >
+              {GROOVE_LAB_QUANTIZE_OPTIONS.map((q) => (
+                <option key={`riff-${q}`} value={q}>
+                  {q}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#6b7280' }}>
+          ARP RATE
+          <select
+            value={arpRate}
+            onChange={(e) => onArpRateChange?.(e.target.value as GrooveLabQuantize)}
+            style={selectStyle}
+            title="Arpeggio note rate"
+          >
+            {GROOVE_LAB_QUANTIZE_OPTIONS.map((q) => (
+              <option key={`arp-${q}`} value={q}>
+                {q}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      {GROOVE_LAB_RNB_SINE_UI_ENABLED ? (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+          marginBottom: 6,
+          padding: '6px 8px',
+          borderRadius: 6,
+          border: '1px solid #422006',
+          background: '#0a0e14',
+        }}
+      >
+        <span style={{ fontSize: 7, fontWeight: 900, color: '#d97706', letterSpacing: 0.4 }}>
+          R&B SINE
+        </span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#9ca3af' }}>
+          GLIDE
+          <input
+            type="range"
+            min={0}
+            max={480}
+            value={Math.round(glideMs)}
+            onChange={(e) => onGlideMsChange?.(Number(e.target.value))}
+            style={{ width: 88, accentColor: '#fbbf24' }}
+            title="Portamento — slides pitch between melody notes (80s/90s urban sine lead)"
+          />
+          <span style={{ color: '#fde68a', minWidth: 34 }}>{Math.round(glideMs)}ms</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#9ca3af' }}>
+          VIB RATE
+          <input
+            type="range"
+            min={0}
+            max={80}
+            step={1}
+            value={Math.round(lfoRateHz * 10)}
+            onChange={(e) => onLfoRateHzChange?.(Number(e.target.value) / 10)}
+            style={{ width: 72, accentColor: '#c4b5fd' }}
+            title="Pitch LFO speed (Hz) — ~5 Hz is classic R&B vibrato"
+          />
+          <span style={{ color: '#e9d5ff', minWidth: 28 }}>{lfoRateHz.toFixed(1)}Hz</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 8, color: '#9ca3af' }}>
+          VIB DEPTH
+          <input
+            type="range"
+            min={0}
+            max={24}
+            value={Math.round(lfoDepthCents)}
+            onChange={(e) => onLfoDepthCentsChange?.(Number(e.target.value))}
+            style={{ width: 72, accentColor: '#c4b5fd' }}
+            title="Vibrato depth in cents — subtle 7–12 for silk urban lead"
+          />
+          <span style={{ color: '#e9d5ff', minWidth: 22 }}>{Math.round(lfoDepthCents)}¢</span>
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            onMelodySoundChange('sinePureLead');
+            onGlideMsChange?.(GROOVE_LAB_RNB_SINE_GLIDE_MS);
+            onLfoRateHzChange?.(GROOVE_LAB_RNB_SINE_LFO_RATE_HZ);
+            onLfoDepthCentsChange?.(GROOVE_LAB_RNB_SINE_LFO_DEPTH_CENTS);
+          }}
+          style={btnStyle('#fde68a', '#ca8a04aa')}
+          title="R&B sine lead — mono glide + triangle warmth + ~5 Hz vibrato (Jodeci / Pure Sine style)"
+        >
+          80s/90s R&B
+        </button>
+      </div>
+      ) : null}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
         <button
@@ -198,79 +407,20 @@ export function GrooveLabComposerPanel({
             upTitle="All amber melody / riff notes — up one octave"
           />
         ) : null}
-        {onSubOctaveDown && onSubOctaveUp ? (
-          <GrooveOctaveShiftButtons
-            layerLabel="SUB"
-            accentColor="#fb923c"
-            borderColor="#ea580c"
-            noteCount={subRootNoteCount}
-            onOctaveDown={onSubOctaveDown}
-            onOctaveUp={onSubOctaveUp}
-            downTitle="All blue 808 sub roots — down one octave"
-            upTitle="All blue 808 sub roots — up one octave"
-          />
-        ) : null}
-        {onRegenerateSubGuide ? (
+        {onClearAllMelody ? (
           <button
             type="button"
-            disabled={disabled}
-            onClick={onRegenerateSubGuide}
+            disabled={melodyLayerNoteCount === 0}
+            onClick={onClearAllMelody}
             style={{
-              ...btnStyle('#93c5fd', '#3b82f666'),
-              opacity: disabled ? 0.45 : 1,
-              cursor: disabled ? 'not-allowed' : 'pointer',
+              ...btnStyle('#fbbf24', '#b45309aa'),
+              opacity: melodyLayerNoteCount === 0 ? 0.45 : 1,
+              cursor: melodyLayerNoteCount === 0 ? 'not-allowed' : 'pointer',
               fontSize: 7,
             }}
-            title="Light orange sub keys on the 808 keypad (does not write the roll)"
+            title="Remove all amber melody / riff / arp notes from every channel — keeps green chords"
           >
-            LIGHT SUB KEYS
-          </button>
-        ) : null}
-        {onAuditionSubGuide ? (
-          <button
-            type="button"
-            disabled={disabled || subGuideStepCount === 0}
-            onClick={onAuditionSubGuide}
-            style={{
-              ...btnStyle('#67e8f9', '#22d3ee55'),
-              opacity: disabled || subGuideStepCount === 0 ? 0.45 : 1,
-              cursor: disabled || subGuideStepCount === 0 ? 'not-allowed' : 'pointer',
-              fontSize: 7,
-            }}
-          >
-            HEAR SUB PATH
-          </button>
-        ) : null}
-        {onPushSubGuideToRoll ? (
-          <button
-            type="button"
-            disabled={disabled || subGuideStepCount === 0}
-            onClick={onPushSubGuideToRoll}
-            style={{
-              ...btnStyle('#fb923c', '#ea580c88'),
-              opacity: disabled || subGuideStepCount === 0 ? 0.45 : 1,
-              cursor: disabled || subGuideStepCount === 0 ? 'not-allowed' : 'pointer',
-              fontSize: 7,
-            }}
-            title="Optional — write the lit sub path to the blue roll lane"
-          >
-            PUSH SUBS
-          </button>
-        ) : null}
-        {onClearAllSubRoots ? (
-          <button
-            type="button"
-            disabled={subRootNoteCount === 0}
-            onClick={onClearAllSubRoots}
-            style={{
-              ...btnStyle('#fb923c', '#7c2d12aa'),
-              opacity: subRootNoteCount === 0 ? 0.45 : 1,
-              cursor: subRootNoteCount === 0 ? 'not-allowed' : 'pointer',
-              fontSize: 7,
-            }}
-            title={`Remove all blue ${GROOVE_LAB_808_SUBROOTS_BANK_LABEL} from the roll — keeps chords and melody`}
-          >
-            ERASE ALL SUB{subRootNoteCount > 0 ? ` (${subRootNoteCount})` : ''}
+            ERASE ALL MELODY{melodyLayerNoteCount > 0 ? ` (${melodyLayerNoteCount})` : ''}
           </button>
         ) : null}
         <button
@@ -284,11 +434,11 @@ export function GrooveLabComposerPanel({
       </div>
 
       <p style={{ margin: 0, fontSize: 8, color: '#4b5563', lineHeight: 1.35 }}>
-        <strong style={{ color: '#fbbf24' }}>Amber lane</strong> = melody / riffs / arps from{' '}
+        <strong style={{ color: '#fbbf24' }}>Amber lane</strong> = multi-note phrases from{' '}
         <strong style={{ color: '#4ade80' }}>green chords</strong> ({chordColumnCount} col
         {chordColumnCount === 1 ? '' : 's'}). {melodyNoteCount} melody hit
-        {melodyNoteCount === 1 ? '' : 's'}. Drop chords first ({chordBrand} Studio), then MELODY / RIFF / ARP.
-        <strong style={{ color: '#fb923c' }}>808 keypad</strong> lights in-key subs — <strong style={{ color: '#fdba74' }}>PUSH SUBS</strong> only if you want the roll.
+        {melodyNoteCount === 1 ? '' : 's'}. Drop chords first, then MELODY / RIFF / ARP — use VARIATION for a new phrase.
+        Production bass → <strong style={{ color: '#a78bfa' }}>Beat Lab NEW SYNTH</strong> (Send from export strip).
       </p>
     </div>
   );

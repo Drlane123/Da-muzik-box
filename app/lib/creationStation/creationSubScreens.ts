@@ -22,15 +22,20 @@ export const CREATION_SUB_SCREENS: {
   id: CreationSubScreenId;
   label: string;
   shortLabel: string;
+  /** When false, hidden from Creation Station sub-nav (route still works). */
+  navVisible?: boolean;
 }[] = [
   { id: 'beat-lab', label: 'Beat Lab', shortLabel: 'Beat Lab' },
   { id: 'groove-lab', label: 'Groove Lab', shortLabel: 'Groove Lab' },
   { id: 'chord-builder', label: 'Chord Builder', shortLabel: 'Chord' },
-  { id: 'more', label: 'More', shortLabel: 'More' },
+  { id: 'more', label: 'More', shortLabel: 'More', navVisible: false },
   { id: '808-lab', label: '808 Lab', shortLabel: '808' },
   { id: 'drum-kit-generator', label: 'Drum Kit Generator', shortLabel: 'Kit Gen' },
   { id: 'chord-bass-sequencer', label: 'Chord / Bass Sequencer', shortLabel: 'Chord/Bass' },
 ];
+
+/** Sub-nav picks under Creation Station (excludes reserved / future screens). */
+export const CREATION_SUB_SCREENS_NAV = CREATION_SUB_SCREENS.filter((s) => s.navVisible !== false);
 
 export function creationSubScreenToTab(sub: CreationSubScreenId): CreationStationTab {
   switch (sub) {

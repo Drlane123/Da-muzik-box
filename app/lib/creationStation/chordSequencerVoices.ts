@@ -163,6 +163,13 @@ function midiToFreq(midi: number): number {
 /** When set, chord preview/audition routes here so STOP can mute immediately. */
 let progressionAuditionOutput: AudioNode | null = null;
 
+let grooveLabTransportChordBus: GainNode | null = null;
+let grooveLabTransportChordBusCtx: AudioContext | null = null;
+let grooveLabTransportChordBusDest: AudioNode | null = null;
+let progressionAuditionBus: GainNode | null = null;
+let progressionAuditionBusCtx: AudioContext | null = null;
+let progressionAuditionBusDest: AudioNode | null = null;
+
 export function withProgressionAuditionOutput<T>(output: AudioNode | null, fn: () => T): T {
   const prev = progressionAuditionOutput;
   progressionAuditionOutput = output;
@@ -171,6 +178,95 @@ export function withProgressionAuditionOutput<T>(output: AudioNode | null, fn: (
   } finally {
     progressionAuditionOutput = prev;
   }
+}
+
+function ensureGrooveLabTransportChordBus(ctx: AudioContext, dest?: AudioNode | null): GainNode {
+  const target = dest ?? resolveGrooveLabAudioDest(ctx);
+  if (!grooveLabTransportChordBus || grooveLabTransportChordBusCtx !== ctx) {
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(target);
+    grooveLabTransportChordBus = bus;
+    grooveLabTransportChordBusCtx = ctx;
+    grooveLabTransportChordBusDest = target;
+  } else if (grooveLabTransportChordBusDest !== target) {
+    try {
+      grooveLabTransportChordBus.disconnect();
+    } catch {
+      /* */
+    }
+    grooveLabTransportChordBus.connect(target);
+    grooveLabTransportChordBusDest = target;
+  }
+  return grooveLabTransportChordBus;
+}
+
+function ensureProgressionAuditionBus(ctx: AudioContext, dest?: AudioNode | null): GainNode {
+  const target = dest ?? resolveGrooveLabAudioDest(ctx);
+  if (!progressionAuditionBus || progressionAuditionBusCtx !== ctx) {
+    const bus = ctx.createGain();
+    bus.gain.value = 1;
+    bus.connect(target);
+    progressionAuditionBus = bus;
+    progressionAuditionBusCtx = ctx;
+    progressionAuditionBusDest = target;
+  } else if (progressionAuditionBusDest !== target) {
+    try {
+      progressionAuditionBus.disconnect();
+    } catch {
+      /* */
+    }
+    progressionAuditionBus.connect(target);
+    progressionAuditionBusDest = target;
+  }
+  return progressionAuditionBus;
+}
+
+/** Groove Lab transport lookahead — mute bus so STOP silences ~3s of scheduled chord oscillators. */
+export function withGrooveLabTransportChordRouting<T>(
+  ctx: AudioContext,
+  fn: () => T,
+  dest?: AudioNode | null,
+): T {
+  return withProgressionAuditionOutput(ensureGrooveLabTransportChordBus(ctx, dest), fn);
+}
+
+/** Progression builder audition — separate bus so STOP does not leave chords ringing. */
+export function withProgressionAuditionBus<T>(ctx: AudioContext, fn: () => T, dest?: AudioNode | null): T {
+  return withProgressionAuditionOutput(ensureProgressionAuditionBus(ctx, dest), fn);
+}
+
+function muteChordBus(bus: GainNode | null, ctx: AudioContext | null): void {
+  if (!bus || !ctx) return;
+  const t = ctx.currentTime;
+  try {
+    bus.gain.cancelScheduledValues(t);
+    bus.gain.setValueAtTime(0, t);
+  } catch {
+    /* closed */
+  }
+}
+
+function unmuteChordBus(bus: GainNode | null, ctx: AudioContext | null): void {
+  if (!bus || !ctx) return;
+  const t = ctx.currentTime;
+  try {
+    bus.gain.cancelScheduledValues(t);
+    bus.gain.setValueAtTime(1, t);
+  } catch {
+    /* closed */
+  }
+}
+
+/** Immediate silence for transport + progression chord voices (Groove Lab STOP / Beat Lab shared output). */
+export function haltChordSequencerTransportVoices(): void {
+  muteChordBus(grooveLabTransportChordBus, grooveLabTransportChordBusCtx);
+  muteChordBus(progressionAuditionBus, progressionAuditionBusCtx);
+}
+
+export function restoreChordSequencerTransportVoices(): void {
+  unmuteChordBus(grooveLabTransportChordBus, grooveLabTransportChordBusCtx);
+  unmuteChordBus(progressionAuditionBus, progressionAuditionBusCtx);
 }
 
 function connectOut(

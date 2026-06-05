@@ -2,16 +2,45 @@ import {
   grooveLabIsBassSubMidi,
   grooveLabIsMelodyMidi,
 } from '@/app/lib/creationStation/grooveComposerEngine';
-import { GROOVE_LAB_CHORD_ROLL_MIDI_MIN } from '@/app/lib/creationStation/grooveLabPitch';
-import { grooveLabBassAnchorsFromHits } from '@/app/lib/creationStation/grooveLabRoll';
-import { playGrooveLabBassSound, type GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
+import { scheduleGrooveLabGuitarTransportHit } from '@/app/lib/creationStation/grooveLabGuitarAudition';
+import { scheduleGrooveLabOrchestraTransportHit } from '@/app/lib/creationStation/grooveLabOrchestraHitAudition';
+import type { OrchestraHitId } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import { ensureOrchestraHitBuffer, getOrchestraHitDef } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import { resolveGrooveLabOrchestraHitId } from '@/app/lib/creationStation/grooveLabOrchestraHitSoundBank';
+import type { GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/grooveLabGuitarFx';
+import { grooveLabIsGuitarMidi } from '@/app/lib/creationStation/grooveLabPitch';
+import { ensureGuitarLickBuffer, getGuitarLickDef, isGuitarLickSampleId } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
+import { resolveGrooveLabGuitarSoundId } from '@/app/lib/creationStation/grooveLabGuitarSoundBank';
+import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
 import {
-  collapseGrooveChordHitsToBarDownbeats,
+  grooveLabBassAnchorsFromHits,
+  grooveLabChordAttackStacks,
+  GROOVE_LAB_QUANTIZE_DEFAULT,
   GROOVE_LAB_SLOTS_PER_BAR,
+  type GrooveLabQuantize,
   type GrooveRollHit,
 } from '@/app/lib/creationStation/grooveLabRoll';
+import { playGrooveLabBassSound, type GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
 import { scheduleOrchidChord, type OrchidPerformanceMode } from '@/app/lib/creationStation/orchidChordEngine';
-import type { ChordVoiceId } from '@/app/lib/creationStation/chordSequencerVoices';
+import {
+  withGrooveLabTransportChordRouting,
+  type ChordVoiceId,
+} from '@/app/lib/creationStation/chordSequencerVoices';
+import { resolveGrooveLabChannelDest } from '@/app/lib/creationStation/grooveLabAudio';
+import {
+  grooveLabChannelVolumeGain,
+  grooveLabMeterPeakFromVelocity,
+  scheduleGrooveLabMeterPulseAt,
+} from '@/app/lib/creationStation/grooveLabChannelMeters';
+import {
+  playWaveLeafNote,
+  WAVE_LEAF_TRANSPORT_ONSET_LEAD_MS,
+} from '@/app/lib/creationStation/waveLeafEngine';
+import { waveLeafIsLeadMidi } from '@/app/lib/creationStation/waveLeafPitch';
+import {
+  readWaveLeafOutputGain,
+  readWaveLeafSynthSettings,
+} from '@/app/lib/creationStation/waveLeafRuntimeSettings';
 import {
   CREATION_LOOP_CHAIN_FLOOR_SEC,
   CREATION_METRO_NODE_EPS_SEC,
@@ -33,17 +62,10 @@ export function grooveLabTransportSessionStart(
 
 const GROOVE_LAB_MAX_SCHEDULE_PER_REFILL = 256;
 
-function chordRollHitsFromLayer(
-  hits: readonly GrooveRollHit[],
-): GrooveRollHit[] {
-  return collapseGrooveChordHitsToBarDownbeats(
-    hits.filter((h) => h.midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN),
-  );
-}
-
 export function grooveLabTransportEventKey(cycle: number, ev: GrooveLabTransportEvent): string {
   if (ev.kind === 'bass') return `${cycle}|b|${ev.slot}|${ev.midi}`;
   if (ev.kind === 'melody') return `${cycle}|m|${ev.slot}|${ev.midi}`;
+  if (ev.kind === 'guitar') return `${cycle}|g|${ev.slot}|${ev.midi}`;
   return `${cycle}|c|${ev.slot}|${ev.midis.join('.')}`;
 }
 
@@ -62,16 +84,31 @@ export function grooveLabOriginBeatFromSlot(slot: number): number {
 export type GrooveLabTransportEvent =
   | { kind: 'bass'; slot: number; midi: number; sustainSlots: number; vel: number }
   | { kind: 'melody'; slot: number; midi: number; sustainSlots: number; vel: number }
-  | { kind: 'chord'; slot: number; midis: number[]; sustainSlots: number; vel: number };
+  | { kind: 'chord'; slot: number; midis: number[]; sustainSlots: number; vel: number }
+  | { kind: 'sample'; slot: number; midis: number[]; sustainSlots: number; vel: number }
+  | { kind: 'guitar'; slot: number; midi: number; sustainSlots: number; vel: number };
 
-/** Build loop events from SUB + CHORD + MELODY work channels. */
+const GROOVE_TRANSPORT_KIND_ORDER: Record<GrooveLabTransportEvent['kind'], number> = {
+  bass: 0,
+  chord: 1,
+  sample: 2,
+  guitar: 3,
+  melody: 4,
+};
+
+/** Build loop events from SUB + CHORD + SAMPLE + MELODY + GUITAR work channels. */
 export function buildGrooveLabTransportEvents(
   subHits: GrooveRollHit[],
   chordHits: GrooveRollHit[],
   melodyHits: GrooveRollHit[] = [],
+  quantize?: GrooveLabQuantize,
+  guitarHits: GrooveRollHit[] = [],
+  sampleHits: GrooveRollHit[] = [],
 ): GrooveLabTransportEvent[] {
+  const q = quantize ?? GROOVE_LAB_QUANTIZE_DEFAULT;
+
   const subs = subHits.filter((h) => grooveLabIsBassSubMidi(h.midi));
-  const leads = melodyHits.filter((h) => grooveLabIsMelodyMidi(h.midi));
+  const leads = melodyHits.filter((h) => waveLeafIsLeadMidi(h.midi) || grooveLabIsMelodyMidi(h.midi));
   const anchors = grooveLabBassAnchorsFromHits(subs);
   const anchorKeys = new Set(anchors.map((a) => `${a.slot}:${a.midi}`));
 
@@ -98,30 +135,44 @@ export function buildGrooveLabTransportEvents(
     });
   }
 
-  const chordSource = chordRollHitsFromLayer(chordHits);
-  const bySlot = new Map<number, GrooveRollHit[]>();
-  for (const h of chordSource) {
-    const list = bySlot.get(h.slot) ?? [];
-    list.push(h);
-    bySlot.set(h.slot, list);
-  }
-  for (const [slot, list] of bySlot) {
-    const midis = [...new Set(list.map((h) => Math.round(h.midi)))].sort((a, b) => a - b);
-    if (midis.length === 0) continue;
+  const chordStacks = grooveLabChordAttackStacks(chordHits, { quantize: q });
+  for (const stack of chordStacks) {
+    if (stack.midis.length === 0) continue;
     events.push({
       kind: 'chord',
-      slot,
-      midis,
-      sustainSlots: Math.max(...list.map((h) => h.sustainSlots)),
-      vel: Math.max(...list.map((h) => h.vel)),
+      slot: stack.slot,
+      midis: stack.midis,
+      sustainSlots: stack.sustainSlots,
+      vel: stack.vel,
+    });
+  }
+
+  const sampleStacks = grooveLabChordAttackStacks(sampleHits, { quantize: q });
+  for (const stack of sampleStacks) {
+    if (stack.midis.length === 0) continue;
+    events.push({
+      kind: 'sample',
+      slot: stack.slot,
+      midis: stack.midis,
+      sustainSlots: stack.sustainSlots,
+      vel: stack.vel,
+    });
+  }
+
+  for (const h of guitarHits.filter((hit) => grooveLabIsGuitarMidi(hit.midi))) {
+    events.push({
+      kind: 'guitar',
+      slot: h.slot,
+      midi: h.midi,
+      sustainSlots: h.sustainSlots,
+      vel: h.vel,
     });
   }
 
   events.sort(
     (a, b) =>
       a.slot - b.slot ||
-      (a.kind === 'chord' ? 1 : 0) - (b.kind === 'chord' ? 1 : 0) ||
-      (a.kind === 'melody' ? 1 : 0) - (b.kind === 'melody' ? 1 : 0),
+      GROOVE_TRANSPORT_KIND_ORDER[a.kind] - GROOVE_TRANSPORT_KIND_ORDER[b.kind],
   );
   if (events.length > 0) return events;
 
@@ -134,23 +185,15 @@ export function buildGrooveLabTransportEvents(
       vel: h.vel,
     });
   }
-  if (chordHits.length > 0) {
-    const bySlotFb = new Map<number, GrooveRollHit[]>();
-    for (const h of collapseGrooveChordHitsToBarDownbeats(chordHits)) {
-      const list = bySlotFb.get(h.slot) ?? [];
-      list.push(h);
-      bySlotFb.set(h.slot, list);
-    }
-    for (const [slot, list] of bySlotFb) {
-      const midis = [...new Set(list.map((h) => Math.round(h.midi)))].sort((a, b) => a - b);
-      events.push({
-        kind: 'chord',
-        slot,
-        midis,
-        sustainSlots: Math.max(...list.map((h) => h.sustainSlots)),
-        vel: Math.max(...list.map((h) => h.vel)),
-      });
-    }
+  for (const stack of chordStacks) {
+    if (stack.midis.length === 0) continue;
+    events.push({
+      kind: 'chord',
+      slot: stack.slot,
+      midis: stack.midis,
+      sustainSlots: stack.sustainSlots,
+      vel: stack.vel,
+    });
   }
   for (const h of leads) {
     events.push({
@@ -161,7 +204,15 @@ export function buildGrooveLabTransportEvents(
       vel: h.vel,
     });
   }
-
+  for (const h of guitarHits.filter((hit) => grooveLabIsGuitarMidi(hit.midi))) {
+    events.push({
+      kind: 'guitar',
+      slot: h.slot,
+      midi: h.midi,
+      sustainSlots: h.sustainSlots,
+      vel: h.vel,
+    });
+  }
   return events;
 }
 
@@ -179,10 +230,44 @@ export function scheduleGrooveLabTransportEvent(
     chordsMuted: boolean;
     bassMuted?: boolean;
     perfMode: OrchidPerformanceMode;
+    guitarSoundId?: GrooveLabAnyLeadSoundId | string | null;
+    guitarFx?: GrooveLabGuitarFxSettings;
+    guitarChannel?: number;
+    chordChannel?: number;
+    melodyChannel?: number;
+    sampleChannel?: number;
+    orchestraHitId?: OrchestraHitId | string;
+    leadMuted?: boolean;
+    channelVolumes?: Record<number, number>;
   },
 ): void {
   const holdBeats = Math.max(0.35, (ev.sustainSlots * opts.secPerSlot * opts.bpm) / 60);
   const sustainSec = (ev.sustainSlots * opts.secPerSlot) * 0.92;
+
+  if (ev.kind === 'guitar') {
+    if (opts.guitarChannel == null || !Number.isFinite(opts.guitarChannel)) return;
+    const soundId = resolveGrooveLabGuitarSoundId(opts.guitarSoundId);
+    if (isGuitarLickSampleId(soundId)) {
+      const def = getGuitarLickDef(soundId);
+      if (def) void ensureGuitarLickBuffer(ctx, def);
+    }
+    const lickBar = isGuitarLickSampleId(soundId);
+    const guitarSus = lickBar
+      ? Math.min(8, Math.max(0.45, ev.sustainSlots * opts.secPerSlot * 0.98))
+      : Math.min(2.8, Math.max(0.28, ev.sustainSlots * opts.secPerSlot * 0.96));
+    scheduleGrooveLabGuitarTransportHit(ctx, {
+      midi: ev.midi,
+      soundId,
+      when,
+      velocity01: Math.min(1, Math.max(0.05, ev.vel)) * 0.9,
+      bpm: opts.bpm,
+      sustainSec: guitarSus,
+      guitarFx: opts.guitarFx,
+      guitarChannel: opts.guitarChannel,
+      channelVolumes: opts.channelVolumes,
+    });
+    return;
+  }
 
   if (ev.kind === 'bass') {
     if (opts.bassMuted) return;
@@ -192,17 +277,85 @@ export function scheduleGrooveLabTransportEvent(
     return;
   }
   if (ev.kind === 'melody') {
-    if (opts.bassMuted) return;
-    playGrooveLabBassSound(ctx, ev.midi, opts.melodySoundId, when, ev.vel * 0.88, opts.bpm, holdBeats, {
-      monophonic: false,
+    if (opts.leadMuted || !waveLeafIsLeadMidi(ev.midi)) return;
+    const wl = readWaveLeafSynthSettings();
+    const melodyCh = opts.melodyChannel;
+    if (melodyCh == null || !Number.isFinite(melodyCh)) return;
+    const dest = resolveGrooveLabChannelDest(ctx, melodyCh, opts.channelVolumes);
+    const whenLead = when - WAVE_LEAF_TRANSPORT_ONSET_LEAD_MS / 1000;
+    const vel = Math.min(1, Math.max(0.05, ev.vel));
+    playWaveLeafNote(ctx, ev.midi, whenLead, {
+      preset: wl.preset,
+      glideMs: wl.glideMs,
+      brightness: wl.brightness,
+      warmth: wl.warmth,
+      drive: wl.drive,
+      vibratoDepthCents: wl.vibratoDepthCents,
+      bpm: opts.bpm,
+      holdBeats,
+      velocity: vel,
+      outputGain: readWaveLeafOutputGain(),
+      destination: dest,
+      monophonic: true,
+      transportChordSnap: true,
     });
+    scheduleGrooveLabMeterPulseAt(
+      ctx,
+      melodyCh,
+      grooveLabMeterPeakFromVelocity(vel, melodyCh, opts.channelVolumes),
+      0,
+      whenLead,
+    );
     return;
   }
-  if (opts.chordsMuted || opts.chordVolume <= 0.02) return;
-  /** Transport = block chord on the grid line (no strum/arp smear — that stays in preview/export only). */
-  scheduleOrchidChord(ctx, ev.midis, when, sustainSec, opts.chordVoice, opts.chordVolume * ev.vel, {
-    mode: 'block',
-    bpm: opts.bpm,
+  if (ev.kind === 'chord') {
+    if (opts.chordsMuted || opts.chordVolume <= 0.02) return;
+    const chordCh = opts.chordChannel;
+    if (
+      chordCh != null &&
+      Number.isFinite(chordCh) &&
+      grooveLabChannelVolumeGain(chordCh, opts.channelVolumes) <= 0.001
+    ) {
+      return;
+    }
+    const vel = opts.chordVolume * ev.vel;
+    const scheduleChord = () =>
+      scheduleOrchidChord(ctx, ev.midis, when, sustainSec, opts.chordVoice, vel, {
+        mode: 'block',
+        bpm: opts.bpm,
+      });
+    if (chordCh != null && Number.isFinite(chordCh)) {
+      const chordDest = resolveGrooveLabChannelDest(ctx, chordCh, opts.channelVolumes);
+      withGrooveLabTransportChordRouting(ctx, scheduleChord, chordDest);
+      scheduleGrooveLabMeterPulseAt(
+        ctx,
+        chordCh,
+        grooveLabMeterPeakFromVelocity(vel, chordCh, opts.channelVolumes),
+        0,
+        when,
+      );
+    } else {
+      scheduleChord();
+    }
+    return;
+  }
+
+  if (ev.kind !== 'sample') return;
+  const sampleCh = opts.sampleChannel;
+  if (sampleCh == null || !Number.isFinite(sampleCh)) return;
+  if (grooveLabChannelVolumeGain(sampleCh, opts.channelVolumes) <= 0.001) return;
+  const hitId = resolveGrooveLabOrchestraHitId(opts.orchestraHitId);
+  const def = getOrchestraHitDef(hitId);
+  if (def) void ensureOrchestraHitBuffer(ctx, def);
+  const vel = Math.min(1, Math.max(0.05, ev.vel));
+  const fallbackMidi = ev.midis.length > 0 ? Math.min(...ev.midis) : def?.rootMidi;
+  scheduleGrooveLabOrchestraTransportHit(ctx, {
+    hitId,
+    when,
+    velocity01: vel,
+    orchestraChannel: sampleCh,
+    channelVolumes: opts.channelVolumes,
+    fallbackMidi,
   });
 }
 
@@ -219,6 +372,15 @@ export type RefillGrooveLabTransportOpts = {
   chordsMuted: boolean;
   bassMuted: boolean;
   perfMode: OrchidPerformanceMode;
+  guitarSoundId?: GrooveLabAnyLeadSoundId | string | null;
+  guitarFx?: GrooveLabGuitarFxSettings;
+  guitarChannel?: number;
+  chordChannel?: number;
+  melodyChannel?: number;
+  sampleChannel?: number;
+  orchestraHitId?: OrchestraHitId | string;
+  leadMuted?: boolean;
+  channelVolumes?: Record<number, number>;
 };
 
 export type RefillGrooveLabMetronomeOpts = {
@@ -268,19 +430,33 @@ export function refillGrooveLabTransport(
     chordsMuted: opts.chordsMuted,
     bassMuted: opts.bassMuted,
     perfMode: opts.perfMode,
+    guitarSoundId: opts.guitarSoundId,
+    guitarFx: opts.guitarFx,
+    guitarChannel: opts.guitarChannel,
+    chordChannel: opts.chordChannel,
+    melodyChannel: opts.melodyChannel,
+    sampleChannel: opts.sampleChannel,
+    orchestraHitId: opts.orchestraHitId,
+    leadMuted: opts.leadMuted,
+    channelVolumes: opts.channelVolumes,
   };
 
   for (let cycle = cycleNow; cycle <= cycleNow + 2 && scheduled < GROOVE_LAB_MAX_SCHEDULE_PER_REFILL; cycle++) {
+    const slotWhen = new Map<number, number>();
     for (const ev of evs) {
       const key = grooveLabTransportEventKey(cycle, ev);
       if (firedKeys.has(key)) continue;
 
       const delta = (ev.slot - opts.seekSlot + opts.loopSlots) % opts.loopSlots;
-      let t = sessionStart + cycle * loopSec + delta * opts.secPerSlot;
+      const t = sessionStart + cycle * loopSec + delta * opts.secPerSlot;
 
       if (t >= horizon) continue;
 
-      const when = Math.max(t, chain);
+      let when = slotWhen.get(ev.slot);
+      if (when === undefined) {
+        when = Math.max(t, chain);
+        slotWhen.set(ev.slot, when);
+      }
       if (when < now - 0.08) continue;
       try {
         scheduleGrooveLabTransportEvent(ctx, when, ev, schedOpts);
@@ -288,7 +464,7 @@ export function refillGrooveLabTransport(
         continue;
       }
       firedKeys.add(key);
-      chain = when + CREATION_METRO_NODE_EPS_SEC;
+      chain = Math.max(chain, when + CREATION_METRO_NODE_EPS_SEC);
       scheduled += 1;
       if (scheduled >= GROOVE_LAB_MAX_SCHEDULE_PER_REFILL) return;
     }
@@ -350,6 +526,7 @@ export function previewGrooveLabRoll(
   subHits: GrooveRollHit[],
   chordHits: GrooveRollHit[],
   melodyHits: GrooveRollHit[],
+  guitarHits: GrooveRollHit[] = [],
   opts: {
     bpm: number;
     bassSoundId: GrooveLabBassSoundId;
@@ -358,14 +535,29 @@ export function previewGrooveLabRoll(
     chordVolume: number;
     chordsMuted: boolean;
     bassMuted?: boolean;
+    leadMuted?: boolean;
     perfMode: OrchidPerformanceMode;
     startDelaySec?: number;
+    chordChannel?: number;
+    melodyChannel?: number;
+    guitarChannel?: number;
+    guitarSoundId?: GrooveLabAnyLeadSoundId | string | null;
+    guitarFx?: GrooveLabGuitarFxSettings;
+    channelVolumes?: Record<number, number>;
   },
 ): void {
-  const events = buildGrooveLabTransportEvents(subHits, chordHits, melodyHits);
+  const events = buildGrooveLabTransportEvents(
+    subHits,
+    chordHits,
+    melodyHits,
+    undefined,
+    guitarHits,
+  );
   if (events.length === 0) return;
   const secPerSlot = grooveLabSecPerSlot(opts.bpm);
   const t0 = ctx.currentTime + (opts.startDelaySec ?? GROOVE_LAB_TRANSPORT_AUDIO_FLOOR_SEC);
+  let chain = t0 + SE2_AUDIO_START_FLOOR_SEC;
+  const slotWhen = new Map<number, number>();
   const schedOpts = {
     bpm: opts.bpm,
     secPerSlot,
@@ -375,10 +567,23 @@ export function previewGrooveLabRoll(
     chordVolume: opts.chordVolume,
     chordsMuted: opts.chordsMuted,
     bassMuted: opts.bassMuted,
+    leadMuted: opts.leadMuted,
     perfMode: opts.perfMode,
+    chordChannel: opts.chordChannel,
+    melodyChannel: opts.melodyChannel,
+    guitarSoundId: opts.guitarSoundId,
+    guitarFx: opts.guitarFx,
+    guitarChannel: opts.guitarChannel,
+    channelVolumes: opts.channelVolumes,
   };
   for (const ev of events) {
-    const when = t0 + ev.slot * secPerSlot;
+    const t = t0 + ev.slot * secPerSlot;
+    let when = slotWhen.get(ev.slot);
+    if (when === undefined) {
+      when = Math.max(t, chain);
+      slotWhen.set(ev.slot, when);
+      chain = when + CREATION_METRO_NODE_EPS_SEC;
+    }
     scheduleGrooveLabTransportEvent(ctx, when, ev, schedOpts);
   }
 }

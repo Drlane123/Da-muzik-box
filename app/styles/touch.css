@@ -51,6 +51,11 @@ html.touch-coarse .cs-pad-hit {
   touch-action: manipulation;
 }
 
+.lab808-pad-hit:active {
+  filter: brightness(1.12);
+  transform: scale(0.98);
+}
+
 /* Prevent text selection while painting notes / automation on touch */
 /**
  * Groove Lab 8-bar song bank — thick, easy-to-grab scrollbar (Windows / Cursor preview).
@@ -92,4 +97,300 @@ html.touch-coarse .cs-pad-hit {
 
 .groove-song-bank-scroll::-webkit-scrollbar-button:single-button:vertical:increment {
   border-top: 1px solid #1e3a5f;
+}
+
+/**
+ * Beat Lab mixer — horizontal ridged scroll thumb (CH 1–32 strip).
+ */
+.beat-lab-mixer-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #00e5ff #0a0e14;
+}
+
+.beat-lab-mixer-scroll::-webkit-scrollbar {
+  height: 14px;
+}
+
+.beat-lab-mixer-scroll::-webkit-scrollbar-track {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #06080c 0%, #0e1218 100%);
+  border-top: 1px solid rgba(0, 229, 255, 0.22);
+}
+
+.beat-lab-mixer-scroll::-webkit-scrollbar-thumb {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0 1px, rgba(255, 255, 255, 0.22) 1px 2px, #00e5ff 2px 3px),
+    linear-gradient(180deg, #00e5ff 0%, #00a8c4 100%);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  min-width: 72px;
+}
+
+.beat-lab-mixer-scroll::-webkit-scrollbar-thumb:hover {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0 1px, rgba(255, 255, 255, 0.3) 1px 2px, #33ebff 2px 3px),
+    linear-gradient(180deg, #33ebff 0%, #00e5ff 100%);
+}
+
+/**
+ * Beat Lab transport toolbar (SNAP / DL / tools / Loop…) — always-visible, thicker ridged bar.
+ */
+.beat-lab-toolbar-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #00e5ff #0a0e14;
+  scrollbar-gutter: stable;
+}
+
+.beat-lab-toolbar-scroll::-webkit-scrollbar {
+  height: 18px;
+  -webkit-appearance: none;
+}
+
+.beat-lab-toolbar-scroll::-webkit-scrollbar-track {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #06080c 0%, #0e1218 100%);
+  border-top: 1px solid rgba(0, 229, 255, 0.28);
+}
+
+.beat-lab-toolbar-scroll::-webkit-scrollbar-thumb {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0 1px, rgba(255, 255, 255, 0.24) 1px 2px, #00e5ff 2px 3px),
+    linear-gradient(180deg, #00e5ff 0%, #00a8c4 100%);
+  border: 2px solid #0a0e14;
+  border-radius: 4px;
+  min-width: 96px;
+}
+
+.beat-lab-toolbar-scroll::-webkit-scrollbar-thumb:hover {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0 1px, rgba(255, 255, 255, 0.32) 1px 2px, #33ebff 2px 3px),
+    linear-gradient(180deg, #33ebff 0%, #00e5ff 100%);
+}
+
+.groove-lab-mixer-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #86efac #0a100c;
+}
+
+.groove-lab-mixer-scroll::-webkit-scrollbar {
+  height: 14px;
+}
+
+.groove-lab-mixer-scroll::-webkit-scrollbar-track {
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #060a08 0%, #0e1410 100%);
+  border-top: 1px solid rgba(134, 239, 172, 0.22);
+}
+
+.groove-lab-mixer-scroll::-webkit-scrollbar-thumb {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0 1px, rgba(255, 255, 255, 0.22) 1px 2px, #86efac 2px 3px),
+    linear-gradient(180deg, #86efac 0%, #4ade80 100%);
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  min-width: 72px;
+}
+
+.groove-lab-mixer-scroll::-webkit-scrollbar-thumb:hover {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.65) 0 1px, rgba(255, 255, 255, 0.3) 1px 2px, #a7f3b8 2px 3px),
+    linear-gradient(180deg, #a7f3b8 0%, #86efac 100%);
+}
+
+/** Groove Lead — genre banks + sound pads: sharper type without resizing the panel shell. */
+.groove-lead-type-label {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: 0.03em;
+}
+
+/** Groove Lead — preset names under “All Leads” (fixed slot, vertical scrollbar). */
+.groove-lead-preset-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: #5ce1ff #050c16;
+}
+
+.groove-lead-preset-scroll::-webkit-scrollbar {
+  width: 11px;
+}
+
+.groove-lead-preset-scroll::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #050c16 0%, #081420 100%);
+}
+
+.groove-lead-preset-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7ee8ff 0%, #4ec8e8 100%);
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
+  min-height: 36px;
+}
+
+.groove-lead-preset-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #9ef0ff 0%, #5ce1ff 100%);
+}
+
+/** Groove Lead — preset column: guitar + minimoog + flute watermarks behind sound pads */
+.groove-lead-preset-stage {
+  position: relative;
+  isolation: isolate;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.groove-lead-preset-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Instrument art — grayscale keeps shape/detail readable on dark UI */
+.groove-lead-preset-backdrop__guitar,
+.groove-lead-preset-backdrop__flute {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  object-fit: contain;
+  filter: grayscale(1) contrast(1.12) brightness(0.72);
+  mix-blend-mode: lighten;
+  opacity: 0.52;
+}
+
+/* Mini Moog photo — same depth as guitar/flute (low, soft, behind pads) */
+.groove-lead-preset-backdrop__moog {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  object-fit: contain;
+  filter: grayscale(1) contrast(1.08) brightness(0.66);
+  mix-blend-mode: lighten;
+  opacity: 0.4;
+}
+
+.groove-lead-preset-backdrop__guitar {
+  left: -6%;
+  bottom: 0;
+  width: 58%;
+  max-width: 152px;
+  height: 98%;
+  max-height: 248px;
+  object-position: left bottom;
+}
+
+.groove-lead-preset-backdrop__moog {
+  left: 48%;
+  top: auto;
+  bottom: 0;
+  width: 48%;
+  max-width: 168px;
+  height: auto;
+  max-height: 56%;
+  transform: translateX(-50%) scale(0.94);
+  transform-origin: center bottom;
+  object-position: center bottom;
+}
+
+.groove-lead-preset-backdrop__flute {
+  right: -4%;
+  bottom: 2%;
+  width: 42%;
+  max-width: 120px;
+  height: 92%;
+  max-height: 220px;
+  object-position: right bottom;
+  opacity: 0.5;
+}
+
+.groove-lead-preset-backdrop--guitar .groove-lead-preset-backdrop__guitar {
+  opacity: 0.62;
+  filter: grayscale(0.85) contrast(1.18) brightness(0.78);
+}
+
+.groove-lead-preset-backdrop--guitar .groove-lead-preset-backdrop__flute {
+  opacity: 0.14;
+}
+
+.groove-lead-preset-backdrop--flute .groove-lead-preset-backdrop__flute {
+  opacity: 0.64;
+  filter: grayscale(0.82) contrast(1.14) brightness(0.8);
+}
+
+.groove-lead-preset-backdrop--flute .groove-lead-preset-backdrop__guitar {
+  opacity: 0.14;
+}
+
+.groove-lead-preset-backdrop--moog .groove-lead-preset-backdrop__guitar,
+.groove-lead-preset-backdrop--moog .groove-lead-preset-backdrop__flute {
+  opacity: 0.16;
+}
+
+.groove-lead-preset-backdrop--moog .groove-lead-preset-backdrop__moog {
+  opacity: 0.5;
+  filter: grayscale(1) contrast(1.1) brightness(0.7);
+}
+
+.groove-lead-preset-backdrop--guitar .groove-lead-preset-backdrop__moog,
+.groove-lead-preset-backdrop--flute .groove-lead-preset-backdrop__moog {
+  opacity: 0.18;
+}
+
+/** Idle pads stay readable but let the watermark show through */
+.groove-lead-preset-stage .groove-lead-preset-pad-idle {
+  background: rgba(8, 20, 32, 0.48) !important;
+  backdrop-filter: blur(0.5px);
+}
+
+.groove-lead-preset-stage__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+/**
+ * Beat Lab drum grid — cyan fluorescent glow on default-thin scrollbars (H + V).
+ * Size unchanged; color + glow only.
+ */
+.beat-lab-drum-grid-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #00e5ff #0a0e14;
+}
+
+.beat-lab-drum-grid-scroll::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #06080c 0%, #0a0e14 100%);
+  box-shadow: inset 0 0 5px rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.14);
+}
+
+.beat-lab-drum-grid-scroll::-webkit-scrollbar-thumb {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0 1px, rgba(255, 255, 255, 0.2) 1px 2px, #00e5ff 2px 3px),
+    linear-gradient(180deg, #00e5ff 0%, #00a8c4 100%);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  border-radius: 3px;
+  box-shadow:
+    0 0 8px rgba(0, 229, 255, 0.55),
+    0 0 3px rgba(0, 229, 255, 0.35);
+}
+
+.beat-lab-drum-grid-scroll::-webkit-scrollbar-thumb:hover {
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.55) 0 1px, rgba(255, 255, 255, 0.28) 1px 2px, #33ebff 2px 3px),
+    linear-gradient(180deg, #33ebff 0%, #00e5ff 100%);
+  box-shadow:
+    0 0 12px rgba(0, 229, 255, 0.75),
+    0 0 4px rgba(0, 229, 255, 0.5);
+}
+
+.beat-lab-drum-grid-scroll::-webkit-scrollbar-corner {
+  background: #0a0e14;
+  box-shadow: inset 0 0 4px rgba(0, 229, 255, 0.08);
 }

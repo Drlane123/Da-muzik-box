@@ -501,6 +501,24 @@ export type BeatLabImportedChordRail = {
   mode: ChordMode;
 };
 
+/** Lane note length for transport — full grid hold, bounded by next note on lane. */
+export function beatLabLaneNoteLenCols(
+  note: BeatLabMidiNote,
+  colInPattern: number,
+  roll: readonly BeatLabMidiNote[],
+  gridCols: number,
+): number {
+  let nextLaneGap = Number.POSITIVE_INFINITY;
+  for (const o of roll) {
+    if (o.muted || o.lane !== note.lane) continue;
+    if (o.col === colInPattern) continue;
+    const delta = o.col > colInPattern ? o.col - colInPattern : gridCols - colInPattern + o.col;
+    if (delta > 0 && delta < nextLaneGap) nextLaneGap = delta;
+  }
+  const colsToNext = Number.isFinite(nextLaneGap) ? Math.max(1, Math.floor(nextLaneGap)) : gridCols;
+  return Math.max(1, Math.min(Math.max(1, note.len), colsToNext, gridCols - colInPattern));
+}
+
 /** Chord Builder uses quarter-note columns; Beat Lab stores step columns (snap subdiv per beat). */
 export function chordQuarterColToStepCol(
   quarterCol: number,
@@ -531,10 +549,11 @@ export function beatLabStepsPerBar(
  */
 export function snapBeatLabChordNotesToBarDownbeats(
   notes: readonly BeatLabMidiNote[],
-  opts: { stepsPerBar: number; patternCols: number },
+  opts: { stepsPerBar: number; patternCols: number; preserveMultiBarLen?: boolean },
 ): BeatLabMidiNote[] {
   const spb = Math.max(1, Math.round(opts.stepsPerBar));
   const maxCol = Math.max(1, Math.round(opts.patternCols));
+  const preserveLen = opts.preserveMultiBarLen === true;
   const byLaneBar = new Map<string, BeatLabMidiNote[]>();
 
   for (const n of notes) {
@@ -551,7 +570,7 @@ export function snapBeatLabChordNotesToBarDownbeats(
     const lane = group[0]!.lane;
     const headCol = bar * spb;
     if (headCol >= maxCol) continue;
-    const barSpan = Math.min(spb, maxCol - headCol);
+    const barSpan = preserveLen ? maxCol - headCol : Math.min(spb, maxCol - headCol);
     const bestByPitch = new Map<number, BeatLabMidiNote>();
 
     for (const n of group) {

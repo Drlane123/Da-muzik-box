@@ -98,10 +98,8 @@ export function creationPatternColFFromBeat(
   }
   const drumColOffset = Math.floor(Math.max(0, loopOn ? loopStartBeat * sub : 0) + 1e-8);
   const rel = stepF - drumColOffset;
-  if (playMode === 'chainAB') {
-    return ((rel % pc) + pc) % pc;
-  }
-  return Math.max(0, Math.min(pc - 1, rel));
+  void playMode;
+  return ((rel % pc) + pc) % pc;
 }
 
 /** DAW bar number (1-based) at the start of the bar that contains `bankCol`. */
@@ -252,15 +250,59 @@ export function beatLabSnapRulerLabel(patternCol: number, bankColOffset: number,
   return String((bc % s) + 1);
 }
 
+/** Step columns per quarter in the visible drum grid (accounts for `TOTAL_COLS` cap). */
+export function beatLabGridStepsPerQuarter(patternCols: number, quarterCols: number): number {
+  const pc = Math.max(1, Math.round(patternCols));
+  const qc = Math.max(1, Math.round(quarterCols));
+  return Math.max(1, Math.round(pc / qc));
+}
+
+/** Measure digit 1…`measuresPerBar` from global quarter index (resets every bar). */
+export function beatLabMeasureDigitForQuarterIndex(
+  quarterIndex: number,
+  measuresPerBar: number = CREATION_44_MEASURES_PER_BAR,
+): number {
+  const q = Math.max(1, Math.round(measuresPerBar));
+  const qi = Math.max(0, Math.round(quarterIndex));
+  return ((qi % q) + q) % q + 1;
+}
+
+/** Measure digit 1…`measuresPerBar` from pattern column (resets every bar in the visible grid). */
+export function beatLabMeasureDigitForPatternCol(
+  patternCol: number,
+  subdiv: number,
+  measuresPerBar: number = CREATION_44_MEASURES_PER_BAR,
+  patternCols?: number,
+  quarterCols?: number,
+): number {
+  if (patternCols != null && quarterCols != null) {
+    const spq = beatLabGridStepsPerQuarter(patternCols, quarterCols);
+    const colsPerBar = Math.max(1, Math.round(measuresPerBar)) * spq;
+    const colInBar =
+      ((Math.max(0, Math.round(patternCol)) % colsPerBar) + colsPerBar) % colsPerBar;
+    return Math.floor(colInBar / spq) + 1;
+  }
+  const s = Math.max(1, Math.round(subdiv));
+  const q = Math.max(1, Math.round(measuresPerBar));
+  const colsPerBar = q * s;
+  const colInBar = ((Math.max(0, Math.round(patternCol)) % colsPerBar) + colsPerBar) % colsPerBar;
+  return Math.floor(colInBar / s) + 1;
+}
+
 /** MEASURES row / piano-roll header: 1–4 per bar in 4/4 (one label per quarter, not per subdiv column). */
 export function beatLabMeasureRulerLabel(
   patternCol: number,
-  bankColOffset: number,
+  _bankColOffset: number,
   subdiv: number,
   measuresPerBar: number = CREATION_44_MEASURES_PER_BAR,
 ): string {
   const s = Math.max(1, Math.round(subdiv));
-  const bankCol = patternCol + bankColOffset;
-  if (bankCol % s !== 0) return '';
-  return String(creation44MeasureInBar(bankCol, subdiv, measuresPerBar));
+  const q = Math.max(1, Math.round(measuresPerBar));
+  const colsPerBar = q * s;
+  /** Capped grid: one column per quarter — label every measure cell in the bar. */
+  if (colsPerBar <= q) {
+    return String(beatLabMeasureDigitForPatternCol(patternCol, subdiv, measuresPerBar));
+  }
+  if (patternCol % s !== 0) return '';
+  return String(beatLabMeasureDigitForPatternCol(patternCol, subdiv, measuresPerBar));
 }

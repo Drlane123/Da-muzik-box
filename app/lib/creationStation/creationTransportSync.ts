@@ -50,6 +50,48 @@ export type CreationScheduledMetroNode = {
 };
 
 /**
+ * Stop all queued buffer clicks (~3 s lookahead).
+ * SE2 uses `src.stop()` (not `stop(0)`); future `start(t0)` nodes must mute + disconnect.
+ */
+export function cancelCreationScheduledMetroNodes(
+  scheduled: CreationScheduledMetroNode[],
+): void {
+  if (scheduled.length === 0) return;
+  const pending = scheduled.splice(0, scheduled.length);
+  for (const { src, gain } of pending) {
+    try {
+      const c = src.context;
+      if (c && c.state !== 'closed') {
+        const now = c.currentTime;
+        try {
+          gain.gain.cancelScheduledValues(now);
+          gain.gain.setValueAtTime(0, now);
+        } catch {
+          /* */
+        }
+        try {
+          src.stop(now);
+        } catch {
+          try {
+            src.stop();
+          } catch {
+            /* scheduled in the future — disconnect below */
+          }
+        }
+      }
+    } catch {
+      /* */
+    }
+    try {
+      gain.disconnect();
+      src.disconnect();
+    } catch {
+      /* */
+    }
+  }
+}
+
+/**
  * Wilson-style metronome click on the shared master bus (SE2 `playClick` contract).
  */
 export function scheduleCreationMetronomeClickAt(
@@ -58,7 +100,7 @@ export function scheduleCreationMetronomeClickAt(
   accent: boolean,
   ctSnap: number,
   buffers: CreationMetronomeClickBuffers,
-  getMetronomeBusGain: () => GainNode | null,
+  _getMetronomeBusGain: () => GainNode | null,
   scheduled: CreationScheduledMetroNode[],
 ): void {
   const buf = accent ? buffers.accent : buffers.click;
@@ -69,7 +111,10 @@ export function scheduleCreationMetronomeClickAt(
   const gain = ctx.createGain();
   gain.gain.value = CREATION_METRO_VOLUME;
   src.connect(gain);
-  /** Beat Lab metro always uses master gain — survives `attachNewMetronomeBus` disconnecting the metro bus. */
+  /**
+   * Creation buffer clicks always on session master gain — never the master-clock metro bus
+   * (oscillator lookahead). Sharing the metro bus caused audible double-MET with Beat Lab.
+   */
   const master =
     typeof window !== 'undefined'
       ? (window as unknown as { __daMusicMasterGain?: GainNode | null }).__daMusicMasterGain
@@ -77,9 +122,7 @@ export function scheduleCreationMetronomeClickAt(
   if (master && master.context === ctx) {
     gain.connect(master);
   } else {
-    const bus = getMetronomeBusGain();
-    if (bus && bus.context === ctx) gain.connect(bus);
-    else gain.connect(ctx.destination);
+    gain.connect(ctx.destination);
   }
   src.start(t0);
   const entry = { src, gain };
@@ -105,6 +148,10 @@ export function beatAtSessionTime(
   const spb = 60 / Math.max(1, bpm);
   const b = originBeat + Math.max(0, t - sessionStartAudio) / spb;
   return Math.max(0, b);
+}
+
+export function shouldHoldSharedAudioGraphForCreationModules(): boolean {
+  return isCreationBeatLabTransportRunning() || grooveLabHoldsSharedAudioGraph();
 }
 
 /** Beat Lab local transport is playing — master `pause`/`stop` must not suspend the shared graph. */
@@ -138,6 +185,25 @@ export function isGrooveLabTransportRunning(): boolean {
   );
 }
 
+/** Groove Lab tab visible — master `pause`/`stop` must not suspend the shared graph (keypad preview). */
+export function setGrooveLabScreenActive(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicGrooveLabScreenActive?: boolean }).__daMusicGrooveLabScreenActive =
+    active;
+}
+
+export function isGrooveLabScreenActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicGrooveLabScreenActive?: boolean }).__daMusicGrooveLabScreenActive ===
+    true
+  );
+}
+
+function grooveLabHoldsSharedAudioGraph(): boolean {
+  return isGrooveLabTransportRunning() || isGrooveLabScreenActive();
+}
+
 /**
  * Groove Lab metronome — **groove playback bus only** (never `__daMusicMasterGain` / master metro bus).
  * Prevents double clicks when master clock or Beat Lab also schedules metronome on the shared graph.
@@ -148,7 +214,7 @@ export function scheduleGrooveLabMetronomeClickAt(
   accent: boolean,
   ctSnap: number,
   buffers: CreationMetronomeClickBuffers,
-  grooveBus: GainNode,
+  grooveDest: AudioNode,
   scheduled: CreationScheduledMetroNode[],
 ): void {
   const buf = accent ? buffers.accent : buffers.click;
@@ -159,8 +225,8 @@ export function scheduleGrooveLabMetronomeClickAt(
   const gain = ctx.createGain();
   gain.gain.value = CREATION_METRO_VOLUME;
   src.connect(gain);
-  if (grooveBus.context === ctx) {
-    gain.connect(grooveBus);
+  if (grooveDest.context === ctx) {
+    gain.connect(grooveDest);
   } else {
     gain.connect(ctx.destination);
   }

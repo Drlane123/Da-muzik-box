@@ -16,6 +16,8 @@ export interface GrooveLabTempoStripProps {
   transportPlaying?: boolean;
   /** Smaller control for progression panel / tight toolbars (no slider). */
   compact?: boolean;
+  /** Single-row BPM + slider inside Groove Lab transport bar. */
+  transportBar?: boolean;
 }
 
 export function GrooveLabTempoStrip({
@@ -25,6 +27,7 @@ export function GrooveLabTempoStrip({
   disabled = false,
   transportPlaying = false,
   compact = false,
+  transportBar = false,
 }: GrooveLabTempoStripProps) {
   const safeBpm = clampGrooveLabBpm(bpm);
   const [bpmInput, setBpmInput] = useState(String(safeBpm));
@@ -42,6 +45,137 @@ export function GrooveLabTempoStrip({
   );
 
   const barLabel = formatGrooveLabBarDuration(safeBpm);
+
+  const bpmInputBox = (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        gap: 0,
+        background: '#0a1018',
+        border: '1px solid #1f3a29',
+        borderRadius: 5,
+        overflow: 'hidden',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: transportBar ? '1px 6px' : '2px 8px' }}>
+        <Zap size={transportBar ? 10 : 11} style={{ color: '#7cf4c6', flexShrink: 0 }} />
+        <input
+          type="text"
+          inputMode="numeric"
+          readOnly={disabled}
+          value={bpmInput}
+          onChange={(e) => {
+            if (disabled) return;
+            setBpmInput(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (disabled) return;
+            if (e.key === 'Enter') e.currentTarget.blur();
+            else if (e.key === 'Escape') {
+              setBpmInput(String(safeBpm));
+              e.currentTarget.blur();
+            }
+          }}
+          onBlur={() => {
+            if (disabled) return;
+            const v = parseInt(bpmInput.trim(), 10);
+            if (Number.isFinite(v)) commit(v);
+            else setBpmInput(String(safeBpm));
+          }}
+          onFocus={(e) => e.currentTarget.select()}
+          title={`Tempo ${GROOVE_LAB_BPM_MIN}–${GROOVE_LAB_BPM_MAX} BPM — Enter to apply`}
+          style={{
+            width: transportBar ? 38 : 44,
+            background: 'transparent',
+            border: 'none',
+            color: '#7cf4c6',
+            fontSize: transportBar ? 12 : 14,
+            fontFamily: 'monospace',
+            fontWeight: 800,
+            outline: 'none',
+            textAlign: 'center',
+            cursor: disabled ? 'not-allowed' : 'text',
+            opacity: disabled ? 0.45 : 1,
+          }}
+        />
+        <span style={{ fontSize: transportBar ? 8 : 9, color: '#6b7280', fontWeight: 800 }}>BPM</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #1f3a29' }}>
+        <button
+          type="button"
+          disabled={disabled || safeBpm >= GROOVE_LAB_BPM_MAX}
+          onClick={() => commit(safeBpm + 1)}
+          style={stepBtn(disabled)}
+          aria-label="Increase BPM"
+        >
+          <ChevronUp size={transportBar ? 11 : 13} />
+        </button>
+        <button
+          type="button"
+          disabled={disabled || safeBpm <= GROOVE_LAB_BPM_MIN}
+          onClick={() => commit(safeBpm - 1)}
+          style={{ ...stepBtn(disabled), borderTop: '1px solid #1f3a29' }}
+          aria-label="Decrease BPM"
+        >
+          <ChevronDown size={transportBar ? 11 : 13} />
+        </button>
+      </div>
+    </div>
+  );
+
+  if (transportBar) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexShrink: 0,
+          maxWidth: 'min(100%, 280px)',
+        }}
+        title={`4/4 · ${barLabel}s per bar${sessionLocked ? ' · session BPM locked' : ''}`}
+      >
+        <span
+          style={{
+            fontSize: 8,
+            fontWeight: 800,
+            letterSpacing: 0.4,
+            color: sessionLocked ? '#7cf4c6' : '#6b7280',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 3,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {sessionLocked ? <Link2 size={9} /> : null}
+          TEMPO
+          {transportPlaying ? <span style={{ color: '#4ade80' }}>▶</span> : null}
+        </span>
+        {bpmInputBox}
+        <input
+          type="range"
+          min={GROOVE_LAB_BPM_MIN}
+          max={GROOVE_LAB_BPM_MAX}
+          step={1}
+          disabled={disabled}
+          value={safeBpm}
+          onChange={(e) => commit(Number(e.target.value))}
+          style={{
+            width: 96,
+            height: 5,
+            margin: 0,
+            flexShrink: 1,
+            minWidth: 72,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            accentColor: '#7cf4c6',
+            opacity: disabled ? 0.45 : 1,
+          }}
+          title={`Drag tempo — ${GROOVE_LAB_BPM_MIN}–${GROOVE_LAB_BPM_MAX} BPM`}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -108,81 +242,7 @@ export function GrooveLabTempoStrip({
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 0 : 4, flexShrink: 0 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'stretch',
-            gap: 0,
-            background: '#0a1018',
-            border: '1px solid #1f3a29',
-            borderRadius: 5,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px' }}>
-            <Zap size={11} style={{ color: '#7cf4c6', flexShrink: 0 }} />
-            <input
-              type="text"
-              inputMode="numeric"
-              readOnly={disabled}
-              value={bpmInput}
-              onChange={(e) => {
-                if (disabled) return;
-                setBpmInput(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (disabled) return;
-                if (e.key === 'Enter') e.currentTarget.blur();
-                else if (e.key === 'Escape') {
-                  setBpmInput(String(safeBpm));
-                  e.currentTarget.blur();
-                }
-              }}
-              onBlur={() => {
-                if (disabled) return;
-                const v = parseInt(bpmInput.trim(), 10);
-                if (Number.isFinite(v)) commit(v);
-                else setBpmInput(String(safeBpm));
-              }}
-              onFocus={(e) => e.currentTarget.select()}
-              title={`Tempo ${GROOVE_LAB_BPM_MIN}–${GROOVE_LAB_BPM_MAX} BPM — Enter to apply`}
-              style={{
-                width: 44,
-                background: 'transparent',
-                border: 'none',
-                color: '#7cf4c6',
-                fontSize: 14,
-                fontFamily: 'monospace',
-                fontWeight: 800,
-                outline: 'none',
-                textAlign: 'center',
-                cursor: disabled ? 'not-allowed' : 'text',
-                opacity: disabled ? 0.45 : 1,
-              }}
-            />
-            <span style={{ fontSize: 9, color: '#6b7280', fontWeight: 800 }}>BPM</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', borderLeft: '1px solid #1f3a29' }}>
-            <button
-              type="button"
-              disabled={disabled || safeBpm >= GROOVE_LAB_BPM_MAX}
-              onClick={() => commit(safeBpm + 1)}
-              style={stepBtn(disabled)}
-              aria-label="Increase BPM"
-            >
-              <ChevronUp size={13} />
-            </button>
-            <button
-              type="button"
-              disabled={disabled || safeBpm <= GROOVE_LAB_BPM_MIN}
-              onClick={() => commit(safeBpm - 1)}
-              style={{ ...stepBtn(disabled), borderTop: '1px solid #1f3a29' }}
-              aria-label="Decrease BPM"
-            >
-              <ChevronDown size={13} />
-            </button>
-          </div>
-        </div>
+        {bpmInputBox}
         {!compact ? (
           <input
             type="range"

@@ -2,22 +2,22 @@
  * Visual controls for Beat Lab per-pad EFX rack: graphic EQ curve + vertical faders.
  */
 
-import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+
+import {
+  GrooveStyleTCapParamHorizontalFader,
+  GrooveStyleTCapParamVerticalFader,
+  GrooveStyleTCapVolumeFaderStyles,
+} from '@/app/components/creation/GrooveStyleTCapVolumeFader';
 
 import type {
   PadSamplerCompressorFx,
   PadSamplerEqFx,
 } from '@/app/lib/creationStation/padSamplerFxRack';
 
-/** Map linear value position (bottom=0 top=1) to numeric range. */
-function valueFromFaderNormalized(t: number, min: number, max: number): number {
-  const u = Math.max(0, Math.min(1, t));
-  return min + (1 - u) * (max - min);
-}
-
-function normalizeFromValue(v: number, min: number, max: number): number {
-  if (max <= min) return 0.5;
-  return Math.max(0, Math.min(1, 1 - (v - min) / (max - min)));
+/** Inject once near pad EDIT/EFX popovers. */
+export function PadSamplerFxTCapStyles() {
+  return <GrooveStyleTCapVolumeFaderStyles />;
 }
 
 type VerticalFaderProps = {
@@ -43,22 +43,6 @@ export function PadFxVerticalFader({
   accent,
   disabled,
 }: VerticalFaderProps) {
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const dragging = useRef(false);
-
-  const setFromClientY = (clientY: number) => {
-    const el = trackRef.current;
-    if (!el || disabled) return;
-    const r = el.getBoundingClientRect();
-    const t = 1 - (clientY - r.top) / Math.max(1, r.height);
-    const raw = valueFromFaderNormalized(t, min, max);
-    const steps = Math.round((raw - min) / step);
-    const snapped = Math.max(min, Math.min(max, min + steps * step));
-    if (Math.abs(snapped - value) > 1e-6) onChange(snapped);
-  };
-
-  const norm = normalizeFromValue(value, min, max);
-
   return (
     <div
       style={{
@@ -72,126 +56,77 @@ export function PadFxVerticalFader({
     >
       <span
         style={{
-          fontSize: 9,
+          fontSize: 11,
           fontWeight: 800,
-          color: '#c4b5fd',
+          color: '#ddd6fe',
           fontVariantNumeric: 'tabular-nums',
         }}
       >
         {format(value)}
       </span>
-      <div
-        ref={trackRef}
-        role="slider"
-        aria-valuemin={min}
-        aria-valuemax={max}
-        aria-valuenow={value}
-        aria-label={label}
-        tabIndex={disabled ? -1 : 0}
-        onPointerDown={(e) => {
-          if (disabled) return;
-          e.preventDefault();
-          dragging.current = true;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          setFromClientY(e.clientY);
-        }}
-        onPointerMove={(e) => {
-          if (!dragging.current || disabled) return;
-          setFromClientY(e.clientY);
-        }}
-        onPointerUp={(e) => {
-          dragging.current = false;
-          try {
-            e.currentTarget.releasePointerCapture(e.pointerId);
-          } catch {
-            /* */
-          }
-        }}
-        onKeyDown={(e) => {
-          if (disabled) return;
-          if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
-            e.preventDefault();
-            onChange(Math.min(max, value + step));
-          }
-          if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
-            e.preventDefault();
-            onChange(Math.max(min, value - step));
-          }
-          if (e.key === 'Home') {
-            e.preventDefault();
-            onChange(min);
-          }
-          if (e.key === 'End') {
-            e.preventDefault();
-            onChange(max);
-          }
-        }}
-        style={{
-          width: 22,
-          height: 112,
-          borderRadius: 5,
-          background: 'linear-gradient(180deg, #16161f 0%, #0c0c10 55%, #0a080e 100%)',
-          border: `1px solid ${accent}`,
-          boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.55)',
-          position: 'relative',
-          cursor: disabled ? 'not-allowed' : 'ns-resize',
-        }}
-      >
-        {/* scale ticks */}
-        <div
-          style={{
-            position: 'absolute',
-            left: -5,
-            top: 8,
-            bottom: 8,
-            width: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            pointerEvents: 'none',
-            opacity: 0.55,
-          }}
-        >
-          {[0, 1, 2, 3, 4].map((k) => (
-            <span
-              key={k}
-              style={{
-                display: 'block',
-                height: 1,
-                background: accent,
-              }}
-            />
-          ))}
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: `${8 + norm * (100 - 16)}%`,
-            transform: 'translate(-50%, -50%)',
-            width: 18,
-            height: 10,
-            borderRadius: 2,
-            background: `linear-gradient(180deg, #e8e4ff 0%, ${accent} 100%)`,
-            boxShadow:
-              `0 0 0 1px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.45), 0 0 10px ${accent}66`,
-          }}
-        />
-      </div>
+      <GrooveStyleTCapParamVerticalFader
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={onChange}
+        accent={accent}
+        ariaLabel={label}
+        height={112}
+        disabled={disabled}
+      />
       <span
         style={{
-          fontSize: 7,
-          color: '#818cf8',
+          fontSize: 10,
+          color: '#c4b5fd',
           fontWeight: 900,
-          letterSpacing: 0.4,
+          letterSpacing: 0.35,
           textAlign: 'center',
-          maxWidth: 48,
+          maxWidth: 52,
           lineHeight: 1.15,
         }}
       >
         {label}
       </span>
     </div>
+  );
+}
+
+type HorizontalSliderProps = {
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (v: number) => void;
+  accent: string;
+  ariaLabel?: string;
+  disabled?: boolean;
+  style?: CSSProperties;
+};
+
+export function PadFxHorizontalTCapSlider({
+  min,
+  max,
+  step,
+  value,
+  onChange,
+  accent,
+  ariaLabel,
+  disabled,
+  style,
+}: HorizontalSliderProps) {
+  return (
+    <GrooveStyleTCapParamHorizontalFader
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={onChange}
+      accent={accent}
+      ariaLabel={ariaLabel}
+      disabled={disabled}
+      style={{ margin: '6px 0', ...style }}
+    />
   );
 }
 
@@ -586,19 +521,19 @@ export function PadFxInteractiveGraphicEq({
             </g>
           );
         })}
-        <text x={12} y={h - 5} fill="#64748b" fontSize={6} fontWeight={800}>
+        <text x={12} y={h - 5} fill="#94a3b8" fontSize={8} fontWeight={800}>
           20Hz
         </text>
-        <text x={w / 2 - 12} y={h - 5} fill="#64748b" fontSize={6} fontWeight={800}>
+        <text x={w / 2 - 12} y={h - 5} fill="#94a3b8" fontSize={8} fontWeight={800}>
           1k
         </text>
-        <text x={w - 42} y={h - 5} fill="#64748b" fontSize={6} fontWeight={800}>
+        <text x={w - 42} y={h - 5} fill="#94a3b8" fontSize={8} fontWeight={800}>
           20k
         </text>
-        <text x={12} y={14} fill="#818cf8" fontSize={6} fontWeight={900}>
+        <text x={12} y={14} fill="#a5b4fc" fontSize={8} fontWeight={900}>
           +12dB
         </text>
-        <text x={12} y={zeroY + 1} fill="#7cf4c6" fontSize={6} fontWeight={900} opacity={0.9}>
+        <text x={12} y={zeroY + 1} fill="#7cf4c6" fontSize={8} fontWeight={900} opacity={0.9}>
           0dB
         </text>
       </svg>
@@ -608,9 +543,10 @@ export function PadFxInteractiveGraphicEq({
           justifyContent: 'space-between',
           gap: 6,
           marginTop: 5,
-          fontSize: 7,
-          color: '#6b7280',
+          fontSize: 9,
+          color: '#b8c4d8',
           fontWeight: 700,
+          lineHeight: 1.35,
         }}
       >
         <span>Drag dot: ↔ freq · ↕ gain</span>
@@ -708,19 +644,19 @@ export function PadSamplerEqCompControls({
 
   return (
     <div style={{ marginTop: 10 }}>
-      <div style={{ fontSize: 7, color: '#818cf8', fontWeight: 900, letterSpacing: 0.85, marginBottom: 6 }}>GRAPHIC EQ</div>
+      <div style={{ fontSize: 10, color: '#c7d2fe', fontWeight: 900, letterSpacing: 0.65, marginBottom: 8 }}>GRAPHIC EQ</div>
       <button
         type="button"
         onClick={() => onEqChange({ enabled: !eq.enabled })}
         style={{
-          fontSize: 8,
+          fontSize: 10,
           fontWeight: 800,
-          padding: '3px 8px',
+          padding: '4px 10px',
           borderRadius: 4,
           marginBottom: 8,
           border: `1px solid ${eq.enabled ? 'rgba(129, 140, 248, 0.55)' : '#444'}`,
           background: eq.enabled ? 'rgba(129, 140, 248, 0.16)' : '#101014',
-          color: eq.enabled ? '#c7d2fe' : '#888',
+          color: eq.enabled ? '#e0e7ff' : '#b8bfd0',
           cursor: 'pointer',
         }}
       >
@@ -741,21 +677,21 @@ export function PadSamplerEqCompControls({
         </>
       ) : null}
 
-      <div style={{ fontSize: 7, color: '#818cf8', fontWeight: 900, letterSpacing: 0.85, marginTop: 12, marginBottom: 6 }}>
+      <div style={{ fontSize: 10, color: '#c7d2fe', fontWeight: 900, letterSpacing: 0.65, marginTop: 12, marginBottom: 8 }}>
         COMPRESSOR
       </div>
       <button
         type="button"
         onClick={() => onCompChange({ enabled: !comp.enabled })}
         style={{
-          fontSize: 8,
+          fontSize: 10,
           fontWeight: 800,
-          padding: '3px 8px',
+          padding: '4px 10px',
           borderRadius: 4,
-          marginBottom: 6,
+          marginBottom: 8,
           border: `1px solid ${comp.enabled ? 'rgba(124, 244, 198, 0.45)' : '#444'}`,
           background: comp.enabled ? 'rgba(124, 244, 198, 0.1)' : '#101014',
-          color: comp.enabled ? '#7cf4c6' : '#888',
+          color: comp.enabled ? '#a7f3d0' : '#b8bfd0',
           cursor: 'pointer',
         }}
       >

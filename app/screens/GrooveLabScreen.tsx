@@ -1,32 +1,80 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GrooveLabLayerLegend } from '@/app/components/creation/GrooveLabLayerLegend';
-import { GrooveLabTempoStrip } from '@/app/components/creation/GrooveLabTempoStrip';
-import { GROOVE_LAB_CHORD_MIX_GAIN } from '@/app/lib/creationStation/grooveLabLayers';
+import {
+  GROOVE_LAB_CHORD_MIX_GAIN,
+  grooveLabChordStripVoiceMix,
+} from '@/app/lib/creationStation/grooveLabLayers';
 import { GrooveLabBeatLabPadPicker } from '@/app/components/creation/GrooveLabBeatLabPadPicker';
 import { OrchidPerformancePanel } from '@/app/components/creation/OrchidPerformancePanel';
+import { GrooveLabChannelRail } from '@/app/components/creation/GrooveLabChannelRail';
 import { GrooveLabPianoRoll } from '@/app/components/creation/GrooveLabPianoRoll';
+import { grooveLabLayerScopeForChannel } from '@/app/lib/creationStation/grooveLabPianoRollLayers';
 import { clampGrooveLabBpm } from '@/app/lib/creationStation/grooveLabTempo';
+import {
+  dispatchGrooveLabTransportMirror,
+  LAB808_SYNC_CHANGED_EVENT,
+  LAB808_TRANSPORT_MIRROR_EVENT,
+  readLab808TransportMirror,
+  type Lab808TransportMirrorDetail,
+} from '@/app/lib/creationStation/lab808Sync';
+import {
+  CREATION_BEATLAB_PLAY_MIRROR_EVENT,
+  type CreationBeatlabPlayMirrorDetail,
+} from '@/app/lib/creationStation/creationSessionLink';
+import type { GrooveGuitarPackRollBuild } from '@/app/lib/creationStation/grooveLabGuitarPackLibrary';
 import {
   progressionStepsToGrooveHits,
   type GrooveProgressionStep,
   type GrooveStagedProgression,
 } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
 import { orchidVoiceAuditionLabel } from '@/app/lib/creationStation/grooveLabProgressionPreview';
+import { useMasterClock } from '@/app/context/MasterClockContext';
 import { useGrooveLabProgressionAudition } from '@/app/hooks/useGrooveLabProgressionAudition';
 import { useGrooveLabOrchid } from '@/app/hooks/useGrooveLabOrchid';
 import { useGrooveLabTransport } from '@/app/hooks/useGrooveLabTransport';
+import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { chordBassSeqChannelLabel } from '@/app/lib/creationStation/chordBassSequencerSession';
-import { previewGrooveLabRoll } from '@/app/lib/creationStation/grooveLabTransport';
+import { grooveLabSecPerSlot, previewGrooveLabRoll } from '@/app/lib/creationStation/grooveLabTransport';
 import {
-  armGrooveLabPlayback,
-  getOrCreateGrooveLabPlaybackBus,
+  applyGrooveLabChannelVolumes,
+  ensureGrooveLabAudioReady,
+  grooveLabAudioWhen,
+  resolveGrooveLabChannelDest,
+  restoreGrooveLabTransportGuitarBus,
+  restoreGrooveLabTransportMelodyBus,
+  resumeGrooveLabAudioContext,
   runWithGrooveLabAudio,
-  silenceGrooveLabPlayback,
-  withGrooveLabPlaybackSink,
 } from '@/app/lib/creationStation/grooveLabAudio';
-import { withProgressionAuditionOutput } from '@/app/lib/creationStation/chordSequencerVoices';
-import { playGrooveLabBassSound } from '@/app/lib/creationStation/grooveLabBassSounds';
+import { restoreChordSequencerTransportVoices } from '@/app/lib/creationStation/chordSequencerVoices';
+import {
+  auditionGrooveLabGuitarLick,
+  playGrooveLabGuitarNoteScheduled,
+  scheduleGrooveLabGuitarTransportHit,
+} from '@/app/lib/creationStation/grooveLabGuitarAudition';
+import { grooveLabGuitarFxToPlayOpts, type GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/grooveLabGuitarFx';
+import {
+  GROOVE_GUITAR_SOUND_DEFAULT,
+  resolveGrooveLabGuitarSoundId,
+} from '@/app/lib/creationStation/grooveLabGuitarSoundBank';
+import {
+  ensureGuitarLickBuffer,
+  getGuitarLickDef,
+  isGuitarLickSampleId,
+  grooveLabGuitarBarSec,
+} from '@/app/lib/creationStation/grooveLabGuitarLickBank';
+import { mergeGuitarPlaybackFx } from '@/app/lib/creationStation/grooveLabGuitarFx';
+import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
+import { GROOVE_LAB_GUITAR_MONO_GROUP } from '@/app/lib/creationStation/grooveLabLeadMono';
+import {
+  playGrooveLabLeadSound,
+  type GrooveLabAnyLeadSoundId,
+} from '@/app/lib/creationStation/grooveLabLeadSounds';
+import {
+  grooveLabChannelVolumeGain,
+  grooveLabMeterPeakFromVelocity,
+  scheduleGrooveLabMeterPulseAt,
+} from '@/app/lib/creationStation/grooveLabChannelMeters';
 import { grooveLabGlobalColToSlot, grooveLabSlotToGlobalCol } from '@/app/lib/creationStation/grooveLabGrid';
+import { notifyLab808ChordSourcesChanged } from '@/app/lib/creationStation/lab808ChordLockSources';
 import {
   isGrooveLabMidiImportError,
   isMidiFileName,
@@ -39,12 +87,16 @@ import {
   grooveLabChannelIds,
   grooveLabDefaultLayerChannels,
   grooveLabPickChordChannel,
+  grooveLabPickGuitarChannel,
   grooveLabPickMelodyChannel,
+  grooveLabPickSampleChannel,
+  sanitizeGrooveLabGuitarChannelHits,
+  grooveLabTrimGuitarHitsMonophonic,
   loadGrooveLabSession,
   normalizeGrooveBarCount,
   sanitizeGrooveLabHits,
+  grooveLabChordHitsForTransport,
   sanitizeGrooveLabChordChannelHits,
-  grooveLabRollHasChordNotes,
   grooveLabTransportChordsMuted,
   saveGrooveLabSession,
   type GrooveLabBarCount,
@@ -54,17 +106,57 @@ import {
 import {
   grooveLabIsBassSubMidi,
   grooveLabIsMelodyMidi,
+  grooveLabStripMelodyHits,
   grooveLabStripSubRootHits,
 } from '@/app/lib/creationStation/grooveComposerEngine';
+import { grooveLabIsGuitarMidi } from '@/app/lib/creationStation/grooveLabPitch';
+import {
+  defaultGrooveLabChannelSound,
+  grooveLabAssignLayerToChannel,
+  grooveLabSanitizeLayerRouting,
+  readGrooveLabChannelSounds,
+  resolveGrooveLabChordVoiceId,
+  resolveGrooveLabLeadSoundId,
+  resolveGrooveLabOrchestraHitSoundId,
+  resolveGrooveLabWaveLeafPresetId,
+  writeGrooveLabChannelSounds,
+  type GrooveLabChannelSoundConfig,
+  type GrooveLabLayerRole,
+} from '@/app/lib/creationStation/grooveLabChannelConfig';
+import { preloadGuitarLickBank } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
+import { preloadOrchestraHitBank } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import {
+  auditionGrooveLabOrchestraHit,
+  scheduleGrooveLabOrchestraTransportHit,
+} from '@/app/lib/creationStation/grooveLabOrchestraHitAudition';
+import { buildOrchestraHitRoll } from '@/app/lib/creationStation/grooveLabOrchestraHitRoll';
+import type { OrchestraHitId } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import { haltWaveLeafVoices, playWaveLeafNote } from '@/app/lib/creationStation/waveLeafEngine';
+import {
+  waveLeafIsLeadMidi,
+  waveLeafPrepareRollHits,
+  waveLeafSanitizeHits,
+  waveLeafSanitizeRollEdits,
+  waveLeafStoreRollEdits,
+  waveLeafTransposeHitsOctave,
+} from '@/app/lib/creationStation/waveLeafPitch';
+import {
+  readWaveLeafOutputGain,
+  readWaveLeafSynthSettings,
+  writeWaveLeafRuntimeSettings,
+} from '@/app/lib/creationStation/waveLeafRuntimeSettings';
+import { WAVE_LEAF_PRESETS } from '@/app/lib/creationStation/waveLeafPresets';
+import { waveLeafMelodyGenColumnCount } from '@/app/lib/creationStation/waveLeafPhraseGen';
 import {
   GROOVE_LAB_ROLL_OCTAVE_OPTS,
   grooveLabCountLayerHits,
   grooveLabTransposeChordStackHitsOctave,
-  grooveLabTransposeMelodyHitsOctave,
-  grooveLabTransposeSubHitsOctave,
-  type GrooveLabOctaveLayer,
 } from '@/app/lib/creationStation/grooveLabOctaveShift';
-import { GROOVE_LAB_CHORD_ROLL_MIDI_MIN } from '@/app/lib/creationStation/grooveLabPitch';
+import {
+  grooveLabClampBassRootMidi,
+  grooveLabIsChordStackMidi,
+  GROOVE_LAB_CHORD_ROLL_MIDI_MIN,
+} from '@/app/lib/creationStation/grooveLabPitch';
 import {
   downloadGrooveChordMidi,
   downloadGrooveChordWav,
@@ -86,46 +178,95 @@ export type GrooveLabNewSynthExportArgs = {
   chordHits: GrooveRollHit[];
   bpm: number;
   label: string;
+  /** When set (timeline export), import uses progression; `null` = roll hits only. */
   progressionSteps?: GrooveProgressionStep[] | null;
+  quantize?: GrooveLabQuantize;
+  barCount?: number;
+  keyRoot: number;
+  mode: ChordMode;
 };
-const GROOVE_BASS_CH_KEY = 'groove-lab-bass-ch';
 const GROOVE_CHORD_CH_KEY = 'groove-lab-chord-ch';
 const GROOVE_MELODY_CH_KEY = 'groove-lab-melody-ch';
+const GROOVE_GUITAR_CH_KEY = 'groove-lab-guitar-ch';
+const GROOVE_SAMPLE_CH_KEY = 'groove-lab-sample-ch';
+const GROOVE_EDIT_CH_KEY = 'groove-lab-edit-ch';
 const GROOVE_METRONOME_KEY = 'groove-lab-metronome-on';
 
-function readStoredBassChannel(): number {
-  const { bass } = grooveLabDefaultLayerChannels();
-  if (typeof window === 'undefined') return bass;
-  try {
-    const v = Number(window.localStorage.getItem(GROOVE_BASS_CH_KEY));
-    return grooveLabChannelIds().includes(v) ? v : bass;
-  } catch {
-    return bass;
-  }
-}
-
-function readStoredChordChannel(bassChannel: number): number {
-  if (typeof window === 'undefined') return grooveLabPickChordChannel(bassChannel);
+function readStoredChordChannel(): number {
+  const { chord } = grooveLabDefaultLayerChannels();
+  if (typeof window === 'undefined') return chord;
   try {
     const v = Number(window.localStorage.getItem(GROOVE_CHORD_CH_KEY));
-    return grooveLabPickChordChannel(bassChannel, Number.isFinite(v) ? v : undefined);
+    return grooveLabPickChordChannel(Number.isFinite(v) ? v : undefined);
   } catch {
-    return grooveLabPickChordChannel(bassChannel);
+    return chord;
   }
 }
 
-function readStoredMelodyChannel(bassChannel: number, chordChannel: number): number {
-  if (typeof window === 'undefined') return grooveLabPickMelodyChannel(bassChannel, chordChannel);
+function readStoredMelodyChannel(chordChannel: number): number {
+  const { melody } = grooveLabDefaultLayerChannels();
+  if (typeof window === 'undefined') return melody;
   try {
     const v = Number(window.localStorage.getItem(GROOVE_MELODY_CH_KEY));
-    return grooveLabPickMelodyChannel(
-      bassChannel,
+    return grooveLabPickMelodyChannel(chordChannel, Number.isFinite(v) ? v : undefined);
+  } catch {
+    return grooveLabPickMelodyChannel(chordChannel);
+  }
+}
+
+function readStoredGuitarChannel(chordChannel: number, melodyChannel: number): number {
+  const { guitar } = grooveLabDefaultLayerChannels();
+  if (typeof window === 'undefined') return guitar;
+  try {
+    const v = Number(window.localStorage.getItem(GROOVE_GUITAR_CH_KEY));
+    return grooveLabPickGuitarChannel(
       chordChannel,
+      melodyChannel,
       Number.isFinite(v) ? v : undefined,
     );
   } catch {
-    return grooveLabPickMelodyChannel(bassChannel, chordChannel);
+    return grooveLabPickGuitarChannel(chordChannel, melodyChannel);
   }
+}
+
+function readStoredEditChannel(fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const v = Number(window.localStorage.getItem(GROOVE_EDIT_CH_KEY));
+    if (!grooveLabChannelIds().includes(v)) return fallback;
+    return v;
+  } catch {
+    return fallback;
+  }
+}
+
+function readStoredSampleChannel(
+  chordChannel: number,
+  melodyChannel: number,
+  guitarChannel: number,
+): number {
+  if (typeof window === 'undefined') {
+    return grooveLabPickSampleChannel(chordChannel, melodyChannel, guitarChannel);
+  }
+  try {
+    const v = Number(window.localStorage.getItem(GROOVE_SAMPLE_CH_KEY));
+    return grooveLabPickSampleChannel(
+      chordChannel,
+      melodyChannel,
+      guitarChannel,
+      Number.isFinite(v) ? v : undefined,
+    );
+  } catch {
+    return grooveLabPickSampleChannel(chordChannel, melodyChannel, guitarChannel);
+  }
+}
+
+function readStoredGrooveLayerRouting() {
+  const chord = readStoredChordChannel();
+  const melody = readStoredMelodyChannel(chord);
+  const guitar = readStoredGuitarChannel(chord, melody);
+  const sample = readStoredSampleChannel(chord, melody, guitar);
+  return grooveLabSanitizeLayerRouting({ chord, melody, guitar, sample });
 }
 
 function readStoredGrooveMetronome(): boolean {
@@ -145,6 +286,14 @@ export interface GrooveLabScreenProps {
   bpm?: number;
   /** When set (Creation Station), Groove Lab tempo edits update the session BPM. */
   onBpmChange?: (bpm: number) => void;
+  /** When false (session BPM unlinked), Groove Lab keeps its own local tempo. */
+  sessionBpmLinked?: boolean;
+  /** When false, Beat Lab transport does not start/stop Groove Lab (808 mirror strip still works). */
+  sessionPlayLinked?: boolean;
+  /** Session Link Sync on 808 Lab — Groove transport also starts/stops 808. */
+  session808PlayLinked?: boolean;
+  /** 808 Lab tab open — keep Groove transport engine alive for PLAY mirror from pad deck. */
+  companion808Lab?: boolean;
   getAudioContext?: () => AudioContext;
   /** Creation Station: load rendered chord WAV into a Beat Lab sampler pad. */
   onExportChordWavToPad?: (args: GrooveLabPadExportArgs) => void | Promise<void>;
@@ -158,21 +307,69 @@ export interface GrooveLabScreenProps {
   setChannelVolume?: (chId: number, volume: number) => void;
 }
 
-function previewBassPitch(
+function previewGrooveLabRollPitch(
   ctx: AudioContext,
   when: number,
   midi: number,
-  bassSoundId: Parameters<typeof playGrooveLabBassSound>[2],
-  bpm: number,
+  lanes: {
+    chordChannel: number;
+    melodyChannel: number;
+    guitarChannel: number;
+    guitarSoundId: GrooveLabAnyLeadSoundId;
+    guitarFx: GrooveLabGuitarFxSettings;
+    bpm: number;
+  },
+  channelVolumes: Record<number, number>,
+  meterChannel?: number,
 ): void {
-  playGrooveLabBassSound(ctx, midi, bassSoundId, when, 0.88, bpm);
+  const meterCh = meterChannel ?? lanes.guitarChannel;
+
+  if (
+    grooveLabIsGuitarMidi(midi) &&
+    (meterChannel == null || meterChannel === lanes.guitarChannel)
+  ) {
+    const soundId = resolveGrooveLabGuitarSoundId(lanes.guitarSoundId);
+    const sustainSec = isGuitarLickSampleId(soundId)
+      ? grooveLabGuitarBarSec(lanes.bpm, 1)
+      : 0.55;
+    playGrooveLabGuitarNoteScheduled(ctx, {
+      midi,
+      soundId,
+      when,
+      velocity01: 0.88,
+      bpm: lanes.bpm,
+      sustainSec,
+      guitarFx: lanes.guitarFx,
+      guitarChannel: lanes.guitarChannel,
+      channelVolumes,
+      route: 'channel',
+    });
+    return;
+  }
+
+  if (grooveLabIsBassSubMidi(midi)) return;
+  if (waveLeafIsLeadMidi(midi)) return;
+  if (grooveLabIsMelodyMidi(midi)) return;
+  if (meterChannel != null) {
+    scheduleGrooveLabMeterPulseAt(
+      ctx,
+      meterChannel,
+      grooveLabMeterPeakFromVelocity(0.75, meterChannel, channelVolumes),
+      0,
+      when,
+    );
+  }
 }
 
 export default function GrooveLabScreen({
   embedded = false,
   isScreenActive = true,
+  companion808Lab = false,
   bpm: bpmProp = 100,
   onBpmChange,
+  sessionBpmLinked = true,
+  sessionPlayLinked = true,
+  session808PlayLinked = false,
   getAudioContext,
   onExportChordWavToPad,
   onSendChordsToNewSynth,
@@ -181,7 +378,26 @@ export default function GrooveLabScreen({
   channelVolumes: channelVolumesProp,
   setChannelVolume: setChannelVolumeProp,
 }: GrooveLabScreenProps) {
+  const { getOrCreateAudioContext: masterGetAudioContext } = useMasterClock();
+  const resolveAudioContext = useCallback((): AudioContext => {
+    if (getAudioContext) return getAudioContext();
+    return masterGetAudioContext();
+  }, [getAudioContext, masterGetAudioContext]);
+
   const [localBpm, setLocalBpm] = useState(() => clampGrooveLabBpm(bpmProp));
+  /** 808 Lab PLAY → Groove Lab: keep transport alive while user stays on the 808 tab. */
+  const [mirror808PlayToGroove, setMirror808PlayToGroove] = useState(
+    () => readLab808TransportMirror() === 'groove-lab',
+  );
+  useEffect(() => {
+    const bump = () => setMirror808PlayToGroove(readLab808TransportMirror() === 'groove-lab');
+    window.addEventListener(LAB808_SYNC_CHANGED_EVENT, bump);
+    return () => window.removeEventListener(LAB808_SYNC_CHANGED_EVENT, bump);
+  }, []);
+  /** Session Link Sync: Beat Lab play/pause/stop while user stays on Beat Lab (hidden mount). */
+  const sessionBeatLabPlayMirror = embedded && sessionPlayLinked;
+  const grooveTransportActive =
+    isScreenActive || companion808Lab || mirror808PlayToGroove || sessionBeatLabPlayMirror;
   const bpm = onBpmChange ? clampGrooveLabBpm(bpmProp) : localBpm;
   const setBpm = useCallback(
     (next: number) => {
@@ -191,12 +407,12 @@ export default function GrooveLabScreen({
     },
     [onBpmChange],
   );
+  const grooveSessionBpmLocked = embedded && sessionBpmLinked && Boolean(onBpmChange);
 
   useEffect(() => {
     if (!onBpmChange) setLocalBpm(clampGrooveLabBpm(bpmProp));
   }, [bpmProp, onBpmChange]);
   const channels = grooveLabChannelIds();
-  const [bassChannel, setBassChannel] = useState(readStoredBassChannel);
   const [notesByChannel, setNotesByChannel] = useState(() => loadGrooveLabSession().notesByChannel);
   const [barCount, setBarCount] = useState<GrooveLabBarCount>(() => loadGrooveLabSession().barCount);
   const [noteLengthSlots, setNoteLengthSlots] = useState(8);
@@ -211,12 +427,16 @@ export default function GrooveLabScreen({
     },
     [metronomeEnabled, onMetronomeEnabledChange],
   );
-  const [chordChannel, setChordChannel] = useState(() =>
-    readStoredChordChannel(readStoredBassChannel()),
+  const initialLayerRouting = readStoredGrooveLayerRouting();
+  const [chordChannel, setChordChannel] = useState(initialLayerRouting.chord);
+  const [melodyChannel, setMelodyChannel] = useState(initialLayerRouting.melody);
+  const [guitarChannel, setGuitarChannel] = useState(initialLayerRouting.guitar);
+  const [sampleChannel, setSampleChannel] = useState(initialLayerRouting.sample);
+  const [channelSounds, setChannelSounds] = useState(readGrooveLabChannelSounds);
+  const [selectedEditChannel, setSelectedEditChannel] = useState(() =>
+    readStoredEditChannel(readStoredChordChannel()),
   );
-  const [melodyChannel, setMelodyChannel] = useState(() =>
-    readStoredMelodyChannel(readStoredBassChannel(), readStoredChordChannel(readStoredBassChannel())),
-  );
+  const [rollExpanded, setRollExpanded] = useState(false);
   const [rollPxPerCol, setRollPxPerCol] = useState(40);
   const playheadElRef = useRef<HTMLDivElement | null>(null);
   const rollScrollRef = useRef<HTMLDivElement | null>(null);
@@ -230,7 +450,6 @@ export default function GrooveLabScreen({
     hits: GrooveRollHit[];
     label: string;
   } | null>(null);
-  const [matchBassAfterProgressionDrop, setMatchBassAfterProgressionDrop] = useState(false);
   const [localChannelVolumes, setLocalChannelVolumes] = useState<Record<number, number>>(() => {
     const out: Record<number, number> = {};
     for (const ch of grooveLabChannelIds()) out[ch] = 80;
@@ -248,16 +467,61 @@ export default function GrooveLabScreen({
     [setChannelVolumeProp],
   );
 
+  /** Live CH 33–48 faders — update strip bus gain immediately (not only on next note). */
+  useEffect(() => {
+    if (!isScreenActive) return;
+    let ctx: AudioContext | null = null;
+    try {
+      ctx = resolveAudioContext();
+    } catch {
+      return;
+    }
+    if (!ctx || ctx.state === 'closed') return;
+    applyGrooveLabChannelVolumes(ctx, channelVolumes);
+  }, [channelVolumes, isScreenActive, resolveAudioContext]);
+
   useEffect(() => {
     setNotesByChannel((prev) => {
       let changed = false;
       const next: Record<number, GrooveRollHit[]> = { ...prev };
+
       for (const ch of grooveLabChannelIds()) {
         const raw = prev[ch] ?? [];
+        let stripped = grooveLabStripSubRootHits(raw);
+        if (ch === melodyChannel) {
+          /** Groove Lead — C5–C6 only; do not run amber-lane strip on lead channel. */
+          stripped = waveLeafSanitizeHits(stripped);
+        } else if (ch === guitarChannel) {
+          stripped = stripped.filter((h) => grooveLabIsGuitarMidi(h.midi));
+        } else {
+          stripped = grooveLabStripMelodyHits(stripped);
+        }
+        if (ch === chordChannel || ch === sampleChannel) {
+          stripped = stripped.filter((h) => grooveLabIsChordStackMidi(h.midi));
+        }
+        if (stripped.length !== raw.length) {
+          changed = true;
+          next[ch] =
+            ch === chordChannel || ch === sampleChannel
+              ? sanitizeGrooveLabChordChannelHits(stripped, barCount)
+              : ch === melodyChannel
+                ? waveLeafPrepareRollHits(stripped, barCount)
+                : ch === guitarChannel
+                  ? sanitizeGrooveLabGuitarChannelHits(stripped, barCount)
+                  : sanitizeGrooveLabHits(stripped, barCount);
+        }
+      }
+
+      for (const ch of grooveLabChannelIds()) {
+        const raw = next[ch] ?? prev[ch] ?? [];
         const clean =
-          ch === chordChannel
+          ch === chordChannel || ch === sampleChannel
             ? sanitizeGrooveLabChordChannelHits(raw, barCount)
-            : sanitizeGrooveLabHits(raw, barCount);
+            : ch === melodyChannel
+              ? waveLeafPrepareRollHits(raw, barCount)
+              : ch === guitarChannel
+                ? sanitizeGrooveLabGuitarChannelHits(raw, barCount)
+                : sanitizeGrooveLabHits(raw, barCount);
         if (clean.length !== raw.length) {
           changed = true;
           next[ch] = clean;
@@ -281,31 +545,26 @@ export default function GrooveLabScreen({
   useEffect(() => {
     if (!isScreenActive) return;
     saveGrooveLabSession(notesByChannel, barCount);
+    notifyLab808ChordSourcesChanged();
   }, [notesByChannel, barCount, isScreenActive]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(GROOVE_BASS_CH_KEY, String(bassChannel));
       window.localStorage.setItem(GROOVE_CHORD_CH_KEY, String(chordChannel));
       window.localStorage.setItem(GROOVE_MELODY_CH_KEY, String(melodyChannel));
+      window.localStorage.setItem(GROOVE_GUITAR_CH_KEY, String(guitarChannel));
+      window.localStorage.setItem(GROOVE_SAMPLE_CH_KEY, String(sampleChannel));
+      window.localStorage.setItem(GROOVE_EDIT_CH_KEY, String(selectedEditChannel));
       window.localStorage.setItem(GROOVE_METRONOME_KEY, metronomeEnabled ? '1' : '0');
     } catch {
       /* ignore */
     }
-  }, [bassChannel, chordChannel, melodyChannel, metronomeEnabled]);
+  }, [chordChannel, melodyChannel, guitarChannel, sampleChannel, selectedEditChannel, metronomeEnabled]);
 
   useEffect(() => {
-    if (chordChannel === bassChannel) {
-      setChordChannel(grooveLabPickChordChannel(bassChannel, chordChannel));
-    }
-  }, [bassChannel, chordChannel]);
-
-  useEffect(() => {
-    if (melodyChannel === bassChannel || melodyChannel === chordChannel) {
-      setMelodyChannel(grooveLabPickMelodyChannel(bassChannel, chordChannel, melodyChannel));
-    }
-  }, [bassChannel, chordChannel, melodyChannel]);
+    writeGrooveLabChannelSounds(channelSounds);
+  }, [channelSounds]);
 
   const handleBarCountChange = useCallback((next: GrooveLabBarCount) => {
     const bars = normalizeGrooveBarCount(next);
@@ -320,28 +579,74 @@ export default function GrooveLabScreen({
   }, []);
 
   const chordHits = notesByChannel[chordChannel] ?? [];
-
-  const bassRollHits = useMemo(
-    () =>
-      sanitizeGrooveLabHits(
-        (notesByChannel[bassChannel] ?? []).filter((h) => grooveLabIsBassSubMidi(h.midi)),
-        barCount,
-      ),
-    [notesByChannel, bassChannel, barCount],
+  /** Same stack the CHORD roll draws — transport must not play tones the roll hides. */
+  const chordHitsForTransport = useMemo(
+    () => grooveLabChordHitsForTransport(chordHits, barCount, quantize),
+    [chordHits, barCount, quantize],
   );
 
-  const melodyRollHits = useMemo(
+  const chordHitsForMelodyGen = chordHitsForTransport;
+
+  const transportBassHits: GrooveRollHit[] = [];
+  const transportChordHits = chordHitsForTransport;
+
+  /** Piano roll + edits — keep user sustain / length (no monophonic trim on every frame). */
+  const waveLeafRollHits = useMemo(
     () =>
-      sanitizeGrooveLabHits(
-        (notesByChannel[melodyChannel] ?? []).filter((h) => grooveLabIsMelodyMidi(h.midi)),
-        barCount,
-      ),
+      waveLeafSanitizeRollEdits(notesByChannel[melodyChannel] ?? [], barCount, {
+        expanded: rollExpanded,
+      }),
+    [notesByChannel, melodyChannel, barCount, rollExpanded],
+  );
+
+  /** Transport playback — one note per slot, trim sustain between adjacent hits. */
+  const waveLeafTransportHits = useMemo(
+    () => waveLeafPrepareRollHits(notesByChannel[melodyChannel] ?? [], barCount),
     [notesByChannel, melodyChannel, barCount],
   );
 
-  const transportBassHits = bassRollHits;
-  const transportMelodyHits = melodyRollHits;
-  const transportChordHits = chordHits;
+  const guitarRollHits = useMemo(
+    () => sanitizeGrooveLabGuitarChannelHits(notesByChannel[guitarChannel] ?? [], barCount),
+    [notesByChannel, guitarChannel, barCount],
+  );
+
+  const guitarTransportHits = useMemo(
+    () => grooveLabTrimGuitarHitsMonophonic(guitarRollHits),
+    [guitarRollHits],
+  );
+
+  const sampleRollHits = useMemo(
+    () => sanitizeGrooveLabChordChannelHits(notesByChannel[sampleChannel] ?? [], barCount),
+    [notesByChannel, sampleChannel, barCount],
+  );
+
+  const sampleTransportHits = useMemo(
+    () => grooveLabChordHitsForTransport(sampleRollHits, barCount, quantize),
+    [sampleRollHits, barCount, quantize],
+  );
+
+  const setWaveLeafHits = useCallback(
+    (next: GrooveRollHit[] | ((prev: GrooveRollHit[]) => GrooveRollHit[])) => {
+      setNotesByChannel((prev) => {
+        const raw = prev[melodyChannel] ?? [];
+        const displayPrev = waveLeafSanitizeRollEdits(raw, barCount, { expanded: rollExpanded });
+        const resolved = typeof next === 'function' ? next(displayPrev) : next;
+        return {
+          ...prev,
+          [melodyChannel]: waveLeafStoreRollEdits(resolved, barCount, { expanded: rollExpanded }),
+        };
+      });
+    },
+    [melodyChannel, barCount, rollExpanded],
+  );
+
+  const WAVE_LEAF_MELODY_UNDO_MAX = 16;
+  const [waveLeafMelodyUndoStack, setWaveLeafMelodyUndoStack] = useState<GrooveRollHit[][]>([]);
+
+  const snapshotWaveLeafHits = useCallback(
+    (hits: readonly GrooveRollHit[]) => hits.map((h) => ({ ...h })),
+    [],
+  );
 
   const setChordHits = useCallback(
     (next: GrooveRollHit[]) => {
@@ -353,121 +658,408 @@ export default function GrooveLabScreen({
     [chordChannel, barCount],
   );
 
-  const setBassRollHits = useCallback(
+  const setSampleHits = useCallback(
     (next: GrooveRollHit[]) => {
       setNotesByChannel((prev) => ({
         ...prev,
-        [bassChannel]: sanitizeGrooveLabHits(
-          next.filter((h) => grooveLabIsBassSubMidi(h.midi)),
-          barCount,
-        ),
+        [sampleChannel]: sanitizeGrooveLabChordChannelHits(next, barCount),
       }));
     },
-    [bassChannel, barCount],
+    [sampleChannel, barCount],
   );
 
-  const setMelodyRollHits = useCallback(
-    (next: GrooveRollHit[]) => {
-      setNotesByChannel((prev) => ({
-        ...prev,
-        [melodyChannel]: sanitizeGrooveLabHits(
-          next.filter((h) => grooveLabIsMelodyMidi(h.midi)),
-          barCount,
-        ),
-      }));
+  const editLayerScope = useMemo(
+    () =>
+      grooveLabLayerScopeForChannel(
+        selectedEditChannel,
+        chordChannel,
+        melodyChannel,
+        guitarChannel,
+        sampleChannel,
+      ),
+    [selectedEditChannel, chordChannel, melodyChannel, guitarChannel, sampleChannel],
+  );
+
+  const selectedRollHits = useMemo(() => {
+    const raw = notesByChannel[selectedEditChannel] ?? [];
+    if (editLayerScope === 'chord' || editLayerScope === 'sample') {
+      return sanitizeGrooveLabChordChannelHits(raw, barCount);
+    }
+    if (editLayerScope === 'waveleaf') {
+      return waveLeafSanitizeRollEdits(raw, barCount, { expanded: rollExpanded });
+    }
+    if (editLayerScope === 'guitar') {
+      return sanitizeGrooveLabGuitarChannelHits(raw, barCount);
+    }
+    return sanitizeGrooveLabHits(raw, barCount);
+  }, [notesByChannel, selectedEditChannel, editLayerScope, barCount, rollExpanded]);
+
+  const setSelectedRollHits = useCallback(
+    (next: GrooveRollHit[] | ((prev: GrooveRollHit[]) => GrooveRollHit[])) => {
+      if (selectedEditChannel === chordChannel || selectedEditChannel === sampleChannel) {
+        const ch = selectedEditChannel;
+        setNotesByChannel((prev) => {
+          const raw = prev[ch] ?? [];
+          const resolved = typeof next === 'function' ? next(raw) : next;
+          return { ...prev, [ch]: sanitizeGrooveLabChordChannelHits(resolved, barCount) };
+        });
+        return;
+      }
+      if (selectedEditChannel === melodyChannel) {
+        setWaveLeafHits(next);
+        return;
+      }
+      if (selectedEditChannel === guitarChannel) {
+        setNotesByChannel((prev) => {
+          const raw = prev[guitarChannel] ?? [];
+          const resolved = typeof next === 'function' ? next(raw) : next;
+          return {
+            ...prev,
+            [guitarChannel]: sanitizeGrooveLabGuitarChannelHits(resolved, barCount),
+          };
+        });
+        return;
+      }
+      setNotesByChannel((prev) => {
+        const raw = prev[selectedEditChannel] ?? [];
+        const resolved = typeof next === 'function' ? next(raw) : next;
+        return {
+          ...prev,
+          [selectedEditChannel]: sanitizeGrooveLabHits(resolved, barCount),
+        };
+      });
     },
-    [melodyChannel, barCount],
+    [selectedEditChannel, chordChannel, melodyChannel, guitarChannel, sampleChannel, barCount, setWaveLeafHits],
   );
 
-  const rollHits = useMemo(
-    () => [...bassRollHits, ...melodyRollHits, ...chordHits],
-    [bassRollHits, melodyRollHits, chordHits],
+  const editorRollHits = useMemo(() => {
+    if (rollExpanded) {
+      const raw = notesByChannel[selectedEditChannel] ?? [];
+      if (editLayerScope === 'chord' || editLayerScope === 'sample') {
+        return sanitizeGrooveLabChordChannelHits(raw, barCount);
+      }
+      if (editLayerScope === 'waveleaf') {
+        return waveLeafSanitizeRollEdits(raw, barCount, { expanded: rollExpanded });
+      }
+      if (editLayerScope === 'guitar') {
+        return sanitizeGrooveLabGuitarChannelHits(raw, barCount);
+      }
+      return sanitizeGrooveLabHits(raw, barCount);
+    }
+    return selectedRollHits;
+  }, [
+    rollExpanded,
+    notesByChannel,
+    selectedEditChannel,
+    editLayerScope,
+    barCount,
+    selectedRollHits,
+  ]);
+
+  const setEditorRollHits = useCallback(
+    (next: GrooveRollHit[] | ((prev: GrooveRollHit[]) => GrooveRollHit[])) => {
+      if (rollExpanded) {
+        if (editLayerScope === 'waveleaf') {
+          setWaveLeafHits(next);
+          return;
+        }
+        setNotesByChannel((prev) => {
+          const raw = prev[selectedEditChannel] ?? [];
+          const resolved = typeof next === 'function' ? next(raw) : next;
+          const sanitized =
+            editLayerScope === 'chord' || editLayerScope === 'sample'
+              ? sanitizeGrooveLabChordChannelHits(resolved, barCount)
+              : editLayerScope === 'guitar'
+                ? sanitizeGrooveLabGuitarChannelHits(resolved, barCount)
+                : sanitizeGrooveLabHits(resolved, barCount);
+          return {
+            ...prev,
+            [selectedEditChannel]: sanitized,
+          };
+        });
+        return;
+      }
+      setSelectedRollHits(next);
+    },
+    [rollExpanded, selectedEditChannel, barCount, setSelectedRollHits, editLayerScope, setWaveLeafHits],
   );
 
-  const subRootNoteCount = useMemo(
-    () => grooveLabCountLayerHits(rollHits, 'sub'),
-    [rollHits],
-  );
+  const channelNoteCounts = useMemo(() => {
+    const out: Record<number, number> = {};
+    for (const ch of channels) {
+      out[ch] = (notesByChannel[ch] ?? []).length;
+    }
+    return out;
+  }, [notesByChannel, channels]);
+
+  const rollHits = chordHits;
 
   const chordStackNoteCount = useMemo(
     () => grooveLabCountLayerHits(rollHits, 'chord'),
     [rollHits],
   );
 
-  const melodyLayerNoteCount = useMemo(
-    () => grooveLabCountLayerHits(rollHits, 'melody'),
-    [rollHits],
+  const sampleStackNoteCount = useMemo(
+    () => grooveLabCountLayerHits(sampleRollHits, 'chord'),
+    [sampleRollHits],
+  );
+
+  const noopHitsChange = useCallback(() => {}, []);
+
+  const handleMelodyComposerHits = useCallback(
+    (next: GrooveRollHit[], loopBars?: GrooveLabBarCount) => {
+      setWaveLeafHits(next);
+      if (loopBars != null && loopBars > barCount) handleBarCountChange(loopBars);
+      setSelectedEditChannel(melodyChannel);
+    },
+    [setWaveLeafHits, barCount, handleBarCountChange, melodyChannel],
   );
 
   const orchid = useGrooveLabOrchid({
-    getAudioContext,
+    getAudioContext: resolveAudioContext,
     bpm,
-    activeChannel: bassChannel,
+    activeChannel: chordChannel,
     barCount,
     noteLengthSlots,
     quantize,
-    hits: bassRollHits,
-    onHitsChange: setBassRollHits,
+    hits: [],
+    onHitsChange: noopHitsChange,
     splitChordChannel: true,
     chordHits,
     onChordHitsChange: setChordHits,
-    melodyHits: melodyRollHits,
-    onMelodyHitsChange: setMelodyRollHits,
+    melodyHits: waveLeafRollHits,
+    onMelodyHitsChange: handleMelodyComposerHits,
+    chordChannel,
+    channelVolumes,
+    onBarCountSync: handleBarCountChange,
   });
 
-  const shiftLayerOctave = useCallback(
-    (layer: GrooveLabOctaveLayer, dir: 1 | -1) => {
-      const bassRoot = orchid.bassRootMidi;
-      const rollOpts = GROOVE_LAB_ROLL_OCTAVE_OPTS;
-      setNotesByChannel((prev) => {
-        const next: Record<number, GrooveRollHit[]> = { ...prev };
-        if (layer === 'chord') {
-          const raw = prev[chordChannel] ?? [];
-          next[chordChannel] = sanitizeGrooveLabChordChannelHits(
-            grooveLabTransposeChordStackHitsOctave(raw, dir, bassRoot, rollOpts),
-            barCount,
-          );
-        } else if (layer === 'melody') {
-          const raw = prev[melodyChannel] ?? [];
-          next[melodyChannel] = sanitizeGrooveLabHits(
-            grooveLabTransposeMelodyHitsOctave(raw, dir),
-            barCount,
-          );
-        } else if (layer === 'sub') {
-          const raw = prev[bassChannel] ?? [];
-          next[bassChannel] = sanitizeGrooveLabHits(
-            grooveLabTransposeSubHitsOctave(raw, dir),
-            barCount,
-          );
-        }
-        return next;
+  const handleAssignLayerRole = useCallback(
+    (ch: number, role: GrooveLabLayerRole) => {
+      const next = grooveLabAssignLayerToChannel(ch, role, {
+        chord: chordChannel,
+        melody: melodyChannel,
+        guitar: guitarChannel,
+        sample: sampleChannel,
+      });
+      setChordChannel(next.chord);
+      setMelodyChannel(next.melody);
+      setGuitarChannel(next.guitar);
+      setSampleChannel(next.sample);
+      setChannelSounds((prev) => {
+        const out = { ...prev };
+        out[next.chord] = defaultGrooveLabChannelSound('chord');
+        out[next.melody] = defaultGrooveLabChannelSound('waveleaf');
+        out[next.guitar] = defaultGrooveLabChannelSound('guitar');
+        out[next.sample] = defaultGrooveLabChannelSound('sample');
+        if (role !== 'work') out[ch] = defaultGrooveLabChannelSound(role);
+        return out;
       });
     },
-    [chordChannel, melodyChannel, bassChannel, barCount, orchid.bassRootMidi],
+    [chordChannel, melodyChannel, guitarChannel, sampleChannel],
   );
 
-  const clearAllSubRootsFromRoll = useCallback(() => {
-    setNotesByChannel((prev) => {
-      let changed = false;
-      const next: Record<number, GrooveRollHit[]> = { ...prev };
-      for (const ch of channels) {
-        const raw = prev[ch] ?? [];
-        const stripped = grooveLabStripSubRootHits(raw);
-        if (stripped.length === raw.length) continue;
-        changed = true;
-        next[ch] =
-          ch === chordChannel
-            ? sanitizeGrooveLabChordChannelHits(stripped, barCount)
-            : sanitizeGrooveLabHits(stripped, barCount);
+  const handleChannelSoundChange = useCallback(
+    (ch: number, cfg: GrooveLabChannelSoundConfig) => {
+      setChannelSounds((prev) => ({ ...prev, [ch]: cfg }));
+      if (cfg.kind === 'chord' && cfg.chordVoice && ch === chordChannel) {
+        orchid.setChordVoice(cfg.chordVoice);
       }
-      return changed ? next : prev;
+      if (cfg.kind === 'waveleaf' && cfg.waveLeafPreset && ch === melodyChannel) {
+        const wl = readWaveLeafSynthSettings();
+        writeWaveLeafRuntimeSettings({
+          ...wl,
+          preset: WAVE_LEAF_PRESETS[cfg.waveLeafPreset],
+        });
+      }
+    },
+    [chordChannel, melodyChannel, orchid],
+  );
+
+  const guitarSoundId = useMemo(
+    () => resolveGrooveLabGuitarSoundId(resolveGrooveLabLeadSoundId(channelSounds, guitarChannel, GROOVE_GUITAR_SOUND_DEFAULT)),
+    [channelSounds, guitarChannel],
+  );
+
+  const orchestraHitId = useMemo(
+    () => resolveGrooveLabOrchestraHitSoundId(channelSounds, sampleChannel),
+    [channelSounds, sampleChannel],
+  );
+
+  const guitarFxPlayOpts = useMemo(
+    () => grooveLabGuitarFxToPlayOpts(orchid.guitarFx),
+    [orchid.guitarFx],
+  );
+
+  const handleGuitarSoundChange = useCallback(
+    (id: GrooveLabAnyLeadSoundId) => {
+      handleChannelSoundChange(guitarChannel, { kind: 'lead', leadId: id });
+      if (isGuitarLickSampleId(id)) {
+        void auditionGrooveLabGuitarLick({
+          getAudioContext: resolveAudioContext,
+          lickId: id,
+          targetMidi: 74,
+          bpm,
+          bars: 1,
+          route: 'channel',
+          guitarChannel,
+          channelVolumes,
+          guitarFx: orchid.guitarFx,
+        });
+        return;
+      }
+      void (async () => {
+        const ctx = await ensureGrooveLabAudioReady(resolveAudioContext);
+        if (!ctx) return;
+        const when = grooveLabAudioWhen(ctx);
+        const dest = resolveGrooveLabChannelDest(ctx, guitarChannel, channelVolumes);
+        playGrooveLabLeadSound(ctx, 74, id, when, 0.9, bpm, 0.45, {
+          pitchRegister: 'guitar',
+          monophonic: true,
+          monoGroup: GROOVE_LAB_GUITAR_MONO_GROUP,
+          outputNode: dest,
+        });
+      })();
+    },
+    [guitarChannel, handleChannelSoundChange, resolveAudioContext, channelVolumes, bpm, orchid.guitarFx],
+  );
+
+  const handleOrchestraHitChange = useCallback(
+    (id: OrchestraHitId) => {
+      handleChannelSoundChange(sampleChannel, { kind: 'orchestra', orchestraHitId: id });
+      void (async () => {
+        const ctx = await ensureGrooveLabAudioReady(resolveAudioContext);
+        if (!ctx) return;
+        auditionGrooveLabOrchestraHit(ctx, id, sampleChannel, channelVolumes);
+      })();
+    },
+    [sampleChannel, handleChannelSoundChange, resolveAudioContext, channelVolumes],
+  );
+
+  const melodyGenColumnCount = useMemo(
+    () =>
+      waveLeafMelodyGenColumnCount(chordHits, {
+        barCount,
+        keyRoot: orchid.keyRoot,
+        mode: orchid.mode,
+        bassRootMidi: orchid.bassRootMidi,
+      }),
+    [chordHits, barCount, orchid.keyRoot, orchid.mode, orchid.bassRootMidi],
+  );
+
+  const shiftLayerOctave = useCallback(
+    (dir: 1 | -1) => {
+      const bassRoot = orchid.bassRootMidi;
+      const rollOpts = GROOVE_LAB_ROLL_OCTAVE_OPTS;
+      const ch = editLayerScope === 'sample' ? sampleChannel : chordChannel;
+      setNotesByChannel((prev) => {
+        const raw = prev[ch] ?? [];
+        return {
+          ...prev,
+          [ch]: sanitizeGrooveLabChordChannelHits(
+            grooveLabTransposeChordStackHitsOctave(raw, dir, bassRoot, rollOpts),
+            barCount,
+          ),
+        };
+      });
+    },
+    [chordChannel, sampleChannel, editLayerScope, barCount, orchid.bassRootMidi],
+  );
+
+  const shiftWaveLeafOctave = useCallback(
+    (dir: 1 | -1) => {
+      setWaveLeafHits(waveLeafTransposeHitsOctave(waveLeafRollHits, dir));
+    },
+    [waveLeafRollHits, setWaveLeafHits],
+  );
+
+  const previewWaveLeafHitsNow = useCallback(
+    (hits: readonly GrooveRollHit[]) => {
+      if (hits.length === 0) return;
+      haltWaveLeafVoices();
+      const wl = readWaveLeafSynthSettings();
+      const outGain = readWaveLeafOutputGain();
+      const sorted = [...hits].sort((a, b) => a.slot - b.slot);
+      runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+        const dest = resolveGrooveLabChannelDest(ctx, melodyChannel, channelVolumes);
+        const spb = 60 / Math.max(40, bpm);
+        let t = when;
+        for (const h of sorted.slice(0, 24)) {
+          playWaveLeafNote(ctx, h.midi, t, {
+            preset: wl.preset,
+            glideMs: wl.glideMs,
+            brightness: wl.brightness,
+            warmth: wl.warmth,
+            drive: wl.drive,
+            vibratoDepthCents: wl.vibratoDepthCents,
+            bpm,
+            holdBeats: Math.max(0.35, (h.sustainSlots / 4) * 0.25),
+            velocity: h.vel,
+            outputGain: outGain,
+            destination: dest,
+            melodyChannel,
+            channelVolumes,
+            monophonic: true,
+          });
+          t += spb * 0.45;
+        }
+      });
+    },
+    [resolveAudioContext, bpm, melodyChannel, channelVolumes],
+  );
+
+  const handlePreviewWaveLeafRoll = useCallback(() => {
+    previewWaveLeafHitsNow(waveLeafRollHits);
+  }, [waveLeafRollHits, previewWaveLeafHitsNow]);
+
+  const handleWaveLeafMelodyGenerated = useCallback(
+    (hits: GrooveRollHit[], loopBars: number) => {
+      if (hits.length === 0) return;
+      if (waveLeafRollHits.length > 0) {
+        setWaveLeafMelodyUndoStack((stack) => [
+          ...stack.slice(-(WAVE_LEAF_MELODY_UNDO_MAX - 1)),
+          snapshotWaveLeafHits(waveLeafRollHits),
+        ]);
+      }
+      setWaveLeafHits(hits);
+      setSelectedEditChannel(melodyChannel);
+      if (loopBars > barCount) handleBarCountChange(loopBars as GrooveLabBarCount);
+      previewWaveLeafHitsNow(hits);
+    },
+    [
+      waveLeafRollHits,
+      snapshotWaveLeafHits,
+      setWaveLeafHits,
+      melodyChannel,
+      barCount,
+      handleBarCountChange,
+      previewWaveLeafHitsNow,
+    ],
+  );
+
+  const handleWaveLeafMelodyUndo = useCallback(() => {
+    setWaveLeafMelodyUndoStack((stack) => {
+      if (stack.length === 0) return stack;
+      const restored = stack[stack.length - 1]!;
+      setWaveLeafHits(restored);
+      setSelectedEditChannel(melodyChannel);
+      previewWaveLeafHitsNow(restored);
+      return stack.slice(0, -1);
     });
-    orchid.setEditSlot(0);
-  }, [channels, chordChannel, barCount, orchid.setEditSlot]);
+  }, [setWaveLeafHits, melodyChannel, previewWaveLeafHitsNow]);
+
+  const canUndoWaveLeafMelody = waveLeafMelodyUndoStack.length > 0;
 
   const transportChordsMuted = useMemo(
-    () => grooveLabTransportChordsMuted(orchid.orchidLinkedChordsMuted, rollHits),
-    [orchid.orchidLinkedChordsMuted, rollHits],
+    () =>
+      grooveLabChannelVolumeGain(chordChannel, channelVolumes) <= 0.001 ||
+      grooveLabTransportChordsMuted(orchid.orchidLinkedChordsMuted, rollHits),
+    [chordChannel, channelVolumes, orchid.orchidLinkedChordsMuted, rollHits],
+  );
+
+  const transportLeadMuted = useMemo(
+    () => grooveLabChannelVolumeGain(melodyChannel, channelVolumes) <= 0.001,
+    [melodyChannel, channelVolumes],
   );
 
   const rollChordHitsForExport = useMemo(() => {
@@ -478,11 +1070,11 @@ export default function GrooveLabScreen({
     () => ({
       bpm,
       chordVoice: orchid.chordVoice,
-      chordVolume: orchid.orchidLinkedChordVolume * GROOVE_LAB_CHORD_MIX_GAIN,
+      chordVolume: grooveLabChannelVolumeGain(chordChannel, channelVolumes) * GROOVE_LAB_CHORD_MIX_GAIN,
       perfMode: orchid.orchidPerfMode,
       trackName: 'Groove Lab Chords',
     }),
-    [bpm, orchid.chordVoice, orchid.orchidLinkedChordVolume, orchid.orchidPerfMode],
+    [bpm, orchid.chordVoice, orchid.orchidPerfMode, chordChannel, channelVolumes],
   );
 
   const exportHitsToPad = useCallback(
@@ -614,8 +1206,18 @@ export default function GrooveLabScreen({
   );
 
   const handleExportRollWavToPad = useCallback(() => {
-    requestPadExport(rollChordHitsForExport, 'GrooveLab_Roll');
-  }, [rollChordHitsForExport, requestPadExport]);
+    if (!onExportChordWavToPad) {
+      setChordExportStatus('PAD export needs Creation Station Beat Lab');
+      return;
+    }
+    if (rollChordHitsForExport.length === 0) {
+      setChordExportStatus('No chord notes to export');
+      return;
+    }
+    setPadExportRequest((prev) =>
+      prev?.label === 'GrooveLab_Roll' ? null : { hits: rollChordHitsForExport, label: 'GrooveLab_Roll' },
+    );
+  }, [onExportChordWavToPad, rollChordHitsForExport]);
 
   const sendChordHitsToNewSynth = useCallback(
     (hits: GrooveRollHit[], label: string, progressionSteps?: GrooveProgressionStep[] | null) => {
@@ -631,16 +1233,21 @@ export default function GrooveLabScreen({
         chordHits: hits,
         bpm,
         label,
-        progressionSteps: progressionSteps ?? progressionStaged?.steps ?? null,
+        progressionSteps:
+          progressionSteps !== undefined ? progressionSteps : progressionStaged?.steps ?? null,
+        quantize,
+        barCount,
+        keyRoot: orchid.keyRoot,
+        mode: orchid.mode,
       });
       setChordExportStatus('✓ Sent to NEW SYNTH — Beat Lab · VIEW');
       window.setTimeout(() => setChordExportStatus(null), 5000);
     },
-    [onSendChordsToNewSynth, bpm, progressionStaged?.steps],
+    [onSendChordsToNewSynth, bpm, progressionStaged?.steps, quantize, barCount, orchid.keyRoot, orchid.mode],
   );
 
   const handleSendRollToNewSynth = useCallback(() => {
-    sendChordHitsToNewSynth(rollChordHitsForExport, 'Groove Lab roll');
+    sendChordHitsToNewSynth(rollChordHitsForExport, 'Groove Lab roll', null);
   }, [rollChordHitsForExport, sendChordHitsToNewSynth]);
 
   const handleSendTimelineToNewSynth = useCallback(
@@ -652,33 +1259,132 @@ export default function GrooveLabScreen({
     [hitsFromTimelineSteps, sendChordHitsToNewSynth],
   );
 
-  useEffect(() => {
-    if (!grooveLabRollHasChordNotes(rollHits)) return;
-    if (!orchid.orchidLinkedChordsMuted) return;
-    orchid.setOrchidLinkedChordsMuted(false);
-  }, [rollHits, orchid.orchidLinkedChordsMuted, orchid.setOrchidLinkedChordsMuted]);
-
   const grooveTransport = useGrooveLabTransport({
-    getAudioContext,
-    isScreenActive,
+    getAudioContext: resolveAudioContext,
+    isScreenActive: grooveTransportActive,
     bpm,
     barCount,
     quantize,
     pxPerCol: rollPxPerCol,
     bassHits: transportBassHits,
     chordHits: transportChordHits,
-    melodyHits: transportMelodyHits,
+    melodyHits: waveLeafTransportHits,
+    guitarHits: guitarTransportHits,
+    sampleHits: sampleTransportHits,
     bassSoundId: orchid.bassSoundId,
     melodySoundId: orchid.melodySoundId,
-    chordVoice: orchid.chordVoice,
-    chordVolume: orchid.orchidLinkedChordVolume * GROOVE_LAB_CHORD_MIX_GAIN,
+    chordVoice: resolveGrooveLabChordVoiceId(channelSounds, chordChannel, orchid.chordVoice),
+    chordVolume: grooveLabChordStripVoiceMix(),
     chordsMuted: transportChordsMuted,
-    bassMuted: orchid.bassMuted,
+    bassMuted: true,
+    leadMuted: transportLeadMuted,
     perfMode: orchid.orchidPerfMode,
     metronomeEnabled,
+    chordChannel,
+    melodyChannel,
+    guitarChannel,
+    sampleChannel,
+    orchestraHitId,
+    guitarSoundId: guitarSoundId,
+    guitarFx: guitarFxPlayOpts,
+    guitarFxSettings: orchid.guitarFx,
+    channelVolumes,
     playheadElRef,
     rollScrollRef,
   });
+
+  /** Beat Lab PLAY link → Groove Lab transport (Session Link Sync; works on Beat Lab tab via hidden mount). */
+  useEffect(() => {
+    if (!sessionBeatLabPlayMirror && !isScreenActive) return;
+    if (!sessionPlayLinked) return;
+    const onBeatLabMirror = (ev: Event) => {
+      const detail = (ev as CustomEvent<CreationBeatlabPlayMirrorDetail>).detail;
+      if (!detail || detail.target !== 'groove-lab') return;
+      try {
+        resumeGrooveLabAudioContext(resolveAudioContext());
+      } catch {
+        /* ignore */
+      }
+      if (detail.action === 'play') {
+        if (!grooveTransport.playing) grooveTransport.togglePlayPause();
+      } else if (detail.action === 'pause') {
+        if (grooveTransport.playing) grooveTransport.pause();
+      } else if (detail.action === 'stop') {
+        grooveTransport.stop();
+      }
+    };
+    window.addEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
+    return () => window.removeEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
+  }, [sessionPlayLinked, sessionBeatLabPlayMirror, isScreenActive, grooveTransport, resolveAudioContext]);
+
+  const suppress808OutboundMirrorRef = useRef(false);
+
+  /** 808 Lab PLAY → Groove Lab mirror (808 pad-deck sync strip). */
+  useEffect(() => {
+    const on808Mirror = (ev: Event) => {
+      const detail = (ev as CustomEvent<Lab808TransportMirrorDetail>).detail;
+      if (!detail || detail.target !== 'groove-lab') return;
+      suppress808OutboundMirrorRef.current = true;
+      try {
+        try {
+          resumeGrooveLabAudioContext(resolveAudioContext());
+        } catch {
+          /* ignore */
+        }
+        if (detail.action === 'play') {
+          if (!grooveTransport.playing) grooveTransport.togglePlayPause();
+        } else if (detail.action === 'pause') {
+          if (grooveTransport.playing) grooveTransport.pause();
+        } else if (detail.action === 'stop') {
+          grooveTransport.stop();
+        }
+      } finally {
+        queueMicrotask(() => {
+          suppress808OutboundMirrorRef.current = false;
+        });
+      }
+    };
+    window.addEventListener(LAB808_TRANSPORT_MIRROR_EVENT, on808Mirror);
+    return () => window.removeEventListener(LAB808_TRANSPORT_MIRROR_EVENT, on808Mirror);
+  }, [grooveTransport, resolveAudioContext]);
+
+  const mirror808PlayToGrooveRef = useRef(mirror808PlayToGroove);
+  mirror808PlayToGrooveRef.current = mirror808PlayToGroove;
+  const session808PlayLinkedRef = useRef(session808PlayLinked);
+  session808PlayLinkedRef.current = session808PlayLinked;
+
+  const mirrorGrooveTransportTo808 = useCallback(
+    (action: 'play' | 'pause' | 'stop') => {
+      if (suppress808OutboundMirrorRef.current) return;
+      if (!session808PlayLinkedRef.current && !mirror808PlayToGrooveRef.current) return;
+      dispatchGrooveLabTransportMirror(action);
+    },
+    [],
+  );
+
+  /** Groove Lab PLAY → 808 Lab (Session Link Sync and/or 808 pad-deck PLAY → Groove Lab). */
+  const prevGrooveTransportRef = useRef(grooveTransport.transportState);
+  useEffect(() => {
+    if (!isScreenActive) return;
+    if (!session808PlayLinked && !mirror808PlayToGroove) return;
+    if (suppress808OutboundMirrorRef.current) {
+      prevGrooveTransportRef.current = grooveTransport.transportState;
+      return;
+    }
+    const prev = prevGrooveTransportRef.current;
+    const next = grooveTransport.transportState;
+    prevGrooveTransportRef.current = next;
+    if (prev === next) return;
+    if (next === 'playing') mirrorGrooveTransportTo808('play');
+    else if (next === 'paused') mirrorGrooveTransportTo808('pause');
+    else if (next === 'stopped') mirrorGrooveTransportTo808('stop');
+  }, [
+    grooveTransport.transportState,
+    mirror808PlayToGroove,
+    session808PlayLinked,
+    isScreenActive,
+    mirrorGrooveTransportTo808,
+  ]);
 
   const activeGlobalCol = useMemo(() => {
     if (grooveTransport.playing) return undefined;
@@ -695,69 +1401,272 @@ export default function GrooveLabScreen({
   );
 
 
-  /** Warm master bus + unlock AudioContext on first tap while Groove Lab is open. */
+  /** Warm master bus + unlock AudioContext while Groove is visible or Beat Lab Sync keeps it mounted. */
   useEffect(() => {
-    if (!isScreenActive || !getAudioContext) return;
+    if (!grooveTransportActive) return;
     try {
-      getAudioContext();
+      const ctx = resolveAudioContext();
+      void preloadGuitarLickBank(ctx);
+      void preloadOrchestraHitBank(ctx);
     } catch {
       /* ignore */
     }
     const prime = () => {
       try {
-        void getAudioContext()?.resume().catch(() => {});
+        const ctx = resolveAudioContext();
+        resumeGrooveLabAudioContext(ctx);
+        void preloadGuitarLickBank(ctx);
+        void preloadOrchestraHitBank(ctx);
       } catch {
         /* ignore */
       }
     };
     window.addEventListener('pointerdown', prime, { capture: true });
     return () => window.removeEventListener('pointerdown', prime, { capture: true });
-  }, [isScreenActive, getAudioContext]);
+  }, [grooveTransportActive, resolveAudioContext]);
 
   const handlePreview = useCallback(() => {
-    runWithGrooveLabAudio(getAudioContext, (ctx, when) => {
-      const bus = getOrCreateGrooveLabPlaybackBus(ctx);
-      armGrooveLabPlayback(ctx);
-      withGrooveLabPlaybackSink(bus, () =>
-        withProgressionAuditionOutput(bus, () =>
-          previewGrooveLabRoll(ctx, transportBassHits, transportChordHits, transportMelodyHits, {
+    if (grooveTransport.playing) grooveTransport.pause();
+    if (editLayerScope === 'waveleaf') {
+      handlePreviewWaveLeafRoll();
+      return;
+    }
+    runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+      const previewOpts = {
+        bpm,
+        bassSoundId: orchid.bassSoundId,
+        melodySoundId: orchid.melodySoundId,
+        chordVoice: orchid.chordVoice,
+        chordVolume: grooveLabChordStripVoiceMix(),
+        chordsMuted: transportChordsMuted,
+        bassMuted: true,
+        perfMode: orchid.orchidPerfMode,
+        startDelaySec: when - ctx.currentTime,
+        chordChannel,
+        melodyChannel,
+        guitarChannel,
+        guitarSoundId,
+        guitarFx: guitarFxPlayOpts,
+        guitarFxSettings: orchid.guitarFx,
+        channelVolumes,
+      };
+      if (editLayerScope === 'guitar') {
+        for (const hit of guitarTransportHits) {
+          scheduleGrooveLabGuitarTransportHit(ctx, {
+            midi: hit.midi,
+            soundId: guitarSoundId,
+            when: when + hit.slot * grooveLabSecPerSlot(bpm),
+            velocity01: hit.vel,
             bpm,
-            bassSoundId: orchid.bassSoundId,
-            melodySoundId: orchid.melodySoundId,
-            chordVoice: orchid.chordVoice,
-            chordVolume: orchid.orchidLinkedChordVolume * GROOVE_LAB_CHORD_MIX_GAIN,
-            chordsMuted: transportChordsMuted,
-            bassMuted: orchid.bassMuted,
-            perfMode: orchid.orchidPerfMode,
-            startDelaySec: when - ctx.currentTime,
-          }),
-        ),
+            sustainSec: grooveLabGuitarBarSec(bpm, 1),
+            guitarFx: guitarFxPlayOpts,
+            guitarChannel,
+            channelVolumes,
+          });
+        }
+        return;
+      }
+      previewGrooveLabRoll(
+        ctx,
+        transportBassHits,
+        transportChordHits,
+        waveLeafTransportHits,
+        guitarTransportHits,
+        {
+          ...previewOpts,
+          leadMuted: transportLeadMuted,
+        },
       );
     });
   }, [
-    getAudioContext,
+    resolveAudioContext,
     transportBassHits,
     transportChordHits,
-    transportMelodyHits,
+    waveLeafTransportHits,
+    guitarTransportHits,
+    transportLeadMuted,
+    editLayerScope,
+    handlePreviewWaveLeafRoll,
+    grooveTransport,
     bpm,
     orchid.bassSoundId,
     orchid.melodySoundId,
     orchid.chordVoice,
-    orchid.orchidLinkedChordVolume,
     transportChordsMuted,
-    orchid.bassMuted,
     orchid.orchidPerfMode,
+    chordChannel,
+    melodyChannel,
+    guitarChannel,
+    guitarSoundId,
+    guitarFxPlayOpts,
+    orchid.guitarFx,
+    channelVolumes,
   ]);
 
+  const previewGrooveChordOnly = useCallback(() => {
+    haltWaveLeafVoices();
+    orchid.previewOrchidChord();
+  }, [orchid.previewOrchidChord]);
+
+  const primeGuitarRollAudio = useCallback(() => {
+    void (async () => {
+      try {
+        const ctx = await ensureGrooveLabAudioReady(resolveAudioContext);
+        if (ctx) {
+          void preloadGuitarLickBank(ctx);
+          void preloadOrchestraHitBank(ctx);
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [resolveAudioContext]);
+
+  const previewGuitarNote = useCallback(
+    (midi: number, velocity01 = 0.88) => {
+      if (!grooveLabIsGuitarMidi(midi)) return;
+      const soundId = guitarSoundId;
+      const sustainSec = grooveLabGuitarBarSec(bpm, 1);
+      runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+        playGrooveLabGuitarNoteScheduled(ctx, {
+          midi,
+          soundId,
+          when,
+          velocity01,
+          bpm,
+          sustainSec,
+          guitarFx: orchid.guitarFx,
+          guitarChannel,
+          channelVolumes,
+          route: 'channel',
+        });
+      });
+      const def = getGuitarLickDef(soundId);
+      if (def) {
+        try {
+          void ensureGuitarLickBuffer(resolveAudioContext(), def);
+        } catch {
+          /* */
+        }
+      }
+    },
+    [
+      resolveAudioContext,
+      guitarSoundId,
+      bpm,
+      orchid.guitarFx,
+      guitarChannel,
+      channelVolumes,
+    ],
+  );
+
   const handlePreviewPitch = useCallback(
-    (midi: number) => {
-      if (orchid.bassMuted) return;
-      runWithGrooveLabAudio(getAudioContext, (ctx, when) => {
-        previewBassPitch(ctx, when, midi, orchid.bassSoundId, bpm);
+    (midi: number, meterChannel?: number) => {
+      const meterCh = meterChannel ?? selectedEditChannel;
+
+      if (editLayerScope === 'sample' || selectedEditChannel === sampleChannel) {
+        if (!grooveLabIsChordStackMidi(midi)) return;
+        runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+          scheduleGrooveLabOrchestraTransportHit(ctx, {
+            hitId: orchestraHitId,
+            when,
+            velocity01: 0.9,
+            orchestraChannel: sampleChannel,
+            channelVolumes,
+            fallbackMidi: midi,
+          });
+        });
+        return;
+      }
+
+      if (editLayerScope === 'guitar' || selectedEditChannel === guitarChannel) {
+        previewGuitarNote(midi);
+        return;
+      }
+
+      if (editLayerScope === 'waveleaf' || selectedEditChannel === melodyChannel) {
+        if (!waveLeafIsLeadMidi(midi)) return;
+        const wl = readWaveLeafSynthSettings();
+        runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+          const dest = resolveGrooveLabChannelDest(ctx, melodyChannel, channelVolumes);
+          playWaveLeafNote(ctx, midi, when, {
+            preset: wl.preset,
+            glideMs: wl.glideMs,
+            brightness: wl.brightness,
+            warmth: wl.warmth,
+            drive: wl.drive,
+            vibratoDepthCents: wl.vibratoDepthCents,
+            bpm,
+            outputGain: readWaveLeafOutputGain(),
+            destination: dest,
+            melodyChannel,
+            channelVolumes,
+            monophonic: true,
+          });
+        });
+        scheduleGrooveLabMeterPulseAt(
+          resolveAudioContext(),
+          meterCh,
+          grooveLabMeterPeakFromVelocity(0.85, meterCh, channelVolumes),
+          0,
+          resolveAudioContext().currentTime,
+        );
+        return;
+      }
+
+      if (editLayerScope === 'chord' || selectedEditChannel === chordChannel) {
+        if (!grooveLabIsChordStackMidi(midi)) return;
+        haltWaveLeafVoices();
+        if (
+          !orchid.orchidLinkedChordsMuted &&
+          grooveLabChannelVolumeGain(chordChannel, channelVolumes) > 0.02
+        ) {
+          orchid.previewOrchidChord(orchid.orchidRootMidi);
+        }
+        return;
+      }
+
+      runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+        previewGrooveLabRollPitch(
+          ctx,
+          when,
+          midi,
+          {
+            chordChannel,
+            melodyChannel,
+            guitarChannel,
+            guitarSoundId,
+            guitarFx: orchid.guitarFx,
+            bpm,
+          },
+          channelVolumes,
+          meterCh,
+        );
       });
     },
-    [getAudioContext, orchid.bassSoundId, orchid.bassMuted, bpm],
+    [
+      resolveAudioContext,
+      editLayerScope,
+      selectedEditChannel,
+      sampleChannel,
+      orchestraHitId,
+      melodyChannel,
+      guitarChannel,
+      guitarSoundId,
+      previewGuitarNote,
+      orchid.guitarFx,
+      orchid.orchidRootMidi,
+      orchid.previewOrchidChord,
+      orchid.orchidLinkedChordsMuted,
+      chordChannel,
+      channelVolumes,
+      bpm,
+    ],
   );
+
+  const handleSelectEditChannel = useCallback((ch: number) => {
+    setSelectedEditChannel(ch);
+  }, []);
 
   const flashMidiImport = useCallback((msg: string) => {
     if (midiImportStatusTimerRef.current != null) {
@@ -780,43 +1689,29 @@ export default function GrooveLabScreen({
   );
 
   const applyProgressionStaged = useCallback(
-    (staged: GrooveStagedProgression, opts?: { matchBassAfter?: boolean }) => {
-      const chordCh = grooveLabPickChordChannel(bassChannel, chordChannel);
-      const melodyCh = grooveLabPickMelodyChannel(bassChannel, chordCh, melodyChannel);
+    (staged: GrooveStagedProgression) => {
+      const chordCh = grooveLabPickChordChannel(chordChannel);
       setChordChannel(chordCh);
-      setMelodyChannel(melodyCh);
       setBarCount(staged.barCount);
-      const chordSlots = new Set(staged.chordHits.map((h) => h.slot));
       setNotesByChannel((prev) => {
         const next: Record<number, GrooveRollHit[]> = {};
         for (const ch of channels) {
-          next[ch] = clipGrooveHitsToBarCount(prev[ch] ?? [], staged.barCount);
+          const clipped = clipGrooveHitsToBarCount(prev[ch] ?? [], staged.barCount);
+          const stripped = grooveLabStripMelodyHits(grooveLabStripSubRootHits(clipped));
+          next[ch] =
+            ch === chordCh
+              ? sanitizeGrooveLabChordChannelHits(staged.chordHits, staged.barCount)
+              : sanitizeGrooveLabHits(stripped, staged.barCount);
         }
-        next[chordCh] = sanitizeGrooveLabChordChannelHits(staged.chordHits, staged.barCount);
-        /** Groove Studio / progression drop = green chords only — never auto-fill blue bass. */
-        const prevBass = prev[bassChannel] ?? [];
-        next[bassChannel] = sanitizeGrooveLabHits(
-          prevBass.filter((h) => !chordSlots.has(h.slot)),
-          staged.barCount,
-        );
         return next;
       });
-      orchid.setOrchidLinkedChordsMuted(false);
       grooveTransport.rewind();
       orchid.setEditSlot(0);
+      setSelectedEditChannel(chordCh);
       const scrollEl = rollScrollRef.current;
       if (scrollEl) scrollEl.scrollLeft = 0;
-      if (opts?.matchBassAfter) setMatchBassAfterProgressionDrop(true);
     },
-    [
-      bassChannel,
-      chordChannel,
-      melodyChannel,
-      channels,
-      grooveTransport,
-      orchid.setEditSlot,
-      orchid.setOrchidLinkedChordsMuted,
-    ],
+    [chordChannel, channels, grooveTransport, orchid.setEditSlot],
   );
 
   const buildProgression = useCallback(
@@ -837,36 +1732,23 @@ export default function GrooveLabScreen({
     [quantize, barCount, noteLengthSlots],
   );
 
-  useEffect(() => {
-    if (!matchBassAfterProgressionDrop) return;
-    if (orchid.chordAnchorCount === 0) return;
-    orchid.matchBassToChords();
-    setMatchBassAfterProgressionDrop(false);
-    setProgressionStatus('✓ Dropped on roll · bass matched to chords');
-  }, [matchBassAfterProgressionDrop, orchid.chordAnchorCount, orchid.matchBassToChords]);
-
   const progressionAudition = useGrooveLabProgressionAudition({
-    getAudioContext,
+    getAudioContext: resolveAudioContext,
     bpm,
     chordVoice: orchid.chordVoice,
     perfMode: orchid.orchidPerfMode,
-    linkedChordVolume: orchid.orchidLinkedChordVolume,
+    linkedChordVolume: grooveLabChannelVolumeGain(chordChannel, channelVolumes),
   });
 
   const stopAllGrooveLabPlayback = useCallback(() => {
     progressionAudition.stopPlayback();
+    haltWaveLeafVoices();
     grooveTransport.stop();
-    if (getAudioContext) {
-      try {
-        silenceGrooveLabPlayback(getAudioContext());
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [getAudioContext, progressionAudition, grooveTransport]);
+    mirrorGrooveTransportTo808('stop');
+  }, [progressionAudition, grooveTransport, mirrorGrooveTransportTo808]);
 
   const dropProgressionFromSteps = useCallback(
-    (steps: GrooveProgressionStep[], opts?: { matchBassAfter?: boolean }) => {
+    (steps: GrooveProgressionStep[]) => {
       const built = progressionStepsToGrooveHits(steps, {
         quantize,
         barCount,
@@ -875,19 +1757,22 @@ export default function GrooveLabScreen({
       if ('message' in built) {
         setProgressionStaged(null);
         setProgressionStatus(built.message);
+        flashMidiImport(built.message);
         return;
       }
       if (built.chordHits.length === 0) {
         setProgressionStaged(null);
-        setProgressionStatus('No chord notes for the roll — check chord labels (C, Am, G7…).');
+        const msg = 'No chord notes for the roll — check chord labels (C, Am, G7…).';
+        setProgressionStatus(msg);
+        flashMidiImport(msg);
         return;
       }
       progressionAudition.stopPlayback();
       setProgressionStaged(built);
-      applyProgressionStaged(built, { matchBassAfter: opts?.matchBassAfter });
-      setProgressionStatus(
-        `✓ ${built.barCount} bars · green chords only (C4+) — press ▶ transport · use + MATCH BASS for blue 808`,
-      );
+      applyProgressionStaged(built);
+      const okMsg = `✓ ${built.chordHits.length} chord notes · ${built.barCount} bars on CHORD roll — press ▶ to hear`;
+      setProgressionStatus(okMsg);
+      flashMidiImport(okMsg);
     },
     [
       quantize,
@@ -895,19 +1780,34 @@ export default function GrooveLabScreen({
       noteLengthSlots,
       progressionAudition,
       applyProgressionStaged,
+      flashMidiImport,
     ],
   );
 
   const handleTransportPlayPause = useCallback(() => {
-    if (!grooveTransport.playing) progressionAudition.stopPlayback();
+    try {
+      resumeGrooveLabAudioContext(resolveAudioContext());
+    } catch {
+      /* ignore */
+    }
+    if (!grooveTransport.playing) {
+      progressionAudition.stopPlayback();
+      restoreChordSequencerTransportVoices();
+      restoreGrooveLabTransportGuitarBus();
+      restoreGrooveLabTransportMelodyBus();
+    }
     grooveTransport.togglePlayPause();
-  }, [grooveTransport, progressionAudition]);
+  }, [grooveTransport, progressionAudition, resolveAudioContext]);
 
   const stopAllRef = useRef(stopAllGrooveLabPlayback);
   stopAllRef.current = stopAllGrooveLabPlayback;
   useEffect(() => {
-    if (!isScreenActive) stopAllRef.current();
-  }, [isScreenActive]);
+    if (!grooveTransportActive) {
+      stopAllRef.current();
+      return;
+    }
+    void ensureGrooveLabAudioReady(resolveAudioContext);
+  }, [grooveTransportActive, resolveAudioContext]);
 
   const dropProgressionChordsOnly = useCallback(
     (steps: GrooveProgressionStep[]) => {
@@ -916,12 +1816,137 @@ export default function GrooveLabScreen({
     [dropProgressionFromSteps],
   );
 
-  const dropProgressionAndMatchBass = useCallback(
-    (steps: GrooveProgressionStep[]) => {
-      dropProgressionFromSteps(steps, { matchBassAfter: true });
+  const dropGuitarPack = useCallback(
+    (built: GrooveGuitarPackRollBuild) => {
+      if (built.guitarHits.length === 0) {
+        const msg = 'No guitar licks to drop.';
+        setProgressionStatus(msg);
+        flashMidiImport(msg);
+        return;
+      }
+      progressionAudition.stopPlayback();
+      handleChannelSoundChange(guitarChannel, { kind: 'lead', leadId: built.lickId });
+      setBarCount(built.barCount);
+      setNotesByChannel((prev) => {
+        const next: Record<number, GrooveRollHit[]> = {};
+        for (const ch of channels) {
+          const clipped = clipGrooveHitsToBarCount(prev[ch] ?? [], built.barCount);
+          if (ch === guitarChannel) {
+            next[ch] = sanitizeGrooveLabGuitarChannelHits(built.guitarHits, built.barCount);
+          } else {
+            const stripped = grooveLabStripMelodyHits(grooveLabStripSubRootHits(clipped));
+            next[ch] = sanitizeGrooveLabHits(stripped, built.barCount);
+          }
+        }
+        return next;
+      });
+      orchid.setEditSlot(0);
+      setSelectedEditChannel(guitarChannel);
+      const droppedLickId = resolveGrooveLabGuitarSoundId(built.lickId);
+      const droppedHits = built.guitarHits;
+      queueMicrotask(() => {
+        try {
+          resumeGrooveLabAudioContext(resolveAudioContext());
+        } catch {
+          /* */
+        }
+        runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+          previewGrooveLabRoll(ctx, [], [], [], [], {
+            bpm,
+            bassSoundId: orchid.bassSoundId,
+            melodySoundId: orchid.melodySoundId,
+            chordVoice: orchid.chordVoice,
+            chordVolume: grooveLabChordStripVoiceMix(),
+            chordsMuted: true,
+            bassMuted: true,
+            perfMode: orchid.orchidPerfMode,
+            startDelaySec: when - ctx.currentTime,
+            chordChannel,
+            melodyChannel,
+            guitarChannel,
+            guitarSoundId: droppedLickId,
+            guitarFx: grooveLabGuitarFxToPlayOpts(orchid.guitarFx),
+            guitarFxSettings: orchid.guitarFx,
+            channelVolumes,
+          }, droppedHits);
+        });
+        const def = getGuitarLickDef(droppedLickId);
+        if (def) void ensureGuitarLickBuffer(resolveAudioContext(), def);
+      });
+      grooveTransport.rewind();
+      const scrollEl = rollScrollRef.current;
+      if (scrollEl) scrollEl.scrollLeft = 0;
+      const okMsg = `✓ ${built.guitarHits.length} wah/bar triggers on CH ${guitarChannel} · ${built.barCount} bars`;
+      setProgressionStatus(okMsg);
+      flashMidiImport(okMsg);
     },
-    [dropProgressionFromSteps],
+    [
+      progressionAudition,
+      channels,
+      guitarChannel,
+      chordChannel,
+      melodyChannel,
+      handleChannelSoundChange,
+      grooveTransport,
+      orchid.setEditSlot,
+      orchid.guitarFx,
+      orchid.bassSoundId,
+      orchid.melodySoundId,
+      orchid.chordVoice,
+      orchid.orchidPerfMode,
+      resolveAudioContext,
+      bpm,
+      channelVolumes,
+      flashMidiImport,
+    ],
   );
+
+  const dropOrchestraHit = useCallback(() => {
+    const built = buildOrchestraHitRoll(orchestraHitId, {
+      keyRoot: orchid.keyRoot,
+      mode: orchid.mode,
+      quantize,
+      barCount,
+      sustainSlots: noteLengthSlots,
+      chordHits: chordHitsForTransport,
+      referenceMidi: orchid.bassRootMidi,
+    });
+    if ('message' in built) {
+      setProgressionStatus(built.message);
+      flashMidiImport(built.message);
+      return;
+    }
+    progressionAudition.stopPlayback();
+    handleChannelSoundChange(sampleChannel, {
+      kind: 'orchestra',
+      orchestraHitId: built.hitId,
+    });
+    setSampleHits(sanitizeGrooveLabChordChannelHits(built.orchestraHits, built.barCount));
+    orchid.setEditSlot(0);
+    setSelectedEditChannel(sampleChannel);
+    grooveTransport.rewind();
+    const scrollEl = rollScrollRef.current;
+    if (scrollEl) scrollEl.scrollLeft = 0;
+    const okMsg = `✓ ${built.orchestraHits.length} orch hits on CH ${sampleChannel} · locked to chord roots`;
+    setProgressionStatus(okMsg);
+    flashMidiImport(okMsg);
+  }, [
+    orchestraHitId,
+    orchid.keyRoot,
+    orchid.mode,
+    orchid.bassRootMidi,
+    orchid.setEditSlot,
+    quantize,
+    barCount,
+    noteLengthSlots,
+    chordHitsForTransport,
+    progressionAudition,
+    handleChannelSoundChange,
+    sampleChannel,
+    setSampleHits,
+    grooveTransport,
+    flashMidiImport,
+  ]);
 
   const handleMidiImport = useCallback(
     async (file: File) => {
@@ -936,28 +1961,28 @@ export default function GrooveLabScreen({
           flashMidiImport(parsed.message);
           return;
         }
-        const chordCh = grooveLabPickChordChannel(bassChannel, chordChannel);
-        const melodyCh = grooveLabPickMelodyChannel(bassChannel, chordCh, melodyChannel);
+        const chordCh = grooveLabPickChordChannel(chordChannel);
         setChordChannel(chordCh);
-        setMelodyChannel(melodyCh);
+        setSelectedEditChannel(chordCh);
         setBpm(parsed.bpm);
         setBarCount(parsed.barCount);
         setNotesByChannel((prev) => {
           const next: Record<number, GrooveRollHit[]> = {};
           for (const ch of channels) {
-            next[ch] = clipGrooveHitsToBarCount(prev[ch] ?? [], parsed.barCount);
+            next[ch] = sanitizeGrooveLabHits(
+              grooveLabStripMelodyHits(
+                grooveLabStripSubRootHits(clipGrooveHitsToBarCount(prev[ch] ?? [], parsed.barCount)),
+              ),
+              parsed.barCount,
+            );
           }
-          const importedMelody = parsed.bassHits.filter((h) => grooveLabIsMelodyMidi(h.midi));
-          const importedSub = parsed.bassHits.filter((h) => grooveLabIsBassSubMidi(h.midi));
-          next[bassChannel] = sanitizeGrooveLabHits(importedSub, parsed.barCount);
-          next[melodyCh] = sanitizeGrooveLabHits(importedMelody, parsed.barCount);
           next[chordCh] = sanitizeGrooveLabChordChannelHits(parsed.chordHits, parsed.barCount);
           return next;
         });
         grooveTransport.rewind();
         orchid.setEditSlot(0);
         flashMidiImport(
-          `✓ ${file.name} · ${parsed.bpm} BPM · ${parsed.bassHits.length} bass / ${parsed.chordHits.length} chord`,
+          `✓ ${file.name} · ${parsed.bpm} BPM · ${parsed.chordHits.length} chord`,
         );
       } catch (err) {
         flashMidiImport(err instanceof Error ? err.message : 'Import failed.');
@@ -966,7 +1991,6 @@ export default function GrooveLabScreen({
     [
       quantize,
       barCount,
-      bassChannel,
       chordChannel,
       melodyChannel,
       channels,
@@ -974,24 +1998,6 @@ export default function GrooveLabScreen({
       flashMidiImport,
       grooveTransport,
       orchid.setEditSlot,
-    ],
-  );
-
-  const handleApplyImportedBassHits = useCallback(
-    (hits: GrooveRollHit[]) => {
-      stopAllGrooveLabPlayback();
-      setBassRollHits(sanitizeGrooveLabHits(hits, barCount));
-      grooveTransport.rewind();
-      orchid.setEditSlot(0);
-      flashMidiImport(`✓ ${hits.length} bass note${hits.length === 1 ? '' : 's'} on roll`);
-    },
-    [
-      stopAllGrooveLabPlayback,
-      setBassRollHits,
-      barCount,
-      grooveTransport,
-      orchid.setEditSlot,
-      flashMidiImport,
     ],
   );
 
@@ -1012,39 +2018,32 @@ export default function GrooveLabScreen({
           flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '6px 10px',
+          gap: 8,
+          padding: '3px 10px',
           borderBottom: '1px solid #151515',
           background: '#090909',
           flexWrap: 'wrap',
+          minWidth: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.08em', color: '#f0f0f0' }}>
-            GROOVE <span style={{ color: '#7cf4c6' }}>LAB</span>
-          </span>
-          <span style={{ fontSize: 9, color: '#67e8f9', fontWeight: 800 }}>
-            SUB {chordBassSeqChannelLabel(bassChannel)}
-            <span style={{ color: '#86efac', marginLeft: 6 }}>
-              · CHORD {chordBassSeqChannelLabel(chordChannel)}
-            </span>
-            <span style={{ color: '#fbbf24', marginLeft: 6 }}>
-              · MELODY {chordBassSeqChannelLabel(melodyChannel)}
-            </span>
-          </span>
-        </div>
-        <GrooveLabTempoStrip
-          bpm={bpm}
-          onBpmChange={setBpm}
-          sessionLocked={embedded || Boolean(onBpmChange)}
-          transportPlaying={grooveTransport.playing}
-        />
+        <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', color: '#f0f0f0' }}>
+          GROOVE <span style={{ color: '#7cf4c6' }}>LAB</span>
+        </span>
+        <span style={{ fontSize: 9, color: '#86efac', fontWeight: 800 }}>
+          CHORD {chordBassSeqChannelLabel(chordChannel)}
+        </span>
+        <span style={{ fontSize: 9, color: '#c4b5fd', fontWeight: 800 }}>
+          · LEAD {chordBassSeqChannelLabel(melodyChannel)}
+        </span>
       </div>
 
       <div
         style={{
-          flexShrink: 0,
+          flexShrink: rollExpanded ? 1 : 0,
+          flex: rollExpanded ? '0 1 auto' : undefined,
+          minHeight: rollExpanded ? 140 : undefined,
+          maxHeight: rollExpanded ? '40vh' : undefined,
+          overflow: rollExpanded ? 'auto' : undefined,
           borderBottom: '2px solid #22c55e44',
           background: 'linear-gradient(180deg, #060a08 0%, #050608 100%)',
         }}
@@ -1123,7 +2122,7 @@ export default function GrooveLabScreen({
           onSmartMatchChange={orchid.setOrchidSmartMatch}
           progressionBpm={bpm}
           onProgressionBpmChange={setBpm}
-          progressionSessionBpmLocked={embedded || Boolean(onBpmChange)}
+          progressionSessionBpmLocked={grooveSessionBpmLocked}
           progressionKeyRoot={orchid.keyRoot}
           progressionMode={orchid.mode}
           progressionChordVoiceLabel={orchidVoiceAuditionLabel(orchid.chordVoice)}
@@ -1137,8 +2136,31 @@ export default function GrooveLabScreen({
           onProgressionLoop={progressionAudition.playProgressionLoop}
           onProgressionStopAudition={stopAllGrooveLabPlayback}
           onProgressionDropChords={dropProgressionChordsOnly}
-          onProgressionDropWithBass={dropProgressionAndMatchBass}
-          onPreview={orchid.previewOrchidChord}
+          onPreview={previewGrooveChordOnly}
+          showSubKeypad={false}
+          showWaveLeaf
+          waveLeaf={{
+            channel: melodyChannel,
+            noteCount: waveLeafRollHits.length,
+            bpm,
+            getAudioContext: resolveAudioContext,
+            channelVolumes,
+            onPreviewRoll: handlePreviewWaveLeafRoll,
+            onClearHits: () => {
+              setWaveLeafMelodyUndoStack([]);
+              setWaveLeafHits([]);
+            },
+            chordColumnCount: melodyGenColumnCount,
+            chordHits: chordHitsForMelodyGen,
+            barCount,
+            quantize,
+            keyRoot: orchid.keyRoot,
+            mode: orchid.mode,
+            bassRootMidi: orchid.bassRootMidi,
+            onMelodyGenerated: handleWaveLeafMelodyGenerated,
+            canUndoMelody: canUndoWaveLeafMelody,
+            onUndoMelody: handleWaveLeafMelodyUndo,
+          }}
           onWriteChordToRoll={() => {
             orchid.writeOrchidChordAtEditSlot();
           }}
@@ -1149,63 +2171,29 @@ export default function GrooveLabScreen({
           onGenerateChordPattern={() => {
             orchid.generateChordProgression();
           }}
-          onMatchBassToChords={() => {
-            orchid.matchBassToChords();
-          }}
           chordColumnCount={orchid.chordAnchorCount}
           chordAutoAdvance={orchid.chordAutoAdvance}
           onChordAutoAdvanceChange={orchid.setChordAutoAdvance}
-          onPinToPad={() => {}}
-          pinDisabled
-          bassKeys={orchid.orchidBassKeys}
-          linkedChordVolume={orchid.orchidLinkedChordVolume}
-          onLinkedChordVolumeChange={orchid.setOrchidLinkedChordVolume}
-          linkedChordsMuted={orchid.orchidLinkedChordsMuted}
-          onLinkedChordsMutedChange={orchid.setOrchidLinkedChordsMuted}
-          bassMuted={orchid.bassMuted}
-          onBassMutedChange={orchid.setBassMuted}
-          writeToPianoRoll={orchid.orchidWriteToPianoRoll}
-          onWriteToPianoRollChange={orchid.setOrchidWriteToPianoRoll}
-          onBassKeyDown={orchid.playOrchidBassKey}
-          subRootNoteCount={subRootNoteCount}
-          onClearAllSubRoots={clearAllSubRootsFromRoll}
-          onSubOctaveDown={() => shiftLayerOctave('sub', -1)}
-          onSubOctaveUp={() => shiftLayerOctave('sub', 1)}
           chordStackNoteCount={chordStackNoteCount}
-          onChordOctaveDown={() => shiftLayerOctave('chord', -1)}
-          onChordOctaveUp={() => shiftLayerOctave('chord', 1)}
-          melodyLayerNoteCount={melodyLayerNoteCount}
-          onMelodyOctaveDown={() => shiftLayerOctave('melody', -1)}
-          onMelodyOctaveUp={() => shiftLayerOctave('melody', 1)}
-          suggestedSubMidis={orchid.subKeypadGuide.suggestedKeyMidis}
-          subGuideAuditionMidi={orchid.subGuideAuditionMidi}
-          subGuideStepCount={orchid.subKeypadGuide.steps.length}
-          onRegenerateSubGuide={orchid.regenerateSubKeypadGuide}
-          onAuditionSubGuide={orchid.auditionSubKeypadGuide}
-          onStopSubGuideAudition={orchid.stopSubKeypadAudition}
-          onPushSubGuideToRoll={orchid.applySubKeypadGuideToRoll}
-          bassAutoAdvance={orchid.bassAutoAdvance}
-          onBassAutoAdvanceChange={orchid.setBassAutoAdvance}
-          bassDrawNotes={orchid.bassDrawNotes}
-          onBassDrawNotesChange={orchid.setBassDrawNotes}
-          bassKeypadPreviewMode={orchid.bassKeypadPreviewMode}
-          onBassKeypadPreviewModeChange={orchid.setBassKeypadPreviewMode}
-          bassKeypadSoundLabel={orchid.bassKeypadSoundLabel}
-          bassKeypadChordVoiceLabel={orchid.bassKeypadChordVoiceLabel}
-          bassSoundId={orchid.bassSoundId}
-          onBassSoundChange={orchid.setBassSoundId}
-          melodySoundId={orchid.melodySoundId}
-          onMelodySoundChange={orchid.setMelodySoundId}
-          composerComplexity={orchid.composerComplexity}
-          onComposerComplexityChange={orchid.setComposerComplexity}
-          onGenerateComposerPart={orchid.generateComposerPart}
-          melodyNoteCount={orchid.melodyNoteCount}
-          onLockChords={() => {
-            orchid.lockChordsToGroove({ forceSplit: true });
-          }}
-          bassAnchorCount={orchid.bassAnchorCount}
+          onChordOctaveDown={() => shiftLayerOctave(-1)}
+          onChordOctaveUp={() => shiftLayerOctave(1)}
           chordVoice={orchid.chordVoice}
           onChordVoiceChange={orchid.setChordVoiceWithPreview}
+          guitarSoundId={guitarSoundId}
+          onGuitarSoundChange={handleGuitarSoundChange}
+          orchestraHitId={orchestraHitId}
+          onOrchestraHitChange={handleOrchestraHitChange}
+          guitarFx={orchid.guitarFx}
+          onGuitarWahAmountChange={orchid.setGuitarWahAmount}
+          onGuitarWahRateHzChange={orchid.setGuitarWahRateHz}
+          onGuitarFilterCutoffHzChange={orchid.setGuitarFilterCutoffHz}
+          onGuitarLowCutHzChange={orchid.setGuitarLowCutHz}
+          onGuitarHighCutHzChange={orchid.setGuitarHighCutHz}
+          onGuitarDriveChange={orchid.setGuitarDrive}
+          onGuitarDistortionChange={orchid.setGuitarDistortion}
+          onGuitarLfoRateHzChange={orchid.setGuitarLfoRateHz}
+          onGuitarLfoDepthCentsChange={orchid.setGuitarLfoDepthCents}
+          onGuitarGlideMsChange={orchid.setGuitarGlideMs}
           transportPlaying={grooveTransport.playing}
           transportDisabled={grooveTransport.transportDisabled}
           onTransportRewind={grooveTransport.rewind}
@@ -1213,20 +2201,31 @@ export default function GrooveLabScreen({
           onTransportPlayPause={handleTransportPlayPause}
           onTransportFastForward={grooveTransport.fastForward}
           layerChannels={channels}
-          bassChannel={bassChannel}
           chordChannel={chordChannel}
           melodyChannel={melodyChannel}
-          onBassChannelChange={setBassChannel}
+          guitarChannel={guitarChannel}
+          sampleChannel={sampleChannel}
           onChordChannelChange={setChordChannel}
           onMelodyChannelChange={setMelodyChannel}
+          channelSounds={channelSounds}
+          onChannelSoundChange={handleChannelSoundChange}
+          onAssignLayerRole={handleAssignLayerRole}
+          selectedEditChannel={selectedEditChannel}
+          onSelectEditChannel={handleSelectEditChannel}
+          channelNoteCounts={channelNoteCounts}
           channelVolumes={channelVolumes}
           setChannelVolume={setChannelVolume}
           metronomeEnabled={metronomeEnabled}
           onMetronomeToggle={() => setMetronomeEnabled((v) => !v)}
           grooveQuantize={quantize}
           grooveBarCount={barCount}
-          getAudioContext={getAudioContext}
-          onApplyImportedBassHits={handleApplyImportedBassHits}
+          getAudioContext={resolveAudioContext}
+          grooveGuitarPackSustainSlots={noteLengthSlots}
+          grooveGuitarPackChordHits={chordHitsForTransport}
+          grooveGuitarPackBassRootMidi={orchid.bassRootMidi}
+          onDropGuitarPack={dropGuitarPack}
+          onDropOrchestraHit={dropOrchestraHit}
+          onGuitarPackStatus={setProgressionStatus}
           progressionExportBusy={chordExportBusy}
           progressionExportStatus={chordExportStatus}
           onProgressionExportTimelineMidi={handleExportTimelineMidi}
@@ -1251,60 +2250,50 @@ export default function GrooveLabScreen({
         />
       </div>
 
-      <GrooveLabLayerLegend
-        splitChannels
-        bassChannelLabel={chordBassSeqChannelLabel(bassChannel)}
-        chordChannelLabel={chordBassSeqChannelLabel(chordChannel)}
-        melodyChannelLabel={chordBassSeqChannelLabel(melodyChannel)}
-        onImportMidi={handleMidiImport}
-        midiImportStatus={midiImportStatus}
-        exportBusy={chordExportBusy}
-        exportStatus={chordExportStatus}
-        rollHasChords={rollChordHitsForExport.length > 0}
-        rollHasNotes={rollHits.length > 0}
-        onExportRollMidi={handleExportRollMidi}
-        onExportRollWav={handleExportRollWav}
-        onExportRollWavToPad={handleExportRollWavToPad}
-        onSendRollToNewSynth={onSendChordsToNewSynth ? handleSendRollToNewSynth : undefined}
-        padExportEnabled={Boolean(onExportChordWavToPad)}
-      />
-
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div
+        style={{
+          flex: rollExpanded ? '1.5 1 0' : 1,
+          minHeight: rollExpanded ? 320 : 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
         <GrooveLabPianoRoll
-          channel={bassChannel}
-          chordChannel={chordChannel}
-          melodyChannel={melodyChannel}
+          channel={selectedEditChannel}
+          layerScope={editLayerScope}
+          rollChrome="full"
+          hits={editorRollHits}
+          onHitsChange={setEditorRollHits}
+          onRollExpandedChange={setRollExpanded}
+          rollExpanded={rollExpanded}
           bassRootMidi={orchid.bassRootMidi}
-          hits={rollHits}
-          onHitsChange={setBassRollHits}
-          splitChannels
-          bassHits={bassRollHits}
-          chordHits={chordHits}
-          melodyHits={melodyRollHits}
-          onBassHitsChange={setBassRollHits}
-          onChordHitsChange={setChordHits}
-          onMelodyHitsChange={setMelodyRollHits}
           noteLengthSlots={noteLengthSlots}
           onNoteLengthChange={setNoteLengthSlots}
           quantize={quantize}
           onQuantizeChange={setQuantize}
           barCount={barCount}
           onBarCountChange={handleBarCountChange}
-          onPreview={getAudioContext ? handlePreview : undefined}
-          onPreviewPitch={getAudioContext ? handlePreviewPitch : undefined}
-          onSpreadChord={orchid.spreadChordToRoll}
-          onDeleteChordAtSlot={orchid.deleteChordAtSlot}
-          editSlot={orchid.editSlot}
-          onEditSlotChange={orchid.setEditSlot}
-          bassDrawNotes={orchid.bassDrawNotes}
-          onPlaceBassNote={
-            orchid.bassDrawNotes
-              ? (midi, anchorSlot, opts) => {
-                  orchid.placeBassAtSlot(midi, anchorSlot, opts);
-                  handlePreviewPitch(midi);
-                }
+          onPreview={handlePreview}
+          onPreviewPitch={handlePreviewPitch}
+          onPreviewGuitarNote={
+            editLayerScope === 'guitar' || selectedEditChannel === guitarChannel
+              ? previewGuitarNote
               : undefined
           }
+          onPrimeAudio={
+            editLayerScope === 'guitar' || selectedEditChannel === guitarChannel
+              ? primeGuitarRollAudio
+              : undefined
+          }
+          onSpreadChord={
+            selectedEditChannel === chordChannel ? orchid.spreadChordToRoll : undefined
+          }
+          onDeleteChordAtSlot={
+            selectedEditChannel === chordChannel ? orchid.deleteChordAtSlot : undefined
+          }
+          editSlot={orchid.editSlot}
+          onEditSlotChange={orchid.setEditSlot}
           playheadElRef={playheadElRef}
           rollScrollRef={rollScrollRef}
           transportNotStopped={grooveTransport.transportNotStopped}
@@ -1317,17 +2306,36 @@ export default function GrooveLabScreen({
           activeGlobalCol={activeGlobalCol}
           onSeekCol={handleSeekCol}
           onPxPerColChange={setRollPxPerCol}
-          subRootNoteCount={subRootNoteCount}
-          onClearAllSubRoots={clearAllSubRootsFromRoll}
-          onSubOctaveDown={() => shiftLayerOctave('sub', -1)}
-          onSubOctaveUp={() => shiftLayerOctave('sub', 1)}
-          chordStackNoteCount={chordStackNoteCount}
-          onChordOctaveDown={() => shiftLayerOctave('chord', -1)}
-          onChordOctaveUp={() => shiftLayerOctave('chord', 1)}
-          melodyLayerNoteCount={melodyLayerNoteCount}
-          onMelodyOctaveDown={() => shiftLayerOctave('melody', -1)}
-          onMelodyOctaveUp={() => shiftLayerOctave('melody', 1)}
+          chordStackNoteCount={
+            editLayerScope === 'chord'
+              ? chordStackNoteCount
+              : editLayerScope === 'sample'
+                ? sampleStackNoteCount
+                : 0
+          }
+          onChordOctaveDown={
+            editLayerScope === 'chord' || editLayerScope === 'sample'
+              ? () => shiftLayerOctave(-1)
+              : undefined
+          }
+          onChordOctaveUp={
+            editLayerScope === 'chord' || editLayerScope === 'sample'
+              ? () => shiftLayerOctave(1)
+              : undefined
+          }
+          melodyLayerNoteCount={editLayerScope === 'waveleaf' ? waveLeafRollHits.length : 0}
+          onClearAllMelody={
+            editLayerScope === 'waveleaf' ? () => setWaveLeafHits([]) : undefined
+          }
+          onMelodyOctaveDown={
+            editLayerScope === 'waveleaf' ? () => shiftWaveLeafOctave(-1) : undefined
+          }
+          onMelodyOctaveUp={
+            editLayerScope === 'waveleaf' ? () => shiftWaveLeafOctave(1) : undefined
+          }
           onMidiFileDrop={handleMidiImport}
+          onImportMidi={handleMidiImport}
+          midiImportStatus={midiImportStatus}
           exportBusy={chordExportBusy}
           exportStatus={chordExportStatus}
           rollHasChords={rollChordHitsForExport.length > 0}
@@ -1337,6 +2345,7 @@ export default function GrooveLabScreen({
           onExportRollWavToPad={handleExportRollWavToPad}
           onSendRollToNewSynth={onSendChordsToNewSynth ? handleSendRollToNewSynth : undefined}
           padExportEnabled={Boolean(onExportChordWavToPad)}
+          padPickerOpen={padExportRequest?.label === 'GrooveLab_Roll'}
         />
       </div>
 

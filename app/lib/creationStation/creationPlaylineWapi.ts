@@ -36,10 +36,13 @@ export function creationPlaylineBeatForWapi(
   return beatNow + leadSec * (Math.max(1, bpm) / 60);
 }
 
-/** Half of Creation Station drum playline `width` (2) — math is column **center**, transform is **left**. */
-export const CREATION_DRUM_PLAYLINE_CENTER_X = 1;
-/** Half of piano playline `width` (1). */
-export const CREATION_PIANO_PLAYLINE_CENTER_X = 0.5;
+/** SE2 `PLAYHEAD_GRIP_W_PX` / `PLAYHEAD_W_PX` — compositor animates grip center, not arrow tip. */
+export const CREATION_SE2_PLAYHEAD_GRIP_W_PX = 16;
+export const CREATION_SE2_PLAYHEAD_LINE_W_PX = 2;
+/** Half of drum grip width — WAAPI `translate3d` targets grip **center**. */
+export const CREATION_DRUM_PLAYLINE_CENTER_X = CREATION_SE2_PLAYHEAD_GRIP_W_PX / 2;
+/** Half of piano roll line width. */
+export const CREATION_PIANO_PLAYLINE_CENTER_X = CREATION_SE2_PLAYHEAD_LINE_W_PX / 2;
 
 /** X shift so a `drumColW`-wide quant glow strip’s center tracks the drum playline center (same WAAPI keyframes + offset). */
 export function creationDrumQuantGlowKeyframeOffsetPx(drumColW: number): number {
@@ -108,6 +111,10 @@ export type CreationPlaylineWapiRefs = {
   /** Beat Lab only — optional for Chord Builder / 808 / Orchid playlines. */
   wapiSegStateRef?: MutableRefObject<CreationPlaylineWapiSegState>;
   wapiBpmRef?: MutableRefObject<number>;
+  /** SE2 `wapiLoopCycleSeenRef` — seeded from seek position on each WAAPI launch. */
+  wapiLoopCycleSeenRef?: MutableRefObject<number>;
+  /** SE2 `wapiPrevPhaseMsRef` — loop-wrap edge detect; reset to -1 on launch. */
+  wapiPrevPhaseMsRef?: MutableRefObject<number>;
 };
 
 function resolvePlaylineWapiRefs(refs: CreationPlaylineWapiRefs): {
@@ -118,6 +125,21 @@ function resolvePlaylineWapiRefs(refs: CreationPlaylineWapiRefs): {
     wapiSegStateRef: refs.wapiSegStateRef ?? fallbackWapiSegRef,
     wapiBpmRef: refs.wapiBpmRef ?? fallbackWapiBpmRef,
   };
+}
+
+/** SE2 `launchWapiAnims` — seed loop-wrap detect so frame 0 does not false-trigger splice. */
+function seedCreationPlaylineWapiLoopDetect(
+  refs: CreationPlaylineWapiRefs,
+  useLoopSegment: boolean,
+  seekMs: number,
+  durMs: number,
+): void {
+  const cycleSeenRef = refs.wapiLoopCycleSeenRef;
+  const prevPhaseRef = refs.wapiPrevPhaseMsRef;
+  if (!cycleSeenRef || !prevPhaseRef) return;
+  const dSafe = Math.max(1e-9, durMs);
+  cycleSeenRef.current = useLoopSegment ? Math.floor(seekMs / dSafe) : 0;
+  prevPhaseRef.current = -1;
 }
 
 /** Visual beat from compositor `Animation.currentTime` (SE2 `animationTick` `b`). */
@@ -142,9 +164,11 @@ export function beatFromCreationPlaylineWapiAnim(
       Math.max(seg.loopStartBeat, seg.loopStartBeat + (t / d) * span),
     );
   }
-  /** Open pattern — SE2: linear compositor beat (infinite iterations still advance in ms). */
+  /** Open full-span — Groove / NEW SYNTH style phase wrap (infinite WAAPI iterations). */
   const totalBeats = Math.max(1e-9, seg.periodBeats);
-  return Math.max(0, Math.min(totalBeats, (animMs / 1000) * (bpm / 60)));
+  const d = Math.max(1e-9, seg.durMs);
+  const phaseMs = ((animMs % d) + d) % d;
+  return Math.max(0, Math.min(totalBeats, (phaseMs / d) * totalBeats));
 }
 
 /** Re-seek running WAAPI playlines without cancel/rebuild (playhead-only drift / post-`ensureCtx` lock). */
@@ -210,6 +234,10 @@ export function creationPlaylineColFAndPx(
   );
   const cw = Math.max(1, drumColW);
   const pcw = Math.max(1, pianoColW);
+  /**
+   * Leading edge of the beat on the step grid (beat 0 → column 0 left / before “1”).
+   * WAAPI grip is centered via `CREATION_DRUM_PLAYLINE_CENTER_X` in translate.
+   */
   return { colF: bankColF, drumX: bankColF * cw, pianoX: patternColF * pcw };
 }
 
@@ -226,6 +254,31 @@ export function cancelCreationPlaylineWapi(
     if (!el) continue;
     el.getAnimations().forEach((a) => a.cancel());
     el.style.removeProperty('will-change');
+  }
+}
+
+/** Compositor time is only valid while WAAPI owns the playline — not when idle/finished. */
+export function creationPlaylineWapiCompositorMs(anim: Animation | null): number | null {
+  if (!anim || anim.playState === 'idle' || anim.playState === 'finished') return null;
+  const ms = Number(anim.currentTime ?? 0);
+  return Number.isFinite(ms) && ms >= 0 ? ms : null;
+}
+
+/** Beat Lab: `play()` in the user-gesture stack — pending/paused anims otherwise never move. */
+export function kickCreationPlaylineWapiPlaying(refs: CreationPlaylineWapiRefs): void {
+  for (const anim of [
+    refs.drumAnimRef.current,
+    refs.pianoAnimRef.current,
+    refs.drumQuantGlowAnimRef.current,
+  ]) {
+    if (!anim || anim.playState === 'idle') continue;
+    if (anim.playState !== 'running') {
+      try {
+        anim.play();
+      } catch {
+        /* autoplay policy */
+      }
+    }
   }
 }
 
@@ -295,29 +348,27 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
     a.currentTime = sm;
     if (play) {
       a.play();
-      if (el) void el.offsetWidth;
+      void el.offsetWidth;
     }
     return a;
   };
 
   /**
-   * Same branch as SE2 `launchWapiAnims` `useSegment`:
-   * `play && loopOn && le > ls && ls >= 0` → one segment over `(le − ls)` beats, infinite iterations.
-   * Maps timeline beats → pattern-column pixels via `creationPlaylineColFAndPx`.
+   * SE2 `launchWapiAnims` — loop brace only gets seamless infinite segment.
+   * Loop off: one linear open span (`iterations: 1`), same as Studio Editor 2.
    */
-  /** Same gate as SE2 `launchWapiAnims` — segment loop while `loopOn` (no “wait until loop brace”). */
-  const useSegment =
+  const totalBeatsOpen = Math.max(1e-9, o.totalBeats ?? pc / sub);
+  const useLoopSegment =
     play &&
     o.loopOn &&
     o.loopEndBeat > o.loopStartBeat &&
     o.loopStartBeat >= 0;
 
-  if (useSegment) {
+  if (useLoopSegment) {
     const lsLoop = o.loopStartBeat;
     const leLoop = o.loopEndBeat;
     const spanBeats = Math.max(1e-9, leLoop - lsLoop);
     const durMs = Math.max(16, (spanBeats / (bpm / 60)) * 1000);
-    /** End keyframe just inside `le` so pattern-wrap doesn’t collapse x0≈x1 (zero-motion segment). */
     const endBeat = Math.max(lsLoop + 1e-9, leLoop - 1e-6);
     const bn = Math.min(Math.max(beatNow, lsLoop), endBeat);
     const seekMs = Math.max(0, Math.min(((bn - lsLoop) / Math.max(1e-9, bpm / 60)) * 1000, durMs));
@@ -327,23 +378,24 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
       loopEndBeat: leLoop,
       durMs,
       seamlessLoop: true,
-      periodBeats: 0,
+      periodBeats: totalBeatsOpen,
       beatAtLaunch: beatNow,
       seekMs,
     };
-    const x0d = creationPlaylineColFAndPx(lsLoop, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).drumX;
-    let x1d = creationPlaylineColFAndPx(endBeat, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).drumX;
-    const x0p = creationPlaylineColFAndPx(lsLoop, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).pianoX;
-    let x1p = creationPlaylineColFAndPx(endBeat, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).pianoX;
+    const x0d = creationPlaylineColFAndPx(lsLoop, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
+    let x1d = creationPlaylineColFAndPx(endBeat, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
+    const x0p = creationPlaylineColFAndPx(lsLoop, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).pianoX;
+    let x1p = creationPlaylineColFAndPx(endBeat, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).pianoX;
     if (Math.abs(x1d - x0d) < 0.5) {
       const midB = lsLoop + spanBeats * 0.5;
-      x1d = creationPlaylineColFAndPx(midB, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).drumX;
+      x1d = creationPlaylineColFAndPx(midB, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
     }
     if (Math.abs(x1p - x0p) < 0.5) {
       const midB = lsLoop + spanBeats * 0.5;
-      x1p = creationPlaylineColFAndPx(midB, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).pianoX;
+      x1p = creationPlaylineColFAndPx(midB, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).pianoX;
     }
     const iters = Number.POSITIVE_INFINITY;
+    seedCreationPlaylineWapiLoopDetect(refs, true, seekMs, durMs);
     refs.drumAnimRef.current = makeAnimSeg(drumEl, x0d, x1d, durMs, seekMs, iters, CREATION_DRUM_PLAYLINE_CENTER_X);
     refs.pianoAnimRef.current = makeAnimSeg(pianoEl, x0p, x1p, durMs, seekMs, iters, CREATION_PIANO_PLAYLINE_CENTER_X);
     refs.drumQuantGlowAnimRef.current = makeAnimSeg(
@@ -356,12 +408,13 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
       CREATION_DRUM_PLAYLINE_CENTER_X,
       glowKfOff,
     );
+    if (play) kickCreationPlaylineWapiPlaying(refs);
     return;
   }
 
   /**
-   * Open pattern — mirrors SE2 `launchWapiAnims` non-segment branch:
-   * `durMs = totalBeats × spb`, `seekMs = beatNow × spb`, `iterations = 1`, pause → seek → play.
+   * Open pattern — one period duration, infinite compositor iterations (NEW SYNTH / Groove contract).
+   * Avoids `finished` playState stalling the line while audio/metro keep running.
    */
   const totalBeats = Math.max(1e-9, o.totalBeats ?? pc / sub);
   const durMs = Math.max(16, totalBeats * spb * 1000);
@@ -380,7 +433,8 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
     beatAtLaunch: beatNow,
     seekMs,
   };
-  const iters = play ? Number.POSITIVE_INFINITY : 1;
+  const iters = Number.POSITIVE_INFINITY;
+  seedCreationPlaylineWapiLoopDetect(refs, false, seekMs, durMs);
 
   refs.drumAnimRef.current = makeAnimSeg(drumEl, x0d, x1d, durMs, seekMs, iters, CREATION_DRUM_PLAYLINE_CENTER_X);
   refs.pianoAnimRef.current = makeAnimSeg(pianoEl, x0p, x1p, durMs, seekMs, iters, CREATION_PIANO_PLAYLINE_CENTER_X);
@@ -393,6 +447,63 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
     iters,
     CREATION_DRUM_PLAYLINE_CENTER_X,
     glowKfOff,
+  );
+  if (play) kickCreationPlaylineWapiPlaying(refs);
+}
+
+/** Resume or re-seek existing compositor anims without cancel/rebuild. Returns true if any anim was touched. */
+export function resumeCreationPlaylineWapiAtBeat(
+  refs: CreationPlaylineWapiRefs,
+  beatNow: number,
+  bpm: number,
+): boolean {
+  const hasAnim =
+    refs.drumAnimRef.current ||
+    refs.pianoAnimRef.current ||
+    refs.drumQuantGlowAnimRef.current;
+  if (!hasAnim) return false;
+  seekRunningCreationPlaylineWapi(refs, beatNow, bpm);
+  return true;
+}
+
+/** Re-bind compositor anim from the live DOM when React remounts the playline node. */
+export function resolveCreationDrumPlaylineAnim(
+  animRef: MutableRefObject<Animation | null>,
+  drumEl: HTMLElement | null,
+): Animation | null {
+  const refAnim = animRef.current;
+  if (refAnim && creationPlaylineAnimIsLive(refAnim)) return refAnim;
+  if (!drumEl) return refAnim;
+  let best: Animation | null = null;
+  for (const a of drumEl.getAnimations()) {
+    if (!creationPlaylineAnimIsLive(a)) continue;
+    if (!best || Number(a.currentTime ?? 0) > Number(best.currentTime ?? 0)) best = a;
+  }
+  if (best) animRef.current = best;
+  return best ?? refAnim;
+}
+
+/** Active compositor playline — SYNTH/NEW SYNTH use the piano node when the drum grid is unmounted. */
+export function resolveCreationActivePlaylineAnim(
+  refs: CreationPlaylineWapiRefs,
+  drumEl: HTMLElement | null,
+  pianoEl: HTMLElement | null,
+  preferPiano: boolean,
+): Animation | null {
+  const drum = resolveCreationDrumPlaylineAnim(refs.drumAnimRef, drumEl);
+  const piano = resolveCreationDrumPlaylineAnim(refs.pianoAnimRef, pianoEl);
+  if (preferPiano) return piano ?? drum;
+  return drum ?? piano;
+}
+
+/** True when a compositor anim still owns the playline (incl. paused scrub / pause transport). */
+export function creationPlaylineAnimIsLive(anim: Animation | null): boolean {
+  return (
+    anim != null &&
+    (anim.playState === 'running' ||
+      anim.playState === 'pending' ||
+      anim.playState === 'paused' ||
+      anim.playState === 'finished')
   );
 }
 

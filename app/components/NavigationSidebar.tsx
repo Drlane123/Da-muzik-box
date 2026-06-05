@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 import {
-  CREATION_SUB_SCREENS,
+  CREATION_SUB_SCREENS_NAV,
   type CreationSubScreenId,
 } from '@/app/lib/creationStation/creationSubScreens';
 
@@ -247,7 +247,7 @@ function CreationStationNavGroup({
       </div>
       {expanded && (
         <div className="flex flex-col gap-0.5 pl-2 pr-0 pb-1" style={{ marginLeft: 10 }}>
-          {CREATION_SUB_SCREENS.map((sub) => {
+          {CREATION_SUB_SCREENS_NAV.map((sub) => {
             const subActive = isActive && activeSubScreen === sub.id;
             return (
               <button

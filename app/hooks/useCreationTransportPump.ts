@@ -6,17 +6,11 @@ import {
   beatLabDisplayBeatFromAudioClock,
 } from '@/app/lib/creationStation/beatLabSe2TransportEngine';
 import { resolveBeatLabAudioContext } from '@/app/lib/creationStation/beatLabStepScheduler';
-import { setCreationBeatLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
 import { updateSchedAnchor } from '@/app/lib/studio/se2TransportClock';
 
 const fallbackSchedAnchorTimeRef = { current: 0 };
 const fallbackSchedAnchorPerfRef = { current: 0 };
 
-/**
- * **Single** Creation Station transport pump: one `requestAnimationFrame` loop + one `setInterval` for lookahead.
- * Mirrors SE2’s “audio clock drives readouts / lookahead” split: display beat from `ctx.currentTime`
- * (same domain as scheduling). **Does not** import Studio Editor 2 — Creation-only.
- */
 export type CreationTransportPumpRefs = {
   ctxRef: RefObject<AudioContext | null>;
   runningRef: MutableRefObject<boolean>;
@@ -25,22 +19,19 @@ export type CreationTransportPumpRefs = {
   displayBeatRef: MutableRefObject<number>;
   bpmRef: MutableRefObject<number>;
   lastScheduledQuarterRef: MutableRefObject<number>;
-  /** Optional — Beat Lab passes these for `smoothSchedNow`; other screens omit. */
   schedAnchorTimeRef?: MutableRefObject<number>;
   schedAnchorPerfRef?: MutableRefObject<number>;
-  /** Beat Lab — clamp `bDisplay` like SE2 `totalBeatsRef`. */
   totalBeatsRef?: MutableRefObject<number>;
+  perfSessionStartMsRef?: MutableRefObject<number>;
 };
 
 export type CreationTransportPumpOptions = {
   isScreenActive: boolean;
   isPlaying: boolean;
   getOrCreateAudioContext: () => AudioContext;
-  /** Same pattern as `refillCreationScheduleRef` — always latest `(ctx, ctSnap) => void`. */
   refillRef: MutableRefObject<(ctx: AudioContext, ctSnap: number) => void>;
-  /** Invoked every rAF while audio is running; playline + HUD + React churn live here only. */
+  /** Beat Lab recomputes inside `onFrame`; Chord Builder / 808 use the passed `bDisplay`. */
   onFrameRef: MutableRefObject<(bDisplay: number) => void>;
-  /** When the shared graph is rebuilt after `closed`, re-anchor transport + refill lookahead. */
   onAudioContextRebuiltRef?: MutableRefObject<((ctx: AudioContext) => void) | undefined>;
 };
 
@@ -59,26 +50,34 @@ export function useCreationTransportPump(
     schedAnchorTimeRef,
     schedAnchorPerfRef,
     totalBeatsRef,
+    perfSessionStartMsRef,
   } = refs;
-  const { isScreenActive, getOrCreateAudioContext, refillRef, onFrameRef, onAudioContextRebuiltRef } =
-    options;
+  const {
+    isScreenActive,
+    isPlaying,
+    getOrCreateAudioContext,
+    refillRef,
+    onFrameRef,
+    onAudioContextRebuiltRef,
+  } = options;
 
+  /** SE2: visual rAF only while transport is running (not while screen is merely open). */
   useEffect(() => {
-    if (!isScreenActive) return;
+    if (!isScreenActive || !isPlaying) return;
     let raf = 0;
     const tick = () => {
-      const ctx =
-        ctxRef.current && ctxRef.current.state !== 'closed'
-          ? ctxRef.current
-          : null;
-      if (runningRef.current && ctx && ctx.state !== 'closed') {
-        setCreationBeatLabTransportRunning(true);
+      if (!runningRef.current) {
+        raf = 0;
+        return;
+      }
+      const ctx = resolveBeatLabAudioContext(ctxRef, getOrCreateAudioContext);
+      if (ctx.state !== 'closed') {
         if (ctx.state === 'suspended') {
           void ctx.resume().catch(() => {});
         }
         const sat = schedAnchorTimeRef ?? fallbackSchedAnchorTimeRef;
         const sap = schedAnchorPerfRef ?? fallbackSchedAnchorPerfRef;
-        if (schedAnchorTimeRef && schedAnchorPerfRef) {
+        if (schedAnchorTimeRef && schedAnchorPerfRef && ctx.state === 'running') {
           updateSchedAnchor(ctx, sat, sap);
         }
         const tb = totalBeatsRef?.current ?? Number.POSITIVE_INFINITY;
@@ -90,15 +89,17 @@ export function useCreationTransportPump(
           bpmRef.current,
           tb,
         );
-        displayBeatRef.current = bDisplay;
         onFrameRef.current(bDisplay);
       }
-      raf = requestAnimationFrame(tick);
+      if (runningRef.current) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
   }, [
     isScreenActive,
+    isPlaying,
     ctxRef,
     runningRef,
     sessionStartRef,
@@ -109,21 +110,17 @@ export function useCreationTransportPump(
     schedAnchorTimeRef,
     schedAnchorPerfRef,
     totalBeatsRef,
+    getOrCreateAudioContext,
   ]);
 
-  /**
-   * Lookahead refill while `runningRef` is true — do not gate on React `isPlaying` alone;
-   * `startTransport` sets `runningRef` before `setTransport('playing')`, and a stale
-   * `isPlaying` effect teardown clears the interval and leaves ~3s of audio then silence.
-   */
+  /** SE2: 25 ms audio scheduling loop — only while running. */
   useEffect(() => {
-    if (!isScreenActive) {
+    if (!isScreenActive || !isPlaying) {
       lastScheduledQuarterRef.current = Number.NEGATIVE_INFINITY;
       return;
     }
     const tick = () => {
       if (!runningRef.current) return;
-      setCreationBeatLabTransportRunning(true);
       const prevCtx = ctxRef.current;
       const ctx = resolveBeatLabAudioContext(ctxRef, getOrCreateAudioContext);
       if (ctx.state === 'closed') return;
@@ -140,9 +137,12 @@ export function useCreationTransportPump(
         schedAnchorTimeRef.current = t;
         schedAnchorPerfRef.current = performance.now();
       }
+      if (perfSessionStartMsRef && sessionStartRef.current > 0) {
+        perfSessionStartMsRef.current =
+          performance.now() + (sessionStartRef.current - t) * 1000;
+      }
       const runRefill = () => {
         if (!runningRef.current || ctx.state === 'closed') return;
-        /** Schedule ahead even while suspended — events queue and play on resume (skipping refill caused ~3s gaps). */
         refillRef.current(ctx, Math.max(0, ctx.currentTime));
       };
       if (ctx.state === 'suspended') {
@@ -155,12 +155,14 @@ export function useCreationTransportPump(
     return () => window.clearInterval(id);
   }, [
     isScreenActive,
+    isPlaying,
     ctxRef,
     runningRef,
     getOrCreateAudioContext,
     refillRef,
     lastScheduledQuarterRef,
     onAudioContextRebuiltRef,
+    perfSessionStartMsRef,
+    sessionStartRef,
   ]);
-
 }

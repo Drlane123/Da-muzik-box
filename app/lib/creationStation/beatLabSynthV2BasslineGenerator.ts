@@ -534,3 +534,80 @@ export function beatLabSynthV2GenerateBassRollNotes(opts: {
     opts.patternCols,
   );
 }
+
+/**
+ * After new harmony lands on NEW SYNTH, retune existing bass roots and snap bar-1 hits
+ * to the same downbeat columns as the chord stack (keeps rhythmic pattern).
+ */
+export function beatLabSynthV2ResyncBassToHarmony(opts: {
+  notes: readonly BeatLabMidiNote[];
+  bassLane: number;
+  harmonyLane: number;
+  layoutBars: 4 | 8;
+  stepsPerBar: number;
+  patternCols: number;
+  chordRail?: BeatLabImportedChordRail | null;
+  midiAtHarmony?: (n: BeatLabMidiNote) => number;
+  midiAtBass?: (n: BeatLabMidiNote) => number;
+}): BeatLabMidiNote[] {
+  const stepsPerBar = Math.max(1, Math.round(opts.stepsPerBar));
+  const windowCols = Math.min(
+    Math.max(1, Math.round(opts.patternCols)),
+    opts.layoutBars * stepsPerBar,
+  );
+  const midiAtHarmony =
+    opts.midiAtHarmony ??
+    ((n: BeatLabMidiNote) => beatLabMelodicLanePitch(opts.harmonyLane) + (n.pitchSemi ?? 0));
+  const midiAtBass =
+    opts.midiAtBass ??
+    ((n: BeatLabMidiNote) => beatLabMelodicLanePitch(opts.bassLane) + (n.pitchSemi ?? 0));
+
+  const harmonyNotes = opts.notes.filter((n) => n.lane === opts.harmonyLane);
+  const bassNotes = opts.notes.filter((n) => n.lane === opts.bassLane && n.col < windowCols);
+  if (bassNotes.length === 0 || harmonyNotes.length === 0) return [...opts.notes];
+
+  const harmonyDownbeats = beatLabSynthV2HarmonyColumnsOnLane(
+    harmonyNotes,
+    opts.harmonyLane,
+    midiAtHarmony,
+  );
+  const roots = beatLabSynthV2ResolveRootsPerBar({
+    chordRail: opts.chordRail,
+    laneNotes: harmonyNotes,
+    lane: opts.harmonyLane,
+    layoutBars: opts.layoutBars,
+    stepsPerBar,
+    midiAtNote: midiAtHarmony,
+    includeMutedHarmony: true,
+  });
+
+  let out = opts.notes.map((n) => ({ ...n }));
+  for (let bar = 0; bar < opts.layoutBars; bar += 1) {
+    const barStart = bar * stepsPerBar;
+    const barEnd = barStart + stepsPerBar;
+    const downbeatCol =
+      [...harmonyDownbeats].find((c) => c >= barStart && c < barEnd) ?? barStart;
+    const newBase = rootMidiToLanePitchSemi(opts.bassLane, roots[bar]!);
+
+    const bassInBar = out.filter(
+      (n) => n.lane === opts.bassLane && n.col >= barStart && n.col < barEnd && !n.muted,
+    );
+    if (bassInBar.length === 0) continue;
+
+    const anchor =
+      bassInBar.find((n) => n.col === barStart) ??
+      [...bassInBar].sort((a, b) => a.col - b.col)[0]!;
+    const oldBase = anchor.pitchSemi ?? newBase;
+    const delta = newBase - oldBase;
+
+    out = out.map((n) => {
+      if (n.lane !== opts.bassLane || n.col < barStart || n.col >= barEnd) return n;
+      let col = n.col;
+      if (n.col === anchor.col || n.col === barStart) col = downbeatCol;
+      const pitchSemi = Math.max(-24, Math.min(24, (n.pitchSemi ?? 0) + delta));
+      return col === n.col && pitchSemi === (n.pitchSemi ?? 0) ? n : { ...n, col, pitchSemi };
+    });
+  }
+
+  return beatLabSynthV2MonophonicLaneNotes(out, opts.bassLane, midiAtBass, windowCols);
+}

@@ -89,20 +89,25 @@ export function cbPianoMidiToNoteName(midi: number): string {
   return `${NOTE_NAMES[pc]}${oct}`;
 }
 
-/** Row on the chord roll keyboard (C3–C6); tolerates ±1 MIDI for rounding. */
-export function chordRollRowForMidi(midi: number): number {
-  const exact = CB_PIANO_ROWS.indexOf(cbPianoMidiToNoteName(midi));
+/** Nearest row on a piano-row list; tolerates small MIDI drift from voicing / import. */
+export function pianoRowIndexForMidi(midi: number, rows: readonly string[]): number {
+  const exact = rows.indexOf(cbPianoMidiToNoteName(midi));
   if (exact >= 0) return exact;
   let best = -1;
   let dist = 999;
-  for (let i = 0; i < CB_PIANO_ROWS.length; i++) {
-    const d = Math.abs(cbPianoNoteNameToMidi(CB_PIANO_ROWS[i]!) - midi);
+  for (let i = 0; i < rows.length; i++) {
+    const d = Math.abs(cbPianoNoteNameToMidi(rows[i]!) - midi);
     if (d < dist) {
       dist = d;
       best = i;
     }
   }
-  return dist <= 1 ? best : -1;
+  return dist <= 2 ? best : -1;
+}
+
+/** Row on the chord roll keyboard (C3–C6); tolerates ±1 MIDI for rounding. */
+export function chordRollRowForMidi(midi: number): number {
+  return pianoRowIndexForMidi(midi, CB_PIANO_ROWS);
 }
 
 export function cbPianoIsBlackKey(midi: number): boolean {

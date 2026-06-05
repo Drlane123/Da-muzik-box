@@ -1,17 +1,54 @@
 /**
  * Logic-style NEW SYNTH layout: instrument editor (top) + piano roll / MIDI keys (bottom).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 type WorkspaceProps = {
   synthEditor: React.ReactNode;
   pianoRoll: React.ReactNode;
   /** Extra controls in the piano-roll strip (octave, chord guide, …). */
   rollHeaderExtra?: React.ReactNode;
+  /** Open the roll when transport plays (playhead DOM must exist for WAAPI). */
+  isPlaying?: boolean;
+  /** Bump (e.g. Groove → NEW SYNTH import) to expand the roll and show chords. */
+  expandRollKey?: number;
+  /** Parent can relaunch compositor playline after the roll mounts mid-play. */
+  onRollOpenChange?: (open: boolean) => void;
 };
 
-export function BeatLabSynthV2Workspace({ synthEditor, pianoRoll, rollHeaderExtra }: WorkspaceProps) {
-  const [rollOpen, setRollOpen] = useState(false);
+export function BeatLabSynthV2Workspace({
+  synthEditor,
+  pianoRoll,
+  rollHeaderExtra,
+  isPlaying = false,
+  expandRollKey = 0,
+  onRollOpenChange,
+}: WorkspaceProps) {
+  const [rollOpen, setRollOpen] = useState(true);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    setRollOpen((prev) => {
+      if (!prev) onRollOpenChange?.(true);
+      return true;
+    });
+  }, [isPlaying, onRollOpenChange]);
+
+  useEffect(() => {
+    if (expandRollKey <= 0) return;
+    setRollOpen((prev) => {
+      if (!prev) onRollOpenChange?.(true);
+      return true;
+    });
+  }, [expandRollKey, onRollOpenChange]);
+
+  const setRollOpenTracked = (next: boolean | ((prev: boolean) => boolean)) => {
+    setRollOpen((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      if (resolved !== prev) onRollOpenChange?.(resolved);
+      return resolved;
+    });
+  };
   return (
     <div
       style={{
@@ -72,7 +109,7 @@ export function BeatLabSynthV2Workspace({ synthEditor, pianoRoll, rollHeaderExtr
           )}
           <button
             type="button"
-            onClick={() => setRollOpen((v) => !v)}
+            onClick={() => setRollOpenTracked((v) => !v)}
             style={{
               marginLeft: 'auto',
               fontSize: 8,

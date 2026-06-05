@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { withProgressionAuditionOutput } from '@/app/lib/creationStation/chordSequencerVoices';
-import {
-  armGrooveLabPlayback,
-  runWithGrooveLabAudio,
-  silenceGrooveLabPlayback,
-  withGrooveLabPlaybackSink,
-  getOrCreateGrooveLabPlaybackBus,
-} from '@/app/lib/creationStation/grooveLabAudio';
+import { runWithGrooveLabAudio } from '@/app/lib/creationStation/grooveLabAudio';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
 import {
   chordMidisForStepLabel,
@@ -16,7 +9,11 @@ import {
   stepIndexAtElapsedBeats,
   type ProgressionAuditionOpts,
 } from '@/app/lib/creationStation/grooveLabProgressionPreview';
-import type { ChordVoiceId } from '@/app/lib/creationStation/chordSequencerVoices';
+import {
+  haltChordSequencerTransportVoices,
+  withProgressionAuditionBus,
+  type ChordVoiceId,
+} from '@/app/lib/creationStation/chordSequencerVoices';
 import type { OrchidPerformanceMode } from '@/app/lib/creationStation/orchidChordEngine';
 
 function playableTimelineSteps(steps: readonly GrooveProgressionStep[]): GrooveProgressionStep[] {
@@ -54,15 +51,6 @@ export function useGrooveLabProgressionAudition(opts: {
     setActiveStepIndex(null);
   }, []);
 
-  const silenceNow = useCallback(() => {
-    if (!opts.getAudioContext) return;
-    try {
-      silenceGrooveLabPlayback(opts.getAudioContext());
-    } catch {
-      /* context not ready */
-    }
-  }, [opts.getAudioContext]);
-
   const stopPlayback = useCallback(() => {
     sessionRef.current += 1;
     shouldLoopRef.current = false;
@@ -70,11 +58,11 @@ export function useGrooveLabProgressionAudition(opts: {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
+    haltChordSequencerTransportVoices();
     clearPlaybackPosition();
-    silenceNow();
     setPlaying(false);
     setLooping(false);
-  }, [clearPlaybackPosition, silenceNow]);
+  }, [clearPlaybackPosition]);
 
   const startPlaybackPositionTracking = useCallback(
     (
@@ -126,12 +114,8 @@ export function useGrooveLabProgressionAudition(opts: {
         if (sessionRef.current !== sessionId) return;
         runWithGrooveLabAudio(opts.getAudioContext!, (ctx, when) => {
           if (sessionRef.current !== sessionId) return;
-          const bus = getOrCreateGrooveLabPlaybackBus(ctx);
-          armGrooveLabPlayback(ctx);
-          const durationSec = withGrooveLabPlaybackSink(bus, () =>
-            withProgressionAuditionOutput(bus, () =>
-              scheduleProgressionAudition(ctx, steps, when, auditionOpts()),
-            ),
+          const durationSec = withProgressionAuditionBus(ctx, () =>
+            scheduleProgressionAudition(ctx, steps, when, auditionOpts()),
           );
           startPlaybackPositionTracking(ctx, when, steps, sessionId);
           const ms = Math.max(350, durationSec * 1000 + 100);
@@ -141,7 +125,6 @@ export function useGrooveLabProgressionAudition(opts: {
               runOnce();
             } else {
               sessionRef.current += 1;
-              silenceGrooveLabPlayback(ctx);
               setPlaying(false);
               setLooping(false);
               clearPlaybackPosition();
@@ -173,13 +156,9 @@ export function useGrooveLabProgressionAudition(opts: {
       if (!opts.getAudioContext || !chordMidisForStepLabel(step.label)) return;
       if (!options?.keepTimelineLoop) stopPlayback();
       runWithGrooveLabAudio(opts.getAudioContext, (ctx, when) => {
-        const bus = getOrCreateGrooveLabPlaybackBus(ctx);
-        armGrooveLabPlayback(ctx);
-        withGrooveLabPlaybackSink(bus, () =>
-          withProgressionAuditionOutput(bus, () =>
-            scheduleSingleStepAudition(ctx, step, when, auditionOpts()),
-          ),
-        );
+        withProgressionAuditionBus(ctx, () => {
+          scheduleSingleStepAudition(ctx, step, when, auditionOpts());
+        });
       });
     },
     [opts.getAudioContext, auditionOpts, stopPlayback],

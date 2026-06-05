@@ -166,7 +166,8 @@ export function buildOrchidNotesForBassRoot(
 ): number[] {
   const bass = grooveLabClampBassRootMidi(bassMidi);
   const bassOct = Math.floor(bass / 12);
-  const chordBaseOct = Math.max(4, bassOct + 2) - 1;
+  /** Compact R&B stack ~1–2 octaves above the sub (C3–A4), not C5+. */
+  const chordBaseOct = Math.max(3, bassOct + 1);
   const voiced = buildOrchidNotes(bass, type, extensions, inversion, chordBaseOct);
   return grooveLabLiftChordsAboveBass(bass, voiced);
 }

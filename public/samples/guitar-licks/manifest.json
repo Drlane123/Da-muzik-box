@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "note": "Real guitar one-shot notes from open sample libraries (CC-BY / public-domain sources). Loaded on demand.",
+  "licks": [
+    {
+      "id": "lickSample_bluesRiff",
+      "label": "Blues riff",
+      "tag": "blues",
+      "rootMidi": 52,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-electric/E2.mp3",
+      "fallbackSynth": "lickBluesSlide"
+    },
+    {
+      "id": "lickSample_cleanPick",
+      "label": "Clean pick",
+      "tag": "clean",
+      "rootMidi": 57,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-acoustic/A3.mp3",
+      "fallbackSynth": "leadGtrPick"
+    },
+    {
+      "id": "lickSample_neoSoulBend",
+      "label": "Neo soul bend",
+      "tag": "neo-soul",
+      "rootMidi": 60,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-electric/C4.mp3",
+      "fallbackSynth": "lickNeoSoulPhrase"
+    },
+    {
+      "id": "lickSample_arenaHook",
+      "label": "Arena hook",
+      "tag": "rock",
+      "rootMidi": 55,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-electric/Fs3.mp3",
+      "fallbackSynth": "lickArenaHook"
+    },
+    {
+      "id": "lickSample_chimeHarmonic",
+      "label": "Chime harmonic",
+      "tag": "clean",
+      "rootMidi": 64,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-acoustic/E4.mp3",
+      "fallbackSynth": "leadGtrHarmonic"
+    },
+    {
+      "id": "lickSample_palmMute",
+      "label": "Palm mute",
+      "tag": "rhythm",
+      "rootMidi": 48,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-electric/C3.mp3",
+      "fallbackSynth": "leadGtrPalmMute"
+    },
+    {
+      "id": "lickSample_mandolinRun",
+      "label": "Mandolin run",
+      "tag": "folk",
+      "rootMidi": 60,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-acoustic/C4.mp3",
+      "fallbackSynth": "pluckMandolin"
+    },
+    {
+      "id": "lickSample_slideSoul",
+      "label": "Slide soul",
+      "tag": "soul",
+      "rootMidi": 53,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-electric/Fs3.mp3",
+      "fallbackSynth": "leadGtrSlide"
+    },
+    {
+      "id": "lickSample_wahClean",
+      "label": "Wah clean live",
+      "tag": "wah-clean",
+      "rootMidi": 62,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-acoustic/D4.mp3",
+      "fallbackSynth": "leadGtrWahClean"
+    },
+    {
+      "id": "lickSample_wahDrive",
+      "label": "Wah drive live",
+      "tag": "wah-drive",
+      "rootMidi": 59,
+      "url": "https://raw.githubusercontent.com/nbrosowsky/tonejs-instruments/master/samples/guitar-electric/A3.mp3",
+      "fallbackSynth": "leadGtrWahDrive"
+    }
+  ]
+}

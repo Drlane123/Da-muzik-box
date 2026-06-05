@@ -1,9 +1,11 @@
 import type { BassKeypadPreviewMode } from '@/app/hooks/useGrooveLabOrchid';
 import { GrooveLabComposerPanel } from '@/app/components/creation/GrooveLabComposerPanel';
 import { OrchidBassKeypad } from '@/app/components/creation/OrchidBassKeypad';
+import { WaveLeafSynthPanel, type WaveLeafSynthPanelProps } from '@/app/components/creation/WaveLeafSynthPanel';
 import { OrchidChordStrip } from '@/app/components/creation/OrchidChordStrip';
 import type { GrooveComposerPart } from '@/app/lib/creationStation/grooveComposerEngine';
 import type { GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
+import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import type { ChordVoiceId } from '@/app/lib/creationStation/chordSequencerVoices';
 import type { OrchidBassKeyDef } from '@/app/lib/creationStation/orchidChordEngine';
@@ -18,6 +20,7 @@ import type {
   GrooveStagedProgression,
 } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
 import { grooveLabChordLabels } from '@/app/lib/creationStation/grooveLabBranding';
+import type { GrooveGuitarPackRollBuild } from '@/app/lib/creationStation/grooveLabGuitarPackLibrary';
 import type { GrooveLabQuantize, GrooveRollHit } from '@/app/lib/creationStation/grooveLabRoll';
 
 export interface OrchidPerformancePanelProps {
@@ -57,10 +60,16 @@ export interface OrchidPerformancePanelProps {
   onProgressionStopAudition?: () => void;
   onProgressionDropChords?: (steps: GrooveProgressionStep[]) => void;
   onProgressionDropWithBass?: (steps: GrooveProgressionStep[]) => void;
+  onDropGuitarPack?: (built: GrooveGuitarPackRollBuild) => void;
+  onDropOrchestraHit?: () => void;
+  grooveGuitarPackSustainSlots?: number;
+  grooveGuitarPackChordHits?: readonly import('@/app/lib/creationStation/grooveLabRoll').GrooveRollHit[];
+  grooveGuitarPackBassRootMidi?: number;
+  onGuitarPackStatus?: (msg: string | null) => void;
   onPreview: () => void;
   onWriteChordToRoll?: () => void;
   chordNotePreview?: string;
-  onPinToPad: () => void;
+  onPinToPad?: () => void;
   pinDisabled?: boolean;
   bassKeys: OrchidBassKeyDef[];
   linkedChordVolume: number;
@@ -81,6 +90,7 @@ export interface OrchidPerformancePanelProps {
   onChordOctaveDown?: () => void;
   onChordOctaveUp?: () => void;
   melodyLayerNoteCount?: number;
+  onClearAllMelody?: () => void;
   onMelodyOctaveDown?: () => void;
   onMelodyOctaveUp?: () => void;
   suggestedSubMidis?: readonly number[];
@@ -100,11 +110,40 @@ export interface OrchidPerformancePanelProps {
   bassKeypadChordVoiceLabel?: string;
   bassSoundId?: GrooveLabBassSoundId;
   onBassSoundChange?: (id: GrooveLabBassSoundId) => void;
+  /** Groove Lab — hide 808 sub keypad (chords-only workflow). */
+  showSubKeypad?: boolean;
+  /** Groove Lab — Groove Lead synth + lead roll (right column). */
+  showWaveLeaf?: boolean;
+  waveLeaf?: WaveLeafSynthPanelProps | null;
   /** Groove Lab — MELODY & RIFFS composer (optional on Orchid Studio). */
-  melodySoundId?: GrooveLabBassSoundId;
-  onMelodySoundChange?: (id: GrooveLabBassSoundId) => void;
+  melodySoundId?: GrooveLabAnyLeadSoundId;
+  onMelodySoundChange?: (id: GrooveLabAnyLeadSoundId) => void;
   composerComplexity?: number;
   onComposerComplexityChange?: (v: number) => void;
+  composerMelodyRate?: GrooveLabQuantize;
+  onComposerMelodyRateChange?: (v: GrooveLabQuantize) => void;
+  composerRiffRate?: GrooveLabQuantize;
+  onComposerRiffRateChange?: (v: GrooveLabQuantize) => void;
+  composerArpRate?: GrooveLabQuantize;
+  onComposerArpRateChange?: (v: GrooveLabQuantize) => void;
+  leadWahAmount?: number;
+  onLeadWahAmountChange?: (v: number) => void;
+  leadWahRateHz?: number;
+  onLeadWahRateHzChange?: (v: number) => void;
+  leadDrive?: number;
+  onLeadDriveChange?: (v: number) => void;
+  leadDistortion?: number;
+  onLeadDistortionChange?: (v: number) => void;
+  leadGlideMs?: number;
+  onLeadGlideMsChange?: (v: number) => void;
+  leadLfoRateHz?: number;
+  onLeadLfoRateHzChange?: (v: number) => void;
+  leadLfoDepthCents?: number;
+  onLeadLfoDepthCentsChange?: (v: number) => void;
+  melodyGridEnabled?: boolean;
+  onMelodyGridEnabledChange?: (on: boolean) => void;
+  riffGridEnabled?: boolean;
+  onRiffGridEnabledChange?: (on: boolean) => void;
   onGenerateComposerPart?: (part: GrooveComposerPart) => void;
   onLockChords?: () => void;
   melodyNoteCount?: number;
@@ -120,6 +159,21 @@ export interface OrchidPerformancePanelProps {
   bassAnchorCount?: number;
   chordVoice?: ChordVoiceId;
   onChordVoiceChange?: (id: ChordVoiceId) => void;
+  guitarSoundId?: import('@/app/lib/creationStation/grooveLabLeadSounds').GrooveLabAnyLeadSoundId;
+  onGuitarSoundChange?: (id: import('@/app/lib/creationStation/grooveLabLeadSounds').GrooveLabAnyLeadSoundId) => void;
+  orchestraHitId?: import('@/app/lib/creationStation/grooveLabOrchestraHitBank').OrchestraHitId;
+  onOrchestraHitChange?: (id: import('@/app/lib/creationStation/grooveLabOrchestraHitBank').OrchestraHitId) => void;
+  guitarFx?: import('@/app/lib/creationStation/grooveLabGuitarFx').GrooveLabGuitarFxSettings;
+  onGuitarWahAmountChange?: (v: number) => void;
+  onGuitarWahRateHzChange?: (v: number) => void;
+  onGuitarFilterCutoffHzChange?: (v: number) => void;
+  onGuitarLowCutHzChange?: (v: number) => void;
+  onGuitarHighCutHzChange?: (v: number) => void;
+  onGuitarDriveChange?: (v: number) => void;
+  onGuitarDistortionChange?: (v: number) => void;
+  onGuitarLfoRateHzChange?: (v: number) => void;
+  onGuitarLfoDepthCentsChange?: (v: number) => void;
+  onGuitarGlideMsChange?: (v: number) => void;
   transportPlaying?: boolean;
   transportDisabled?: boolean;
   onTransportRewind?: () => void;
@@ -127,12 +181,24 @@ export interface OrchidPerformancePanelProps {
   onTransportPlayPause?: () => void;
   onTransportFastForward?: () => void;
   layerChannels?: readonly number[];
-  bassChannel?: number;
   chordChannel?: number;
   melodyChannel?: number;
-  onBassChannelChange?: (ch: number) => void;
+  guitarChannel?: number;
+  sampleChannel?: number;
   onChordChannelChange?: (ch: number) => void;
   onMelodyChannelChange?: (ch: number) => void;
+  channelSounds?: Record<number, import('@/app/lib/creationStation/grooveLabChannelConfig').GrooveLabChannelSoundConfig>;
+  onChannelSoundChange?: (
+    ch: number,
+    cfg: import('@/app/lib/creationStation/grooveLabChannelConfig').GrooveLabChannelSoundConfig,
+  ) => void;
+  onAssignLayerRole?: (
+    ch: number,
+    role: import('@/app/lib/creationStation/grooveLabChannelConfig').GrooveLabLayerRole,
+  ) => void;
+  selectedEditChannel?: number;
+  onSelectEditChannel?: (ch: number) => void;
+  channelNoteCounts?: Record<number, number>;
   channelVolumes?: Record<number, number>;
   setChannelVolume?: (chId: number, volume: number) => void;
   metronomeEnabled?: boolean;
@@ -192,6 +258,12 @@ export function OrchidPerformancePanel({
   onProgressionStopAudition,
   onProgressionDropChords,
   onProgressionDropWithBass,
+  onDropGuitarPack,
+  onDropOrchestraHit,
+  grooveGuitarPackSustainSlots,
+  grooveGuitarPackChordHits,
+  grooveGuitarPackBassRootMidi,
+  onGuitarPackStatus,
   onPreview,
   onWriteChordToRoll,
   chordNotePreview,
@@ -207,6 +279,9 @@ export function OrchidPerformancePanel({
   writeToPianoRoll,
   onWriteToPianoRollChange,
   onBassKeyDown,
+  showSubKeypad = true,
+  showWaveLeaf = false,
+  waveLeaf = null,
   subRootNoteCount = 0,
   onClearAllSubRoots,
   onSubOctaveDown,
@@ -215,6 +290,7 @@ export function OrchidPerformancePanel({
   onChordOctaveDown,
   onChordOctaveUp,
   melodyLayerNoteCount = 0,
+  onClearAllMelody,
   onMelodyOctaveDown,
   onMelodyOctaveUp,
   suggestedSubMidis = [],
@@ -238,6 +314,30 @@ export function OrchidPerformancePanel({
   onMelodySoundChange,
   composerComplexity,
   onComposerComplexityChange,
+  composerMelodyRate = '1/16',
+  onComposerMelodyRateChange,
+  composerRiffRate = '1/16',
+  onComposerRiffRateChange,
+  composerArpRate = '1/16',
+  onComposerArpRateChange,
+  leadWahAmount = 0.55,
+  onLeadWahAmountChange,
+  leadWahRateHz = 2.2,
+  onLeadWahRateHzChange,
+  leadDrive = 0.3,
+  onLeadDriveChange,
+  leadDistortion = 0.22,
+  onLeadDistortionChange,
+  leadGlideMs = 0,
+  onLeadGlideMsChange,
+  leadLfoRateHz = 5.4,
+  onLeadLfoRateHzChange,
+  leadLfoDepthCents = 9,
+  onLeadLfoDepthCentsChange,
+  melodyGridEnabled = true,
+  onMelodyGridEnabledChange,
+  riffGridEnabled = false,
+  onRiffGridEnabledChange,
   onGenerateComposerPart,
   onLockChords,
   melodyNoteCount,
@@ -252,6 +352,21 @@ export function OrchidPerformancePanel({
   bassAnchorCount,
   chordVoice,
   onChordVoiceChange,
+  guitarSoundId,
+  onGuitarSoundChange,
+  orchestraHitId,
+  onOrchestraHitChange,
+  guitarFx,
+  onGuitarWahAmountChange,
+  onGuitarWahRateHzChange,
+  onGuitarFilterCutoffHzChange,
+  onGuitarLowCutHzChange,
+  onGuitarHighCutHzChange,
+  onGuitarDriveChange,
+  onGuitarDistortionChange,
+  onGuitarLfoRateHzChange,
+  onGuitarLfoDepthCentsChange,
+  onGuitarGlideMsChange,
   transportPlaying,
   transportDisabled,
   onTransportRewind,
@@ -259,12 +374,18 @@ export function OrchidPerformancePanel({
   onTransportPlayPause,
   onTransportFastForward,
   layerChannels,
-  bassChannel,
   chordChannel,
   melodyChannel,
-  onBassChannelChange,
+  guitarChannel,
+  sampleChannel,
   onChordChannelChange,
   onMelodyChannelChange,
+  channelSounds,
+  onChannelSoundChange,
+  onAssignLayerRole,
+  selectedEditChannel,
+  onSelectEditChannel,
+  channelNoteCounts,
   channelVolumes,
   setChannelVolume,
   metronomeEnabled,
@@ -343,6 +464,15 @@ export function OrchidPerformancePanel({
           onProgressionStopAudition={onProgressionStopAudition}
           onProgressionDropChords={onProgressionDropChords}
           onProgressionDropWithBass={onProgressionDropWithBass}
+          grooveGuitarPackQuantize={grooveQuantize}
+          grooveGuitarPackBarCount={grooveBarCount}
+          grooveGuitarPackSustainSlots={grooveGuitarPackSustainSlots}
+          grooveGuitarPackChordHits={grooveGuitarPackChordHits}
+          grooveGuitarPackBassRootMidi={grooveGuitarPackBassRootMidi}
+          onDropGuitarPack={onDropGuitarPack}
+          onDropOrchestraHit={onDropOrchestraHit}
+          grooveGuitarPackGetAudioContext={getAudioContext}
+          onGuitarPackStatus={onGuitarPackStatus}
           exportBusy={progressionExportBusy}
           exportStatus={progressionExportStatus}
           onExportTimelineMidi={onProgressionExportTimelineMidi}
@@ -371,6 +501,21 @@ export function OrchidPerformancePanel({
           pinDisabled={pinDisabled}
           chordVoice={chordVoice}
           onChordVoiceChange={onChordVoiceChange}
+          guitarSoundId={guitarSoundId}
+          onGuitarSoundChange={onGuitarSoundChange}
+          orchestraHitId={orchestraHitId}
+          onOrchestraHitChange={onOrchestraHitChange}
+          guitarFx={guitarFx}
+          onGuitarWahAmountChange={onGuitarWahAmountChange}
+          onGuitarWahRateHzChange={onGuitarWahRateHzChange}
+          onGuitarFilterCutoffHzChange={onGuitarFilterCutoffHzChange}
+          onGuitarLowCutHzChange={onGuitarLowCutHzChange}
+          onGuitarHighCutHzChange={onGuitarHighCutHzChange}
+          onGuitarDriveChange={onGuitarDriveChange}
+          onGuitarDistortionChange={onGuitarDistortionChange}
+          onGuitarLfoRateHzChange={onGuitarLfoRateHzChange}
+          onGuitarLfoDepthCentsChange={onGuitarLfoDepthCentsChange}
+          onGuitarGlideMsChange={onGuitarGlideMsChange}
           transportPlaying={transportPlaying}
           transportDisabled={transportDisabled}
           onTransportRewind={onTransportRewind}
@@ -378,12 +523,18 @@ export function OrchidPerformancePanel({
           onTransportPlayPause={onTransportPlayPause}
           onTransportFastForward={onTransportFastForward}
           layerChannels={layerChannels}
-          bassChannel={bassChannel}
           chordChannel={chordChannel}
           melodyChannel={melodyChannel}
-          onBassChannelChange={onBassChannelChange}
+          guitarChannel={guitarChannel}
+          sampleChannel={sampleChannel}
           onChordChannelChange={onChordChannelChange}
           onMelodyChannelChange={onMelodyChannelChange}
+          channelSounds={channelSounds}
+          onChannelSoundChange={onChannelSoundChange}
+          onAssignLayerRole={onAssignLayerRole}
+          selectedEditChannel={selectedEditChannel}
+          onSelectEditChannel={onSelectEditChannel}
+          channelNoteCounts={channelNoteCounts}
           channelVolumes={channelVolumes}
           setChannelVolume={setChannelVolume}
           metronomeEnabled={metronomeEnabled}
@@ -393,7 +544,16 @@ export function OrchidPerformancePanel({
           onChordOctaveUp={onChordOctaveUp}
         />
       </div>
-      <div style={{ flex: 1, minWidth: 300, display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 300,
+          minHeight: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {showMelodyComposer ? (
           <GrooveLabComposerPanel
             grooveBranding={grooveBranding}
@@ -401,23 +561,43 @@ export function OrchidPerformancePanel({
             onMelodySoundChange={onMelodySoundChange}
             complexity={composerComplexity ?? 0.55}
             onComplexityChange={onComposerComplexityChange}
+            melodyRate={composerMelodyRate}
+            onMelodyRateChange={onComposerMelodyRateChange}
+            riffRate={composerRiffRate}
+            onRiffRateChange={onComposerRiffRateChange}
+            arpRate={composerArpRate}
+            onArpRateChange={onComposerArpRateChange}
+            wahAmount={leadWahAmount}
+            onWahAmountChange={onLeadWahAmountChange}
+            wahRateHz={leadWahRateHz}
+            onWahRateHzChange={onLeadWahRateHzChange}
+            drive={leadDrive}
+            onDriveChange={onLeadDriveChange}
+            distortion={leadDistortion}
+            onDistortionChange={onLeadDistortionChange}
+            glideMs={leadGlideMs}
+            onGlideMsChange={onLeadGlideMsChange}
+            lfoRateHz={leadLfoRateHz}
+            onLfoRateHzChange={onLeadLfoRateHzChange}
+            lfoDepthCents={leadLfoDepthCents}
+            onLfoDepthCentsChange={onLeadLfoDepthCentsChange}
+            melodyGridEnabled={melodyGridEnabled}
+            onMelodyGridEnabledChange={onMelodyGridEnabledChange}
+            riffGridEnabled={riffGridEnabled}
+            onRiffGridEnabledChange={onRiffGridEnabledChange}
+            linkedChordVolume={linkedChordVolume}
+            onLinkedChordVolumeChange={onLinkedChordVolumeChange}
             onGeneratePart={onGenerateComposerPart}
             onLockChords={onLockChords}
             chordColumnCount={chordColumnCount}
             melodyNoteCount={melodyNoteCount}
-            subRootNoteCount={subRootNoteCount}
-            onClearAllSubRoots={onClearAllSubRoots}
-            onSubOctaveDown={onSubOctaveDown}
-            onSubOctaveUp={onSubOctaveUp}
             melodyLayerNoteCount={melodyLayerNoteCount}
+            onClearAllMelody={onClearAllMelody}
             onMelodyOctaveDown={onMelodyOctaveDown}
             onMelodyOctaveUp={onMelodyOctaveUp}
-            onRegenerateSubGuide={onRegenerateSubGuide}
-            onAuditionSubGuide={onAuditionSubGuide}
-            onPushSubGuideToRoll={onPushSubGuideToRoll}
-            subGuideStepCount={subGuideStepCount}
           />
         ) : null}
+        {showSubKeypad ? (
         <OrchidBassKeypad
           chordBrandShort={chordBrand.short}
           chordSoundBankLabel={chordBrand.soundBank}
@@ -457,6 +637,8 @@ export function OrchidPerformancePanel({
           bassSoundLabel={bassKeypadSoundLabel}
           chordVoiceLabel={bassKeypadChordVoiceLabel}
         />
+        ) : null}
+        {showWaveLeaf && waveLeaf ? <WaveLeafSynthPanel {...waveLeaf} /> : null}
       </div>
     </div>
   );

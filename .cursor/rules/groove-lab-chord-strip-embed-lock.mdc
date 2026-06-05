@@ -10,16 +10,15 @@ Green **OrchidChordStrip** (`grooveBranding`) hosts four fixed corner controls i
 
 ## Placement system (do not replace)
 
-Use **`GrooveLabDraggableCornerPanel` with `embedded`** — same `measureAndPlace` + `localStorage` keys + invisible grip spacer (preserves pixel position). **Forbidden:** flex column stacks, `right`/`bottom` CSS-only wrappers, or removing the spacer (shifts boxes).
+**Mixer zone** (bottom of green strip): inline column in `OrchidChordStrip` — not a corner overlay.
 
-| Control | storageKey | defaultRight | defaultBottom | bare | zIndex |
-|---------|------------|--------------|---------------|------|--------|
-| Transport + MET | `groove-lab-transport-panel-pos` | 10 | 8 | yes | 5 |
-| WORK CH | `groove-lab-work-ch-panel-pos` | 10 | 78 | no | **4** |
-| Mixer button | `groove-lab-mixer-btn-pos` | 10 | 148 | yes | 5 |
-| Mixer panel (open) | `groove-lab-mixer-panel-pos` | 10 | 196 | no | **10** |
+| Row | Content |
+|-----|---------|
+| Toolbar (above CH 33–48 rail) | MET + `OrchidTransportControls` + **Mixer** toggle — right-aligned |
+| Rail | `GrooveLabChannelRail` embed — faders + channel select |
+| Popup (when Mixer open) | `GrooveLabMixerPanel` — `position: absolute`, `bottom: 100%` of mixer section (above toolbar + rail) |
 
-**Stacking:** mixer panel must stay **above** WORK CH (`zIndex: 10` vs `4`). Do not raise WORK CH above the open mixer.
+**Forbidden:** moving transport/Mixer back to `GrooveLabDraggableCornerPanel` bottom-corner anchors unless the user asks.
 
 ## Mixer (CH 33–48)
 
@@ -35,6 +34,6 @@ Use **`GrooveLabDraggableCornerPanel` with `embedded`** — same `measureAndPlac
 ## Forbidden without explicit user request
 
 - Re-enabling drag (removing `embedded` or showing grip handles)
-- Moving transport to top of strip or merging all controls into one stack
+- Splitting transport off the Mixer stack into a separate corner panel (use the combined column on `groove-lab-mixer-btn-pos`)
 - Changing defaultRight/defaultBottom or storage keys (breaks saved layout)
 - Substituting Beat Lab mixer for Groove Lab CH 33–48 panel

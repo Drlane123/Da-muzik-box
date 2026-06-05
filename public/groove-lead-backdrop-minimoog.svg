@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Backup asset — Groove Lead uses inline SVG in WaveLeafPresetBackdrop.tsx -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 320">
+  <g fill="#fcef3c">
+    <path d="M24 48 L168 32 L176 108 L20 118 Z"/>
+    <path d="M14 118 L186 108 L192 268 L8 278 Z" fill="#fff8c8"/>
+  </g>
+</svg>

@@ -12,6 +12,11 @@ import {
   getBeatLabChannelMeterLevels,
   computeBeatLabMainBusStereoVu,
 } from '@/app/lib/creationStation/beatLabChannelMeters';
+import {
+  GrooveStyleTCapVolumeFader,
+  GrooveStyleTCapPanFader,
+  GrooveStyleTCapVolumeFaderStyles,
+} from '@/app/components/creation/GrooveStyleTCapVolumeFader';
 
 const MIXER_CHANNELS = 32;
 const PAN_STORAGE_KEY = 'beat-lab-channel-pans-v1';
@@ -154,7 +159,6 @@ function BeatLabMainStrip({
   const volPct = Math.round(Math.max(0, Math.min(1, masterLinear)) * 100);
   const accent = '#ffb74d';
   const faderH = 100;
-  const fillPct = volPct;
 
   return (
     <div
@@ -205,60 +209,21 @@ function BeatLabMainStrip({
             position: 'relative',
             flex: 1,
             minWidth: 30,
+            display: 'flex',
+            alignItems: 'stretch',
+            justifyContent: 'center',
             borderRadius: 4,
-            background: 'rgba(0,0,0,0.35)',
-            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05)',
+            background: 'rgba(0,0,0,0.2)',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.04)',
           }}
         >
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: 10,
-              bottom: 14,
-              width: 3,
-              transform: 'translateX(-50%)',
-              borderRadius: 2,
-              background: '#0a0a12',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,1)',
-            }}
-          />
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              bottom: 14,
-              width: 3,
-              height: `${fillPct}%`,
-              maxHeight: 'calc(100% - 24px)',
-              transform: 'translateX(-50%)',
-              borderRadius: 2,
-              background: accent,
-              opacity: 0.55,
-              transition: 'height 0.04s',
-            }}
-          />
-          <input
-            type="range"
-            aria-label="Master volume"
-            min={0}
-            max={100}
-            step={1}
-            value={volPct}
-            onChange={(e) => onMasterVolumeChange(Number(e.target.value) / 100)}
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              width: faderH - 20,
-              height: 26,
-              transform: 'translate(-50%, -50%) rotate(-90deg)',
-              accentColor: accent,
-              cursor: 'pointer',
-              zIndex: 2,
-            }}
+          <GrooveStyleTCapVolumeFader
+            channelId={0}
+            volume={volPct}
+            accent={accent}
+            ariaLabel="Master volume"
+            onVolumeChange={(v) => onMasterVolumeChange(v / 100)}
+            style={{ height: '100%', minHeight: faderH - 8 }}
           />
         </div>
         <BeatLabStereoVu ch={0} height={faderH} />
@@ -303,7 +268,6 @@ function BeatLabChannelStrip({
   onPanChange: (v: number) => void;
 }) {
   const faderH = 100;
-  const fillPct = Math.max(0, Math.min(100, vol));
 
   return (
     <div
@@ -349,7 +313,7 @@ function BeatLabChannelStrip({
         </div>
       </div>
 
-      {/* Fader + stereo VU — Studio Editor 2 strip layout */}
+      {/* Groove Lab–style T-cap volume + stereo VU */}
       <div
         style={{
           display: 'flex',
@@ -364,60 +328,20 @@ function BeatLabChannelStrip({
             position: 'relative',
             flex: 1,
             minWidth: 30,
+            display: 'flex',
+            alignItems: 'stretch',
+            justifyContent: 'center',
             borderRadius: 4,
-            background: 'rgba(0,0,0,0.35)',
-            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05)',
+            background: 'rgba(0,0,0,0.2)',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.04)',
           }}
         >
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: 10,
-              bottom: 14,
-              width: 3,
-              transform: 'translateX(-50%)',
-              borderRadius: 2,
-              background: '#0a0a12',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,1)',
-            }}
-          />
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              bottom: 14,
-              width: 3,
-              height: `${fillPct}%`,
-              maxHeight: 'calc(100% - 24px)',
-              transform: 'translateX(-50%)',
-              borderRadius: 2,
-              background: accent,
-              opacity: 0.55,
-              transition: 'height 0.04s',
-            }}
-          />
-          <input
-            type="range"
-            aria-label={`Channel ${ch} volume`}
-            min={0}
-            max={100}
-            step={1}
-            value={vol}
-            onChange={(e) => onVolumeChange(Number(e.target.value))}
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              width: faderH - 20,
-              height: 26,
-              transform: 'translate(-50%, -50%) rotate(-90deg)',
-              accentColor: accent,
-              cursor: 'pointer',
-              zIndex: 2,
-            }}
+          <GrooveStyleTCapVolumeFader
+            channelId={ch}
+            volume={vol}
+            accent={accent}
+            onVolumeChange={onVolumeChange}
+            style={{ height: '100%', minHeight: faderH - 8 }}
           />
         </div>
         <BeatLabStereoVu ch={ch} height={faderH} />
@@ -435,17 +359,13 @@ function BeatLabChannelStrip({
         {vol}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <span style={{ fontSize: 7, fontWeight: 800, color: '#6f7e8e', textAlign: 'center' }}>PAN</span>
-        <input
-          type="range"
-          aria-label={`Channel ${ch} pan`}
-          min={-100}
-          max={100}
-          step={1}
-          value={pan}
-          onChange={(e) => onPanChange(Number(e.target.value))}
-          style={{ width: '100%', accentColor: accent, cursor: 'pointer' }}
+        <GrooveStyleTCapPanFader
+          channelId={ch}
+          pan={pan}
+          accent={accent}
+          onPanChange={onPanChange}
         />
         <div style={{ fontSize: 7, fontWeight: 800, color: '#9aacbc', textAlign: 'center' }}>
           {pan === 0 ? 'C' : pan > 0 ? `R${pan}` : `L${-pan}`}
@@ -595,6 +515,7 @@ export function BeatLabMixerPanel({
         flexShrink: 0,
       }}
     >
+      <GrooveStyleTCapVolumeFaderStyles />
       <div
         style={{
           display: 'flex',
@@ -645,6 +566,7 @@ export function BeatLabMixerPanel({
 
       <div
         ref={mixerMeterRootRef}
+        className="beat-lab-mixer-scroll"
         style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}
       >
         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', gap: 6, padding: 10 }}>

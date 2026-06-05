@@ -87,6 +87,10 @@ import {
 } from '@/app/lib/creationStation/chordRollNoteClipboard';
 import { LAB808_ROOTS_IMPORTED_EVENT, sendRootsTo808Lab } from '@/app/lib/creationStation/lab808ChordRoots';
 import {
+  CREATION_BEATLAB_PLAY_MIRROR_EVENT,
+  type CreationBeatlabPlayMirrorDetail,
+} from '@/app/lib/creationStation/creationSessionLink';
+import {
   duplicateTimelineLoop,
   normalizeBarRange,
   tileTimelineSlots,
@@ -248,6 +252,11 @@ export interface ChordBuilderTabProps {
     bpm: number;
     label: string;
   }) => void;
+  /** When set, BPM sync is controlled by Creation Station session link (Beat Lab master). */
+  syncToProject?: boolean;
+  onSyncToProjectChange?: (synced: boolean) => void;
+  /** Beat Lab transport mirrors play/pause/stop here when session PLAY link is on. */
+  sessionPlayLinked?: boolean;
 }
 
 interface TimelineSlot {
@@ -333,6 +342,9 @@ export function ChordBuilderTab({
   onExportToPad,
   onOpen808Lab,
   onSendMidiToBeatLabSynth,
+  syncToProject: syncToProjectProp,
+  onSyncToProjectChange,
+  sessionPlayLinked = false,
 }: ChordBuilderTabProps) {
   const [keyRoot, setKeyRoot] = useState(0);
   const [mode, setMode] = useState<ChordMode>('major');
@@ -391,7 +403,16 @@ export function ChordBuilderTab({
    *  (the `bpm` prop from Creation Station). Toggled OFF automatically when
    *  the user does anything tempo-related here (types a BPM, clicks ± or
    *  tap-tempos) so the local override sticks until they re-sync. */
-  const [syncToProject, setSyncToProject] = useState<boolean>(true);
+  const [internalSyncToProject, setInternalSyncToProject] = useState<boolean>(true);
+  const syncControlled = onSyncToProjectChange != null;
+  const syncToProject = syncControlled ? (syncToProjectProp ?? true) : internalSyncToProject;
+  const setSyncToProject = useCallback(
+    (v: boolean) => {
+      if (syncControlled) onSyncToProjectChange!(v);
+      else setInternalSyncToProject(v);
+    },
+    [syncControlled, onSyncToProjectChange],
+  );
 
   const [melodyPitchEvents, setMelodyPitchEvents] = useState<PitchEvent[]>([]);
   const [melodyRecording, setMelodyRecording] = useState(false);
@@ -456,7 +477,7 @@ export function ChordBuilderTab({
   const setLocalBpmAndUnsync = useCallback((v: number) => {
     setLocalBpm(Math.max(20, Math.min(300, Math.round(v))));
     setSyncToProject(false);
-  }, []);
+  }, [setSyncToProject]);
   /** Tap-tempo: ring of recent tap timestamps. Resets after a 2-second
    *  pause so the user can re-tap with a clean slate. */
   const tapTimesRef = useRef<number[]>([]);
@@ -1870,6 +1891,27 @@ export function ChordBuilderTab({
       setIsPlaying(true);
     }
   }
+
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
+  /** Beat Lab PLAY link → mirror transport when session PLAY chip is linked. */
+  useEffect(() => {
+    if (!sessionPlayLinked) return;
+    const onBeatLabMirror = (ev: Event) => {
+      const detail = (ev as CustomEvent<CreationBeatlabPlayMirrorDetail>).detail;
+      if (!detail || detail.target !== 'chord-builder') return;
+      if (detail.action === 'play') {
+        if (!isPlayingRef.current) setIsPlaying(true);
+      } else if (detail.action === 'pause') {
+        if (isPlayingRef.current) pausePlayback();
+      } else if (detail.action === 'stop') {
+        stopAndReset();
+      }
+    };
+    window.addEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
+    return () => window.removeEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
+  }, [sessionPlayLinked, pausePlayback, stopAndReset]);
 
   /** Move the playhead to column `col` (clamped to the current progression).
    *  If playback is running, restart from the new position so the user hears

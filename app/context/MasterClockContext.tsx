@@ -107,6 +107,7 @@ import { scheduleBeatLabMeterPulseAt } from '@/app/lib/creationStation/beatLabCh
 import {
   isCreationBeatLabTransportRunning,
   isGrooveLabTransportRunning,
+  shouldHoldSharedAudioGraphForCreationModules,
 } from '@/app/lib/creationStation/creationTransportSync';
 
 export const PPQ = 960 as const;
@@ -675,7 +676,7 @@ export interface MasterClockContextValue {
   /** L/R peaks (0–1 linear) for mixer VU — same pan law as Web Audio `StereoPannerNode`. */
   channelStereoLevels: Record<number, { l: number; r: number }>;
   channelVolumes: Record<number, number>;
-  triggerChannel: (chId: number, velocity: number, when?: number) => void;
+  triggerChannel: (chId: number, velocity: number, when?: number) => (() => void) | void;
   setChannelVolume: (chId: number, volume: number) => void;
   /**
    * Fire-and-forget meter pulse (Beat Lab pads / soundfont, etc.). `monoPeakLin` should already
@@ -1194,7 +1195,11 @@ export function MasterClockProvider({
               ).beat;
 
               // Restart metronome lookahead phase-locked to transport (AudioContext clock)
-              if (metronomeRef.current) {
+              if (
+                metronomeRef.current &&
+                !isCreationBeatLabTransportRunning() &&
+                !isGrooveLabTransportRunning()
+              ) {
                 stopMetronomeLoop();
                 startMetronomeLoop(bpmRef.current);
               }
@@ -1282,6 +1287,10 @@ export function MasterClockProvider({
       audioNowForClamp?: number,
     ): boolean => {
       try {
+        /** Beat Lab / Groove Lab own buffer-click lookahead — never stack oscillator clicks. */
+        if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) {
+          return false;
+        }
         const ctx = getOrCreateAudioContext();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -1352,6 +1361,7 @@ export function MasterClockProvider({
   const playMetronomeClick = useCallback(
     (isDownbeat: boolean) => {
       if (!metronomeRef.current) return;
+      if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) return;
       const ctx = getOrCreateAudioContext();
       playMetronomeClickAt(ctx.currentTime, isDownbeat);
     },
@@ -1861,6 +1871,8 @@ export function MasterClockProvider({
       audioNowLock?: number,
     ) => {
       if (!metronomeRef.current) return;
+      /** Beat Lab / Groove Lab own local lookahead MET — never stack master worker clicks. */
+      if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) return;
       /* Second start without an anchor: no-op only if worker is alive. Otherwise we must rebuild — e.g.
        * start threw after setting `active`, or the worker died, which used to strand MET with no pulses. */
       if (
@@ -1927,6 +1939,13 @@ export function MasterClockProvider({
             !isRunningRef.current ||
             !metronomeActiveRef.current ||
             !metronomeRef.current
+          ) {
+            return;
+          }
+          /** Beat Lab / Groove Lab own buffer-click lookahead — worker must not stack oscillator clicks. */
+          if (
+            isCreationBeatLabTransportRunning() ||
+            isGrooveLabTransportRunning()
           ) {
             return;
           }
@@ -2779,12 +2798,7 @@ export function MasterClockProvider({
     if (midiClockEnabledRef.current && midiOutputRef.current) {
       sendMidiRealtimeRef.current(0xfc);
     }
-    if (
-      ac &&
-      ac.state === 'running' &&
-      !isCreationBeatLabTransportRunning() &&
-      !isGrooveLabTransportRunning()
-    ) {
+    if (ac && ac.state === 'running' && !shouldHoldSharedAudioGraphForCreationModules()) {
       void ac.suspend().catch(() => {});
     }
   }, [
@@ -2831,12 +2845,7 @@ export function MasterClockProvider({
       sendMidiRealtimeRef.current(0xfc);
     }
     const ac = audioCtxRef.current;
-    if (
-      ac &&
-      ac.state === 'running' &&
-      !isCreationBeatLabTransportRunning() &&
-      !isGrooveLabTransportRunning()
-    ) {
+    if (ac && ac.state === 'running' && !shouldHoldSharedAudioGraphForCreationModules()) {
       void ac.suspend().catch(() => {});
     }
   }, [stopTimer]);
@@ -3198,7 +3207,7 @@ export function MasterClockProvider({
   );
 
   // ── Drum sounds ─────────────────────────────────────────────────────────
-  const playDrumSound = useCallback((chId: number, velocity: number, baseTimeSec?: number) => {
+  const playDrumSound = useCallback((chId: number, velocity: number, baseTimeSec?: number): (() => void) | void => {
     try {
       const ctx = getOrCreateAudioContext();
       const scheduledAhead =
@@ -3232,6 +3241,7 @@ export function MasterClockProvider({
       panNode.connect(dest);
 
       let activeOscs = 0;
+      const voiceStops: Array<(t: number) => void> = [];
       const releaseVoice = () => {
         activeOscs -= 1;
         if (activeOscs <= 0) {
@@ -3267,6 +3277,19 @@ export function MasterClockProvider({
         gain.gain.exponentialRampToValueAtTime(0.01, tStart + duration);
         osc.start(tStart);
         osc.stop(tStart + duration);
+        voiceStops.push((t) => {
+          try {
+            gain.gain.cancelScheduledValues(t);
+            gain.gain.setValueAtTime(0.0001, t);
+          } catch {
+            /* */
+          }
+          try {
+            osc.stop(t);
+          } catch {
+            /* already stopped */
+          }
+        });
         osc.onended = () => {
           try {
             osc.disconnect();
@@ -3319,6 +3342,22 @@ export function MasterClockProvider({
           makeOsc(440 + chId * 50, null, 0.1, 'sine', 0.5);
           break;
       }
+      if (voiceStops.length === 0) return;
+      return () => {
+        const t = ctx.currentTime;
+        for (const stopVoice of voiceStops) {
+          try {
+            stopVoice(t);
+          } catch {
+            /* */
+          }
+        }
+        try {
+          panNode.disconnect();
+        } catch {
+          /* */
+        }
+      };
     } catch (e) {
       /* AudioContext unavailable */
     }
@@ -3386,7 +3425,7 @@ export function MasterClockProvider({
   }, [publishChannelMeterPulse]);
 
   const triggerChannel = useCallback(
-    (chId: number, velocity: number, when?: number) => {
+    (chId: number, velocity: number, when?: number): (() => void) | void => {
       const MIN_TRIGGER = 0.02;
       const MIN_AUDIBLE_VELOCITY = 0.12;
       const rawVelocity = Math.max(0, Math.min(1, velocity / 127));
@@ -3414,7 +3453,7 @@ export function MasterClockProvider({
       } else {
         pulse();
       }
-      playDrumSound(chId, safeVelocity, when);
+      return playDrumSound(chId, safeVelocity, when);
     },
     [playDrumSound, publishChannelMeterPulse, getOrCreateAudioContext],
   );

@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { ChordVoiceId } from '@/app/lib/creationStation/chordSequencerVoices';
 import type { GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
+import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
+import type { GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/grooveLabGuitarFx';
+import { restoreChordSequencerTransportVoices } from '@/app/lib/creationStation/chordSequencerVoices';
+import {
+  restoreGrooveLabTransportGuitarBus,
+  restoreGrooveLabTransportMelodyBus,
+} from '@/app/lib/creationStation/grooveLabAudio';
+import { preloadGuitarLickBank } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
 import { CB_PIANO_METRICS } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
 import { grooveLabSlotToGlobalCol } from '@/app/lib/creationStation/grooveLabGrid';
 import {
@@ -66,14 +74,25 @@ export interface UseGrooveLabTransportOpts {
   bassHits: GrooveRollHit[];
   chordHits: GrooveRollHit[];
   melodyHits: GrooveRollHit[];
+  guitarHits?: GrooveRollHit[];
+  sampleHits?: GrooveRollHit[];
   bassSoundId: GrooveLabBassSoundId;
   melodySoundId: GrooveLabBassSoundId;
   chordVoice: ChordVoiceId;
   chordVolume: number;
   chordsMuted: boolean;
   bassMuted: boolean;
+  leadMuted?: boolean;
   perfMode: OrchidPerformanceMode;
   metronomeEnabled: boolean;
+  chordChannel?: number;
+  melodyChannel?: number;
+  guitarChannel?: number;
+  sampleChannel?: number;
+  orchestraHitId?: string;
+  guitarSoundId?: GrooveLabAnyLeadSoundId;
+  guitarFxSettings?: GrooveLabGuitarFxSettings;
+  channelVolumes?: Record<number, number>;
   playheadElRef: RefObject<HTMLDivElement | null>;
   rollScrollRef?: RefObject<HTMLDivElement | null>;
   onPlayheadSlot?: (slot: number) => void;
@@ -93,14 +112,25 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     bassHits,
     chordHits,
     melodyHits,
+    guitarHits = [],
+    sampleHits = [],
     bassSoundId,
     melodySoundId,
     chordVoice,
     chordVolume,
     chordsMuted,
     bassMuted,
+    leadMuted = false,
     perfMode,
     metronomeEnabled,
+    chordChannel,
+    melodyChannel,
+    guitarChannel,
+    sampleChannel,
+    orchestraHitId,
+    guitarSoundId,
+    guitarFxSettings,
+    channelVolumes,
     playheadElRef,
     rollScrollRef,
     onPlayheadSlot,
@@ -139,15 +169,32 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
   const chordVolumeRef = useRef(chordVolume);
   const chordsMutedRef = useRef(chordsMuted);
   const bassMutedRef = useRef(bassMuted);
+  const leadMutedRef = useRef(leadMuted);
   const perfModeRef = useRef(perfMode);
   const metronomeEnabledRef = useRef(metronomeEnabled);
+  const chordChannelRef = useRef(chordChannel);
+  const melodyChannelRef = useRef(melodyChannel);
+  const guitarChannelRef = useRef(guitarChannel);
+  const sampleChannelRef = useRef(sampleChannel);
+  const orchestraHitIdRef = useRef(orchestraHitId);
+  const guitarSoundIdRef = useRef(guitarSoundId);
+  const guitarFxSettingsRef = useRef(guitarFxSettings);
+  const channelVolumesRef = useRef(channelVolumes);
   const nextMetroKRef = useRef(0);
   const metroClickBuffersRef = useRef<CreationMetronomeClickBuffers | null>(null);
   const scheduledMetroNodesRef = useRef<CreationScheduledMetroNode[]>([]);
 
   const events = useMemo(
-    () => buildGrooveLabTransportEvents(bassHits, chordHits, melodyHits),
-    [bassHits, chordHits, melodyHits],
+    () =>
+      buildGrooveLabTransportEvents(
+        bassHits,
+        chordHits,
+        melodyHits,
+        quantize,
+        guitarHits,
+        sampleHits,
+      ),
+    [bassHits, chordHits, melodyHits, quantize, guitarHits, sampleHits],
   );
   const eventsRef = useRef(events);
   eventsRef.current = events;
@@ -162,14 +209,24 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
   chordVolumeRef.current = chordVolume;
   chordsMutedRef.current = chordsMuted;
   bassMutedRef.current = bassMuted;
+  leadMutedRef.current = leadMuted;
   perfModeRef.current = perfMode;
   metronomeEnabledRef.current = metronomeEnabled;
+  chordChannelRef.current = chordChannel;
+  melodyChannelRef.current = melodyChannel;
+  guitarChannelRef.current = guitarChannel;
+  sampleChannelRef.current = sampleChannel;
+  orchestraHitIdRef.current = orchestraHitId;
+  guitarSoundIdRef.current = guitarSoundId;
+  guitarFxSettingsRef.current = guitarFxSettings;
+  channelVolumesRef.current = channelVolumes;
 
   const loopSlots = useMemo(() => grooveLabTotalSlots(barCount), [barCount]);
   const loopSlotsRef = useRef(loopSlots);
   loopSlotsRef.current = loopSlots;
 
-  const transportDisabled = events.length === 0 && !metronomeEnabledRef.current;
+  const transportDisabled =
+    events.length === 0 && guitarHits.length === 0 && !metronomeEnabledRef.current;
   const transportNotStopped = transportState !== 'stopped';
 
   const playlineOpts = useCallback(
@@ -315,7 +372,16 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
             chordVolume: chordVolumeRef.current,
             chordsMuted: chordsMutedRef.current,
             bassMuted: bassMutedRef.current,
+            leadMuted: leadMutedRef.current,
             perfMode: perfModeRef.current,
+            guitarSoundId: guitarSoundIdRef.current,
+            guitarFx: guitarFxSettingsRef.current,
+            guitarChannel: guitarChannelRef.current,
+            chordChannel: chordChannelRef.current,
+            melodyChannel: melodyChannelRef.current,
+            sampleChannel: sampleChannelRef.current,
+            orchestraHitId: orchestraHitIdRef.current,
+            channelVolumes: channelVolumesRef.current,
           });
         }
         refillGrooveLabMetronome(
@@ -434,13 +500,28 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
   );
 
   const startTransport = useCallback(async () => {
-    const evs = buildGrooveLabTransportEvents(bassHits, chordHits, melodyHits);
+    const evs = buildGrooveLabTransportEvents(
+      bassHits,
+      chordHits,
+      melodyHits,
+      quantizeRef.current,
+      guitarHits,
+      sampleHits,
+    );
     eventsRef.current = evs;
-    if (evs.length === 0 && !metronomeEnabledRef.current) return;
+    if (evs.length === 0 && guitarHits.length === 0 && !metronomeEnabledRef.current) return;
 
     const gen = ++startGenRef.current;
     const ctx = await ensureGrooveLabAudioReady(getAudioContext);
     if (!ctx || gen !== startGenRef.current) return;
+
+    restoreChordSequencerTransportVoices();
+    restoreGrooveLabTransportGuitarBus();
+    restoreGrooveLabTransportMelodyBus();
+
+    if (guitarHits.length > 0) {
+      await preloadGuitarLickBank(ctx);
+    }
 
     const origin = seekSlotRef.current;
     originSlotRef.current = origin;
@@ -492,6 +573,7 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     bassHits,
     cancelScheduledMetroNodes,
     chordHits,
+    guitarHits,
     melodyHits,
     getAudioContext,
     launchPlaylineNow,

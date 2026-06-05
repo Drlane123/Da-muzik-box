@@ -290,8 +290,7 @@ export default function HarmonyMatchScreen({ onOpenGrooveLab }: HarmonyMatchScre
         setMelodyMatchError(built.message);
         return;
       }
-      const bassCh = CHORD_BASS_SEQ_CHANNEL_BASE;
-      const chordCh = grooveLabPickChordChannel(bassCh);
+      const chordCh = grooveLabPickChordChannel();
       const notesByChannel: Record<number, import('@/app/lib/creationStation/grooveLabRoll').GrooveRollHit[]> =
         {};
       for (const ch of grooveLabChannelIds()) notesByChannel[ch] = [];

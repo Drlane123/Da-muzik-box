@@ -3,6 +3,8 @@
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { BeatLabSnapGridOverlay } from './BeatLabSnapGridOverlay';
+import { CreationSe2PlayheadMark } from './CreationSe2PlayheadMark';
+import { CREATION_SE2_PLAYHEAD_LINE_W_PX } from '@/app/lib/creationStation/creationPlaylineWapi';
 import {
   BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS,
   BEAT_LAB_MELODIC_INSTRUMENT_OPTIONS,
@@ -320,34 +322,14 @@ export function BeatLabMelodicSynthView({
                 position: 'absolute',
                 left: BEAT_LAB_SYNTH_KEY_W,
                 top: 0,
-                width: 1,
+                width: CREATION_SE2_PLAYHEAD_LINE_W_PX,
                 height: BEAT_LAB_SYNTH_HEADER_H + bodyH,
                 pointerEvents: 'none',
                 zIndex: 40,
                 opacity: transportNotStopped ? 1 : 0.45,
               }}
             >
-              <span
-                style={{
-                  position: 'absolute',
-                  left: -4,
-                  top: 0,
-                  width: 8,
-                  height: 10,
-                  clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-                  background: '#7cf4c6',
-                }}
-              />
-              <span
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 10,
-                  width: 1,
-                  height: BEAT_LAB_SYNTH_HEADER_H + bodyH - 10,
-                  background: 'rgba(124, 244, 198, 0.45)',
-                }}
-              />
+              <CreationSe2PlayheadMark variant="piano" height="100%" />
             </div>
 
             <div

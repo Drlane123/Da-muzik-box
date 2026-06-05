@@ -14,6 +14,7 @@ import {
 } from '@/app/lib/creationStation/orchidChordEngine';
 import {
   GROOVE_LAB_SLOTS_PER_BAR,
+  grooveLabProgressionSlotInBar,
   grooveLabSlotsPerCell,
   grooveLabStackChordHitsAtSlot,
   snapGrooveSlot,
@@ -92,10 +93,6 @@ export function generateOrchidChordProgressionHits(opts: {
   const snapStep = grooveLabSlotsPerCell(opts.quantize);
   const slotsPerBar = GROOVE_LAB_SLOTS_PER_BAR;
   const stepsPerBar = def.degrees.length;
-  const stepSpan = Math.max(
-    snapStep,
-    Math.floor(slotsPerBar / stepsPerBar / snapStep) * snapStep,
-  );
   const out: GrooveRollHit[] = [];
 
   for (let bar = 0; bar < opts.barCount; bar++) {
@@ -115,8 +112,8 @@ export function generateOrchidChordProgressionHits(opts: {
         opts.extensions,
         opts.inversion,
       );
-      const rawSlot = bar * slotsPerBar + i * stepSpan;
-      const slot = snapGrooveSlot(rawSlot, opts.quantize, opts.barCount);
+      const colInBar = grooveLabProgressionSlotInBar(i, slotsPerBar, stepsPerBar, snapStep);
+      const slot = snapGrooveSlot(bar * slotsPerBar + colInBar, opts.quantize, opts.barCount);
       out.push(
         ...grooveLabStackChordHitsAtSlot({
           anchorSlot: slot,
@@ -147,16 +144,13 @@ export function chordProgressionBassAnchors(opts: {
   const snapStep = grooveLabSlotsPerCell(opts.quantize);
   const slotsPerBar = GROOVE_LAB_SLOTS_PER_BAR;
   const stepsPerBar = def.degrees.length;
-  const stepSpan = Math.max(
-    snapStep,
-    Math.floor(slotsPerBar / stepsPerBar / snapStep) * snapStep,
-  );
   const anchors: { slot: number; midi: number }[] = [];
   for (let bar = 0; bar < opts.barCount; bar++) {
     for (let i = 0; i < stepsPerBar; i++) {
       const degreeIndex = def.degrees[i]!;
       const bassRoot = diatonicBassRootMidi(opts.keyRoot, opts.mode, degreeIndex, ref);
-      const slot = snapGrooveSlot(bar * slotsPerBar + i * stepSpan, opts.quantize, opts.barCount);
+      const colInBar = grooveLabProgressionSlotInBar(i, slotsPerBar, stepsPerBar, snapStep);
+      const slot = snapGrooveSlot(bar * slotsPerBar + colInBar, opts.quantize, opts.barCount);
       anchors.push({ slot, midi: bassRoot });
     }
   }

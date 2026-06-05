@@ -13,6 +13,8 @@ import {
 } from '../../lib/creationStation/creationDrumGridAdaptive';
 import { BEAT_LAB_AUTOMATION_LANE_H } from '../../lib/creationStation/beatLabAutomation';
 import { BeatLabSnapGridOverlay } from './BeatLabSnapGridOverlay';
+import { CreationSe2PlayheadMark } from './CreationSe2PlayheadMark';
+import { CREATION_SE2_PLAYHEAD_LINE_W_PX } from '@/app/lib/creationStation/creationPlaylineWapi';
 import {
   BEAT_LAB_MELODIC_LANE_START,
   BEAT_LAB_MIDI_LANES,
@@ -816,7 +818,7 @@ export function BeatLabPianoRoll({
               position: 'absolute',
               left: BEAT_LAB_ROLL_LABEL_W,
               top: 0,
-              width: 1,
+              width: CREATION_SE2_PLAYHEAD_LINE_W_PX,
               height: BEAT_LAB_ROLL_RULER_H + rollBodyH,
               background: 'transparent',
               pointerEvents: 'none',
@@ -824,27 +826,7 @@ export function BeatLabPianoRoll({
               opacity: transportNotStopped ? 1 : 0.42,
             }}
           >
-            <span
-              style={{
-                position: 'absolute',
-                left: -4,
-                top: 0,
-                width: 8,
-                height: 12,
-                clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)',
-                background: '#7cf4c6',
-              }}
-            />
-            <span
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 12,
-                width: 1,
-                height: BEAT_LAB_ROLL_RULER_H + rollBodyH - 12,
-                background: 'rgba(124, 244, 198, 0.45)',
-              }}
-            />
+            <CreationSe2PlayheadMark variant="piano" height="100%" />
           </div>
 
           <div
@@ -876,7 +858,8 @@ export function BeatLabPianoRoll({
             </div>
             <div style={{ display: 'flex' }}>
               {Array.from({ length: patternCols }, (_, ci) => {
-                const lit = ci === activeCol && transportNotStopped;
+                /** SE2 mirror — WAAPI line is the only playhead; no column square tint. */
+                const lit = false;
                 return (
                   <button
                     key={ci}

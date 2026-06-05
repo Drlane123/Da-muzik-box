@@ -59,6 +59,8 @@ export interface OrchidProgressionBuilderProps {
   onExportRollWav?: () => void | Promise<void>;
   onExportRollWavToPad?: () => void | Promise<void>;
   rollHasChords?: boolean;
+  /** Keeps GUITAR ▾ pack in sync with GENRE PACK / LOOP picks here. */
+  onGenrePackChange?: (genreId: string, progressionPresetId?: string) => void;
 }
 
 function computePanelPosition(anchor: DOMRect): { top: number; left: number } {
@@ -119,6 +121,7 @@ export function OrchidProgressionBuilder({
   onExportRollWav,
   onExportRollWavToPad,
   rollHasChords = false,
+  onGenrePackChange,
 }: OrchidProgressionBuilderProps) {
   const chordBrand = grooveBranding ? 'Groove' : 'Orchid';
   const catalog = useMemo(() => buildGrooveProgressionPresetCatalog(keyRoot), [keyRoot]);
@@ -210,6 +213,23 @@ export function OrchidProgressionBuilder({
     [],
   );
 
+  /** Timeline cards, or last staged build if the panel was reopened with an empty list. */
+  const resolveDropSteps = useCallback((): GrooveProgressionStep[] => {
+    if (hasPlayableSteps(steps)) return steps;
+    if (staged?.steps?.length && hasPlayableSteps(staged.steps)) return staged.steps;
+    return steps;
+  }, [steps, staged?.steps, hasPlayableSteps]);
+
+  const dropStepsReady = hasPlayableSteps(resolveDropSteps());
+
+  useEffect(() => {
+    if (!open) return;
+    if (stepsRef.current.length > 0) return;
+    if (!staged?.steps?.length || !hasPlayableSteps(staged.steps)) return;
+    syncSteps(staged.steps);
+    setSelectedId(staged.steps[0]?.id ?? null);
+  }, [open, staged, hasPlayableSteps, syncSteps]);
+
   const applyGenreTempo = useCallback(
     (gid: string, progressionId?: string, progressionName?: string) => {
       const resolved = resolveProgressionBpm(gid, { progressionId, progressionName });
@@ -298,6 +318,7 @@ export function OrchidProgressionBuilder({
       if (!entry) return;
       setGenreId(entry.genreId);
       setPresetCatalogId(id);
+      onGenrePackChange?.(entry.genreId, id);
       setCandidateLabel(null);
       const loopLabel = entry.label.replace(/^[^·]+·\s*/, '');
       applyGenreTempo(entry.genreId, entry.progressionId, loopLabel);
@@ -308,8 +329,12 @@ export function OrchidProgressionBuilder({
           .join(' '),
       );
     },
-    [catalog, applyGenreTempo],
+    [catalog, applyGenreTempo, onGenrePackChange],
   );
+
+  useEffect(() => {
+    onGenrePackChange?.(genreId, presetCatalogId || undefined);
+  }, [genreId, presetCatalogId, onGenrePackChange]);
 
   const loadPackToTimeline = useCallback(() => {
     if (!presetCatalogId) return;
@@ -622,6 +647,8 @@ export function OrchidProgressionBuilder({
               if (first) selectCatalogPreset(first.id);
               else {
                 setGenreId(gid);
+                setPresetCatalogId('');
+                onGenrePackChange?.(gid, undefined);
                 applyGenreTempo(gid);
               }
             }}
@@ -1016,17 +1043,20 @@ export function OrchidProgressionBuilder({
       >
         <button
           type="button"
-          disabled={!hasPlayableSteps(steps)}
-          onClick={() => {
-            onDropChordsToRoll(steps);
+          disabled={!dropStepsReady}
+          onClick={(e) => {
+            e.stopPropagation();
+            const toDrop = resolveDropSteps();
+            if (!hasPlayableSteps(toDrop)) return;
+            onDropChordsToRoll(toDrop);
             setOpen(false);
           }}
-          title="Green chord notes only (C4+) — no blue bass. Use + MATCH BASS when you want 808 under the chords."
+          title="Green chord notes on the CHORD piano roll (C3–A4) — switches to the CHORD lane. Use + MATCH BASS for blue 808."
           style={{
             ...actionBtnStyle,
-            background: hasPlayableSteps(steps) ? '#15321e' : '#111',
-            color: hasPlayableSteps(steps) ? '#4ade80' : '#444',
-            border: `1px solid ${hasPlayableSteps(steps) ? '#22c55e88' : '#222'}`,
+            background: dropStepsReady ? '#15321e' : '#111',
+            color: dropStepsReady ? '#4ade80' : '#444',
+            border: `1px solid ${dropStepsReady ? '#22c55e88' : '#222'}`,
             flex: 1,
             minWidth: 160,
           }}
@@ -1036,17 +1066,20 @@ export function OrchidProgressionBuilder({
         {onDropWithMatchBass ? (
           <button
             type="button"
-            disabled={!hasPlayableSteps(steps)}
-            onClick={() => {
-              onDropWithMatchBass(steps);
+            disabled={!dropStepsReady}
+            onClick={(e) => {
+              e.stopPropagation();
+              const toDrop = resolveDropSteps();
+              if (!hasPlayableSteps(toDrop)) return;
+              onDropWithMatchBass(toDrop);
               setOpen(false);
             }}
             title="Chords on roll, then auto-generate blue bass pattern"
             style={{
               ...actionBtnStyle,
-              background: hasPlayableSteps(steps) ? '#0c1828' : '#111',
-              color: hasPlayableSteps(steps) ? '#93c5fd' : '#444',
-              border: `1px solid ${hasPlayableSteps(steps) ? '#3b82f666' : '#222'}`,
+              background: dropStepsReady ? '#0c1828' : '#111',
+              color: dropStepsReady ? '#93c5fd' : '#444',
+              border: `1px solid ${dropStepsReady ? '#3b82f666' : '#222'}`,
             }}
           >
             + MATCH BASS
@@ -1200,7 +1233,7 @@ export function OrchidProgressionBuilder({
   ) : null;
 
   return (
-    <>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
       <button
         ref={btnRef}
         type="button"
@@ -1224,10 +1257,24 @@ export function OrchidProgressionBuilder({
           letterSpacing: 0.3,
         }}
       >
-        PROGRESSION {steps.length > 0 ? `(${steps.length})` : ''} ▾
+        PROGRESSION {steps.length > 0 ? `(${steps.length})` : staged ? '(built)' : ''} ▾
       </button>
+      {!open && status ? (
+        <span
+          style={{
+            fontSize: 7,
+            fontWeight: 800,
+            color: status.startsWith('✓') ? '#86efac' : '#fca5a5',
+            maxWidth: 200,
+            lineHeight: 1.3,
+          }}
+          title={status}
+        >
+          {status.length > 48 ? `${status.slice(0, 48)}…` : status}
+        </span>
+      ) : null}
       {typeof document !== 'undefined' && panel ? createPortal(panel, document.body) : null}
-    </>
+    </span>
   );
 }
 

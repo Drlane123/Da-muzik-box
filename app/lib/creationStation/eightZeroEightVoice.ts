@@ -63,6 +63,8 @@ export interface EightZeroEightPlayExt {
   velocity01?: number;
   /** Bass Low lanes: trap kick (punch) vs 808 bass (hold + glide). */
   soundLane?: Lab808SoundLane;
+  /** Bass lane keyboard: sub oscillator only — no body pitch that reads as piano. */
+  subOscOnly?: boolean;
   /** High-pass / low-pass (Beat Lab pad FX rules). */
   filterFx?: Lab808FilterFx;
 }
@@ -614,20 +616,27 @@ export function playEightZeroEight(
 
   const stoppable: AudioScheduledSourceNode[] = [];
 
-  const bodyOsc = ctx.createOscillator();
-  bodyOsc.type = kickMap && isBassLane ? (preset.mainWave ?? 'sine') : 'sine';
-  bodyOsc.frequency.setValueAtTime(hz1, t0);
-  bodyOsc.frequency.exponentialRampToValueAtTime(hzEnd, t0 + sweepDur);
+  const subOscOnly = kickMap && isBassLane && ext?.subOscOnly !== false;
 
-  const bodyGain = ctx.createGain();
-  bodyGain.gain.setValueAtTime(0.0001, t0);
-  const bodyPeak = kickMap ? (isBassLane ? 0.12 + strike * 0.32 : 0.16 + strike * 0.48) : 0.85;
-  const bodyFadeT = kickMap ? t0 + sweepDur + 0.07 : t0 + sweepDur + bodyDur;
-  bodyGain.gain.exponentialRampToValueAtTime(bodyPeak, t0 + 0.003);
-  bodyGain.gain.exponentialRampToValueAtTime(0.0001, bodyFadeT);
+  if (!subOscOnly) {
+    const bodyOsc = ctx.createOscillator();
+    bodyOsc.type = kickMap && isBassLane ? (preset.mainWave ?? 'sine') : 'sine';
+    bodyOsc.frequency.setValueAtTime(hz1, t0);
+    bodyOsc.frequency.exponentialRampToValueAtTime(hzEnd, t0 + sweepDur);
 
-  bodyOsc.connect(bodyGain);
-  bodyGain.connect(master);
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.0001, t0);
+    const bodyPeak = kickMap ? (isBassLane ? 0.12 + strike * 0.32 : 0.16 + strike * 0.48) : 0.85;
+    const bodyFadeT = kickMap ? t0 + sweepDur + 0.07 : t0 + sweepDur + bodyDur;
+    bodyGain.gain.exponentialRampToValueAtTime(bodyPeak, t0 + 0.003);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, bodyFadeT);
+
+    bodyOsc.connect(bodyGain);
+    bodyGain.connect(master);
+    bodyOsc.start(t0);
+    bodyOsc.stop(tEnd + 0.02);
+    stoppable.push(bodyOsc);
+  }
 
   if (includeSub) {
     const subOsc = ctx.createOscillator();
@@ -683,11 +692,9 @@ export function playEightZeroEight(
   hp.connect(cg);
   cg.connect(master);
 
-  bodyOsc.start(t0);
   click.start(t0);
-  bodyOsc.stop(tEnd + 0.02);
   click.stop(t0 + 0.04);
-  stoppable.push(bodyOsc, click);
+  stoppable.push(click);
 
   if (kickMap && kickBus) {
     activeKickVoice = {

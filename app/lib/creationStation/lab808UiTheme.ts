@@ -20,10 +20,108 @@ export function formatLab808SoundDisplayLabel(createdName: string): string {
   return `${LAB808_DISPLAY_NAME} ${name}`;
 }
 
-/** Transport control sizing (touch-friendly). */
+/** Transport control sizing (touch-friendly — standalone drum machine page). */
 export const LAB808_TRANSPORT_ICON = 22;
 export const LAB808_TRANSPORT_BTN = 44;
 export const LAB808_TRANSPORT_BTN_PLAY = 50;
+
+/** Piano-roll toolbar transport — matches OrchidTransportControls / Groove Lab roll. */
+export const LAB808_ROLL_TRANSPORT_BTN = 26;
+export const LAB808_ROLL_TRANSPORT_PLAY_W = 32;
+export const LAB808_ROLL_TRANSPORT_H = 26;
+export const LAB808_ROLL_TRANSPORT_ICON = 13;
+
+export const lab808RollTransportCluster: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '4px 6px',
+  borderRadius: 6,
+  background: 'rgba(5, 8, 5, 0.92)',
+  border: '1px solid #1f3a29',
+  boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
+  flexShrink: 0,
+};
+
+export function lab808RollTransportButtonStyle(playing?: boolean): CSSProperties {
+  return {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid #1f3a29',
+    borderRadius: 5,
+    background: playing ? '#15321e' : '#0d120f',
+    color: playing ? '#4ade80' : '#86efac',
+    cursor: 'pointer',
+    padding: 0,
+    flexShrink: 0,
+  };
+}
+
+/** Piano-roll toolbar chips — matches GrooveLabPianoRoll actionBtn. */
+export function lab808RollActionBtnStyle(bg: string, color: string, border: string): CSSProperties {
+  return {
+    background: bg,
+    color,
+    border: `1px solid ${border}`,
+    borderRadius: 5,
+    padding: '3px 8px',
+    fontSize: 8,
+    fontWeight: 900,
+    cursor: 'pointer',
+  };
+}
+
+export const lab808RollSelect: CSSProperties = {
+  background: '#0a0e16',
+  color: '#86efac',
+  border: '1px solid #1a3a29',
+  borderRadius: 4,
+  padding: '2px 4px',
+  fontSize: 8,
+  fontWeight: 800,
+};
+
+export const lab808RollToolbarLabel: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+  fontSize: 8,
+  color: '#71717a',
+  fontWeight: 800,
+};
+
+/** Compact BPM field on piano-roll toolbars. */
+export function lab808RollBpmInputStyle(opts?: { readOnly?: boolean }): CSSProperties {
+  return {
+    padding: '2px 4px',
+    borderRadius: 4,
+    border: '1px solid #1a3a29',
+    background: '#0a0e16',
+    color: opts?.readOnly ? '#86efac' : '#86efac',
+    fontSize: 8,
+    fontWeight: 800,
+    fontVariantNumeric: 'tabular-nums',
+    width: 44,
+    minWidth: 44,
+    maxWidth: 52,
+    flexShrink: 0,
+    textAlign: 'center',
+    boxSizing: 'border-box',
+    lineHeight: '14px',
+    MozAppearance: 'textfield',
+    WebkitAppearance: 'textfield',
+    appearance: 'textfield',
+    cursor: opts?.readOnly ? 'default' : 'text',
+  };
+}
+
+export const lab808RollFxLabel: CSSProperties = {
+  fontSize: 8,
+  fontWeight: 800,
+  color: '#71717a',
+  minWidth: 18,
+};
 
 export const lab808ToolbarLabel: CSSProperties = {
   display: 'flex',

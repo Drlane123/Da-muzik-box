@@ -9,6 +9,10 @@ import {
   type ChordSymbol,
 } from '@/app/lib/creationStation/chordBuilder';
 import { cbPianoNoteNameToMidi } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
+import {
+  grooveLabClampBassRootMidi,
+  GROOVE_LAB_BASS_REFERENCE_MIDI,
+} from '@/app/lib/creationStation/grooveLabPitch';
 import { chordSyncLoopLengthBeats, writeChordSync, type ChordSyncBlock } from '@/app/lib/chordBuilderSync';
 
 /** Keep aligned with `MPC_BAR_LOOP_OPTIONS` in `EightZeroEightLabDrumMachine`. */
@@ -59,12 +63,39 @@ export function fitProgressionRootsTo808Roll(
       return shifted.map(clampMidi);
     }
   }
-  return rootMidis.map((m) => clampMidi(fitMidiInto808Roll(m, lowMidi, highMidi)));
+  const used = new Set<number>();
+  return rootMidis.map((m) => {
+    const pc = ((Math.round(m) % 12) + 12) % 12;
+    for (let oct = Math.floor(lowMidi / 12); oct <= Math.floor(highMidi / 12); oct++) {
+      const candidate = clampMidi(oct * 12 + pc);
+      if (candidate >= lowMidi && candidate <= highMidi && !used.has(candidate)) {
+        used.add(candidate);
+        return candidate;
+      }
+    }
+    const solo = clampMidi(fitMidiInto808Roll(m, lowMidi, highMidi));
+    used.add(solo);
+    return solo;
+  });
+}
+
+/** Harmonic root in C1–C3 — 808 voice always triggers this, not the highest chord tone. */
+export function lab808HarmonicBassMidi(midi: number): number {
+  return grooveLabClampBassRootMidi(midi, GROOVE_LAB_BASS_REFERENCE_MIDI);
+}
+
+/** Match a roll note to a progression root (roll lane vs bass trigger). */
+export function lab808ProgressionRootAtRollMidi(
+  roots: readonly Lab808ProgressionRoot[],
+  rollMidi: number,
+): Lab808ProgressionRoot | undefined {
+  return roots.find((r) => (r.rollMidi ?? r.midi) === rollMidi || r.midi === rollMidi);
 }
 
 export type Lab808ImportedRootNote = {
   startBeat: number;
   midi: number;
+  rollMidi?: number;
   durBeats: number;
   chord: string;
 };
@@ -79,6 +110,69 @@ export type Lab808ImportedRootsPayload = {
   octaveShift: number;
   notes: Lab808ImportedRootNote[];
 };
+
+/** One chord root in the connected progression (pads + transport). */
+export type Lab808ProgressionRoot = {
+  startBeat: number;
+  durBeats: number;
+  /** Harmonic bass root (C1–C3) — 808 kick/bass always plays this pitch. */
+  midi: number;
+  /** Piano-roll row (C1–C6); may sit higher when voicings climb. */
+  rollMidi?: number;
+  chord: string;
+};
+
+/**
+ * Roots for chord-lock pads / transport — imported roll notes first, else live Chord Builder sync.
+ */
+/** Which progression root is sounding at `quarterBeat` (loops over `loopLen`). */
+export function lab808ActiveRootIndexAtBeat(
+  roots: readonly Lab808ProgressionRoot[],
+  quarterBeat: number,
+  loopLen: number,
+): number | null {
+  if (!roots.length || loopLen <= 0) return null;
+  const pos = ((quarterBeat % loopLen) + loopLen) % loopLen;
+  for (let i = 0; i < roots.length; i++) {
+    const r = roots[i]!;
+    if (pos >= r.startBeat && pos < r.startBeat + r.durBeats) return i;
+  }
+  return null;
+}
+
+export function progressionRootsToManualRollNotes(
+  roots: readonly Lab808ProgressionRoot[],
+): Array<{ id: string; startBeat: number; midi: number; durBeats: number; chord?: string }> {
+  return roots.map((r, i) => ({
+    id: `808-root-${i}-${r.startBeat}`,
+    startBeat: r.startBeat,
+    midi: r.rollMidi ?? r.midi,
+    durBeats: r.durBeats,
+    chord: r.chord,
+  }));
+}
+
+export function resolveLab808ProgressionRoots(args: {
+  sync: { keyRoot: number; mode: string; blocks: ChordSyncBlock[] } | null;
+  mode: ChordMode;
+  octaveShift?: number;
+  manualNotes?: ReadonlyArray<{ startBeat: number; midi: number; durBeats: number }>;
+}): Lab808ProgressionRoot[] {
+  const octaveShift = args.octaveShift ?? LAB808_DEFAULT_ROOT_OCTAVE_SHIFT;
+  if (args.manualNotes?.length) {
+    const imported = read808LabImportedRoots();
+    const rollMidis = fitProgressionRootsTo808Roll(args.manualNotes.map((n) => n.midi));
+    return args.manualNotes.map((n, i) => ({
+      startBeat: n.startBeat,
+      durBeats: n.durBeats,
+      midi: lab808HarmonicBassMidi(n.midi),
+      rollMidi: rollMidis[i]!,
+      chord: imported?.notes[i]?.chord ?? '·',
+    }));
+  }
+  if (!args.sync?.blocks?.length) return [];
+  return build808RootNotesFromBlocks(args.sync.blocks, args.sync.keyRoot, args.mode, octaveShift);
+}
 
 export function build808RootNotesFromBlocks(
   blocks: ChordSyncBlock[],
@@ -104,10 +198,12 @@ export function build808RootNotesFromBlocks(
     beat += dur;
   }
   if (raw.length === 0) return [];
-  const fitted = fitProgressionRootsTo808Roll(raw.map((r) => r.midi));
+  const bassMidis = raw.map((r) => lab808HarmonicBassMidi(r.midi));
+  const rollMidis = fitProgressionRootsTo808Roll(bassMidis);
   return raw.map((r, i) => ({
     startBeat: r.startBeat,
-    midi: fitted[i]!,
+    midi: bassMidis[i]!,
+    rollMidi: rollMidis[i]!,
     durBeats: r.durBeats,
     chord: r.chord,
   }));
@@ -174,12 +270,16 @@ export function read808LabImportedRoots(): Lab808ImportedRootsPayload | null {
 export function manualRollNotesFrom808Import(
   payload: Lab808ImportedRootsPayload,
 ): Array<{ id: string; startBeat: number; midi: number; durBeats: number }> {
-  const midis = fitProgressionRootsTo808Roll(payload.notes.map((n) => n.midi));
+  const bassMidis = payload.notes.map((n) => lab808HarmonicBassMidi(n.midi));
+  const rollMidis = fitProgressionRootsTo808Roll(
+    payload.notes.map((n, i) => n.rollMidi ?? bassMidis[i]!),
+  );
   return payload.notes.map((n, i) => ({
     id: `808-${payload.savedAt}-${i}`,
     startBeat: n.startBeat,
-    midi: midis[i]!,
+    midi: rollMidis[i]!,
     durBeats: n.durBeats,
+    chord: n.chord,
   }));
 }
 

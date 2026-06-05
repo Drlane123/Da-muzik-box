@@ -3,7 +3,7 @@
  * Each genre opens an upward-fixed menu (scroll inside) so the footer stays short.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
@@ -12,11 +12,14 @@ import {
   getBeatLabDrumPresets,
   type BeatLabPatternBankId,
 } from '@/app/lib/creationStation/beatLabPatternBank';
-import { getPatternPresetBpm, type PatternPreset } from '@/app/lib/patternPresets';
+import { getPatternPresetBpm, getPatternPresetProducerGridBpm, type PatternPreset } from '@/app/lib/patternPresets';
+import { isBeatLabSignatureTrapPattern } from '@/app/lib/creationStation/beatLabSignatureTrapPatterns';
+import { beatLabTrapProducerGridBpmLabel } from '@/app/lib/creationStation/beatLabTrapTempo';
 
 const MINT = '#7cf4c6';
 const MINT_DIM = 'rgba(124, 244, 198, 0.35)';
 const MINT_BG = 'rgba(124, 244, 198, 0.12)';
+const SIG_CYAN = '#67e8f9';
 
 type MenuGeom = {
   left: number;
@@ -87,7 +90,7 @@ function GenrePatternMenuPortal({
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+    const onOutside = (e: MouseEvent) => {
       const t = e.target as Node | null;
       if (triggerEl?.contains(t)) return;
       const menus = document.querySelectorAll('[data-beatlab-pattern-menu="1"]');
@@ -99,13 +102,14 @@ function GenrePatternMenuPortal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('touchstart', onPointerDown, { passive: true });
+    const raf = requestAnimationFrame(() => {
+      document.addEventListener('click', onOutside, true);
+    });
     window.addEventListener('resize', onClose);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('touchstart', onPointerDown);
+      cancelAnimationFrame(raf);
+      document.removeEventListener('click', onOutside, true);
       window.removeEventListener('resize', onClose);
       document.removeEventListener('keydown', onKey);
     };
@@ -130,11 +134,20 @@ function GenrePatternMenuPortal({
         border: `1px solid ${MINT_DIM}`,
         background: 'rgba(8,10,14,0.98)',
         boxShadow: '0 -8px 28px rgba(0,0,0,0.55)',
+        paddingBottom: 6,
       }}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {presets.map((p) => {
-        const presetBpm = getPatternPresetBpm(p);
+        const transportBpm = getPatternPresetBpm(p);
+        const producerGridBpm = getPatternPresetProducerGridBpm(p);
+        const gridLabel = beatLabTrapProducerGridBpmLabel(p, producerGridBpm, transportBpm);
         const isLoaded = loadedPresetId != null && loadedPresetId === p.id;
+        const isSignature = isBeatLabSignatureTrapPattern(p.id);
+        const tempoTitle =
+          gridLabel != null
+            ? `${p.desc} — plays ${transportBpm} BPM (producer grid ${gridLabel} for hat programming)`
+            : `${p.desc} (${transportBpm} BPM)`;
         return (
           <button
             key={p.id}
@@ -142,14 +155,16 @@ function GenrePatternMenuPortal({
             disabled={disabled}
             role="option"
             aria-selected={isLoaded}
-            title={`${p.desc} (${presetBpm} BPM)`}
+            title={isSignature ? `Signature trap · ${tempoTitle}` : tempoTitle}
             onClick={() => {
               if (disabled) return;
               onPick(p);
               onClose();
             }}
             style={{
-              display: 'block',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
               width: '100%',
               textAlign: 'left',
               padding: '8px 10px',
@@ -164,10 +179,31 @@ function GenrePatternMenuPortal({
               opacity: disabled ? 0.45 : 1,
             }}
           >
-            {p.name} <span style={{ color: '#7cf4c6', fontWeight: 800 }}>· {presetBpm}</span>
-            {isLoaded ? (
-              <span style={{ marginLeft: 6, fontSize: 9, color: MINT, fontWeight: 900 }}>· active</span>
+            {isSignature ? (
+              <span
+                aria-label="Signature pattern"
+                title="Signature trap series"
+                style={{
+                  flexShrink: 0,
+                  fontSize: 9,
+                  fontWeight: 900,
+                  color: SIG_CYAN,
+                  letterSpacing: 0.2,
+                }}
+              >
+                (S)
+              </span>
             ) : null}
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {p.name}{' '}
+              <span style={{ color: MINT, fontWeight: 800 }}>· {transportBpm}</span>
+              {gridLabel != null ? (
+                <span style={{ color: '#6a6a78', fontWeight: 700, fontSize: 9 }}> grid {gridLabel}</span>
+              ) : null}
+              {isLoaded ? (
+                <span style={{ marginLeft: 6, fontSize: 9, color: MINT, fontWeight: 900 }}>· active</span>
+              ) : null}
+            </span>
           </button>
         );
       })}
@@ -180,18 +216,12 @@ function GenrePatternMenuPortal({
 }
 
 export function PatternBankPanel({
-  patternSlot,
-  onPatternSlotChange,
   onLoadPreset,
-  onCopyAToB,
   disabled = false,
   loadedBankId = null,
   loadedPresetId = null,
 }: {
-  patternSlot: 'A' | 'B';
-  onPatternSlotChange: (slot: 'A' | 'B') => void;
   onLoadPreset: (preset: PatternPreset) => void;
-  onCopyAToB?: () => void;
   disabled?: boolean;
   /** Highlights the genre chip (Trap, R&B, …) for the last Pattern Bank load. */
   loadedBankId?: BeatLabPatternBankId | null;
@@ -213,27 +243,60 @@ export function PatternBankPanel({
   const activeTrigger = openId ? triggersRef.current[openId] ?? null : null;
   const openPresets = openId ? getBeatLabDrumPresets(openId) : [];
 
+  const chipButtonStyle = (
+    isOpen: boolean,
+    isLoaded: boolean,
+  ): CSSProperties => ({
+    padding: '5px 10px',
+    borderRadius: 5,
+    border: `1px solid ${isOpen ? MINT : isLoaded ? 'rgba(124, 244, 198, 0.85)' : MINT_DIM}`,
+    boxShadow: isLoaded
+      ? '0 0 0 1px rgba(124, 244, 198, 0.35), 0 0 12px rgba(124, 244, 198, 0.12)'
+      : undefined,
+    background: isOpen ? MINT_BG : isLoaded ? 'rgba(124, 244, 198, 0.08)' : 'rgba(255,255,255,0.04)',
+    color: isOpen || isLoaded ? MINT : '#c8cad4',
+    fontSize: 10,
+    fontWeight: 900,
+    letterSpacing: 0.3,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+    flex: '1 1 0',
+    minWidth: 76,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  });
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            alignItems: 'stretch',
-            flex: '1 1 auto',
-            minWidth: 0,
-          }}
-        >
-          {BEAT_LAB_PATTERN_BANKS.map((b) => {
-            const n = countBeatLabDrumPresets(b.id);
-            const isOpen = openId === b.id;
-            const isLoadedBank = loadedBankId != null && loadedBankId === b.id;
-            const borderColor = isOpen ? MINT : isLoadedBank ? 'rgba(124, 244, 198, 0.85)' : MINT_DIM;
-            return (
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 6,
+          alignItems: 'flex-start',
+          flex: '1 1 auto',
+          minWidth: 0,
+        }}
+      >
+        {BEAT_LAB_PATTERN_BANKS.map((b) => {
+          const n = countBeatLabDrumPresets(b.id);
+          const isOpen = openId === b.id;
+          const isLoadedBank = loadedBankId != null && loadedBankId === b.id;
+          const borderColor = isOpen ? MINT : isLoadedBank ? 'rgba(124, 244, 198, 0.85)' : MINT_DIM;
+          return (
+            <div
+              key={b.id}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                flex: '1 1 0',
+                minWidth: 76,
+              }}
+            >
               <button
-                key={b.id}
                 ref={(el) => setTriggerRef(b.id, el)}
                 type="button"
                 disabled={disabled}
@@ -242,25 +305,10 @@ export function PatternBankPanel({
                   setOpenId((prev) => (prev === b.id ? null : b.id));
                 }}
                 style={{
-                  padding: '5px 10px',
-                  borderRadius: 5,
+                  ...chipButtonStyle(isOpen, isLoadedBank),
                   border: `1px solid ${borderColor}`,
-                  boxShadow: isLoadedBank
-                    ? '0 0 0 1px rgba(124, 244, 198, 0.35), 0 0 12px rgba(124, 244, 198, 0.12)'
-                    : undefined,
-                  background: isOpen ? MINT_BG : isLoadedBank ? 'rgba(124, 244, 198, 0.08)' : 'rgba(255,255,255,0.04)',
-                  color: isOpen || isLoadedBank ? MINT : '#c8cad4',
-                  fontSize: 10,
-                  fontWeight: 900,
-                  letterSpacing: 0.3,
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  opacity: disabled ? 0.45 : 1,
-                  flex: '1 1 0',
-                  minWidth: 76,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 6,
+                  width: '100%',
+                  flex: 'none',
                 }}
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -269,53 +317,23 @@ export function PatternBankPanel({
                 </span>
                 <span style={{ opacity: 0.85 }}>{isOpen ? '▴' : '▾'}</span>
               </button>
-            );
-          })}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-          {(['A', 'B'] as const).map((slot) => (
-            <button
-              key={slot}
-              type="button"
-              disabled={disabled}
-              onClick={() => onPatternSlotChange(slot)}
-              style={{
-                padding: '3px 8px',
-                borderRadius: 3,
-                border: `1px solid ${patternSlot === slot ? MINT : 'rgba(255,255,255,0.14)'}`,
-                background: patternSlot === slot ? MINT_BG : 'rgba(255,255,255,0.04)',
-                color: patternSlot === slot ? MINT : '#9a9aa8',
-                fontSize: 8,
-                fontWeight: 900,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.45 : 1,
-              }}
-            >
-              {slot}
-            </button>
-          ))}
-          {onCopyAToB && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={onCopyAToB}
-              title="Copy pattern A into slot B"
-              style={{
-                padding: '3px 6px',
-                borderRadius: 3,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(255,255,255,0.04)',
-                color: '#9a9aa8',
-                fontSize: 7,
-                fontWeight: 800,
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                opacity: disabled ? 0.45 : 1,
-              }}
-            >
-              A→B
-            </button>
-          )}
-        </div>
+              {b.id === 'trap' ? (
+                <span
+                  style={{
+                    fontSize: 7,
+                    fontWeight: 800,
+                    color: '#6a6a78',
+                    letterSpacing: 0.35,
+                    lineHeight: 1.25,
+                    paddingLeft: 2,
+                  }}
+                >
+                  <span style={{ color: SIG_CYAN, fontWeight: 900 }}>(S)</span> = signature · plays felt BPM, grid = producer tempo
+                </span>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       <GenrePatternMenuPortal

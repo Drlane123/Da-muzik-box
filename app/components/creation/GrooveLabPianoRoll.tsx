@@ -22,6 +22,14 @@ import {
   GROOVE_LAB_CHORD_NOTE_INSET,
 } from '@/app/lib/creationStation/grooveLabLayers';
 import {
+  GROOVE_LEAD_DISPLAY_NAME,
+  GROOVE_LEAD_SHORT_LABEL,
+  WAVE_LEAF_NOTE_COLOR,
+  WAVE_LEAF_NOTE_EDGE,
+  WAVE_LEAF_NOTE_INSET,
+  WAVE_LEAF_UI,
+} from '@/app/lib/creationStation/waveLeafBranding';
+import {
   CB_PIANO_METRICS,
   CB_PIANO_MINT,
   CB_PIANO_MINT_BORDER,
@@ -34,6 +42,7 @@ import {
   cbPianoNoteNameToMidi,
   cbPianoPitchRowStyle,
   LAB808_PIANO_ROWS,
+  pianoRowIndexForMidi,
 } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
 import {
   GROOVE_LAB_MEASURES_PER_BAR,
@@ -63,18 +72,28 @@ import {
   type GrooveRollHit,
 } from '@/app/lib/creationStation/grooveLabRoll';
 import { isMidiFileName } from '@/app/lib/creationStation/grooveLabMidiImport';
-import { grooveLabIsBassSubMidi, grooveLabIsMelodyMidi } from '@/app/lib/creationStation/grooveComposerEngine';
-import { GROOVE_LAB_CHORD_ROLL_MIDI_MIN } from '@/app/lib/creationStation/grooveLabPitch';
+import { grooveLabIsBassSubMidi } from '@/app/lib/creationStation/grooveComposerEngine';
+import {
+  grooveLabClampMelodyMidi,
+  grooveLabIsChordStackMidi,
+  grooveLabIsGuitarMidi,
+  grooveLabIsMelodyMidi,
+} from '@/app/lib/creationStation/grooveLabPitch';
+import { waveLeafClampMidi } from '@/app/lib/creationStation/waveLeafPitch';
 import { GrooveOctaveShiftButtons } from '@/app/components/creation/GrooveOctaveShiftButtons';
 import { OrchidTransportControls } from '@/app/components/creation/OrchidTransportControls';
 import { GrooveLabExportStrip } from '@/app/components/creation/GrooveLabExportStrip';
 import { GROOVE_LAB_808_SUBROOTS_BANK_LABEL } from '@/app/lib/creationStation/grooveLabBranding';
+import {
+  grooveLabPianoRowsForScope,
+  type GrooveLabRollLayerScope,
+} from '@/app/lib/creationStation/grooveLabPianoRollLayers';
 
 export type GrooveLabPianoRollProps = {
   channel: number;
   bassRootMidi: number;
   hits: GrooveRollHit[];
-  onHitsChange: (hits: GrooveRollHit[]) => void;
+  onHitsChange: (hits: GrooveRollHit[] | ((prev: GrooveRollHit[]) => GrooveRollHit[])) => void;
   noteLengthSlots: number;
   onNoteLengthChange: (slots: number) => void;
   quantize: GrooveLabQuantize;
@@ -83,6 +102,10 @@ export type GrooveLabPianoRollProps = {
   onBarCountChange: (bars: GrooveLabBarCount) => void;
   onPreview?: () => void;
   onPreviewPitch?: (midi: number) => void;
+  /** Guitar lane only — bypasses chord/melody preview routing. */
+  onPreviewGuitarNote?: (midi: number, velocity01?: number) => void;
+  /** Pointerdown on roll — unlock audio / preload guitar licks before preview. */
+  onPrimeAudio?: () => void;
   /** Write chord voicing as spread notes at the next grid position. */
   onSpreadChord?: () => void;
   /** Remove every note at a slot (one chord strike). */
@@ -115,6 +138,8 @@ export type GrooveLabPianoRollProps = {
   onPxPerColChange?: (px: number) => void;
   /** Drop a Standard MIDI File onto the roll (parent parses BPM + layers). */
   onMidiFileDrop?: (file: File) => void;
+  onImportMidi?: (file: File) => void;
+  midiImportStatus?: string | null;
   /** Roll transport — shown on the roll toolbar (required in full-screen view). */
   transportPlaying?: boolean;
   transportDisabled?: boolean;
@@ -131,6 +156,8 @@ export type GrooveLabPianoRollProps = {
   onExportRollWavToPad?: () => void | Promise<void>;
   onSendRollToNewSynth?: () => void;
   padExportEnabled?: boolean;
+  padPickerOpen?: boolean;
+  showExportLabel?: boolean;
   subRootNoteCount?: number;
   onClearAllSubRoots?: () => void;
   onSubOctaveDown?: () => void;
@@ -139,8 +166,21 @@ export type GrooveLabPianoRollProps = {
   onChordOctaveDown?: () => void;
   onChordOctaveUp?: () => void;
   melodyLayerNoteCount?: number;
+  onClearAllMelody?: () => void;
   onMelodyOctaveDown?: () => void;
   onMelodyOctaveUp?: () => void;
+  /** Single work-lane roll (SUB, CHORD, or MELODY) — register-scoped keyboard rows. */
+  layerScope?: GrooveLabRollLayerScope;
+  /** full = tools + transport; strip = compact lane header (stacked 3-roll layout). */
+  rollChrome?: 'full' | 'strip';
+  layerStripTitle?: string;
+  layerStripColor?: string;
+  syncScrollLeft?: number;
+  onScrollSync?: (scrollLeft: number) => void;
+  /** Notifies parent so layout can grow the roll without covering Groove Studio keypads. */
+  onRollExpandedChange?: (expanded: boolean) => void;
+  /** Parent-controlled FULL view (keeps save + drag pitch clamp in sync). */
+  rollExpanded?: boolean;
 };
 
 const M = CB_PIANO_METRICS;
@@ -163,12 +203,12 @@ const GROOVE_PIANO_MIN_MIDI = cbPianoNoteNameToMidi('C1');
 const GROOVE_PIANO_MAX_MIDI = cbPianoNoteNameToMidi('C6');
 /** Notes align flush to the left grid line (column start). */
 const NOTE_CELL_PAD = 0;
-const NOTE_RESIZE_HANDLE_W = 10;
+const NOTE_RESIZE_HANDLE_W = 14;
 
 type GrooveRollTool = 'pointer' | 'paint' | 'erase';
 
-function grooveLabRowIndexForMidi(midi: number): number {
-  return GROOVE_PIANO_ROWS.indexOf(cbPianoMidiToNoteName(midi));
+function grooveLabRowIndexForMidi(midi: number, rows: readonly string[]): number {
+  return pianoRowIndexForMidi(midi, rows);
 }
 
 function clampSus(slot: number, sus: number, q: GrooveLabQuantize, barCount: number): number {
@@ -189,8 +229,17 @@ function hitAtRollCell(
   );
 }
 
-function paintLayerForMidi(midi: number): 'bass' | 'chord' {
-  return midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN ? 'chord' : 'bass';
+type GrooveRollLayer = 'bass' | 'melody' | 'chord';
+
+function paintLayerForMidi(midi: number, scope?: GrooveLabRollLayerScope | null): GrooveRollLayer {
+  if (scope === 'sub') return 'bass';
+  if (scope === 'chord' || scope === 'sample') return 'chord';
+  if (scope === 'guitar') return 'melody';
+  if (scope === 'melody' || scope === 'waveleaf') return 'melody';
+  if (grooveLabIsMelodyMidi(midi)) return 'melody';
+  if (grooveLabIsGuitarMidi(midi)) return 'melody';
+  if (grooveLabIsChordStackMidi(midi)) return 'chord';
+  return 'bass';
 }
 
 type MultiDragState = {
@@ -207,6 +256,7 @@ type MultiDragState = {
   startClientX: number;
   startClientY: number;
   moved: boolean;
+  backupHits: GrooveRollHit[];
 };
 
 function clampRollMidi(midi: number): number {
@@ -232,6 +282,8 @@ export function GrooveLabPianoRoll({
   onBarCountChange,
   onPreview,
   onPreviewPitch,
+  onPreviewGuitarNote,
+  onPrimeAudio,
   onSpreadChord,
   onDeleteChordAtSlot,
   editSlot = 0,
@@ -254,6 +306,8 @@ export function GrooveLabPianoRoll({
   onSeekCol,
   onPxPerColChange,
   onMidiFileDrop,
+  onImportMidi,
+  midiImportStatus = null,
   transportPlaying = false,
   transportDisabled = true,
   onTransportRewind,
@@ -269,6 +323,8 @@ export function GrooveLabPianoRoll({
   onExportRollWavToPad,
   onSendRollToNewSynth,
   padExportEnabled = true,
+  padPickerOpen = false,
+  showExportLabel = true,
   subRootNoteCount = 0,
   onClearAllSubRoots,
   onSubOctaveDown,
@@ -277,23 +333,44 @@ export function GrooveLabPianoRoll({
   onChordOctaveDown,
   onChordOctaveUp,
   melodyLayerNoteCount = 0,
+  onClearAllMelody,
   onMelodyOctaveDown,
   onMelodyOctaveUp,
+  layerScope,
+  rollChrome = 'full',
+  layerStripTitle,
+  layerStripColor = '#7cf4c6',
+  syncScrollLeft,
+  onScrollSync,
+  onRollExpandedChange,
+  rollExpanded: rollExpandedProp,
 }: GrooveLabPianoRollProps) {
   const bassRootMidi = Number.isFinite(bassRootMidiProp) ? Math.round(bassRootMidiProp) : 36;
-  const split = Boolean(
-    splitChannels &&
-      bassHitsProp &&
-      chordHitsProp &&
-      melodyHitsProp &&
-      onBassHitsChange &&
-      onChordHitsChange &&
-      onMelodyHitsChange,
-  );
+  const isLayerRoll = layerScope != null;
+  const split = isLayerRoll
+    ? false
+    : Boolean(
+        splitChannels &&
+          bassHitsProp &&
+          chordHitsProp &&
+          melodyHitsProp &&
+          onBassHitsChange &&
+          onChordHitsChange &&
+          onMelodyHitsChange,
+      );
   const bassHits = split ? bassHitsProp! : hits;
   const chordHits = split ? chordHitsProp! : hits;
   const melodyHits = split ? melodyHitsProp! : [];
-  const allHits = split ? [...bassHits, ...melodyHits, ...chordHits] : hits;
+  const allHits = isLayerRoll ? hits : split ? [...bassHits, ...melodyHits, ...chordHits] : hits;
+  const scopedLayer: GrooveRollLayer | null = isLayerRoll
+    ? layerScope === 'sub'
+      ? 'bass'
+      : layerScope === 'chord' || layerScope === 'sample'
+        ? 'chord'
+        : layerScope === 'guitar' || layerScope === 'waveleaf' || layerScope === 'melody'
+          ? 'melody'
+          : 'melody'
+    : null;
 
   /** One block per slot+midi (longest sustain) — avoids stacked duplicates on the roll. */
   const rollDisplayHits = useMemo(() => {
@@ -306,28 +383,49 @@ export function GrooveLabPianoRoll({
     return [...byKey.values()];
   }, [allHits]);
 
-  type RollLayer = 'bass' | 'melody' | 'chord';
+  type RollLayer = GrooveRollLayer;
 
   const noteLayer = useCallback(
     (note: GrooveRollHit): RollLayer => {
-      if (note.midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN) return 'chord';
+      if (scopedLayer) return scopedLayer;
       if (grooveLabIsMelodyMidi(note.midi)) return 'melody';
+      if (grooveLabIsChordStackMidi(note.midi)) return 'chord';
       return 'bass';
     },
-    [],
+    [scopedLayer],
   );
 
+  /** Scoped single-layer rolls (waveleaf / chord / sub) use `hits` — not split melodyHits (always []). */
   const layerHits = useCallback(
     (layer: RollLayer) => {
+      if (isLayerRoll) return hits;
       if (layer === 'chord') return chordHits;
       if (layer === 'melody') return melodyHits;
       return bassHits;
     },
-    [bassHits, chordHits, melodyHits],
+    [isLayerRoll, hits, bassHits, chordHits, melodyHits],
   );
 
   const [tool, setTool] = useState<GrooveRollTool>('pointer');
-  const [rollExpanded, setRollExpanded] = useState(false);
+  const [rollExpandedLocal, setRollExpandedLocal] = useState(false);
+  const rollExpanded = rollExpandedProp ?? rollExpandedLocal;
+  const setRollExpanded = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const resolved =
+        typeof next === 'function' ? next(rollExpandedProp ?? rollExpandedLocal) : next;
+      if (rollExpandedProp === undefined) setRollExpandedLocal(resolved);
+      onRollExpandedChange?.(resolved);
+    },
+    [onRollExpandedChange, rollExpandedProp, rollExpandedLocal],
+  );
+  /** Full view = all keys C1–C6 so notes can be dragged anywhere; docked = lane register when scoped. */
+  const activePianoRows = useMemo(
+    () =>
+      rollExpanded || !layerScope
+        ? GROOVE_PIANO_ROWS
+        : grooveLabPianoRowsForScope(layerScope),
+    [layerScope, rollExpanded],
+  );
   const [pxPerCol, setPxPerCol] = useState(GROOVE_ZOOM_DEFAULT);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [clipboard, setClipboard] = useState<GrooveRollHit[] | null>(null);
@@ -338,9 +436,15 @@ export function GrooveLabPianoRoll({
   const resizeRef = useRef<ResizeState | null>(null);
   const paintEraseRef = useRef(false);
   const paintDrawRef = useRef(false);
+  /** Latest channel hits for drag commit (avoids stale closure wiping the roll). */
+  const hitsRef = useRef(hits);
+  useEffect(() => {
+    hitsRef.current = hits;
+  }, [hits]);
   /** Bass / single-channel paint: one note per pointer down (no drag-fill). */
   const bassOneShotPaint = bassDrawNotes || !split;
   const bodyScrollRef = useRef<HTMLDivElement>(null);
+  const midiImportFileRef = useRef<HTMLInputElement>(null);
 
   const selectedHits = useMemo(
     () => allHits.filter((h) => selectedIds.has(hitId(h))),
@@ -348,6 +452,14 @@ export function GrooveLabPianoRoll({
   );
 
   const primarySelected = selectedHits[0] ?? null;
+
+  const previewRollMidi = useCallback(
+    (midi: number, vel = 0.88) => {
+      if (onPreviewGuitarNote) onPreviewGuitarNote(midi, vel);
+      else onPreviewPitch?.(midi);
+    },
+    [onPreviewGuitarNote, onPreviewPitch],
+  );
 
   const isNoteSelected = useCallback((note: GrooveRollHit) => selectedIds.has(hitId(note)), [selectedIds]);
 
@@ -373,6 +485,10 @@ export function GrooveLabPianoRoll({
 
   const setLayerHits = useCallback(
     (layer: RollLayer, next: GrooveRollHit[]) => {
+      if (isLayerRoll) {
+        onHitsChange(next);
+        return;
+      }
       if (split) {
         if (layer === 'chord') {
           onChordHitsChange!(next);
@@ -388,7 +504,7 @@ export function GrooveLabPianoRoll({
       const chordKeep =
         layer === 'chord'
           ? next
-          : allHits.filter((h) => h.midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN);
+          : allHits.filter((h) => grooveLabIsChordStackMidi(h.midi));
       const melodyKeep =
         layer === 'melody'
           ? next
@@ -402,7 +518,7 @@ export function GrooveLabPianoRoll({
       for (const h of merged) byKey.set(hitId(h), h);
       onHitsChange([...byKey.values()]);
     },
-    [split, allHits, bassHits, onHitsChange, onBassHitsChange, onChordHitsChange, onMelodyHitsChange],
+    [isLayerRoll, split, allHits, bassHits, onHitsChange, onBassHitsChange, onChordHitsChange, onMelodyHitsChange],
   );
   const setBodyScrollEl = useCallback(
     (el: HTMLDivElement | null) => {
@@ -413,11 +529,28 @@ export function GrooveLabPianoRoll({
     },
     [rollScrollRef],
   );
+
+  useEffect(() => {
+    const el = bodyScrollRef.current;
+    if (!el || !onScrollSync) return;
+    const onScroll = () => onScrollSync(el.scrollLeft);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [onScrollSync]);
+
+  useEffect(() => {
+    if (syncScrollLeft == null || !Number.isFinite(syncScrollLeft)) return;
+    const el = bodyScrollRef.current;
+    if (el && Math.abs(el.scrollLeft - syncScrollLeft) > 0.5) el.scrollLeft = syncScrollLeft;
+  }, [syncScrollLeft]);
   const gridBodyRef = useRef<HTMLDivElement>(null);
   const channelLabel =
-    split && chordChannel != null && melodyChannel != null
+    layerStripTitle ??
+    (split && chordChannel != null && melodyChannel != null
       ? `SUB ${chordBassSeqChannelLabel(channel)} · MELODY ${chordBassSeqChannelLabel(melodyChannel)} · CHORD ${chordBassSeqChannelLabel(chordChannel)}`
-      : chordBassSeqChannelLabel(channel);
+      : chordBassSeqChannelLabel(channel));
+  const showFullChrome = rollChrome === 'full';
+  const showStripChrome = isLayerRoll && rollChrome === 'strip';
   const snapStep = Math.max(1, grooveLabSlotsPerCell(quantize));
   const colsPerBar = grooveLabColsPerBar(quantize);
   const totalCols = Math.max(1, grooveLabTotalColumns(quantize, barCount) || 1);
@@ -499,10 +632,10 @@ export function GrooveLabPianoRoll({
     const rect = el.getBoundingClientRect();
     const row = Math.max(
       0,
-      Math.min(GROOVE_PIANO_ROWS.length - 1, Math.floor((clientY - rect.top) / M.rowH)),
+      Math.min(activePianoRows.length - 1, Math.floor((clientY - rect.top) / M.rowH)),
     );
-    return cbPianoNoteNameToMidi(GROOVE_PIANO_ROWS[row]!);
-  }, []);
+    return cbPianoNoteNameToMidi(activePianoRows[row]!);
+  }, [activePianoRows]);
 
   const noteColumnLayout = useCallback(
     (slot: number, sustainSlots: number) => {
@@ -524,7 +657,7 @@ export function GrooveLabPianoRoll({
     [snapSlot, snapStep, quantize, totalSlots, colW],
   );
 
-  const pitchBandH = GROOVE_PIANO_ROWS.length * M.rowH;
+  const pitchBandH = activePianoRows.length * M.rowH;
   const gridBodyH = pitchBandH;
 
   const lengthOptions = useMemo(() => {
@@ -615,13 +748,13 @@ export function GrooveLabPianoRoll({
       const deltaCols = Math.round((clientX - d.startClientX) / colW);
       const curCol = Math.max(0, Math.min(totalCols - 1, anchorCol + deltaCols));
       const curSlot = snapSlot(grooveLabGlobalColToSlot(curCol, quantize));
-      const anchorRow = grooveLabRowIndexForMidi(d.anchorMidi);
+      const anchorRow = grooveLabRowIndexForMidi(d.anchorMidi, activePianoRows);
       const deltaRows = Math.round((clientY - d.startClientY) / M.rowH);
       const curRow = Math.max(
         0,
-        Math.min(GROOVE_PIANO_ROWS.length - 1, anchorRow + deltaRows),
+        Math.min(activePianoRows.length - 1, anchorRow + deltaRows),
       );
-      const curMidi = cbPianoNoteNameToMidi(GROOVE_PIANO_ROWS[curRow]!);
+      const curMidi = cbPianoNoteNameToMidi(activePianoRows[curRow]!);
       return {
         curSlot,
         curMidi,
@@ -629,16 +762,20 @@ export function GrooveLabPianoRoll({
         dMidi: curMidi - d.anchorMidi,
       };
     },
-    [quantize, colW, totalCols, snapSlot],
+    [quantize, colW, totalCols, snapSlot, activePianoRows],
   );
 
   const beginDrag = useCallback(
-    (note: GrooveRollHit, startX: number, startY: number) => {
-      const dragItems =
-        selectedIds.has(hitId(note)) && selectedIds.size > 1
-          ? allHits.filter((h) => selectedIds.has(hitId(h)))
-          : [note];
-      if (!selectedIds.has(hitId(note))) selectOnly(note);
+    (note: GrooveRollHit, startX: number, startY: number, opts?: { multi?: boolean }) => {
+      const multi =
+        opts?.multi === true &&
+        selectedIds.has(hitId(note)) &&
+        selectedIds.size > 1;
+      const dragItems = multi
+        ? allHits.filter((h) => selectedIds.has(hitId(h)))
+        : [note];
+      if (!multi) setSelectedIds(new Set([hitId(note)]));
+      const backupHits = hitsRef.current.map((h) => ({ ...h }));
       dragRef.current = {
         items: dragItems.map((h) => ({
           origSlot: h.slot,
@@ -653,10 +790,11 @@ export function GrooveLabPianoRoll({
         startClientX: startX,
         startClientY: startY,
         moved: false,
+        backupHits,
       };
       bump((n) => n + 1);
       const TH = 5;
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         const d = dragRef.current;
         if (!d) return;
         const dx = ev.clientX - startX;
@@ -671,63 +809,76 @@ export function GrooveLabPianoRoll({
         }
       };
       const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
         const d = dragRef.current;
         dragRef.current = null;
         bump((n) => n + 1);
         if (!d?.moved) return;
         const useDSlot = d.curSlot - d.anchorSlot;
-        const anchorRow = grooveLabRowIndexForMidi(d.anchorMidi);
-        const curRow = grooveLabRowIndexForMidi(d.curMidi);
-        const rowDelta = curRow >= 0 && anchorRow >= 0 ? curRow - anchorRow : 0;
+        const semiDelta = d.curMidi - d.anchorMidi;
+        /** Commit against what the roll is showing (not stale raw channel storage). */
+        const commitSource = [...hitsRef.current];
         const newSel = new Set<string>();
         const applyMove = (list: GrooveRollHit[], layerFilter?: 'bass' | 'melody' | 'chord') => {
+          const dragKeys = new Set(
+            d.items.map((it) => `${it.origSlot}:${it.origMidi}`),
+          );
           const next = list.filter((h) => {
             if (layerFilter && noteLayer(h) !== layerFilter) return true;
-            return !d.items.some((it) => it.origSlot === h.slot && it.origMidi === h.midi);
+            return !dragKeys.has(`${h.slot}:${h.midi}`);
           });
           for (const item of d.items) {
-            const orig = allHits.find((h) => h.slot === item.origSlot && h.midi === item.origMidi);
-            if (!orig) continue;
-            if (layerFilter && noteLayer(orig) !== layerFilter) continue;
-            const origRow = grooveLabRowIndexForMidi(item.origMidi);
-            if (origRow < 0) continue;
-            const newRow = Math.max(
-              0,
-              Math.min(GROOVE_PIANO_ROWS.length - 1, origRow + rowDelta),
+            const orig = commitSource.find(
+              (h) => h.slot === item.origSlot && h.midi === item.origMidi,
             );
-            const newMidi = cbPianoNoteNameToMidi(GROOVE_PIANO_ROWS[newRow]!);
+            if (layerFilter && orig && noteLayer(orig) !== layerFilter) continue;
+            let newMidi = Math.round(item.origMidi + semiDelta);
+            if (layerScope === 'waveleaf') {
+              newMidi = rollExpanded
+                ? grooveLabClampMelodyMidi(newMidi)
+                : waveLeafClampMidi(newMidi);
+            } else {
+              newMidi = Math.max(
+                GROOVE_PIANO_MIN_MIDI,
+                Math.min(GROOVE_PIANO_MAX_MIDI, newMidi),
+              );
+              if (grooveLabRowIndexForMidi(newMidi, activePianoRows) < 0) continue;
+            }
             const box = noteColumnLayout(snapSlot(item.origSlot + useDSlot), item.sustainSlots);
             const moved: GrooveRollHit = {
               slot: box.slot,
               midi: newMidi,
               sustainSlots: box.sustainSlots,
-              vel: item.vel,
+              vel: orig?.vel ?? item.vel ?? 0.88,
             };
             const dup = next.findIndex((h) => h.slot === moved.slot && h.midi === moved.midi);
             if (dup >= 0) next.splice(dup, 1);
             next.push(moved);
             newSel.add(hitId(moved));
           }
-          return next;
+          return next.length > 0 || d.items.length === 0 ? next : list;
         };
         if (split) {
           onBassHitsChange!(applyMove(bassHits, 'bass'));
           onMelodyHitsChange!(applyMove(melodyHits, 'melody'));
           onChordHitsChange!(applyMove(chordHits, 'chord'));
         } else {
-          onHitsChange(applyMove(hits));
+          const movedHits = applyMove(commitSource);
+          onHitsChange(
+            movedHits.length > 0 || d.items.length === 0 ? movedHits : d.backupHits,
+          );
         }
         setSelectedIds(newSel);
       };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
     },
     [
       selectedIds,
       allHits,
-      selectOnly,
       noteLayer,
       bassHits,
       chordHits,
@@ -740,6 +891,9 @@ export function GrooveLabPianoRoll({
       noteColumnLayout,
       dragDeltaFromPointer,
       snapSlot,
+      layerScope,
+      rollExpanded,
+      activePianoRows,
     ],
   );
 
@@ -747,13 +901,16 @@ export function GrooveLabPianoRoll({
     (note: GrooveRollHit) => {
       selectOnly(note);
       const layout = noteColumnLayout(note.slot, note.sustainSlots);
+      const origSlot = note.slot;
+      const origMidi = note.midi;
       resizeRef.current = {
         startSlot: layout.slot,
         midi: note.midi,
         endSlot: Math.min(totalSlots - 1, layout.slot + layout.sustainSlots - 1),
       };
+      const backupHits = hitsRef.current.map((h) => ({ ...h }));
       bump((n) => n + 1);
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         const r = resizeRef.current;
         if (!r) return;
         const target = slotFromClientX(ev.clientX);
@@ -761,8 +918,9 @@ export function GrooveLabPianoRoll({
         bump((n) => n + 1);
       };
       const onUp = () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
         const r = resizeRef.current;
         resizeRef.current = null;
         bump((n) => n + 1);
@@ -771,20 +929,17 @@ export function GrooveLabPianoRoll({
         const endCol = grooveLabSlotToGlobalCol(r.endSlot, quantize);
         const colSpan = Math.max(1, endCol - startCol + 1);
         const sus = clampSus(r.startSlot, colSpan * snapStep, quantize, barCount);
-        const hit =
-          allHits.find((h) => h.slot === r.startSlot && h.midi === r.midi) ??
-          allHits.find((h) => h.slot === note.slot && h.midi === note.midi);
-        if (!hit) return;
-        const layer = noteLayer(hit);
-        setLayerHits(
-          layer,
-          layerHits(layer).map((h) =>
-            h.slot === r.startSlot && h.midi === r.midi ? { ...h, sustainSlots: sus } : h,
-          ),
+        const base = [...hitsRef.current];
+        const layer = noteLayer(note);
+        const next = base.map((h) =>
+          h.slot === origSlot && h.midi === origMidi ? { ...h, sustainSlots: sus } : h,
         );
+        const out = next.length > 0 ? next : backupHits;
+        setLayerHits(layer, out);
       };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
     },
     [
       noteColumnLayout,
@@ -804,7 +959,7 @@ export function GrooveLabPianoRoll({
     (
       slot: number,
       midi: number,
-      layer: 'bass' | 'chord' = 'chord',
+      layer: GrooveRollLayer = 'chord',
       sustainSlots = safeNoteLength,
     ) => {
       const snapped = snapSlot(slot);
@@ -921,7 +1076,7 @@ export function GrooveLabPianoRoll({
           }
           const newMidi = h.midi + dir * 12;
           if (newMidi < GROOVE_PIANO_MIN_MIDI || newMidi > GROOVE_PIANO_MAX_MIDI) continue;
-          if (grooveLabRowIndexForMidi(newMidi) < 0) continue;
+          if (grooveLabRowIndexForMidi(newMidi, activePianoRows) < 0) continue;
           if (next.some((x) => x.slot === h.slot && x.midi === newMidi)) continue;
           const moved = { ...h, midi: newMidi };
           next.push(moved);
@@ -1010,9 +1165,15 @@ export function GrooveLabPianoRoll({
             next.push(h);
             continue;
           }
-          const newMidi = h.midi + dir;
+          const rawMidi = h.midi + dir;
+          const newMidi =
+            layerScope === 'waveleaf'
+              ? rollExpanded
+                ? grooveLabClampMelodyMidi(rawMidi)
+                : waveLeafClampMidi(rawMidi)
+              : rawMidi;
           if (newMidi < GROOVE_PIANO_MIN_MIDI || newMidi > GROOVE_PIANO_MAX_MIDI) continue;
-          if (grooveLabRowIndexForMidi(newMidi) < 0) continue;
+          if (grooveLabRowIndexForMidi(newMidi, activePianoRows) < 0) continue;
           if (next.some((x) => x.slot === h.slot && x.midi === newMidi)) continue;
           const moved = { ...h, midi: newMidi };
           next.push(moved);
@@ -1041,6 +1202,8 @@ export function GrooveLabPianoRoll({
       onBassHitsChange,
       onMelodyHitsChange,
       onChordHitsChange,
+      layerScope,
+      rollExpanded,
     ],
   );
 
@@ -1089,11 +1252,11 @@ export function GrooveLabPianoRoll({
         return;
       }
       lastPaintCellRef.current = { slot: snapped, midi };
-      if (bassDrawNotes && onPlaceBassNote && midi < GROOVE_LAB_CHORD_ROLL_MIDI_MIN) {
+      if (bassDrawNotes && onPlaceBassNote && grooveLabIsBassSubMidi(midi)) {
         onPlaceBassNote(midi, snapped, { sustainSlots: snapStep });
         return;
       }
-      addNoteAt(snapped, midi, paintLayerForMidi(midi), snapStep);
+      addNoteAt(snapped, midi, paintLayerForMidi(midi, layerScope), snapStep);
     },
     [focusEditSlot, bassDrawNotes, onPlaceBassNote, snapSlot, addNoteAt, snapStep],
   );
@@ -1101,6 +1264,14 @@ export function GrooveLabPianoRoll({
   const cellPointerDown = useCallback(
     (e: React.PointerEvent, slot: number, midi: number, rowHits: GrooveRollHit[]) => {
       if (!e.isPrimary || e.button !== 0) return;
+      if (!onPreviewGuitarNote) onPrimeAudio?.();
+      else {
+        try {
+          onPrimeAudio?.();
+        } catch {
+          /* sync unlock */
+        }
+      }
       e.preventDefault();
       e.stopPropagation();
       const snapped = snapSlot(slot);
@@ -1108,7 +1279,16 @@ export function GrooveLabPianoRoll({
 
       if (tool === 'pointer') {
         focusEditSlot(snapped);
-        if (!cellHit) addNoteAt(snapped, midi, paintLayerForMidi(midi), safeNoteLength);
+        if (cellHit) {
+          previewRollMidi(midi, cellHit.vel);
+          const multiDrag =
+            e.shiftKey && selectedIds.has(hitId(cellHit)) && selectedIds.size > 1;
+          if (!multiDrag) setSelectedIds(new Set([hitId(cellHit)]));
+          beginDrag(cellHit, e.clientX, e.clientY, { multi: multiDrag });
+          return;
+        }
+        addNoteAt(snapped, midi, paintLayerForMidi(midi, layerScope), safeNoteLength);
+        previewRollMidi(midi);
         return;
       }
 
@@ -1132,7 +1312,20 @@ export function GrooveLabPianoRoll({
       }
       placeAtCell(slot, midi);
     },
-    [tool, snapSlot, focusEditSlot, addNoteAt, safeNoteLength, deleteNote, placeAtCell],
+    [
+      tool,
+      snapSlot,
+      focusEditSlot,
+      addNoteAt,
+      safeNoteLength,
+      deleteNote,
+      placeAtCell,
+      selectedIds,
+      beginDrag,
+      layerScope,
+      previewRollMidi,
+      onPrimeAudio,
+    ],
   );
 
   useEffect(() => {
@@ -1234,6 +1427,8 @@ export function GrooveLabPianoRoll({
   );
 
   const paintMode = tool === 'paint' || tool === 'erase';
+  /** MOVE tool: notes above grid cells so drag / resize handles receive clicks. */
+  const cellsAboveNotes = paintMode;
 
   const gridTimeRuler = useMemo(
     () => (
@@ -1393,42 +1588,108 @@ export function GrooveLabPianoRoll({
     ],
   );
 
-  const shellStyle: CSSProperties = rollExpanded
-    ? {
-        position: 'fixed',
-        inset: 12,
-        zIndex: 12000,
-        display: 'flex',
-        flexDirection: 'column',
-        background: '#030508',
-        padding: '8px 10px',
-        borderRadius: 8,
-        boxShadow: '0 0 0 1px #22c55e66, 0 24px 80px rgba(0,0,0,0.9)',
-      }
-    : {
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        background: '#06080f',
-        padding: '6px 8px',
-      };
+  const shellStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    minHeight: rollExpanded ? 320 : 0,
+    flex: rollExpanded ? '1 1 52%' : undefined,
+    background: '#06080f',
+    padding: '6px 8px',
+    borderTop: rollExpanded ? '2px solid rgba(34, 197, 94, 0.35)' : undefined,
+    boxShadow: rollExpanded ? 'inset 0 1px 0 rgba(134, 239, 172, 0.08)' : undefined,
+  };
 
   return (
-    <>
-      {rollExpanded ? (
-        <div
-          role="presentation"
-          onClick={() => setRollExpanded(false)}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 11999,
-            background: 'rgba(0,0,0,0.78)',
-          }}
-        />
-      ) : null}
     <div style={shellStyle}>
+      {showStripChrome ? (
+        <div
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexWrap: 'wrap',
+            marginBottom: 4,
+            padding: '3px 4px',
+            borderBottom: `1px solid ${layerStripColor}33`,
+          }}
+        >
+          <span style={{ fontSize: 9, fontWeight: 900, color: layerStripColor, letterSpacing: '0.06em' }}>
+            {channelLabel}
+          </span>
+          <span style={{ fontSize: 8, color: '#6b7280' }}>
+            {allHits.length} note{allHits.length === 1 ? '' : 's'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setTool('pointer')}
+            style={toolBtn(tool === 'pointer', '#fde68a', '#2a2410')}
+            title="Move / select"
+          >
+            <MousePointer2 size={10} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTool('paint')}
+            style={toolBtn(tool === 'paint', '#67e8f9', '#0e2838')}
+            title="Draw notes"
+          >
+            <Pencil size={10} />
+          </button>
+          <button type="button" onClick={() => setTool('erase')} style={toolBtn(tool === 'erase', '#fb923c', '#2a1411')}>
+            <Eraser size={10} />
+          </button>
+          {layerScope === 'sub' && onSubOctaveDown && onSubOctaveUp ? (
+            <GrooveOctaveShiftButtons
+              layerLabel="SUB"
+              accentColor="#fb923c"
+              borderColor="#ea580c"
+              noteCount={subRootNoteCount}
+              onOctaveDown={onSubOctaveDown}
+              onOctaveUp={onSubOctaveUp}
+            />
+          ) : null}
+          {(layerScope === 'melody' || layerScope === 'waveleaf') && onMelodyOctaveDown && onMelodyOctaveUp ? (
+            <GrooveOctaveShiftButtons
+              layerLabel={layerScope === 'waveleaf' ? GROOVE_LEAD_SHORT_LABEL : 'LEAD'}
+              accentColor={layerScope === 'waveleaf' ? WAVE_LEAF_UI.accentHi : '#fbbf24'}
+              borderColor={layerScope === 'waveleaf' ? WAVE_LEAF_UI.borderHi : '#d97706'}
+              noteCount={melodyLayerNoteCount}
+              onOctaveDown={onMelodyOctaveDown}
+              onOctaveUp={onMelodyOctaveUp}
+            />
+          ) : null}
+          {(layerScope === 'chord' || layerScope === 'sample') && onChordOctaveDown && onChordOctaveUp ? (
+            <GrooveOctaveShiftButtons
+              layerLabel="CHORD"
+              accentColor="#86efac"
+              borderColor="#22c55e"
+              noteCount={chordStackNoteCount}
+              onOctaveDown={onChordOctaveDown}
+              onOctaveUp={onChordOctaveUp}
+            />
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setRollExpanded((v) => !v)}
+            style={actionBtn(
+              rollExpanded ? '#052e2e' : '#0a0e16',
+              rollExpanded ? '#5eead4' : '#67e8f9',
+              rollExpanded ? '#14b8a6' : '#155e75',
+            )}
+            title={
+              rollExpanded
+                ? 'Dock piano roll (Esc) — compact lane view'
+                : 'Expand piano roll — full C1–C6 keys, Groove Studio stays visible'
+            }
+          >
+            {rollExpanded ? <Minimize2 size={10} /> : <Maximize2 size={10} />}
+            {rollExpanded ? ' DOCK' : ' FULL'}
+          </button>
+        </div>
+      ) : null}
+      {showFullChrome ? (
       <div style={{ flexShrink: 0, marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
           <span style={{ fontSize: 9, fontWeight: 900, color: '#7cf4c6' }}>PIANO ROLL</span>
@@ -1437,7 +1698,9 @@ export function GrooveLabPianoRoll({
             {allHits.length} note{allHits.length === 1 ? '' : 's'}
           </span>
           <span style={{ fontSize: 8, color: '#fde68a', fontWeight: 800 }}>♩ {cbPianoMidiToNoteName(bassRootMidi)}</span>
-          <span style={{ fontSize: 8, color: '#6b7280' }}>C1–C6</span>
+          <span style={{ fontSize: 8, color: '#6b7280' }}>
+            {rollExpanded || !layerScope ? 'C1–C6' : 'lane keys · FULL VIEW = C1–C6'}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
           <button
@@ -1459,7 +1722,7 @@ export function GrooveLabPianoRoll({
           <button type="button" onClick={() => setTool('erase')} style={toolBtn(tool === 'erase', '#fb923c', '#2a1411')}>
             <Eraser size={10} /> ERASE
           </button>
-          {onSubOctaveDown && onSubOctaveUp ? (
+          {!layerScope && onSubOctaveDown && onSubOctaveUp ? (
             <GrooveOctaveShiftButtons
               layerLabel="SUB"
               accentColor="#fb923c"
@@ -1469,7 +1732,7 @@ export function GrooveLabPianoRoll({
               onOctaveUp={onSubOctaveUp}
             />
           ) : null}
-          {onMelodyOctaveDown && onMelodyOctaveUp ? (
+          {!layerScope && onMelodyOctaveDown && onMelodyOctaveUp ? (
             <GrooveOctaveShiftButtons
               layerLabel="LEAD"
               accentColor="#fbbf24"
@@ -1479,7 +1742,9 @@ export function GrooveLabPianoRoll({
               onOctaveUp={onMelodyOctaveUp}
             />
           ) : null}
-          {onChordOctaveDown && onChordOctaveUp ? (
+          {(!layerScope || layerScope === 'chord' || layerScope === 'sample') &&
+          onChordOctaveDown &&
+          onChordOctaveUp ? (
             <GrooveOctaveShiftButtons
               layerLabel="CHORD"
               accentColor="#86efac"
@@ -1498,6 +1763,26 @@ export function GrooveLabPianoRoll({
               title={`Clear all blue ${GROOVE_LAB_808_SUBROOTS_BANK_LABEL} notes — keeps chords and melody`}
             >
               ERASE ALL SUB{subRootNoteCount > 0 ? ` (${subRootNoteCount})` : ''}
+            </button>
+          ) : null}
+          {onClearAllMelody ? (
+            <button
+              type="button"
+              disabled={melodyLayerNoteCount === 0}
+              onClick={onClearAllMelody}
+              style={toolBtn(
+                false,
+                melodyLayerNoteCount === 0 ? '#4b5563' : layerScope === 'waveleaf' ? WAVE_LEAF_UI.accentHi : '#fbbf24',
+                layerScope === 'waveleaf' ? WAVE_LEAF_UI.bgInset : '#422006',
+              )}
+              title={
+                layerScope === 'waveleaf'
+                  ? `Clear all ${GROOVE_LEAD_DISPLAY_NAME} notes on this channel`
+                  : 'Clear all amber melody / riff / arp notes — keeps chords and subs'
+              }
+            >
+              {layerScope === 'waveleaf' ? `ERASE ${GROOVE_LEAD_DISPLAY_NAME}` : 'ERASE ALL MELODY'}
+              {melodyLayerNoteCount > 0 ? ` (${melodyLayerNoteCount})` : ''}
             </button>
           ) : null}
           <span style={{ fontSize: 7, color: '#4b5563', fontWeight: 800 }}>GRID</span>
@@ -1588,33 +1873,25 @@ export function GrooveLabPianoRoll({
               onFastForward={onTransportFastForward}
             />
           ) : null}
-          {(onExportRollMidi || onExportRollWav || onExportRollWavToPad || onSendRollToNewSynth) ? (
-            <GrooveLabExportStrip
-              compact
-              busy={exportBusy}
-              status={exportStatus}
-              hasChords={rollHasChords}
-              hasRollNotes={rollHasNotes}
-              onExportMidi={onExportRollMidi}
-              onExportWav={onExportRollWav}
-              onExportToPad={onExportRollWavToPad}
-              onSendToNewSynth={onSendRollToNewSynth}
-              padExportEnabled={padExportEnabled}
-            />
+          {showFullChrome ? (
+            <button
+              type="button"
+              onClick={() => setRollExpanded((v) => !v)}
+              style={actionBtn(
+                rollExpanded ? '#052e2e' : '#0a0e16',
+                rollExpanded ? '#5eead4' : '#67e8f9',
+                rollExpanded ? '#14b8a6' : '#155e75',
+              )}
+              title={
+                rollExpanded
+                  ? 'Dock piano roll (Esc) — compact lane view'
+                  : 'Expand piano roll — full C1–C6 keys, Groove Studio stays visible'
+              }
+            >
+              {rollExpanded ? <Minimize2 size={10} /> : <Maximize2 size={10} />}
+              {rollExpanded ? ' DOCK' : ' FULL VIEW'}
+            </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setRollExpanded((v) => !v)}
-            style={actionBtn(
-              rollExpanded ? '#052e2e' : '#0a0e16',
-              rollExpanded ? '#5eead4' : '#67e8f9',
-              rollExpanded ? '#14b8a6' : '#155e75',
-            )}
-            title={rollExpanded ? 'Dock piano roll (Esc)' : 'Full-screen piano roll for editing'}
-          >
-            {rollExpanded ? <Minimize2 size={10} /> : <Maximize2 size={10} />}
-            {rollExpanded ? ' DOCK' : ' FULL VIEW'}
-          </button>
           <select
             value={safeNoteLength}
             onChange={(e) => onNoteLengthChange(Number(e.target.value))}
@@ -1683,6 +1960,49 @@ export function GrooveLabPianoRoll({
           >
             CLR ALL
           </button>
+          {onImportMidi ? (
+            <>
+              <input
+                ref={midiImportFileRef}
+                type="file"
+                accept=".mid,.midi,audio/midi"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onImportMidi(f);
+                  e.target.value = '';
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => midiImportFileRef.current?.click()}
+                title={
+                  midiImportStatus
+                    ? midiImportStatus
+                    : 'Import .mid — reads tempo (BPM) and splits bass vs chords vs melody'
+                }
+                style={actionBtn('#0c1520', '#93c5fd', '#1e3a5f')}
+              >
+                IMPORT .MID
+              </button>
+            </>
+          ) : null}
+          {(onExportRollMidi || onExportRollWav || onExportRollWavToPad || onSendRollToNewSynth) ? (
+            <GrooveLabExportStrip
+              toolbarInline
+              showExportLabel={showExportLabel}
+              busy={exportBusy}
+              status={exportStatus}
+              hasChords={rollHasChords}
+              hasRollNotes={rollHasNotes}
+              onExportMidi={onExportRollMidi}
+              onExportWav={onExportRollWav}
+              onExportToPad={onExportRollWavToPad}
+              onSendToNewSynth={onSendRollToNewSynth}
+              padExportEnabled={padExportEnabled}
+              padPickerOpen={padPickerOpen}
+            />
+          ) : null}
           {selectedHits.length > 0 ? (
             <div
               style={{
@@ -1772,6 +2092,7 @@ export function GrooveLabPianoRoll({
           ) : null}
         </div>
       </div>
+      ) : null}
 
       <div
         ref={setBodyScrollEl}
@@ -1893,7 +2214,7 @@ export function GrooveLabPianoRoll({
                 background: '#030508',
               }}
             >
-            {GROOVE_PIANO_ROWS.map((noteName) => {
+            {activePianoRows.map((noteName) => {
               const midi = cbPianoNoteNameToMidi(noteName);
               return (
                 <div key={`key-${noteName}`} style={cbPianoPitchRowStyle(midi, M)}>
@@ -1901,9 +2222,10 @@ export function GrooveLabPianoRoll({
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
+                      onPrimeAudio?.();
                       setPreviewKeyMidi(midi);
                       if (bassDrawNotes && onPlaceBassNote) onPlaceBassNote(midi, editSlot);
-                      else onPreviewPitch?.(midi);
+                      else previewRollMidi(midi);
                     }}
                     onMouseUp={() => setPreviewKeyMidi((p) => (p === midi ? null : p))}
                     onMouseLeave={() => setPreviewKeyMidi((p) => (p === midi ? null : p))}
@@ -1963,12 +2285,12 @@ export function GrooveLabPianoRoll({
                   (h) =>
                     h.midi === midi && snapped >= h.slot && snapped < h.slot + h.sustainSlots,
                 );
-                if (!occupied) addNoteAt(snapped, midi, paintLayerForMidi(midi), safeNoteLength);
+                if (!occupied) addNoteAt(snapped, midi, paintLayerForMidi(midi, layerScope), safeNoteLength);
               }}
             >
               {/* Row backgrounds (white / black stripes) */}
               <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
-                {GROOVE_PIANO_ROWS.map((noteName, j) => {
+                {activePianoRows.map((noteName, j) => {
                   const midi = cbPianoNoteNameToMidi(noteName);
                   const rowBg = cbPianoGridRowStyle(midi);
                   return (
@@ -2016,13 +2338,15 @@ export function GrooveLabPianoRoll({
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  zIndex: paintMode ? 6 : 2,
+                  zIndex: cellsAboveNotes ? 6 : 1,
                   pointerEvents: 'auto',
                 }}
               >
-                {GROOVE_PIANO_ROWS.map((noteName, j) => {
+                {activePianoRows.map((noteName, j) => {
                   const midi = cbPianoNoteNameToMidi(noteName);
-                  const rowHits = rollDisplayHits.filter((h) => grooveLabRowIndexForMidi(h.midi) === j);
+                  const rowHits = rollDisplayHits.filter(
+                    (h) => grooveLabRowIndexForMidi(h.midi, activePianoRows) === j,
+                  );
                   const top = j * M.rowH;
                   return (
                     <div
@@ -2086,11 +2410,11 @@ export function GrooveLabPianoRoll({
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  zIndex: paintMode ? 4 : 8,
+                  zIndex: cellsAboveNotes ? 4 : 10,
                   pointerEvents: 'none',
                 }}
               >
-                {GROOVE_PIANO_ROWS.map((noteName, j) => {
+                {activePianoRows.map((noteName, j) => {
                   const rowHits = rollDisplayHits.filter((h) => {
                     const dragItem = drag?.items.find(
                       (it) => it.origSlot === h.slot && it.origMidi === h.midi,
@@ -2098,7 +2422,7 @@ export function GrooveLabPianoRoll({
                     const isDragNote = Boolean(dragItem && drag);
                     const dMidi = isDragNote && drag ? drag.curMidi - drag.anchorMidi : 0;
                     const effectiveMidi = isDragNote ? h.midi + dMidi : h.midi;
-                    return grooveLabRowIndexForMidi(effectiveMidi) === j;
+                    return grooveLabRowIndexForMidi(effectiveMidi, activePianoRows) === j;
                   });
                   const top = j * M.rowH;
                   return (
@@ -2135,20 +2459,24 @@ export function GrooveLabPianoRoll({
                         const box = noteColumnLayout(slot, sus);
                         const isSel = isNoteSelected(note);
                         const layer = noteLayer(note);
-                        const noteFill =
-                          layer === 'melody'
+                        const waveLeafNote = layerScope === 'waveleaf' && layer === 'melody';
+                        const noteFill = waveLeafNote
+                          ? WAVE_LEAF_NOTE_COLOR
+                          : layer === 'melody'
                             ? GROOVE_LAB_MELODY_NOTE_COLOR
                             : layer === 'bass'
                               ? GROOVE_LAB_BASS_NOTE_COLOR
                               : GROOVE_LAB_CHORD_NOTE_COLOR;
-                        const noteEdge =
-                          layer === 'melody'
+                        const noteEdge = waveLeafNote
+                          ? WAVE_LEAF_NOTE_EDGE
+                          : layer === 'melody'
                             ? GROOVE_LAB_MELODY_NOTE_EDGE
                             : layer === 'bass'
                               ? GROOVE_LAB_BASS_NOTE_EDGE
                               : GROOVE_LAB_CHORD_NOTE_EDGE;
-                        const noteInset =
-                          layer === 'melody'
+                        const noteInset = waveLeafNote
+                          ? WAVE_LEAF_NOTE_INSET
+                          : layer === 'melody'
                             ? GROOVE_LAB_MELODY_NOTE_INSET
                             : layer === 'bass'
                               ? GROOVE_LAB_BASS_NOTE_INSET
@@ -2158,10 +2486,14 @@ export function GrooveLabPianoRoll({
                             key={hitId(note)}
                             onPointerDown={(e) => {
                               if (!e.isPrimary || e.button !== 0) return;
+                              onPrimeAudio?.();
                               e.stopPropagation();
                               if (tool === 'erase') {
                                 deleteNote(note);
                                 return;
+                              }
+                              if (tool === 'pointer' || tool === 'paint') {
+                                previewRollMidi(displayMidi, note.vel);
                               }
                               if (tool === 'paint') {
                                 setTool('pointer');
@@ -2171,8 +2503,14 @@ export function GrooveLabPianoRoll({
                                 toggleNoteSelection(note);
                                 return;
                               }
-                              if (!isNoteSelected(note)) selectOnly(note);
-                              beginDrag(note, e.clientX, e.clientY);
+                              const multiDrag =
+                                e.shiftKey &&
+                                isNoteSelected(note) &&
+                                selectedIds.size > 1;
+                              if (!multiDrag && !isNoteSelected(note)) {
+                                setSelectedIds(new Set([hitId(note)]));
+                              }
+                              beginDrag(note, e.clientX, e.clientY, { multi: multiDrag });
                             }}
                             onContextMenu={(e) => {
                               e.preventDefault();
@@ -2187,7 +2525,7 @@ export function GrooveLabPianoRoll({
                               const splitSlot = slotFromClientX(e.clientX);
                               splitNoteAtSlot(note, splitSlot);
                             }}
-                            title={`${cbPianoMidiToNoteName(displayMidi)} · ${box.colSpan} step${box.colSpan === 1 ? '' : 's'} · drag = move (multi if selected) · Shift+click = add to selection`}
+                            title={`${cbPianoMidiToNoteName(displayMidi)} · ${box.colSpan} step${box.colSpan === 1 ? '' : 's'} · drag = move · Shift+drag = move selection · Shift+click = add to selection`}
                             style={{
                               position: 'absolute',
                               top: NOTE_CELL_PAD,
@@ -2236,12 +2574,12 @@ export function GrooveLabPianoRoll({
                               onPointerDown={(e) => {
                                 if (!e.isPrimary || e.button !== 0) return;
                                 e.stopPropagation();
-                                if (selectedIds.size !== 1 || !isNoteSelected(note)) return;
                                 if (tool === 'erase') {
                                   deleteNote(note);
                                   return;
                                 }
                                 if (tool === 'paint') setTool('pointer');
+                                if (!isNoteSelected(note)) selectOnly(note);
                                 beginResize(note);
                               }}
                               style={{
@@ -2339,16 +2677,20 @@ export function GrooveLabPianoRoll({
         </div>
       </div>
 
-      <p style={{ margin: '6px 0 0', fontSize: 7, color: '#4b5563', lineHeight: 1.35, flexShrink: 0 }}>
-        {channelLabel} · {barCount} bars ·{' '}
-        <span style={{ color: GROOVE_LAB_BASS_NOTE_COLOR, fontWeight: 900 }}>B</span> = bass sound ·{' '}
-        <span style={{ color: GROOVE_LAB_CHORD_NOTE_COLOR, fontWeight: 900 }}>C</span> = Groove chord ·{' '}
-        <span style={{ color: '#fde68a', fontWeight: 800 }}>MOVE</span> click = add · SEL ALL / Ctrl+A · drag group ·{' '}
-        <span style={{ color: GROOVE_LAB_CHORD_NOTE_COLOR, fontWeight: 800 }}>OCT ±</span> = whole layer (chord / lead / sub) · 8va = selected ·{' '}
-        <span style={{ color: '#67e8f9', fontWeight: 800 }}>DRAW</span> paint · <span style={{ color: '#a7f3d0' }}>LEN</span> = new note length
-      </p>
+      {!isLayerRoll || rollExpanded ? (
+        <p style={{ margin: '6px 0 0', fontSize: 7, color: '#4b5563', lineHeight: 1.35, flexShrink: 0 }}>
+          {channelLabel} · {barCount} bars ·{' '}
+          {rollExpanded && layerScope ? (
+            <span style={{ color: '#67e8f9' }}>FULL VIEW C1–C6 · </span>
+          ) : null}
+          <span style={{ color: GROOVE_LAB_BASS_NOTE_COLOR, fontWeight: 900 }}>B</span> = bass sound ·{' '}
+          <span style={{ color: GROOVE_LAB_CHORD_NOTE_COLOR, fontWeight: 900 }}>C</span> = Groove chord ·{' '}
+          <span style={{ color: '#fde68a', fontWeight: 800 }}>MOVE</span> click = add · SEL ALL / Ctrl+A · drag group ·{' '}
+          <span style={{ color: GROOVE_LAB_CHORD_NOTE_COLOR, fontWeight: 800 }}>OCT ±</span> = whole layer (chord / lead / sub) · 8va = selected ·{' '}
+          <span style={{ color: '#67e8f9', fontWeight: 800 }}>DRAW</span> paint · <span style={{ color: '#a7f3d0' }}>LEN</span> = new note length
+        </p>
+      ) : null}
     </div>
-    </>
   );
 }
 

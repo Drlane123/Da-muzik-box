@@ -20,6 +20,7 @@ import {
   generateGrooveComposerPart,
   grooveComposerHarmonyFromChordHits,
   grooveComposerMergePart,
+  grooveLabStripSubHitsAtMelodySlots,
   type GrooveComposerPart,
 } from '@/app/lib/creationStation/grooveComposerEngine';
 import { GROOVE_LAB_SLOTS_PER_BEAT } from '@/app/lib/creationStation/grooveLabGrid';
@@ -27,7 +28,7 @@ import {
   grooveLabBuildSubKeypadGuide,
   grooveLabSubGuideToRollHits,
   type GrooveSubKeypadGuide,
-} from '@/app/lib/creationStation/grooveLabSubKeypadGuide';
+} from '@/app/lib/creationStation/grooveLabSubEngine';
 import {
   GROOVE_LAB_BASS_SOUND_DEFAULT,
   grooveLabBassSoundDef,
@@ -35,16 +36,46 @@ import {
   playGrooveLabBassSound,
   type GrooveLabBassSoundId,
 } from '@/app/lib/creationStation/grooveLabBassSounds';
-import { runWithGrooveLabAudio } from '@/app/lib/creationStation/grooveLabAudio';
+import {
+  GROOVE_LAB_RNB_SINE_GLIDE_MS,
+  GROOVE_LAB_RNB_SINE_LFO_DEPTH_CENTS,
+  GROOVE_LAB_RNB_SINE_LFO_RATE_HZ,
+  GROOVE_LAB_RNB_SINE_UI_ENABLED,
+  grooveLabNormalizeLeadSoundId,
+  type GrooveLabAnyLeadSoundId,
+} from '@/app/lib/creationStation/grooveLabLeadSounds';
+import {
+  GROOVE_GUITAR_DISTORTION_KEY,
+  GROOVE_GUITAR_DRIVE_KEY,
+  GROOVE_GUITAR_FILTER_CUTOFF_KEY,
+  GROOVE_GUITAR_HIGH_CUT_KEY,
+  GROOVE_GUITAR_LOW_CUT_KEY,
+  GROOVE_GUITAR_GLIDE_MS_KEY,
+  GROOVE_GUITAR_LFO_DEPTH_KEY,
+  GROOVE_GUITAR_LFO_RATE_KEY,
+  GROOVE_GUITAR_WAH_AMOUNT_KEY,
+  GROOVE_GUITAR_WAH_RATE_KEY,
+  readStoredGrooveLabGuitarFx,
+  type GrooveLabGuitarFxSettings,
+} from '@/app/lib/creationStation/grooveLabGuitarFx';
+import {
+  resumeGrooveLabAudioContext,
+  runWithGrooveLabAudio,
+} from '@/app/lib/creationStation/grooveLabAudio';
+import {
+  grooveLabMeterPeakFromVelocity,
+  scheduleGrooveLabMeterPulseAt,
+} from '@/app/lib/creationStation/grooveLabChannelMeters';
 import { GROOVE_LAB_KEYPAD_CHORD_MIX_GAIN } from '@/app/lib/creationStation/grooveLabLayers';
 import { cbPianoMidiToNoteName } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
 import {
-  GROOVE_LAB_CHORD_ROLL_MIDI_MIN,
+  grooveLabIsChordStackMidi,
   GROOVE_LAB_MELODY_REFERENCE_MIDI,
   grooveLabClampBassRootMidi,
   grooveLabIsMelodyMidi,
   grooveLabClampChordRollMidi,
   grooveLabLiftChordsAboveBass,
+  grooveLabStripMelodyLaneHits,
 } from '@/app/lib/creationStation/grooveLabPitch';
 import {
   generateOrchidChordProgressionHits,
@@ -61,11 +92,13 @@ import {
   grooveLabRemoveHitsAtSlot,
   grooveLabReplaceBassAtSlot,
   grooveLabSpreadChordHits,
+  grooveLabInferComposerBarCount,
   grooveLabSlotsPerCell,
   grooveLabTotalSlots,
   grooveLabWriteOrchidColumn,
   snapGrooveSlot,
   snapGrooveSustain,
+  type GrooveLabBarCount,
   type GrooveLabQuantize,
   type GrooveRollHit,
 } from '@/app/lib/creationStation/grooveLabRoll';
@@ -76,6 +109,30 @@ const GROOVE_COMPOSER_COMPLEXITY_KEY = 'groove-lab-composer-complexity';
 const GROOVE_CHORD_VOICE_KEY = 'groove-lab-chord-voice';
 const GROOVE_BASS_KEYPAD_PREVIEW_KEY = 'groove-lab-bass-keypad-preview';
 const GROOVE_ORCHID_PROGRESSION_KEY = 'groove-lab-orchid-progression';
+const GROOVE_COMPOSER_MELODY_RATE_KEY = 'groove-lab-composer-melody-rate';
+const GROOVE_COMPOSER_RIFF_RATE_KEY = 'groove-lab-composer-riff-rate';
+const GROOVE_COMPOSER_ARP_RATE_KEY = 'groove-lab-composer-arp-rate';
+const GROOVE_LEAD_WAH_AMOUNT_KEY = 'groove-lab-lead-wah-amount';
+const GROOVE_LEAD_WAH_RATE_KEY = 'groove-lab-lead-wah-rate';
+const GROOVE_LEAD_DRIVE_KEY = 'groove-lab-lead-drive';
+const GROOVE_LEAD_DISTORTION_KEY = 'groove-lab-lead-distortion';
+const GROOVE_LEAD_GLIDE_MS_KEY = 'groove-lab-lead-glide-ms';
+const GROOVE_LEAD_LFO_RATE_KEY = 'groove-lab-lead-lfo-rate-hz';
+const GROOVE_LEAD_LFO_DEPTH_KEY = 'groove-lab-lead-lfo-depth-cents';
+const GROOVE_MELODY_GRID_ENABLED_KEY = 'groove-lab-melody-grid-enabled';
+const GROOVE_RIFF_GRID_ENABLED_KEY = 'groove-lab-riff-grid-enabled';
+
+function readStoredBool(key: string, fallback: boolean): boolean {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const v = window.localStorage.getItem(key);
+    if (v === '0') return false;
+    if (v === '1') return true;
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
 
 function readStoredProgression(): OrchidProgressionId {
   if (typeof window === 'undefined') return 'I-IV-V-I';
@@ -130,15 +187,55 @@ function readStoredComposerComplexity(): number {
   return 0.55;
 }
 
-function readStoredMelodySound(): GrooveLabBassSoundId {
-  if (typeof window === 'undefined') return 'gtrFinger';
+function readStoredComposerRate(
+  key: string,
+  fallback: GrooveLabQuantize,
+): GrooveLabQuantize {
+  if (typeof window === 'undefined') return fallback;
   try {
-    const v = window.localStorage.getItem(GROOVE_MELODY_SOUND_KEY);
-    if (v) return v as GrooveLabBassSoundId;
+    const v = window.localStorage.getItem(key);
+    if (v === '1/4' || v === '1/8' || v === '1/16' || v === '1/32') return v;
   } catch {
     /* ignore */
   }
-  return 'gtrFinger';
+  return fallback;
+}
+
+function readStoredUnitFloat(key: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const v = Number.parseFloat(window.localStorage.getItem(key) ?? '');
+    if (Number.isFinite(v)) return Math.max(0, Math.min(1, v));
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+function readStoredFloatInRange(
+  key: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const v = Number.parseFloat(window.localStorage.getItem(key) ?? '');
+    if (Number.isFinite(v)) return Math.max(min, Math.min(max, v));
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
+function readStoredMelodySound(): GrooveLabAnyLeadSoundId {
+  if (typeof window === 'undefined') return grooveLabNormalizeLeadSoundId(null);
+  try {
+    const v = window.localStorage.getItem(GROOVE_MELODY_SOUND_KEY);
+    return grooveLabNormalizeLeadSoundId(v);
+  } catch {
+    return grooveLabNormalizeLeadSoundId(null);
+  }
 }
 
 export type UseGrooveLabOrchidArgs = {
@@ -155,7 +252,12 @@ export type UseGrooveLabOrchidArgs = {
   chordHits?: GrooveRollHit[];
   onChordHitsChange?: (hits: GrooveRollHit[]) => void;
   melodyHits?: GrooveRollHit[];
-  onMelodyHitsChange?: (hits: GrooveRollHit[]) => void;
+  onMelodyHitsChange?: (hits: GrooveRollHit[], loopBars?: GrooveLabBarCount) => void;
+  /** CH 33–48 for embed VU meters on keypad / chord preview. */
+  chordChannel?: number;
+  channelVolumes?: Record<number, number>;
+  /** Expand loop bars when chords on the roll exceed the current bar preset. */
+  onBarCountSync?: (bars: GrooveLabBarCount) => void;
 };
 
 export function useGrooveLabOrchid({
@@ -172,6 +274,9 @@ export function useGrooveLabOrchid({
   onChordHitsChange,
   melodyHits = [],
   onMelodyHitsChange,
+  chordChannel,
+  channelVolumes,
+  onBarCountSync,
 }: UseGrooveLabOrchidArgs) {
   const splitChords = splitChordChannel && !!onChordHitsChange;
   const splitMelody = splitChords && !!onMelodyHitsChange;
@@ -186,13 +291,89 @@ export function useGrooveLabOrchid({
   const [orchidSmartMatch, setOrchidSmartMatch] = useState(true);
   const [orchidLinkedChordVolume, setOrchidLinkedChordVolume] = useState(0.75);
   /** Bass keypad / MIDI library = bass only; chord layer is opt-in via CHORD LAYER ON. */
-  const [orchidLinkedChordsMuted, setOrchidLinkedChordsMuted] = useState(true);
+  const [orchidLinkedChordsMuted, setOrchidLinkedChordsMuted] = useState(false);
   const [bassMuted, setBassMuted] = useState(false);
   const [orchidWriteToPianoRoll, setOrchidWriteToPianoRoll] = useState(true);
   const [orchidBassMatchLabel, setOrchidBassMatchLabel] = useState('');
   const [bassSoundId, setBassSoundId] = useState<GrooveLabBassSoundId>(readStoredBassSound);
-  const [melodySoundId, setMelodySoundId] = useState<GrooveLabBassSoundId>(readStoredMelodySound);
+  const [melodySoundId, setMelodySoundId] = useState<GrooveLabAnyLeadSoundId>(readStoredMelodySound);
   const [composerComplexity, setComposerComplexity] = useState(readStoredComposerComplexity);
+  const [composerMelodyRate, setComposerMelodyRate] = useState<GrooveLabQuantize>(() =>
+    readStoredComposerRate(GROOVE_COMPOSER_MELODY_RATE_KEY, '1/16'),
+  );
+  const [composerRiffRate, setComposerRiffRate] = useState<GrooveLabQuantize>(() =>
+    readStoredComposerRate(GROOVE_COMPOSER_RIFF_RATE_KEY, '1/16'),
+  );
+  const [composerArpRate, setComposerArpRate] = useState<GrooveLabQuantize>(() =>
+    readStoredComposerRate(GROOVE_COMPOSER_ARP_RATE_KEY, '1/16'),
+  );
+  const [leadWahAmount, setLeadWahAmount] = useState(() =>
+    readStoredUnitFloat(GROOVE_LEAD_WAH_AMOUNT_KEY, 0.55),
+  );
+  const [leadWahRateHz, setLeadWahRateHz] = useState(() =>
+    readStoredFloatInRange(GROOVE_LEAD_WAH_RATE_KEY, 2.2, 0.2, 8),
+  );
+  const [leadDrive, setLeadDrive] = useState(() =>
+    readStoredUnitFloat(GROOVE_LEAD_DRIVE_KEY, 0.3),
+  );
+  const [leadDistortion, setLeadDistortion] = useState(() =>
+    readStoredUnitFloat(GROOVE_LEAD_DISTORTION_KEY, 0.22),
+  );
+  const [leadGlideMs, setLeadGlideMs] = useState(() =>
+    readStoredFloatInRange(
+      GROOVE_LEAD_GLIDE_MS_KEY,
+      GROOVE_LAB_RNB_SINE_UI_ENABLED ? GROOVE_LAB_RNB_SINE_GLIDE_MS : 0,
+      0,
+      480,
+    ),
+  );
+
+  useEffect(() => {
+    if (!GROOVE_LAB_RNB_SINE_UI_ENABLED) setLeadGlideMs(0);
+  }, []);
+  const [leadLfoRateHz, setLeadLfoRateHz] = useState(() =>
+    readStoredFloatInRange(GROOVE_LEAD_LFO_RATE_KEY, GROOVE_LAB_RNB_SINE_LFO_RATE_HZ, 0, 8),
+  );
+  const [leadLfoDepthCents, setLeadLfoDepthCents] = useState(() =>
+    readStoredFloatInRange(GROOVE_LEAD_LFO_DEPTH_KEY, GROOVE_LAB_RNB_SINE_LFO_DEPTH_CENTS, 0, 24),
+  );
+  const [guitarFx, setGuitarFx] = useState<GrooveLabGuitarFxSettings>(() => readStoredGrooveLabGuitarFx());
+  const setGuitarWahAmount = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, wahAmount: Math.max(0, Math.min(1, v)) }));
+  }, []);
+  const setGuitarWahRateHz = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, wahRateHz: Math.max(0.2, Math.min(8, v)) }));
+  }, []);
+  const setGuitarDrive = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, drive: Math.max(0, Math.min(1, v)) }));
+  }, []);
+  const setGuitarDistortion = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, distortion: Math.max(0, Math.min(1, v)) }));
+  }, []);
+  const setGuitarFilterCutoffHz = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, filterCutoffHz: Math.max(900, Math.min(14000, v)) }));
+  }, []);
+  const setGuitarLowCutHz = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, lowCutHz: Math.max(20, Math.min(800, v)) }));
+  }, []);
+  const setGuitarHighCutHz = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, highCutHz: Math.max(400, Math.min(18000, v)) }));
+  }, []);
+  const setGuitarLfoRateHz = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, leadLfoRateHz: Math.max(0, Math.min(12, v)) }));
+  }, []);
+  const setGuitarLfoDepthCents = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, leadLfoDepthCents: Math.max(0, Math.min(48, v)) }));
+  }, []);
+  const setGuitarGlideMs = useCallback((v: number) => {
+    setGuitarFx((prev) => ({ ...prev, glideMs: Math.max(0, Math.min(480, v)) }));
+  }, []);
+  const [melodyGridEnabled, setMelodyGridEnabled] = useState(() =>
+    readStoredBool(GROOVE_MELODY_GRID_ENABLED_KEY, true),
+  );
+  const [riffGridEnabled, setRiffGridEnabled] = useState(() =>
+    readStoredBool(GROOVE_RIFF_GRID_ENABLED_KEY, true),
+  );
   const [grooveSeed, setGrooveSeed] = useState(1);
   const [subGuideSeed, setSubGuideSeed] = useState(1);
   const [subGuideAuditionMidi, setSubGuideAuditionMidi] = useState<number | null>(null);
@@ -265,6 +446,55 @@ export function useGrooveLabOrchid({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
+      window.localStorage.setItem(GROOVE_COMPOSER_MELODY_RATE_KEY, composerMelodyRate);
+      window.localStorage.setItem(GROOVE_COMPOSER_RIFF_RATE_KEY, composerRiffRate);
+      window.localStorage.setItem(GROOVE_COMPOSER_ARP_RATE_KEY, composerArpRate);
+    } catch {
+      /* ignore */
+    }
+  }, [composerMelodyRate, composerRiffRate, composerArpRate]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(GROOVE_LEAD_WAH_AMOUNT_KEY, String(leadWahAmount));
+      window.localStorage.setItem(GROOVE_LEAD_WAH_RATE_KEY, String(leadWahRateHz));
+      window.localStorage.setItem(GROOVE_LEAD_DRIVE_KEY, String(leadDrive));
+      window.localStorage.setItem(GROOVE_LEAD_DISTORTION_KEY, String(leadDistortion));
+      window.localStorage.setItem(GROOVE_LEAD_GLIDE_MS_KEY, String(leadGlideMs));
+      window.localStorage.setItem(GROOVE_LEAD_LFO_RATE_KEY, String(leadLfoRateHz));
+      window.localStorage.setItem(GROOVE_LEAD_LFO_DEPTH_KEY, String(leadLfoDepthCents));
+      window.localStorage.setItem(GROOVE_MELODY_GRID_ENABLED_KEY, melodyGridEnabled ? '1' : '0');
+      window.localStorage.setItem(GROOVE_RIFF_GRID_ENABLED_KEY, riffGridEnabled ? '1' : '0');
+      window.localStorage.setItem(GROOVE_GUITAR_WAH_AMOUNT_KEY, String(guitarFx.wahAmount));
+      window.localStorage.setItem(GROOVE_GUITAR_WAH_RATE_KEY, String(guitarFx.wahRateHz));
+      window.localStorage.setItem(GROOVE_GUITAR_DRIVE_KEY, String(guitarFx.drive));
+      window.localStorage.setItem(GROOVE_GUITAR_DISTORTION_KEY, String(guitarFx.distortion));
+      window.localStorage.setItem(GROOVE_GUITAR_FILTER_CUTOFF_KEY, String(guitarFx.filterCutoffHz));
+      window.localStorage.setItem(GROOVE_GUITAR_LOW_CUT_KEY, String(guitarFx.lowCutHz));
+      window.localStorage.setItem(GROOVE_GUITAR_HIGH_CUT_KEY, String(guitarFx.highCutHz));
+      window.localStorage.setItem(GROOVE_GUITAR_LFO_RATE_KEY, String(guitarFx.leadLfoRateHz));
+      window.localStorage.setItem(GROOVE_GUITAR_LFO_DEPTH_KEY, String(guitarFx.leadLfoDepthCents));
+      window.localStorage.setItem(GROOVE_GUITAR_GLIDE_MS_KEY, String(guitarFx.glideMs));
+    } catch {
+      /* ignore */
+    }
+  }, [
+    leadWahAmount,
+    leadWahRateHz,
+    leadDrive,
+    leadDistortion,
+    leadGlideMs,
+    leadLfoRateHz,
+    leadLfoDepthCents,
+    guitarFx,
+    melodyGridEnabled,
+    riffGridEnabled,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
       window.localStorage.setItem(GROOVE_CHORD_VOICE_KEY, chordVoice);
     } catch {
       /* ignore */
@@ -323,20 +553,40 @@ export function useGrooveLabOrchid({
 
   const previewOrchidChord = useCallback(
     (rootMidi?: number) => {
+      if (orchidLinkedChordsMuted || orchidLinkedChordVolume <= 0.02) return;
       runWithGrooveLabAudio(getAudioContext, (ctx, when) => {
         const root = rootMidi ?? orchidRootMidi;
         const type = orchidSmartMatch
           ? diatonicOrchidTypeForRootPc(root % 12, keyRoot, mode)
           : orchidType;
-        const notes = buildOrchidNotes(root, type, orchidExtensions, orchidInversion, 3);
-        scheduleOrchidChord(ctx, notes, when, 0.85, chordVoice, 0.9, {
+        const notes = buildOrchidNotesForBassRoot(
+          root,
+          type,
+          orchidExtensions,
+          orchidInversion,
+        );
+        const vel = orchidLinkedChordVolume * GROOVE_LAB_KEYPAD_CHORD_MIX_GAIN;
+        scheduleOrchidChord(ctx, notes, when, 0.85, chordVoice, vel, {
           mode: orchidPerfMode,
           bpm,
         });
+        if (chordChannel != null) {
+          scheduleGrooveLabMeterPulseAt(
+            ctx,
+            chordChannel,
+            grooveLabMeterPeakFromVelocity(vel, chordChannel, channelVolumes),
+            0,
+            when,
+          );
+        }
       });
     },
     [
       getAudioContext,
+      orchidLinkedChordsMuted,
+      orchidLinkedChordVolume,
+      chordChannel,
+      channelVolumes,
       orchidRootMidi,
       orchidSmartMatch,
       keyRoot,
@@ -490,7 +740,7 @@ export function useGrooveLabOrchid({
 
   const chordHitsForComposer = useMemo(() => {
     if (splitChords) return chordHits;
-    return hits.filter((h) => h.midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN);
+    return hits.filter((h) => grooveLabIsChordStackMidi(h.midi));
   }, [splitChords, chordHits, hits]);
 
   const subKeypadGuide: GrooveSubKeypadGuide = useMemo(() => {
@@ -505,18 +755,8 @@ export function useGrooveLabOrchid({
     return grooveLabBuildSubKeypadGuide({
       harmony,
       keypadMidis: orchidBassKeys.map((k) => k.midi),
-      seed: subGuideSeed,
-      complexity: composerComplexity,
     });
-  }, [
-    chordHitsForComposer,
-    keyRoot,
-    mode,
-    orchidRootMidi,
-    orchidBassKeys,
-    subGuideSeed,
-    composerComplexity,
-  ]);
+  }, [chordHitsForComposer, keyRoot, mode, orchidRootMidi, orchidBassKeys, subGuideSeed]);
 
   const stopSubKeypadAudition = useCallback(() => {
     subGuideAuditionStopRef.current?.();
@@ -554,7 +794,10 @@ export function useGrooveLabOrchid({
         recordSlotRef.current = step.slot;
         if (!bassMuted) {
           runWithGrooveLabAudio(getAudioContext, (ctx, when) => {
-            playGrooveLabBassSound(ctx, step.keypadMidi, bassSoundId, when, 0.92, bpm);
+            playGrooveLabBassSound(ctx, step.keypadMidi, bassSoundId, when, 0.92, bpm, 2, {
+              role: 'sub',
+              monophonic: true,
+            });
           });
         }
         if (i > 0) {
@@ -593,12 +836,14 @@ export function useGrooveLabOrchid({
         referenceMidi: grooveLabClampBassRootMidi(orchidRootMidi),
       });
       if (harmony.columns.length === 0) return;
+      const loopBars = grooveLabInferComposerBarCount(chordHitsForComposer, barCount);
+      if (loopBars > barCount) onBarCountSync?.(loopBars);
       const seed = grooveSeed + 1;
       setGrooveSeed(seed);
       const generated = generateGrooveComposerPart({
         part,
         harmony,
-        barCount,
+        barCount: loopBars,
         quantize,
         keyRoot,
         mode,
@@ -607,14 +852,30 @@ export function useGrooveLabOrchid({
             ? grooveLabClampBassRootMidi(orchidRootMidi)
             : GROOVE_LAB_MELODY_REFERENCE_MIDI,
         complexity: composerComplexity,
+        rates: {
+          melody: composerMelodyRate,
+          riff: composerRiffRate,
+          arp: composerArpRate,
+        },
+        melodyGridEnabled,
+        riffGridEnabled,
+        bpm,
         seed,
       });
       if (part === 'bass') {
         onHitsChange(grooveComposerMergePart(hits, part, generated));
       } else if (splitMelody) {
-        onMelodyHitsChange!(grooveComposerMergePart(melodyHits, part, generated));
+        const mergedMelody = grooveComposerMergePart(melodyHits, part, generated);
+        onMelodyHitsChange!(mergedMelody, loopBars);
+        onHitsChange(
+          grooveLabStripSubHitsAtMelodySlots(grooveLabStripMelodyLaneHits(hits), mergedMelody),
+        );
       } else {
-        onHitsChange(grooveComposerMergePart(hits, part, generated));
+        const merged = grooveComposerMergePart(hits, part, generated);
+        const melodyOnly = merged.filter((h) => grooveLabIsMelodyMidi(h.midi));
+        onHitsChange(
+          grooveLabStripSubHitsAtMelodySlots(grooveLabStripMelodyLaneHits(merged), melodyOnly),
+        );
       }
       recordSlotRef.current = 0;
     },
@@ -627,6 +888,12 @@ export function useGrooveLabOrchid({
       barCount,
       quantize,
       composerComplexity,
+      composerMelodyRate,
+      composerRiffRate,
+      composerArpRate,
+      melodyGridEnabled,
+      riffGridEnabled,
+      onBarCountSync,
       hits,
       melodyHits,
       onHitsChange,
@@ -830,12 +1097,55 @@ export function useGrooveLabOrchid({
 
       if (bassMuted) return;
 
+      if (getAudioContext) {
+        try {
+          resumeGrooveLabAudioContext(getAudioContext());
+        } catch {
+          /* ignore */
+        }
+      }
+
       runWithGrooveLabAudio(getAudioContext, (ctx, when) => {
-        playGrooveLabBassSound(ctx, bassMidi, bassSoundId, when, 0.92, bpm);
+        playGrooveLabBassSound(ctx, bassMidi, bassSoundId, when, 0.92, bpm, 2, {
+          role: 'sub',
+          monophonic: true,
+        });
+        scheduleGrooveLabMeterPulseAt(
+          ctx,
+          activeChannel,
+          grooveLabMeterPeakFromVelocity(0.92, activeChannel, channelVolumes),
+          0,
+          when,
+        );
+        playLinkedChords(ctx, bassMidi, when, 0.85);
+        if (
+          chordChannel != null &&
+          !orchidLinkedChordsMuted &&
+          orchidLinkedChordVolume > 0.02
+        ) {
+          scheduleGrooveLabMeterPulseAt(
+            ctx,
+            chordChannel,
+            grooveLabMeterPeakFromVelocity(
+              orchidLinkedChordVolume * GROOVE_LAB_KEYPAD_CHORD_MIX_GAIN,
+              chordChannel,
+              channelVolumes,
+            ),
+            0,
+            when + 0.02,
+          );
+        }
       });
     },
     [
       bassMuted,
+      activeChannel,
+      chordChannel,
+      channelVolumes,
+      orchidLinkedChordsMuted,
+      orchidLinkedChordVolume,
+      playLinkedChords,
+      noteLengthSlots,
       orchidSmartMatch,
       keyRoot,
       mode,
@@ -935,6 +1245,41 @@ export function useGrooveLabOrchid({
     setMelodySoundId,
     composerComplexity,
     setComposerComplexity,
+    composerMelodyRate,
+    setComposerMelodyRate,
+    composerRiffRate,
+    setComposerRiffRate,
+    composerArpRate,
+    setComposerArpRate,
+    leadWahAmount,
+    setLeadWahAmount,
+    leadWahRateHz,
+    setLeadWahRateHz,
+    leadDrive,
+    setLeadDrive,
+    leadDistortion,
+    setLeadDistortion,
+    leadGlideMs,
+    setLeadGlideMs,
+    leadLfoRateHz,
+    setLeadLfoRateHz,
+    leadLfoDepthCents,
+    setLeadLfoDepthCents,
+    guitarFx,
+    setGuitarWahAmount,
+    setGuitarWahRateHz,
+    setGuitarDrive,
+    setGuitarDistortion,
+    setGuitarFilterCutoffHz,
+    setGuitarLowCutHz,
+    setGuitarHighCutHz,
+    setGuitarLfoRateHz,
+    setGuitarLfoDepthCents,
+    setGuitarGlideMs,
+    melodyGridEnabled,
+    setMelodyGridEnabled,
+    riffGridEnabled,
+    setRiffGridEnabled,
     generateComposerPart,
     generateChordProgression,
     matchBassToChords,

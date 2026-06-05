@@ -1,7 +1,7 @@
 /**
  * Chord Builder piano roll — shared with Beat Lab SYNTH.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   chordSymbolToName,
   type ChordEventOut,
@@ -14,6 +14,7 @@ import {
   chordBuilderPreviewCols,
   type ChordBuilderBlockSpan,
 } from '@/app/lib/creationStation/chordBuilderBeatLabImport';
+import { BeatLabSynth2PlayheadMount } from '@/app/components/creation/BeatLabSynth2PlayheadMount';
 import {
   CB_PIANO_BLACK_KEY_W,
   CB_PIANO_LABEL_W,
@@ -65,6 +66,8 @@ export type ChordBuilderPianoRollProps = {
   playheadCol: number;
   dragTargetBar: number | null;
   playingMidis: ReadonlySet<number>;
+  /** Chord voicing at playhead — softer key glow when not actively sounding. */
+  chordVoicingMidis?: ReadonlySet<number>;
   manualAdded: ReadonlySet<string>;
   manualRemoved: ReadonlySet<string>;
   noteLengths: ReadonlyMap<string, number>;
@@ -99,6 +102,8 @@ export type ChordBuilderPianoRollProps = {
   onSizeModeChange: (mode: 'compact' | 'normal' | 'expanded') => void;
   isPlaying: boolean;
   playheadElRef?: React.MutableRefObject<HTMLDivElement | null>;
+  /** NEW SYNTH v2 — Groove Lab playhead (transport WAAPI); `hidden` = no playhead node. */
+  playheadVariant?: 'default' | 'groove-mount' | 'hidden';
   /** Optional outer scroll container (Beat Lab SYNTH follow-scroll). */
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   headerTitle?: string;
@@ -116,6 +121,7 @@ export function ChordBuilderPianoRoll({
   playheadCol,
   dragTargetBar,
   playingMidis,
+  chordVoicingMidis,
   manualAdded,
   manualRemoved,
   noteLengths,
@@ -141,6 +147,7 @@ export function ChordBuilderPianoRoll({
   onSizeModeChange,
   isPlaying,
   playheadElRef,
+  playheadVariant = 'default',
   scrollContainerRef,
   headerTitle,
   headerHint,
@@ -210,6 +217,14 @@ export function ChordBuilderPianoRoll({
 
   const cellW = Math.max(20, Math.floor(PIANO_BAR_MIN_W / colsPerBar));
   const barW = cellW * colsPerBar;
+
+  /** Stopped snap — not used for Groove / hidden playheads (transport owns transform). */
+  useLayoutEffect(() => {
+    if (playheadVariant !== 'default' || !isBeatLab || isPlaying) return;
+    const el = playheadElRef?.current;
+    if (!el) return;
+    el.style.transform = `translateX(${playheadCol * cellW}px)`;
+  }, [isBeatLab, isPlaying, playheadCol, cellW, playheadElRef, playheadVariant]);
 
   // Center the scroll view on the C4..C5 chord-voicing zone the first time the
   // panel renders so users don't have to scroll down past empty high octaves
@@ -515,39 +530,31 @@ export function ChordBuilderPianoRoll({
             position: 'relative',
           }}
         >
-          {/* Single playhead line — a 2-px vertical mint stripe that spans
-              the entire scrollable content (ruler, chord-name header, and
-              every pitch row). Positioned absolutely so it sits *between*
-              cells at column-precise X with no per-bar background glow.
-              `pointer-events: none` keeps clicks falling through to the
-              cells below, and a high z-index ensures it draws above the
-              sticky ruler + bar header so the line stays visually continuous. */}
-          <div
-            ref={playheadElRef}
-            aria-hidden
-            style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              // Base offset stays on `left` (sticky-friendly). Beat
-              // position is driven via `transform: translateX(...)`:
-              // translateX is GPU-composited and the parent's rAF loop
-              // writes directly to it without paint or layout reflow.
-              // While playing we omit `transform` from the React-managed
-              // style so React doesn't reset the rAF-written value on
-              // unrelated re-renders.
-              left: PIANO_LABEL_W,
-              ...(isPlaying
-                ? null
-                : { transform: `translateX(${playheadCol * cellW}px)` }),
-              willChange: 'transform',
-              width: 2,
-              background: 'rgba(124, 244, 198, 0.88)',
-              boxShadow: '0 0 5px rgba(124, 244, 198, 0.50)',
-              zIndex: 5,
-              pointerEvents: 'none',
-            }}
-          />
+          {playheadVariant !== 'hidden' && playheadElRef ? (
+            playheadVariant === 'groove-mount' ? (
+              <BeatLabSynth2PlayheadMount ref={playheadElRef} />
+            ) : (
+              <div
+                ref={playheadElRef}
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: PIANO_LABEL_W,
+                  ...(isBeatLab || isPlaying
+                    ? null
+                    : { transform: `translateX(${playheadCol * cellW}px)` }),
+                  willChange: isBeatLab && isPlaying ? 'transform' : undefined,
+                  width: 2,
+                  background: 'rgba(124, 244, 198, 0.88)',
+                  boxShadow: '0 0 5px rgba(124, 244, 198, 0.50)',
+                  zIndex: 5,
+                  pointerEvents: 'none',
+                }}
+              />
+            )
+          ) : null}
           {/* Transport ruler — click or drag anywhere inside a bar to drop
               the playhead at that exact column (1/N-note resolution). Sticks
               to the top of the scroller so it's always reachable. */}
@@ -776,6 +783,8 @@ export function ChordBuilderPianoRoll({
             const isC = noteName.startsWith('C') && !noteName.startsWith('C#');
             const rowMidi = noteNameToMidi(noteName);
             const isActiveKey = playingMidis.has(rowMidi);
+            const isChordVoicingKey =
+              !isActiveKey && (chordVoicingMidis?.has(rowMidi) ?? false);
             // Build the row's "note layout": for each lit cell, look up its
             // stretched length and mark the trailing columns as `skipCols`
             // so they won't render their own cell (the head cell expands to
@@ -870,14 +879,18 @@ export function ChordBuilderPianoRoll({
                       width: isBlack ? PIANO_BLACK_KEY_W : PIANO_WHITE_KEY_W,
                       background: isActiveKey
                         ? `linear-gradient(180deg, ${MINT} 0%, rgba(124,244,198,0.70) 100%)`
-                        : isBlack
-                          ? 'linear-gradient(180deg, #25252e 0%, #0e0e14 100%)'
-                          : 'linear-gradient(180deg, #e5e5ec 0%, #b6b6c0 100%)',
+                        : isChordVoicingKey
+                          ? 'linear-gradient(180deg, rgba(124,244,198,0.42) 0%, rgba(124,244,198,0.18) 100%)'
+                          : isBlack
+                            ? 'linear-gradient(180deg, #25252e 0%, #0e0e14 100%)'
+                            : 'linear-gradient(180deg, #e5e5ec 0%, #b6b6c0 100%)',
                       boxShadow: isActiveKey
                         ? `0 0 6px ${MINT}, inset 0 0 0 1px rgba(255,255,255,0.4)`
-                        : isBlack
-                          ? 'inset 0 -1px 1px rgba(0,0,0,0.6), inset -1px 0 1px rgba(0,0,0,0.4)'
-                          : 'inset 0 -1px 1px rgba(0,0,0,0.18), inset -1px 0 1px rgba(0,0,0,0.10)',
+                        : isChordVoicingKey
+                          ? `0 0 4px rgba(124,244,198,0.35), inset 0 0 0 1px rgba(124,244,198,0.25)`
+                          : isBlack
+                            ? 'inset 0 -1px 1px rgba(0,0,0,0.6), inset -1px 0 1px rgba(0,0,0,0.4)'
+                            : 'inset 0 -1px 1px rgba(0,0,0,0.18), inset -1px 0 1px rgba(0,0,0,0.10)',
                       borderRadius: '0 3px 3px 0',
                       borderTop: isBlack ? 'none' : '1px solid rgba(255,255,255,0.45)',
                       borderBottom: isBlack
@@ -893,9 +906,13 @@ export function ChordBuilderPianoRoll({
                       fontWeight: isC ? 800 : 700,
                       color: isActiveKey
                         ? '#0a0a0e'
-                        : isBlack
-                          ? '#9a9aa6'
-                          : '#1a1a22',
+                        : isChordVoicingKey
+                          ? isBlack
+                            ? '#d1fae5'
+                            : '#14532d'
+                          : isBlack
+                            ? '#9a9aa6'
+                            : '#1a1a22',
                       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
                       letterSpacing: 0.2,
                       transition: 'background 80ms linear, box-shadow 80ms linear',

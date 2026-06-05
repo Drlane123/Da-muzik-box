@@ -1,11 +1,15 @@
-import { useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { GrooveOctaveShiftButtons } from '@/app/components/creation/GrooveOctaveShiftButtons';
 import { GrooveLabMixerPanel } from '@/app/components/creation/GrooveLabMixerPanel';
+import { GrooveLabGuitarFxStrip } from '@/app/components/creation/GrooveLabGuitarFxStrip';
+import { GrooveLabGuitarPackPanel } from '@/app/components/creation/GrooveLabGuitarPackPanel';
+import type { GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/grooveLabGuitarFx';
 import { OrchidProgressionBuilder } from '@/app/components/creation/OrchidProgressionBuilder';
-import { GrooveLabExportStrip } from '@/app/components/creation/GrooveLabExportStrip';
-import { GrooveLabDraggableCornerPanel } from '@/app/components/creation/GrooveLabDraggableCornerPanel';
-import { GrooveLabLayerChannels } from '@/app/components/creation/GrooveLabLayerChannels';
+import type { GrooveGuitarPackRollBuild } from '@/app/lib/creationStation/grooveLabGuitarPackLibrary';
+import type { GrooveLabQuantize } from '@/app/lib/creationStation/grooveLabRoll';
+import { GrooveLabChannelRail } from '@/app/components/creation/GrooveLabChannelRail';
+import { GrooveLabTempoStrip } from '@/app/components/creation/GrooveLabTempoStrip';
 import { OrchidTransportControls } from '@/app/components/creation/OrchidTransportControls';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
@@ -16,6 +20,20 @@ import {
   type ChordVoiceCategory,
   type ChordVoiceId,
 } from '@/app/lib/creationStation/chordSequencerVoices';
+import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
+import {
+  GROOVE_GUITAR_SOUND_CATEGORIES,
+  GROOVE_GUITAR_SOUND_MAP,
+  GROOVE_GUITAR_SOUNDS_BY_CATEGORY,
+} from '@/app/lib/creationStation/grooveLabGuitarSoundBank';
+import {
+  loadOrchestraHitManifest,
+  type OrchestraHitId,
+} from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import {
+  GROOVE_ORCHESTRA_HIT_MAP,
+  refreshOrchestraHitSoundCatalog,
+} from '@/app/lib/creationStation/grooveLabOrchestraHitSoundBank';
 import {
   ORCHID_CHORD_TYPES,
   ORCHID_EXTENSIONS,
@@ -69,6 +87,15 @@ export interface OrchidChordStripProps {
   onProgressionStopAudition?: () => void;
   onProgressionDropChords?: (steps: GrooveProgressionStep[]) => void;
   onProgressionDropWithBass?: (steps: GrooveProgressionStep[]) => void;
+  grooveGuitarPackQuantize?: GrooveLabQuantize;
+  grooveGuitarPackBarCount?: number;
+  grooveGuitarPackSustainSlots?: number;
+  grooveGuitarPackChordHits?: readonly import('@/app/lib/creationStation/grooveLabRoll').GrooveRollHit[];
+  grooveGuitarPackBassRootMidi?: number;
+  onDropGuitarPack?: (built: GrooveGuitarPackRollBuild) => void;
+  onDropOrchestraHit?: () => void;
+  grooveGuitarPackGetAudioContext?: () => AudioContext | null;
+  onGuitarPackStatus?: (msg: string | null) => void;
   onPreview: () => void;
   /** Stack green chord notes on the roll at the edit column (one note per key). */
   onWriteChordToRoll?: () => void;
@@ -81,10 +108,27 @@ export interface OrchidChordStripProps {
   chordColumnCount?: number;
   chordAutoAdvance?: boolean;
   onChordAutoAdvanceChange?: (on: boolean) => void;
-  onPinToPad: () => void;
+  /** Orchid Studio / pad bank — omit in Groove Lab (no chord pads). */
+  onPinToPad?: () => void;
   pinDisabled?: boolean;
   chordVoice: ChordVoiceId;
   onChordVoiceChange: (id: ChordVoiceId) => void;
+  /** Groove Lab — guitar channel timbre (not chord / lead bank). */
+  guitarSoundId?: GrooveLabAnyLeadSoundId;
+  onGuitarSoundChange?: (id: GrooveLabAnyLeadSoundId) => void;
+  orchestraHitId?: OrchestraHitId;
+  onOrchestraHitChange?: (id: OrchestraHitId) => void;
+  guitarFx?: GrooveLabGuitarFxSettings;
+  onGuitarWahAmountChange?: (v: number) => void;
+  onGuitarWahRateHzChange?: (v: number) => void;
+  onGuitarFilterCutoffHzChange?: (v: number) => void;
+  onGuitarLowCutHzChange?: (v: number) => void;
+  onGuitarHighCutHzChange?: (v: number) => void;
+  onGuitarDriveChange?: (v: number) => void;
+  onGuitarDistortionChange?: (v: number) => void;
+  onGuitarLfoRateHzChange?: (v: number) => void;
+  onGuitarLfoDepthCentsChange?: (v: number) => void;
+  onGuitarGlideMsChange?: (v: number) => void;
   transportPlaying?: boolean;
   transportDisabled?: boolean;
   onTransportRewind?: () => void;
@@ -92,12 +136,24 @@ export interface OrchidChordStripProps {
   onTransportPlayPause?: () => void;
   onTransportFastForward?: () => void;
   layerChannels?: readonly number[];
-  bassChannel?: number;
   chordChannel?: number;
   melodyChannel?: number;
-  onBassChannelChange?: (ch: number) => void;
+  guitarChannel?: number;
+  sampleChannel?: number;
   onChordChannelChange?: (ch: number) => void;
   onMelodyChannelChange?: (ch: number) => void;
+  channelSounds?: Record<number, import('@/app/lib/creationStation/grooveLabChannelConfig').GrooveLabChannelSoundConfig>;
+  onChannelSoundChange?: (
+    ch: number,
+    cfg: import('@/app/lib/creationStation/grooveLabChannelConfig').GrooveLabChannelSoundConfig,
+  ) => void;
+  onAssignLayerRole?: (
+    ch: number,
+    role: import('@/app/lib/creationStation/grooveLabChannelConfig').GrooveLabLayerRole,
+  ) => void;
+  selectedEditChannel?: number;
+  onSelectEditChannel?: (ch: number) => void;
+  channelNoteCounts?: Record<number, number>;
   channelVolumes?: Record<number, number>;
   setChannelVolume?: (chId: number, volume: number) => void;
   metronomeEnabled?: boolean;
@@ -156,6 +212,15 @@ export function OrchidChordStrip({
   onProgressionStopAudition,
   onProgressionDropChords,
   onProgressionDropWithBass,
+  grooveGuitarPackQuantize,
+  grooveGuitarPackBarCount,
+  grooveGuitarPackSustainSlots,
+  grooveGuitarPackChordHits,
+  grooveGuitarPackBassRootMidi,
+  onDropGuitarPack,
+  onDropOrchestraHit,
+  grooveGuitarPackGetAudioContext,
+  onGuitarPackStatus,
   onPreview,
   onWriteChordToRoll,
   chordNotePreview,
@@ -171,6 +236,21 @@ export function OrchidChordStrip({
   pinDisabled,
   chordVoice,
   onChordVoiceChange,
+  guitarSoundId,
+  onGuitarSoundChange,
+  orchestraHitId,
+  onOrchestraHitChange,
+  guitarFx,
+  onGuitarWahAmountChange,
+  onGuitarWahRateHzChange,
+  onGuitarFilterCutoffHzChange,
+  onGuitarLowCutHzChange,
+  onGuitarHighCutHzChange,
+  onGuitarDriveChange,
+  onGuitarDistortionChange,
+  onGuitarLfoRateHzChange,
+  onGuitarLfoDepthCentsChange,
+  onGuitarGlideMsChange,
   transportPlaying = false,
   transportDisabled = true,
   onTransportRewind,
@@ -178,12 +258,15 @@ export function OrchidChordStrip({
   onTransportPlayPause,
   onTransportFastForward,
   layerChannels,
-  bassChannel,
   chordChannel,
   melodyChannel,
-  onBassChannelChange,
+  guitarChannel,
+  sampleChannel,
   onChordChannelChange,
   onMelodyChannelChange,
+  channelSounds,
+  onChannelSoundChange,
+  onAssignLayerRole,
   channelVolumes,
   setChannelVolume,
   metronomeEnabled = true,
@@ -204,33 +287,61 @@ export function OrchidChordStrip({
   chordStackNoteCount = 0,
   onChordOctaveDown,
   onChordOctaveUp,
+  selectedEditChannel,
+  onSelectEditChannel,
+  channelNoteCounts,
 }: OrchidChordStripProps) {
   const voiceDef = CHORD_VOICE_MAP[chordVoice];
-  const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const showLayerChannels =
+  const guitarVoiceDef = guitarSoundId ? GROOVE_GUITAR_SOUND_MAP[guitarSoundId] : undefined;
+  const showGuitarSoundBank =
+    grooveBranding && guitarChannel != null && onGuitarSoundChange != null && guitarSoundId != null;
+  const showOrchestraHitBank =
     grooveBranding &&
-    layerChannels != null &&
-    bassChannel != null &&
+    sampleChannel != null &&
+    onOrchestraHitChange != null &&
+    orchestraHitId != null;
+  const [orchestraHitCatalog, setOrchestraHitCatalog] = useState(refreshOrchestraHitSoundCatalog);
+  const orchestraHitDef = GROOVE_ORCHESTRA_HIT_MAP[orchestraHitId ?? ''] ?? orchestraHitCatalog[0];
+
+  useEffect(() => {
+    if (!showOrchestraHitBank) return;
+    let cancelled = false;
+    void (async () => {
+      await loadOrchestraHitManifest();
+      if (cancelled) return;
+      setOrchestraHitCatalog(refreshOrchestraHitSoundCatalog());
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showOrchestraHitBank]);
+
+  const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const showGrooveChannelBank =
+    grooveBranding &&
     chordChannel != null &&
     melodyChannel != null &&
-    onBassChannelChange != null &&
-    onChordChannelChange != null &&
-    onMelodyChannelChange != null;
+    onAssignLayerRole != null &&
+    selectedEditChannel != null &&
+    onSelectEditChannel != null;
   const showGrooveMixer =
-    showLayerChannels && channelVolumes != null && setChannelVolume != null;
+    grooveBranding && channelVolumes != null && setChannelVolume != null;
   const [grooveLabMixerOpen, setGrooveLabMixerOpen] = useState(false);
   const showTransport =
     onTransportRewind != null &&
     onTransportStop != null &&
     onTransportPlayPause != null &&
     onTransportFastForward != null;
-  const stripRef = useRef<HTMLDivElement>(null);
+  const mixerSectionRef = useRef<HTMLDivElement>(null);
+  const showMixerSection = showGrooveChannelBank || showGrooveMixer;
+  const showMixerToolbar = showTransport || showGrooveMixer;
 
   return (
     <div
-      ref={stripRef}
       style={{
         position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
         background: 'linear-gradient(180deg, #071208 0%, #050805 100%)',
         padding: '6px 12px',
         height: '100%',
@@ -262,19 +373,6 @@ export function OrchidChordStrip({
           </span>
         ) : null}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          {(onExportRollMidi || onExportRollWav || onExportRollWavToPad) ? (
-            <GrooveLabExportStrip
-              compact
-              busy={exportBusy}
-              status={exportStatus}
-              hasChords={rollHasChords}
-              hasRollNotes={rollHasNotes}
-              onExportMidi={onExportRollMidi}
-              onExportWav={onExportRollWav}
-              onExportToPad={onExportRollWavToPad}
-              padExportEnabled={padExportEnabled}
-            />
-          ) : null}
           <button
             type="button"
             onClick={() => onSmartMatchChange(!smartMatch)}
@@ -333,6 +431,35 @@ export function OrchidChordStrip({
               rollHasChords={rollHasChords}
             />
           ) : null}
+          {grooveBranding &&
+          onDropGuitarPack &&
+          grooveGuitarPackQuantize != null &&
+          grooveGuitarPackBarCount != null &&
+          grooveGuitarPackSustainSlots != null &&
+          grooveGuitarPackChordHits != null &&
+          guitarChannel != null &&
+          grooveGuitarPackGetAudioContext &&
+          onGuitarSoundChange &&
+          onProgressionStopAudition ? (
+            <GrooveLabGuitarPackPanel
+              bpm={progressionBpm}
+              quantize={grooveGuitarPackQuantize}
+              barCount={grooveGuitarPackBarCount}
+              sustainSlots={grooveGuitarPackSustainSlots}
+              chordHits={grooveGuitarPackChordHits}
+              keyRoot={progressionKeyRoot}
+              mode={progressionMode}
+              bassRootMidi={grooveGuitarPackBassRootMidi}
+              guitarChannel={guitarChannel}
+              channelVolumes={channelVolumes}
+              getAudioContext={grooveGuitarPackGetAudioContext}
+              onDropToRoll={onDropGuitarPack}
+              onPickGuitarLick={onGuitarSoundChange}
+              onStopAudition={onProgressionStopAudition}
+              onStatus={onGuitarPackStatus}
+              guitarFx={guitarFx}
+            />
+          ) : null}
           <button
             type="button"
             onClick={onPreview}
@@ -380,6 +507,30 @@ export function OrchidChordStrip({
               upTitle="All green chord tones — up one octave"
             />
           ) : null}
+          {showGuitarSoundBank &&
+          guitarFx &&
+          onGuitarWahAmountChange &&
+          onGuitarWahRateHzChange &&
+          onGuitarFilterCutoffHzChange &&
+          onGuitarDriveChange &&
+          onGuitarDistortionChange &&
+          onGuitarLfoRateHzChange &&
+          onGuitarLfoDepthCentsChange &&
+          onGuitarGlideMsChange ? (
+            <GrooveLabGuitarFxStrip
+              fx={guitarFx}
+              onWahAmountChange={onGuitarWahAmountChange}
+              onWahRateHzChange={onGuitarWahRateHzChange}
+              onFilterCutoffHzChange={onGuitarFilterCutoffHzChange}
+              onLowCutHzChange={onGuitarLowCutHzChange}
+              onHighCutHzChange={onGuitarHighCutHzChange}
+              onDriveChange={onGuitarDriveChange}
+              onDistortionChange={onGuitarDistortionChange}
+              onLfoRateHzChange={onGuitarLfoRateHzChange}
+              onLfoDepthCentsChange={onGuitarLfoDepthCentsChange}
+              onGlideMsChange={onGuitarGlideMsChange}
+            />
+          ) : null}
           {onChordAutoAdvanceChange ? (
             <button
               type="button"
@@ -420,24 +571,26 @@ export function OrchidChordStrip({
               LIGHT SUB KEYS
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={onPinToPad}
-            disabled={pinDisabled}
-            title="Store this voicing on the selected chord pad"
-            style={{
-              background: pinDisabled ? '#111' : '#1a1408',
-              color: pinDisabled ? '#555' : '#fde68a',
-              border: `1px solid ${pinDisabled ? '#222' : '#4a3c1a'}`,
-              borderRadius: 5,
-              padding: '3px 10px',
-              fontSize: 9,
-              fontWeight: 900,
-              cursor: pinDisabled ? 'not-allowed' : 'pointer',
-            }}
-          >
-            PIN TO PAD
-          </button>
+          {onPinToPad ? (
+            <button
+              type="button"
+              onClick={onPinToPad}
+              disabled={pinDisabled}
+              title="Store this voicing on the selected chord pad"
+              style={{
+                background: pinDisabled ? '#111' : '#1a1408',
+                color: pinDisabled ? '#555' : '#fde68a',
+                border: `1px solid ${pinDisabled ? '#222' : '#4a3c1a'}`,
+                borderRadius: 5,
+                padding: '3px 10px',
+                fontSize: 9,
+                fontWeight: 900,
+                cursor: pinDisabled ? 'not-allowed' : 'pointer',
+              }}
+            >
+              PIN TO PAD
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -493,8 +646,9 @@ export function OrchidChordStrip({
             GEN CHORD PATTERN
           </button>
           <span style={{ fontSize: 7, color: '#4b5563', lineHeight: 1.35 }}>
-            Build chords here first · then <strong style={{ color: '#93c5fd' }}>MATCH BASS →</strong> or draw bass
-            under each column
+            {onMatchBassToChords
+              ? <>Build chords here first · then <strong style={{ color: '#93c5fd' }}>MATCH BASS →</strong> or draw bass under each column</>
+              : 'Build chords here · production bass lives in Beat Lab NEW SYNTH'}
           </span>
         </div>
       ) : null}
@@ -618,45 +772,195 @@ export function OrchidChordStrip({
         </button>
       </div>
 
-      <div style={{ marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <span style={{ fontSize: 8, color: '#4b5563', fontWeight: 800, minWidth: 72 }}>SOUND BANK</span>
-          <span style={{ fontSize: 8, color: '#6b7280', fontWeight: 600 }} title={voiceDef?.describe}>
-            {voiceDef?.describe ?? 'Chord preview timbre'}
-          </span>
+      <div
+        style={{
+          marginBottom: 6,
+          display: 'flex',
+          flexDirection: 'row',
+          flexWrap: 'nowrap',
+          alignItems: 'flex-start',
+          justifyContent: 'flex-start',
+          gap: 10,
+          minWidth: 0,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+        }}
+      >
+        <div style={{ flex: '0 0 auto', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span style={{ fontSize: 8, color: '#4b5563', fontWeight: 800, minWidth: 72 }}>SOUND BANK</span>
+            <span style={{ fontSize: 8, color: '#6b7280', fontWeight: 600 }} title={voiceDef?.describe}>
+              {voiceDef?.describe ?? 'Chord preview timbre'}
+            </span>
+          </div>
+          {CHORD_SOUND_CATEGORIES.map((cat) => (
+            <div
+              key={cat.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 3 }}
+            >
+              <span style={{ fontSize: 7, color: '#374151', fontWeight: 800, minWidth: 52 }}>{cat.label}</span>
+              {CHORD_VOICES_BY_CATEGORY[cat.id].map((v) => {
+                const on = chordVoice === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => onChordVoiceChange(v.id)}
+                    title={v.describe}
+                    style={{
+                      background: on ? '#112015' : '#0a0a0a',
+                      color: on ? '#86efac' : '#6b7280',
+                      border: `1px solid ${on ? '#22c55e66' : '#1a1a1a'}`,
+                      borderRadius: 4,
+                      padding: '2px 6px',
+                      fontSize: 7,
+                      fontWeight: 900,
+                      cursor: 'pointer',
+                      letterSpacing: 0.2,
+                    }}
+                  >
+                    {v.short}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
-        {CHORD_SOUND_CATEGORIES.map((cat) => (
+        {showGuitarSoundBank ? (
           <div
-            key={cat.id}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', marginBottom: 3 }}
+            style={{
+              flex: '0 0 auto',
+              borderLeft: '1px solid #2a2410',
+              paddingLeft: 8,
+              minWidth: 0,
+            }}
           >
-            <span style={{ fontSize: 7, color: '#374151', fontWeight: 800, minWidth: 52 }}>{cat.label}</span>
-            {CHORD_VOICES_BY_CATEGORY[cat.id].map((v) => {
-              const on = chordVoice === v.id;
-              return (
-                <button
-                  key={v.id}
-                  type="button"
-                  onClick={() => onChordVoiceChange(v.id)}
-                  title={v.describe}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+              <span style={{ fontSize: 8, color: '#92400e', fontWeight: 800 }}>GUITAR</span>
+              <span
+                style={{ fontSize: 7, color: '#78716c', fontWeight: 600 }}
+                title={guitarVoiceDef?.describe ?? 'Guitar channel only'}
+              >
+                CH {guitarChannel}
+              </span>
+            </div>
+            {GROOVE_GUITAR_SOUND_CATEGORIES.map((cat) => (
+              <div
+                key={cat.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  flexWrap: 'nowrap',
+                  marginBottom: 3,
+                }}
+              >
+                <span style={{ fontSize: 7, color: '#57534e', fontWeight: 800, minWidth: 34 }}>
+                  {cat.label}
+                </span>
+                {GROOVE_GUITAR_SOUNDS_BY_CATEGORY[cat.id].map((v) => {
+                  const on = guitarSoundId === v.id;
+                  return (
+                    <button
+                      key={`${cat.id}-${v.id}`}
+                      type="button"
+                      onClick={() => onGuitarSoundChange(v.id)}
+                      title={v.describe}
+                      style={{
+                        background: on ? '#2a2410' : '#0a0a0a',
+                        color: on ? '#fbbf24' : '#6b7280',
+                        border: `1px solid ${on ? '#f59e0b88' : '#1a1a1a'}`,
+                        borderRadius: 4,
+                        padding: '2px 5px',
+                        fontSize: 7,
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        letterSpacing: 0.15,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {v.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {showOrchestraHitBank ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  flexWrap: 'nowrap',
+                  marginTop: 3,
+                  marginBottom: 0,
+                }}
+              >
+                <span style={{ fontSize: 7, color: '#57534e', fontWeight: 800, minWidth: 34 }}>
+                  ORCH
+                </span>
+                <select
+                  value={orchestraHitId}
+                  onChange={(e) => onOrchestraHitChange!(e.target.value as OrchestraHitId)}
+                  title={orchestraHitDef?.describe ?? 'Orchestra hit — CH 36 lane'}
                   style={{
-                    background: on ? '#112015' : '#0a0a0a',
-                    color: on ? '#86efac' : '#6b7280',
-                    border: `1px solid ${on ? '#22c55e66' : '#1a1a1a'}`,
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                    maxWidth: 120,
+                    background: '#2a1a38',
+                    color: '#c4b5fd',
+                    border: '1px solid #a78bfa66',
                     borderRadius: 4,
-                    padding: '2px 6px',
+                    padding: '2px 4px',
                     fontSize: 7,
                     fontWeight: 900,
                     cursor: 'pointer',
-                    letterSpacing: 0.2,
+                    letterSpacing: 0.15,
                   }}
                 >
-                  {v.label}
-                </button>
-              );
-            })}
+                  {orchestraHitCatalog.map((hit) => (
+                    <option key={hit.id} value={hit.id}>
+                      {hit.label}
+                    </option>
+                  ))}
+                </select>
+                {onDropOrchestraHit ? (
+                  <button
+                    type="button"
+                    onClick={onDropOrchestraHit}
+                    disabled={chordColumnCount === 0}
+                    title={
+                      chordColumnCount === 0
+                        ? 'Drop green chords first — orch hits lock to each chord downbeat'
+                        : `Stamp ${orchestraHitDef?.label ?? 'orch hit'} on CH ${sampleChannel} at each chord root`
+                    }
+                    style={{
+                      background: chordColumnCount === 0 ? '#0a0a0a' : '#2a1a38',
+                      color: chordColumnCount === 0 ? '#4b5563' : '#c4b5fd',
+                      border: `1px solid ${chordColumnCount === 0 ? '#1a1a1a' : '#a78bfa66'}`,
+                      borderRadius: 4,
+                      padding: '2px 5px',
+                      fontSize: 7,
+                      fontWeight: 900,
+                      cursor: chordColumnCount === 0 ? 'not-allowed' : 'pointer',
+                      letterSpacing: 0.15,
+                      flexShrink: 0,
+                      opacity: chordColumnCount === 0 ? 0.45 : 1,
+                    }}
+                  >
+                    DROP
+                  </button>
+                ) : null}
+                <span
+                  style={{ fontSize: 6, color: '#6b7280', fontWeight: 700, flexShrink: 0 }}
+                  title={`Orchestra hits play on CH ${sampleChannel}`}
+                >
+                  CH {sampleChannel}
+                </span>
+              </div>
+            ) : null}
           </div>
-        ))}
+        ) : null}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -687,142 +991,161 @@ export function OrchidChordStrip({
         })}
       </div>
 
-      {/* LOCKED — groove-lab-chord-strip-embed-lock.mdc: embedded corner panels; do not re-stack or move anchors */}
-      {showGrooveMixer ? (
-        <GrooveLabDraggableCornerPanel
-          boundsRef={stripRef}
-          storageKey="groove-lab-mixer-btn-pos"
-          defaultRight={10}
-          defaultBottom={148}
-          bare
-          embedded
-          dragTitle="Drag to move Mixer button"
+      {showMixerSection ? (
+        <div
+          ref={mixerSectionRef}
+          style={{
+            flex: showGrooveChannelBank ? 1 : undefined,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: showGrooveChannelBank ? 48 : undefined,
+            minWidth: 0,
+            marginTop: showGrooveChannelBank ? 4 : 0,
+            position: 'relative',
+          }}
         >
-          <button
-            type="button"
-            onClick={() => setGrooveLabMixerOpen((o) => !o)}
-            title="16-channel Groove Lab mixer · CH 33–48 · SUB · CHORD · MELODY lanes"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              height: 38,
-              padding: '0 14px',
-              borderRadius: 7,
-              border: `1px solid ${grooveLabMixerOpen ? 'rgba(74, 222, 128, 0.65)' : 'rgba(74, 222, 128, 0.35)'}`,
-              background: grooveLabMixerOpen ? 'rgba(34, 197, 94, 0.16)' : 'rgba(5, 12, 8, 0.92)',
-              color: '#86efac',
-              fontSize: 12,
-              fontWeight: 900,
-              cursor: 'pointer',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <SlidersHorizontal size={18} strokeWidth={2.2} aria-hidden />
-            Mixer
-          </button>
-        </GrooveLabDraggableCornerPanel>
-      ) : null}
-
-      {showGrooveMixer && grooveLabMixerOpen ? (
-        <GrooveLabDraggableCornerPanel
-          boundsRef={stripRef}
-          storageKey="groove-lab-mixer-panel-pos"
-          defaultRight={10}
-          defaultBottom={196}
-          embedded
-          dragTitle="Drag to move Groove Lab mixer"
-          style={{ maxWidth: 'min(98vw, 980px)', zIndex: 10 }}
-        >
-          <GrooveLabMixerPanel
-            open
-            onClose={() => setGrooveLabMixerOpen(false)}
-            channelVolumes={channelVolumes}
-            setChannelVolume={setChannelVolume}
-            bassChannel={bassChannel}
-            chordChannel={chordChannel}
-            melodyChannel={melodyChannel}
-          />
-        </GrooveLabDraggableCornerPanel>
-      ) : null}
-
-      {showLayerChannels ? (
-        <GrooveLabDraggableCornerPanel
-          boundsRef={stripRef}
-          storageKey="groove-lab-work-ch-panel-pos"
-          defaultRight={10}
-          defaultBottom={78}
-          embedded
-          dragTitle="Drag to move WORK CH panel"
-          style={{ zIndex: 4 }}
-        >
-          <GrooveLabLayerChannels
-            compact
-            channels={layerChannels}
-            bassChannel={bassChannel}
-            chordChannel={chordChannel}
-            melodyChannel={melodyChannel}
-            onBassChannelChange={onBassChannelChange}
-            onChordChannelChange={onChordChannelChange}
-            onMelodyChannelChange={onMelodyChannelChange}
-          />
-        </GrooveLabDraggableCornerPanel>
-      ) : null}
-
-      {showTransport ? (
-        <GrooveLabDraggableCornerPanel
-          boundsRef={stripRef}
-          storageKey="groove-lab-transport-panel-pos"
-          defaultRight={10}
-          defaultBottom={8}
-          bare
-          embedded
-          dragTitle="Drag to move transport"
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            {grooveBranding && onMetronomeToggle ? (
-              <button
-                type="button"
-                role="switch"
-                aria-checked={metronomeEnabled}
-                title={
-                  metronomeEnabled
-                    ? 'Metronome on — click to turn off'
-                    : 'Metronome off — click to turn on'
-                }
-                onClick={onMetronomeToggle}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: 26,
-                  minWidth: 30,
-                  padding: '0 6px',
-                  borderRadius: 5,
-                  border: '1px solid',
-                  borderColor: metronomeEnabled ? '#1f3a29' : '#2a2a32',
-                  background: metronomeEnabled ? '#15321e' : '#0d120f',
-                  color: metronomeEnabled ? '#86efac' : '#5c5c68',
-                  fontSize: 9,
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                MET
-              </button>
-            ) : null}
-            <OrchidTransportControls
-              playing={transportPlaying}
-              disabled={transportDisabled}
-              onRewind={onTransportRewind}
-              onStop={onTransportStop}
-              onPlayPause={onTransportPlayPause}
-              onFastForward={onTransportFastForward}
+          {showMixerToolbar ? (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 6,
+                flexShrink: 0,
+                paddingBottom: 4,
+                minHeight: 34,
+              }}
+            >
+              {showTransport ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexShrink: 0,
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
+                  }}
+                >
+                  {grooveBranding && onProgressionBpmChange ? (
+                    <GrooveLabTempoStrip
+                      transportBar
+                      bpm={progressionBpm}
+                      onBpmChange={onProgressionBpmChange}
+                      sessionLocked={progressionSessionBpmLocked}
+                      transportPlaying={transportPlaying}
+                    />
+                  ) : null}
+                  {grooveBranding && onMetronomeToggle ? (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={metronomeEnabled}
+                      title={
+                        metronomeEnabled
+                          ? 'Metronome on — click to turn off'
+                          : 'Metronome off — click to turn on'
+                      }
+                      onClick={onMetronomeToggle}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        height: 26,
+                        minWidth: 30,
+                        padding: '0 6px',
+                        borderRadius: 5,
+                        border: '1px solid',
+                        borderColor: metronomeEnabled ? '#1f3a29' : '#2a2a32',
+                        background: metronomeEnabled ? '#15321e' : '#0d120f',
+                        color: metronomeEnabled ? '#86efac' : '#5c5c68',
+                        fontSize: 9,
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      MET
+                    </button>
+                  ) : null}
+                  <OrchidTransportControls
+                    playing={transportPlaying}
+                    disabled={transportDisabled}
+                    onRewind={onTransportRewind!}
+                    onStop={onTransportStop!}
+                    onPlayPause={onTransportPlayPause!}
+                    onFastForward={onTransportFastForward!}
+                  />
+                </div>
+              ) : null}
+              {showGrooveMixer ? (
+                <button
+                  type="button"
+                  onClick={() => setGrooveLabMixerOpen((o) => !o)}
+                  title="16-channel Groove Lab mixer · CH 33–48 · CHORD · GROOVE LEAD · work lanes"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    height: 38,
+                    padding: '0 14px',
+                    borderRadius: 7,
+                    border: `1px solid ${grooveLabMixerOpen ? 'rgba(74, 222, 128, 0.65)' : 'rgba(74, 222, 128, 0.35)'}`,
+                    background: grooveLabMixerOpen
+                      ? 'rgba(34, 197, 94, 0.16)'
+                      : 'rgba(5, 12, 8, 0.92)',
+                    color: '#86efac',
+                    fontSize: 12,
+                    fontWeight: 900,
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <SlidersHorizontal size={18} strokeWidth={2.2} aria-hidden />
+                  Mixer
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {showGrooveChannelBank ? (
+            <GrooveLabChannelRail
+              embed
+              selectedChannel={selectedEditChannel!}
+              onSelectChannel={onSelectEditChannel!}
+              chordChannel={chordChannel!}
+              melodyChannel={melodyChannel!}
+              guitarChannel={guitarChannel}
+              sampleChannel={sampleChannel}
+              onAssignLayerRole={onAssignLayerRole!}
+              noteCountByChannel={channelNoteCounts}
+              channelVolumes={channelVolumes}
+              setChannelVolume={setChannelVolume}
             />
-          </div>
-        </GrooveLabDraggableCornerPanel>
+          ) : null}
+          {showGrooveMixer && grooveLabMixerOpen ? (
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                bottom: '100%',
+                marginBottom: 4,
+                zIndex: 10,
+                maxWidth: 'min(98vw, 980px)',
+              }}
+            >
+              <GrooveLabMixerPanel
+                open
+                onClose={() => setGrooveLabMixerOpen(false)}
+                channelVolumes={channelVolumes!}
+                setChannelVolume={setChannelVolume!}
+                chordChannel={chordChannel}
+                melodyChannel={melodyChannel}
+                guitarChannel={guitarChannel}
+              />
+            </div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
