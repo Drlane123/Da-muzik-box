@@ -40,8 +40,6 @@ import {
 import { beatLabDrumCellsAlongSegment } from '@/app/lib/creationStation/beatLabGridPaint';
 import {
   BEAT_PADS_LANE_COUNT,
-  BEAT_PADS_MAX_BPM,
-  BEAT_PADS_MIN_BPM,
   BEAT_PADS_STEPS_PER_BAR,
   beatPadsLoopBarChoices,
   beatPadsPatternCols,
@@ -119,18 +117,24 @@ const BEAT_PADS_STEP_INSET = 3;
 const BEAT_PADS_SURFACE = '#0a0c10';
 const BEAT_PADS_SURFACE_SELECTED = '#0e1218';
 
+const TOOLBAR_ICON = 14;
+const TOOLBAR_LABEL: CSSProperties = {
+  fontSize: 11,
+  fontWeight: 800,
+  letterSpacing: 0.2,
+};
+
 const toolBtn: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: 4,
-  height: 24,
-  padding: '0 8px',
+  gap: 5,
+  height: 28,
+  padding: '0 10px',
   borderRadius: 5,
   border: '1px solid rgba(255, 255, 255, 0.14)',
   background: '#12121a',
   color: '#c8d0dc',
-  fontSize: 8,
-  fontWeight: 800,
+  ...TOOLBAR_LABEL,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
   flexShrink: 0,
@@ -386,6 +390,8 @@ export function BeatLabDrumMachineSequencer({
   gridExpandedLiftPx = 0,
 }: BeatLabDrumMachineSequencerProps) {
   const [gridExpandedInternal, setGridExpandedInternal] = useState(false);
+  const [bpmEditing, setBpmEditing] = useState(false);
+  const [bpmDraft, setBpmDraft] = useState('');
   const gridExpanded = gridExpandedProp ?? gridExpandedInternal;
   const compactViewportMinH = beatPadsSequencerMinViewportH(minVisibleLanes);
   const fullGridMinH = beatPadsSequencerMinViewportH(BEAT_PADS_LANE_COUNT);
@@ -516,6 +522,10 @@ export function BeatLabDrumMachineSequencer({
     if (rollDrawMode) setEditTool('draw');
   }, [rollDrawMode]);
 
+  useEffect(() => {
+    if (!bpmEditing && transportBpm != null) setBpmDraft(String(transportBpm));
+  }, [bpmEditing, transportBpm]);
+
   const nudgeBpm = useCallback(
     (delta: number) => {
       if (!onTransportBpmChange || transportBpm == null) return;
@@ -523,6 +533,21 @@ export function BeatLabDrumMachineSequencer({
     },
     [onTransportBpmChange, transportBpm],
   );
+
+  const commitBpmDraft = useCallback(() => {
+    setBpmEditing(false);
+    if (!onTransportBpmChange || transportBpm == null) return;
+    const trimmed = bpmDraft.trim();
+    if (!trimmed) return;
+    const v = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(v)) return;
+    onTransportBpmChange(clampBeatPadsBpm(v));
+  }, [bpmDraft, onTransportBpmChange, transportBpm]);
+
+  const cancelBpmDraft = useCallback(() => {
+    setBpmEditing(false);
+    if (transportBpm != null) setBpmDraft(String(transportBpm));
+  }, [transportBpm]);
 
   const cellAt = useCallback(
     (clientX: number, clientY: number): { lane: number; col: number } | null => {
@@ -1048,7 +1073,7 @@ export function BeatLabDrumMachineSequencer({
             onClick={() => setEditTool('pointer')}
             style={{ ...toolBtn, ...toolActiveStyle(editTool === 'pointer'), opacity: disabled ? 0.45 : 1 }}
           >
-            <MousePointer2 size={11} aria-hidden /> Select
+            <MousePointer2 size={TOOLBAR_ICON} aria-hidden /> Select
           </button>
           <button
             type="button"
@@ -1057,7 +1082,7 @@ export function BeatLabDrumMachineSequencer({
             onClick={() => setEditTool('draw')}
             style={{ ...toolBtn, ...toolActiveStyle(editTool === 'draw'), opacity: disabled ? 0.45 : 1 }}
           >
-            <Pencil size={11} aria-hidden /> Draw
+            <Pencil size={TOOLBAR_ICON} aria-hidden /> Draw
           </button>
           <button
             type="button"
@@ -1066,7 +1091,7 @@ export function BeatLabDrumMachineSequencer({
             onClick={() => setEditTool('erase')}
             style={{ ...toolBtn, ...toolActiveStyle(editTool === 'erase'), opacity: disabled ? 0.45 : 1 }}
           >
-            <Eraser size={11} aria-hidden /> Erase
+            <Eraser size={TOOLBAR_ICON} aria-hidden /> Erase
           </button>
           <button
             type="button"
@@ -1079,7 +1104,7 @@ export function BeatLabDrumMachineSequencer({
               opacity: disabled || !canUndo ? 0.45 : 1,
             }}
           >
-            <Undo2 size={11} aria-hidden /> Undo
+            <Undo2 size={TOOLBAR_ICON} aria-hidden /> Undo
           </button>
           <button
             type="button"
@@ -1092,7 +1117,7 @@ export function BeatLabDrumMachineSequencer({
               opacity: disabled || selectedRefs.length === 0 ? 0.45 : 1,
             }}
           >
-            <Copy size={11} aria-hidden /> Dup
+            <Copy size={TOOLBAR_ICON} aria-hidden /> Dup
           </button>
         </div>
         {rollDrawMode && rollDrawLabel ? (
@@ -1143,8 +1168,8 @@ export function BeatLabDrumMachineSequencer({
                 onClick={onTransportPlay}
                 style={{
                   ...toolBtn,
-                  width: 28,
-                  height: 24,
+                  width: 32,
+                  height: 28,
                   padding: 0,
                   justifyContent: 'center',
                   borderColor: transportPlaying ? 'rgba(124, 244, 198, 0.2)' : 'rgba(124, 244, 198, 0.55)',
@@ -1154,7 +1179,7 @@ export function BeatLabDrumMachineSequencer({
                 }}
                 title="Play loop"
               >
-                <Play size={12} fill="currentColor" aria-hidden />
+                <Play size={TOOLBAR_ICON} fill="currentColor" aria-hidden />
               </button>
               <button
                 type="button"
@@ -1162,8 +1187,8 @@ export function BeatLabDrumMachineSequencer({
                 onClick={onTransportStop}
                 style={{
                   ...toolBtn,
-                  width: 28,
-                  height: 24,
+                  width: 32,
+                  height: 28,
                   padding: 0,
                   justifyContent: 'center',
                   borderColor: transportPlaying ? '#ef444488' : 'rgba(255, 255, 255, 0.14)',
@@ -1173,7 +1198,7 @@ export function BeatLabDrumMachineSequencer({
                 }}
                 title="Stop loop"
               >
-                <Square size={11} fill="currentColor" aria-hidden />
+                <Square size={12} fill="currentColor" aria-hidden />
               </button>
             </div>
             <label
@@ -1195,33 +1220,51 @@ export function BeatLabDrumMachineSequencer({
                     : 'Loop BPM'
               }
             >
-              <span style={{ fontSize: 8, color: '#6a7280', fontWeight: 800 }}>BPM</span>
+              <span style={{ ...TOOLBAR_LABEL, color: '#8a929e' }}>BPM</span>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 className="beat-pads-bpm-input"
-                min={BEAT_PADS_MIN_BPM}
-                max={BEAT_PADS_MAX_BPM}
-                value={transportBpm}
+                value={bpmEditing ? bpmDraft : String(transportBpm)}
                 disabled={disabled || se2SyncSlave || typeof onTransportBpmChange !== 'function'}
+                onFocus={(e) => {
+                  if (disabled || se2SyncSlave || typeof onTransportBpmChange !== 'function') return;
+                  setBpmEditing(true);
+                  setBpmDraft(String(transportBpm));
+                  e.currentTarget.select();
+                }}
                 onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  if (!Number.isFinite(v) || typeof onTransportBpmChange !== 'function') return;
-                  onTransportBpmChange(clampBeatPadsBpm(v));
+                  if (!bpmEditing) setBpmEditing(true);
+                  setBpmDraft(e.target.value.replace(/[^\d]/g, ''));
+                }}
+                onBlur={() => commitBpmDraft()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelBpmDraft();
+                    e.currentTarget.blur();
+                  }
                 }}
                 style={{
-                  width: 44,
-                  height: 22,
+                  width: 52,
+                  height: 26,
                   padding: '0 6px',
                   borderRadius: 4,
                   border: '1px solid rgba(124, 244, 198, 0.35)',
                   background: '#0c0c12',
                   color: '#e8eef4',
-                  fontSize: 10,
+                  fontSize: 14,
                   fontWeight: 700,
                   fontFamily: 'monospace',
                   textAlign: 'center',
+                  cursor: 'text',
                 }}
-                title="Beat Pads loop tempo"
+                title="Click to highlight and type a new BPM — Enter to apply"
+                aria-label="Beat Pads loop tempo in BPM"
               />
               <button
                 type="button"
@@ -1229,15 +1272,15 @@ export function BeatLabDrumMachineSequencer({
                 onClick={() => nudgeBpm(-1)}
                 style={{
                   ...toolBtn,
-                  width: 22,
-                  height: 22,
+                  width: 26,
+                  height: 26,
                   padding: 0,
                   justifyContent: 'center',
                   opacity: disabled || typeof onTransportBpmChange !== 'function' ? 0.45 : 1,
                 }}
                 title="Slower"
               >
-                <ChevronDown size={14} aria-hidden />
+                <ChevronDown size={16} aria-hidden />
               </button>
               <button
                 type="button"
@@ -1245,15 +1288,15 @@ export function BeatLabDrumMachineSequencer({
                 onClick={() => nudgeBpm(1)}
                 style={{
                   ...toolBtn,
-                  width: 22,
-                  height: 22,
+                  width: 26,
+                  height: 26,
                   padding: 0,
                   justifyContent: 'center',
                   opacity: disabled || typeof onTransportBpmChange !== 'function' ? 0.45 : 1,
                 }}
                 title="Faster"
               >
-                <ChevronUp size={14} aria-hidden />
+                <ChevronUp size={16} aria-hidden />
               </button>
             </label>
             <span style={{ width: 1, height: 20, background: 'rgba(124, 244, 198, 0.2)', flexShrink: 0 }} aria-hidden />
@@ -1329,20 +1372,20 @@ export function BeatLabDrumMachineSequencer({
             borderLeft: '1px solid rgba(124, 244, 198, 0.22)',
           }}
         >
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ fontSize: 8, color: '#6a7280', fontWeight: 800 }}>BARS</span>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ ...TOOLBAR_LABEL, color: '#8a929e' }}>BARS</span>
             <select
               value={loopBars}
               disabled={disabled}
               onChange={(e) => onLoopBarsChange(Number(e.target.value))}
               style={{
-                height: 24,
-                padding: '0 6px',
+                height: 28,
+                padding: '0 8px',
                 borderRadius: 4,
                 border: '1px solid rgba(124, 244, 198, 0.35)',
                 background: '#0c0c12',
                 color: '#e8eef4',
-                fontSize: 9,
+                fontSize: 12,
                 fontWeight: 700,
                 cursor: disabled ? 'not-allowed' : 'pointer',
               }}
@@ -1355,7 +1398,7 @@ export function BeatLabDrumMachineSequencer({
             </select>
           </label>
           <button type="button" disabled={disabled} onClick={onClear} style={{ ...toolBtn, opacity: disabled ? 0.45 : 1 }}>
-            <Eraser size={11} aria-hidden /> Clear all
+            <Eraser size={TOOLBAR_ICON} aria-hidden /> Clear all
           </button>
           <button
             type="button"
@@ -1377,11 +1420,11 @@ export function BeatLabDrumMachineSequencer({
           >
             {gridExpanded ? (
               <>
-                <Minimize2 size={11} aria-hidden /> Minimize
+                <Minimize2 size={TOOLBAR_ICON} aria-hidden /> Minimize
               </>
             ) : (
               <>
-                <Maximize2 size={11} aria-hidden /> Expand
+                <Maximize2 size={TOOLBAR_ICON} aria-hidden /> Expand
               </>
             )}
           </button>

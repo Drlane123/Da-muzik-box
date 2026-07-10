@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#050508" />
+    <meta name="theme-color" content="#1e1e1e" />
     <meta name="application-name" content="Da Muzik Box" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -20,7 +20,7 @@
       html, body {
         margin: 0;
         height: 100%;
-        background: #050508;
+        background: #1e1e1e;
       }
     </style>
   </head>
@@ -69,21 +69,38 @@
     </div>
     <script>
       (function () {
-        var p = 0;
+        var host = location.hostname;
+        var isLocalDev =
+          host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
         var fill = document.getElementById('boot-bar-fill');
         var pct = document.getElementById('boot-pct');
+        var cap = document.querySelector('.muzik-boot-caption');
+        var p = 0;
         window.__daMuzikBootPct = 0;
-        var id = window.setInterval(function () {
-          if (p >= 26) {
+
+        if (!isLocalDev) {
+          var id = window.setInterval(function () {
+            if (p >= 26) {
+              window.__daMuzikBootPct = p;
+              window.clearInterval(id);
+              return;
+            }
+            p += 1;
             window.__daMuzikBootPct = p;
-            window.clearInterval(id);
-            return;
-          }
+            if (fill) fill.style.width = p + '%';
+            if (pct) pct.textContent = p + '%';
+          }, 36);
+          return;
+        }
+
+        if (cap) cap.textContent = 'Compiling in Cursor — keep this tab open…';
+        var devId = window.setInterval(function () {
+          if (p >= 88) return;
           p += 1;
           window.__daMuzikBootPct = p;
           if (fill) fill.style.width = p + '%';
           if (pct) pct.textContent = p + '%';
-        }, 36);
+        }, 520);
       })();
     </script>
     <script type="module" src="./main.tsx"></script>

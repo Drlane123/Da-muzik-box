@@ -146,13 +146,13 @@ function beatPadsPanelTab(active: boolean): CSSProperties {
 }
 
 const fxMiniBtn: CSSProperties = {
-  height: 22,
+  height: 24,
   padding: '0 10px',
   borderRadius: 4,
   border: '1px solid rgba(255, 255, 255, 0.14)',
   background: 'rgba(255, 255, 255, 0.04)',
   color: '#b8bcc8',
-  fontSize: 8,
+  fontSize: 10,
   fontWeight: 800,
   cursor: 'pointer',
   letterSpacing: '0.08em',
@@ -755,10 +755,10 @@ function CubaseMainTabBar({
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      height: 16,
-                      padding: '0 7px',
+                      height: 18,
+                      padding: '0 8px',
                       borderRadius: 4,
-                      fontSize: 8,
+                      fontSize: 10,
                       fontWeight: 900,
                       letterSpacing: '0.14em',
                       color: BEAT_PADS_PAD_SPREAD_BADGE_STYLE.color,

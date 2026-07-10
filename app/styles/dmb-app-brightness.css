@@ -1,0 +1,51 @@
+/**
+ * App shell — Cursor chat/editor backdrop (#1e1e1e / #181818 modules).
+ * No brightness filter (that washed modules to light gray).
+ */
+:root {
+  --dmb-cursor-editor: #1e1e1e;
+  --dmb-cursor-sidebar: #181818;
+  --dmb-cursor-panel: #2d2d2d;
+  --dmb-cursor-border: #3c3c3c;
+  --dmb-shell-text: #e8e8e8;
+  --dmb-shell-muted: #a0a0a0;
+}
+
+html,
+body {
+  background: var(--dmb-cursor-editor) !important;
+  color: var(--dmb-shell-text);
+}
+
+#root {
+  flex: 1;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--dmb-cursor-editor);
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dmb-cursor-panel) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #5a5a5a !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6e6e6e !important;
+}
+
+* {
+  scrollbar-color: #5a5a5a var(--dmb-cursor-panel) !important;
+}
+
+#boot-splash.muzik-boot-overlay {
+  background: var(--dmb-cursor-editor) !important;
+}
+
+/* Geno Build 1 / 2 fullscreen — hide Modules (returns on Minimize) */
+body[data-studio-geno-build-fullscreen] [data-dmb-modules-menu] {
+  display: none !important;
+}

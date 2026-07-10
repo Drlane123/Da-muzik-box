@@ -20,7 +20,34 @@ if (useEDrive) {
 }
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'dev-disable-service-worker',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const path = req.url?.split('?')[0];
+          if (path === '/sw.js') {
+            res.statusCode = 404;
+            res.end('// service worker disabled in Vite dev');
+            return;
+          }
+          next();
+        });
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const path = req.url?.split('?')[0];
+          if (path === '/sw.js') {
+            res.statusCode = 404;
+            res.end('// service worker disabled on localhost preview');
+            return;
+          }
+          next();
+        });
+      },
+    },
+  ],
   /** Explicit path so `public/` is always merged into `dist/` (avoid naming a subfolder `assets/` — conflicts with Rollup’s `dist/assets/` output). */
   publicDir: path.resolve(__viteConfigDir, 'public'),
   resolve: {
@@ -33,9 +60,9 @@ export default defineConfig({
    * work (Windows / Simple Browser / IPv6 quirks).
    */
   server: {
-    host: true,
+    host: '127.0.0.1',
     port: 5173,
-    strictPort: false,
+    strictPort: true,
     /** Don't block index.html while the whole dependency graph pre-compiles on connect. */
     preTransformRequests: false,
     /** `.cache` holds drum kits / ONNX / downloads — never watch it or dev hangs on Windows. */

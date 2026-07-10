@@ -1,0 +1,12 @@
+/**
+ * Cursor wall tokens — shared by SE2 + app shell.
+ */
+:root {
+  --cursor-wall-base: #1e1e1e;
+  --cursor-wall-raised: #181818;
+  --cursor-wall-panel: #2d2d2d;
+  --cursor-wall-deep: #181818;
+  --cursor-wall-border: #3c3c3c;
+  --cursor-wall-border-soft: #333333;
+  --cursor-wall-arrange: linear-gradient(165deg, #2d2d2d 0%, #252526 55%, #1e1e1e 100%);
+}

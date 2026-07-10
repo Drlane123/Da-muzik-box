@@ -1,5 +1,8 @@
 import { useMasterClock, LOOP_BAR_OPTIONS, PPQ, type QuantizeValue } from '@/app/context/MasterClockContext';
-import type { ScreenId } from '@/app/components/NavigationSidebar';
+import type { ScreenId } from '@/app/lib/navigation/moduleNav';
+import ModulesMenu from '@/app/components/ModulesMenu';
+import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
+import type { VocalLabSubScreenId } from '@/app/lib/vocalLab/vocalLabSubScreens';
 
 import { Play, Square, Pause, Circle, Repeat, SkipBack, Save, Plus, Trash2, Settings, Sparkles } from 'lucide-react';
 
@@ -23,10 +26,20 @@ export default function TitleBar({
   onOpenSettings,
   onOpenOverview,
   activeScreen,
+  onScreenChange,
+  activeCreationSubScreen,
+  onCreationSubScreenChange,
+  activeVocalLabSubScreen,
+  onVocalLabSubScreenChange,
 }: {
   onOpenSettings?: () => void;
   onOpenOverview?: () => void;
   activeScreen?: ScreenId;
+  onScreenChange?: (id: ScreenId) => void;
+  activeCreationSubScreen?: CreationSubScreenId;
+  onCreationSubScreenChange?: (sub: CreationSubScreenId) => void;
+  activeVocalLabSubScreen?: VocalLabSubScreenId;
+  onVocalLabSubScreenChange?: (sub: VocalLabSubScreenId) => void;
 }) {
   const [saveMessage, setSaveMessage] = useState('');
   const [projectName, setProjectName] = useState('');
@@ -208,8 +221,8 @@ export default function TitleBar({
         columnGap: 12,
       }}
     >
-      {/* Left — logo (unchanged) */}
-      <div className="flex items-center shrink-0 justify-self-start min-w-0">
+      {/* Left — logo + Modules menu */}
+      <div className="flex items-center gap-2 shrink-0 justify-self-start min-w-0">
         <div
           style={{
             height: 44,
@@ -293,6 +306,16 @@ export default function TitleBar({
             Hybrid
           </span>
         </div>
+        {onScreenChange && (
+          <ModulesMenu
+            activeScreen={activeScreen ?? 'creation-station'}
+            onScreenChange={onScreenChange}
+            activeCreationSubScreen={activeCreationSubScreen}
+            onCreationSubScreenChange={onCreationSubScreenChange}
+            activeVocalLabSubScreen={activeVocalLabSubScreen}
+            onVocalLabSubScreenChange={onVocalLabSubScreenChange}
+          />
+        )}
       </div>
 
       {/* Center — title bar (between logo and transport / settings) */}

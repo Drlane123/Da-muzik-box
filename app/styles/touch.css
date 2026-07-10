@@ -441,6 +441,17 @@ html.touch-coarse .cs-pad-hit {
 }
 
 /** Beat Pads BPM — hide native number spinners (external chevrons only). */
+.beat-pads-bpm-input {
+  -moz-appearance: textfield;
+  user-select: text;
+}
+
+.beat-pads-bpm-input:focus {
+  outline: 2px solid rgba(124, 244, 198, 0.55);
+  outline-offset: 1px;
+  border-color: rgba(124, 244, 198, 0.65) !important;
+}
+
 .beat-pads-bpm-input::-webkit-outer-spin-button,
 .beat-pads-bpm-input::-webkit-inner-spin-button {
   -webkit-appearance: none;

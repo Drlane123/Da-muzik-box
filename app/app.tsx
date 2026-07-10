@@ -30,7 +30,7 @@ import KeyboardShortcutsBootstrap from '@/app/components/KeyboardShortcutsBootst
 import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
 
-import NavigationSidebar, { type ScreenId } from '@/app/components/NavigationSidebar';
+import { type ScreenId } from '@/app/lib/navigation/moduleNav';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import {
   screenToVocalLabSubScreen,
@@ -40,7 +40,7 @@ import {
 
 const AiSongScreen = lazy(() => import('@/app/screens/AiSongScreen'));
 const AiMusicMatchScreen = lazy(() => import('@/app/screens/AiMusicMatchScreen'));
-const CreationStationScreen = lazy(() => import('@/app/screens/CreationStationScreen'));
+const CreationStationScreen = lazy(() => loadCreationStationScreen());
 const VocalLabScreen = lazy(() => import('@/app/screens/VocalLabScreen'));
 const AiPatternScreen = lazy(() => import('@/app/screens/AiPatternScreen'));
 const MelodyTranscriptionScreen = lazy(() => import('@/app/screens/MelodyTranscriptionScreen'));
@@ -56,6 +56,7 @@ import type { PendingBeatPadsStudioImport } from '@/app/lib/creationStation/beat
 import type { PendingAiMatchStudioImport } from '@/app/lib/aiMusicMatch/aiMusicMatchStudioExport';
 import { setPendingMasteringBayImport } from '@/app/lib/masteringBay/masteringBayPendingImport';
 import { DaMuzikBoxBootSplash } from '@/app/components/DaMuzikBoxBootSplash';
+import { loadCreationStationScreen } from '@/app/lib/boot/beatLabBootGate';
 import {
   publishNeuralHumCreationImport,
   type PendingNeuralHumCreationImport,
@@ -74,7 +75,7 @@ function AppBootFallback({ moduleName }: { moduleName?: string }) {
         gap: 10,
         minWidth: 0,
         minHeight: 0,
-        background: '#050508',
+        background: '#1e1e1e',
         color: '#9a9ab0',
       }}
     >
@@ -92,22 +93,90 @@ function AppBootFallback({ moduleName }: { moduleName?: string }) {
       <div style={{ fontSize: 11, opacity: 0.85 }}>
         {moduleName ? `Loading ${moduleName}…` : 'Loading module…'}
       </div>
-      <div
-        style={{
-          fontSize: 10,
-          opacity: 0.55,
-          maxWidth: 320,
-          textAlign: 'center',
-          lineHeight: 1.45,
-        }}
-      >
-        Dev mode compiles large screens on first open — Beat Lab ~1–2 min, Studio Editor 2 ~1–2 min.
-        Use one browser tab only; extra tabs can freeze the dev server. Hard refresh after restarting{' '}
-        <code style={{ opacity: 0.9 }}>bun run dev</code>. For instant load, run{' '}
-        <code style={{ opacity: 0.9 }}>bun run preview</code> after a build.
-      </div>
+      {import.meta.env.DEV ? (
+        <div
+          style={{
+            fontSize: 10,
+            opacity: 0.55,
+            maxWidth: 320,
+            textAlign: 'center',
+            lineHeight: 1.45,
+          }}
+        >
+          First open compiles large screens in Cursor — Beat Lab can take 1–2 minutes. Keep one tab on{' '}
+          <code style={{ opacity: 0.9 }}>localhost:5173</code>.
+        </div>
+      ) : null}
     </div>
   );
+}
+
+class LazyScreenErrorBoundary extends React.Component<
+  { moduleName: string; children: React.ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 12,
+            height: '100%',
+            padding: 24,
+            background: '#252526',
+            color: '#e8e8f0',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: 14, fontWeight: 800, color: '#7cf4c6' }}>
+            {this.props.moduleName} could not load
+          </p>
+          <p style={{ fontSize: 12, color: '#9a9aa8', maxWidth: 420, lineHeight: 1.5 }}>
+            {import.meta.env.DEV
+              ? 'In Cursor dev, wait for Vite to finish compiling, then reload. If you used preview before, hard-refresh clears stale chunks (Ctrl+Shift+R).'
+              : 'Try a hard refresh (Ctrl+Shift+R). You can open another screen from the sidebar.'}
+          </p>
+          <pre
+            style={{
+              fontSize: 10,
+              color: '#6a6a78',
+              maxWidth: 480,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {this.state.error.message}
+          </pre>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 6,
+              border: '1px solid rgba(124,244,198,0.45)',
+              background: 'rgba(124,244,198,0.12)',
+              color: '#7cf4c6',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Reload page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 class StudioEditor2ErrorBoundary extends React.Component<
@@ -132,7 +201,7 @@ class StudioEditor2ErrorBoundary extends React.Component<
             gap: 12,
             height: '100%',
             padding: 24,
-            background: '#060607',
+            background: '#252526',
             color: '#e8e8f0',
             textAlign: 'center',
           }}
@@ -190,7 +259,9 @@ function LazyScreenMount({
 }) {
   return (
     <ScreenMount active={active}>
-      <Suspense fallback={<AppBootFallback moduleName={moduleName} />}>{children}</Suspense>
+      <LazyScreenErrorBoundary moduleName={moduleName}>
+        <Suspense fallback={<AppBootFallback moduleName={moduleName} />}>{children}</Suspense>
+      </LazyScreenErrorBoundary>
     </ScreenMount>
   );
 }
@@ -218,7 +289,9 @@ function ScreenMount({ active, children }: { active: boolean; children: React.Re
 function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [showOverview, setShowOverview] = useState(false);
-  const [activeScreen, setActiveScreen] = useState<ScreenId>('creation-station');
+  const [activeScreen, setActiveScreen] = useState<ScreenId>(() =>
+    import.meta.env.DEV ? 'my-projects' : 'creation-station',
+  );
   const [creationSubScreen, setCreationSubScreen] = useState<CreationSubScreenId>('beat-lab');
   const [vocalLabSubScreen, setVocalLabSubScreen] = useState<VocalLabSubScreenId>('vocal-lab');
   /** Passed to Studio Editor when navigating from Vocal Lab with a recorded/uploaded blob. */
@@ -370,7 +443,7 @@ function AppContent() {
   }
 
   return (
-    <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#000', color: '#ccc' }}>
+    <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#1e1e1e', color: '#e8e8e8' }}>
       <TouchDeviceBootstrap />
       <KeyboardShortcutsBootstrap
         activeScreen={activeScreen}
@@ -382,6 +455,11 @@ function AppContent() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenOverview={() => setShowOverview(true)}
         activeScreen={activeScreen}
+        onScreenChange={setActiveScreen}
+        activeCreationSubScreen={creationSubScreen}
+        onCreationSubScreenChange={setCreationSubScreen}
+        activeVocalLabSubScreen={vocalLabSubScreen}
+        onVocalLabSubScreenChange={setVocalLabSubScreen}
       />
       <MidiInputFocus
         activeScreen={activeScreen}
@@ -389,17 +467,9 @@ function AppContent() {
         midiInputEnabled={settings.midiInputEnabled}
       />
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        <NavigationSidebar
-          activeScreen={activeScreen}
-          onScreenChange={setActiveScreen}
-          activeCreationSubScreen={creationSubScreen}
-          onCreationSubScreenChange={setCreationSubScreen}
-          activeVocalLabSubScreen={vocalLabSubScreen}
-          onVocalLabSubScreenChange={setVocalLabSubScreen}
-        />
         <main
-          className="flex-1 min-w-0 min-h-0 overflow-hidden relative"
-          style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch' }}
+          className="flex-1 min-w-0 min-h-0 overflow-hidden relative w-full"
+          style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', background: '#1e1e1e' }}
         >
           <LazyScreenMount active={activeScreen === 'vocal-lab'} moduleName="Vocal Lab">
             {activeScreen === 'vocal-lab' ? (
@@ -533,26 +603,28 @@ function AppContent() {
 
 
 export default function App() {
-  const [bootSplashDone, setBootSplashDone] = useState(false);
+  /** Cursor dev: skip splash — go straight to the app for editing. Production keeps full boot. */
+  const [bootSplashDone, setBootSplashDone] = useState(() => import.meta.env.DEV);
 
   return (
     <SettingsProvider>
-      <MasterClockProvider>
-        <AudioDeviceBinder />
-        <SongArrangerProvider>
-          <ViewProvider>
-            <PianoNotesProvider>
-              <TrackAllocationProvider>
-                <AppContent />
-              </TrackAllocationProvider>
-            </PianoNotesProvider>
-          </ViewProvider>
-        </SongArrangerProvider>
-      </MasterClockProvider>
       {!bootSplashDone ? (
         <DaMuzikBoxBootSplash onComplete={() => setBootSplashDone(true)} />
-      ) : null}
-      <PwaUpdateBanner />
+      ) : (
+        <MasterClockProvider>
+          <AudioDeviceBinder />
+          <SongArrangerProvider>
+            <ViewProvider>
+              <PianoNotesProvider>
+                <TrackAllocationProvider>
+                  <AppContent />
+                </TrackAllocationProvider>
+              </PianoNotesProvider>
+            </ViewProvider>
+          </SongArrangerProvider>
+        </MasterClockProvider>
+      )}
+      {import.meta.env.PROD ? <PwaUpdateBanner /> : null}
     </SettingsProvider>
   );
 }

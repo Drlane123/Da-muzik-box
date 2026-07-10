@@ -1,6 +1,6 @@
 /** Beat Lab boot gate — splash stays until chunk loads (+ brief mount window). */
 
-let beatLabChunkPromise: Promise<unknown> | null = null;
+let beatLabChunkPromise: Promise<typeof import('@/app/screens/CreationStationScreen')> | null = null;
 let beatLabRenderedResolve: (() => void) | null = null;
 let beatLabRenderedPromise: Promise<void> | null = null;
 let bootSplashCovering = true;
@@ -30,6 +30,14 @@ export function markBeatLabBootRendered(): void {
   beatLabRenderedResolve = null;
 }
 
+/** Single shared dynamic import — splash preload and React.lazy must not race separate imports. */
+export function loadCreationStationScreen(): Promise<typeof import('@/app/screens/CreationStationScreen')> {
+  if (!beatLabChunkPromise) {
+    beatLabChunkPromise = import('@/app/screens/CreationStationScreen');
+  }
+  return beatLabChunkPromise;
+}
+
 function waitForBeatLabMountOrTimeout(): Promise<void> {
   return new Promise<void>((resolve) => {
     let settled = false;
@@ -46,12 +54,15 @@ function waitForBeatLabMountOrTimeout(): Promise<void> {
 
 const isDevBoot = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
 
+/** Dev/Cursor: splash skipped — mark gate open so transport helpers never wait on a missing overlay. */
+export function prepareDevBootFastPath(): void {
+  if (!isDevBoot) return;
+  bootSplashCovering = false;
+}
+
 /** Chunk downloaded; then short window for Beat Lab mount (never blocks forever). */
 export function preloadBeatLabBootChunk(): Promise<void> {
-  if (!beatLabChunkPromise) {
-    beatLabChunkPromise = import('@/app/screens/CreationStationScreen');
-  }
-  const chunkWait = beatLabChunkPromise
+  const chunkWait = loadCreationStationScreen()
     .then(() => waitForBeatLabMountOrTimeout())
     .then(() => undefined);
   if (!isDevBoot) return chunkWait;

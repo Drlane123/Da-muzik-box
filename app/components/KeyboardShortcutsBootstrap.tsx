@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-import type { ScreenId } from '@/app/components/NavigationSidebar';
+import type { ScreenId } from '@/app/lib/navigation/moduleNav';
 import { useMasterClock } from '@/app/context/MasterClockContext';
 import { useSettings } from '@/app/context/SettingsContext';
 import { isTypingTarget } from '@/app/lib/keyboardShortcuts';

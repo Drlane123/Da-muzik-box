@@ -1,105 +1,66 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './app/app.tsx'
-import './app/globals.css'
-import './app/styles/touch.css'
-import './app/styles/da-muzik-boot-splash.css'
-import { applyBeatLabFactoryDefaultsIfNeeded } from './app/lib/creationStation/beatLabFactoryDefaults'
-import {
-  applySe2FactoryDefaultsIfNeeded,
-  forceApplySe2FactoryDefaults,
-} from './app/lib/studio/se2FactoryDefaults'
-import {
-  applySe2OwnerStartupTemplateToSession,
-  maybeCaptureExistingSessionAsOwnerStartup,
-} from './app/lib/studio/se2OwnerStartupTemplate'
-import { registerDaMuzikBoxPwa } from './app/lib/pwa/registerAppPwa'
 
-applyBeatLabFactoryDefaultsIfNeeded()
-maybeCaptureExistingSessionAsOwnerStartup()
-applySe2FactoryDefaultsIfNeeded()
-applySe2OwnerStartupTemplateToSession()
-
-if (typeof window !== 'undefined') {
-  void registerDaMuzikBoxPwa()
-  ;(window as unknown as { __dmbResetSe2ToFactory?: () => void }).__dmbResetSe2ToFactory = () => {
-    forceApplySe2FactoryDefaults()
-    window.location.reload()
-  }
-}
-
-class RootErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: Error | null }
-> {
-  state: { error: Error | null } = { error: null }
-
-  static getDerivedStateFromError(error: Error) {
-    return { error }
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
+function DevCompileShell() {
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        padding: 24,
+        background: '#1e1e1e',
+        color: '#ececf4',
+        fontFamily: 'Rajdhani, system-ui, sans-serif',
+        textAlign: 'center',
+      }}
+    >
+      <p style={{ fontSize: 22, fontWeight: 700, color: '#d4af37', margin: 0, letterSpacing: '0.12em' }}>
+        D A &nbsp; M U Z I K &nbsp; B O X
+      </p>
+      <p style={{ fontSize: 14, color: '#7cf4c6', margin: 0 }}>Compiling in Cursor…</p>
+      <p style={{ fontSize: 12, color: '#9a9ab0', maxWidth: 420, margin: 0, lineHeight: 1.5 }}>
+        First dev load compiles the full studio graph. This can take several minutes on Windows — the bar
+        freezing does not mean it crashed. Keep this tab open.
+      </p>
+      <div
+        style={{
+          width: 280,
+          height: 6,
+          borderRadius: 999,
+          background: 'rgba(255,255,255,0.08)',
+          overflow: 'hidden',
+        }}
+      >
         <div
           style={{
-            minHeight: '100vh',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            padding: 24,
-            background: '#050508',
-            color: '#ececf4',
-            fontFamily: 'Rajdhani, system-ui, sans-serif',
-            textAlign: 'center',
+            height: '100%',
+            width: '40%',
+            background: 'linear-gradient(90deg, #7cf4c6, #d4af37)',
+            animation: 'dmb-dev-pulse 1.8s ease-in-out infinite alternate',
           }}
-        >
-          <p style={{ fontSize: 18, fontWeight: 700, color: '#7cf4c6', margin: 0 }}>
-            Da Music Box could not start
-          </p>
-          <p style={{ fontSize: 12, color: '#9a9ab0', maxWidth: 420, margin: 0, lineHeight: 1.5 }}>
-            Try a hard refresh (Ctrl+Shift+R). If this keeps happening, note the error below.
-          </p>
-          <pre
-            style={{
-              fontSize: 10,
-              color: '#6a6a78',
-              maxWidth: 520,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              margin: 0,
-            }}
-          >
-            {this.state.error.message}
-          </pre>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 6,
-              border: '1px solid rgba(124,244,198,0.45)',
-              background: 'rgba(124,244,198,0.12)',
-              color: '#7cf4c6',
-              fontWeight: 800,
-              cursor: 'pointer',
-            }}
-          >
-            Reload
-          </button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
+        />
+      </div>
+      <style>{`@keyframes dmb-dev-pulse { from { transform: translateX(-30%); } to { transform: translateX(180%); } }`}</style>
+    </div>
+  )
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <RootErrorBoundary>
-      <App />
-    </RootErrorBoundary>
-  </React.StrictMode>
-)
+async function boot() {
+  const rootEl = document.getElementById('root')
+  if (!rootEl) return
+
+  document.getElementById('boot-splash')?.remove()
+
+  const root = ReactDOM.createRoot(rootEl)
+  root.render(<DevCompileShell />)
+
+  const { default: BootApp, runBootPrep } = await import('./app/boot-app.tsx')
+  runBootPrep()
+  root.render(<BootApp />)
+}
+
+void boot()

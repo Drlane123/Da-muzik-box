@@ -194,6 +194,8 @@ export function shouldHoldSharedAudioGraphForCreationModules(): boolean {
     isCreationBeatLabTransportRunning() ||
     beatPadsHoldsSharedAudioGraph() ||
     grooveLabHoldsSharedAudioGraph() ||
+    isLab808TransportRunning() ||
+    isLab808ScreenActive() ||
     isPianoRollTransportRunning() ||
     isGenoUltraArpPreviewRunning() ||
     isGenoUltraSynthPanelActive()
@@ -275,6 +277,34 @@ export function isGrooveLabScreenActive(): boolean {
   return (
     (window as unknown as { __daMusicGrooveLabScreenActive?: boolean }).__daMusicGrooveLabScreenActive ===
     true
+  );
+}
+
+/** 808 Lab MPC / tone transport — master pause/stop must not suspend the shared graph. */
+export function setLab808TransportRunning(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicLab808TransportRunning?: boolean }).__daMusicLab808TransportRunning =
+    running;
+}
+
+export function isLab808TransportRunning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicLab808TransportRunning?: boolean }).__daMusicLab808TransportRunning ===
+    true
+  );
+}
+
+/** 808 Lab tab visible — keep shared AudioContext alive for pads + MPC preview. */
+export function setLab808ScreenActive(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicLab808ScreenActive?: boolean }).__daMusicLab808ScreenActive = active;
+}
+
+export function isLab808ScreenActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicLab808ScreenActive?: boolean }).__daMusicLab808ScreenActive === true
   );
 }
 

@@ -26,7 +26,7 @@ import {
   type LabMpcKitId,
 } from '@/app/lib/creationStation/labMpcKits';
 import { LAB_MPC_DRUM_PRESETS, labMpcDrumPresetById } from '@/app/lib/creationStation/labMpcDrumPresets';
-import { beatAtSessionTime } from '@/app/lib/creationStation/creationTransportSync';
+import { beatAtSessionTime, setLab808TransportRunning } from '@/app/lib/creationStation/creationTransportSync';
 import { readLab808GrooveClock } from '@/app/lib/creationStation/lab808GrooveClock';
 import { GROOVE_LAB_SLOTS_PER_BAR } from '@/app/lib/creationStation/grooveLabRoll';
 import {
@@ -377,6 +377,12 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
   useEffect(() => {
     onTransportChange?.(labMpcTransport);
   }, [labMpcTransport, onTransportChange]);
+
+  useEffect(() => {
+    const running = deckPumpActive && labMpcTransport === 'playing';
+    setLab808TransportRunning(running);
+    return () => setLab808TransportRunning(false);
+  }, [deckPumpActive, labMpcTransport]);
 
   const mpcSeqViewportRef = useRef<HTMLDivElement | null>(null);
   const mpcStepPaintRef = useRef<{ target: boolean } | null>(null);

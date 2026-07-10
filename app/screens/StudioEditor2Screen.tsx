@@ -6469,6 +6469,8 @@ export default function StudioEditor2Screen({
   const trackLaneMeterShellRef = useRef<(HTMLDivElement | null)[]>([]);
   const mixerMasterLRef   = useRef<HTMLDivElement | null>(null);
   const mixerMasterRRef   = useRef<HTMLDivElement | null>(null);
+  /** Track-strip scroll — anchor lanes next to pinned master (grow left). */
+  const mixerTrackScrollRef = useRef<HTMLDivElement | null>(null);
   /** Smoothed peak level 0â€“1 per track, decays between hits. */
   const mixerLevelsRef    = useRef<number[]>(Array(MAX_STUDIO_TRACKS).fill(0));
   /** One-time reroute of preview/metro buses onto studio master (avoid disconnect glitches during playback). */
@@ -6488,6 +6490,8 @@ export default function StudioEditor2Screen({
 
   const studioTracksRef = useRef(studioTracks);
   studioTracksRef.current = studioTracks;
+  /** Lane id/kind only — avoid mixer graph rebuild on 808 grid / note edits. */
+  const studioMixerRouteSig = studioTracks.map((t) => `${t.id}:${t.kind}`).join('|');
   const [pianoTool, setPianoTool] = useState<PianoRollTool>('select');
   const [timelineTool, setTimelineTool] = useState<TimelineArrangeTool>('select');
   const [selectedPianoNoteIndex, setSelectedPianoNoteIndex] = useState<number | null>(null);
@@ -7009,6 +7013,19 @@ export default function StudioEditor2Screen({
   useEffect(() => {
     if (!showMixer) setMixerAudioInputPopover(null);
   }, [showMixer]);
+
+  /** Keep mixer lanes hugging the master — newest strip adjacent, older lanes scroll left. */
+  useEffect(() => {
+    if (!showMixer) return;
+    const el = mixerTrackScrollRef.current;
+    if (!el) return;
+    const scrollToEnd = () => {
+      el.scrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    };
+    scrollToEnd();
+    const raf = requestAnimationFrame(scrollToEnd);
+    return () => cancelAnimationFrame(raf);
+  }, [showMixer, studioTracks.length]);
 
   useEffect(() => {
     if (mixerAudioInputPopover == null) return;
@@ -8512,7 +8529,9 @@ export default function StudioEditor2Screen({
     if (!runningRef.current) return;
     const bus = midiPreviewBusRef.current;
     if (!bus || ctx.state === 'closed') return;
-    ensureSe2MixerStrips(ctx, bus, studioMasterOutRef.current ?? ctx.destination);
+    if (ctx.state === 'suspended') {
+      void ctx.resume().catch(() => {});
+    }
 
     const spb = spbFromBpm(bpmRef.current);
     const origin = originBeatRef.current;
@@ -9635,7 +9654,7 @@ export default function StudioEditor2Screen({
     return () => {
       cancelled = true;
     };
-  }, [isScreenActive, studioTracks, ensureCtx, primeSe2MixerStripRoutes]);
+  }, [isScreenActive, studioMixerRouteSig, ensureCtx, primeSe2MixerStripRoutes]);
 
   /** Poll track-lane + mixer VU meters while Studio Editor 2 is active (~30 Hz, lighter when mixer closed). */
   useEffect(() => {
@@ -20900,11 +20919,16 @@ export default function StudioEditor2Screen({
               </span>
             </div>
 
-            {/* Channel strips */}
-            <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden">
-              <div className="flex h-full" style={{ gap: 1, background: '#0a0a0f', minWidth: 'max-content' }}>
+            {/* Channel strips — tracks scroll; master pinned right (Studio One–style) */}
+            <div className="flex-1 min-h-0 flex overflow-hidden" style={{ background: '#0a0a0f' }}>
+              <div
+                ref={mixerTrackScrollRef}
+                className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden"
+              >
+              <div className="flex h-full justify-end" style={{ gap: 1, minWidth: 'max-content' }}>
 
-                {studioTracks.map((tr, i) => {
+                {/* T01 hugs master; higher lane numbers extend left (Studio One–style). */}
+                {studioTracks.map((tr, i) => ({ tr, i })).reverse().map(({ tr, i }) => {
                   const stripTrackLabel = se2FormatTrackNumber(tr.laneNumber ?? i + 1, studioLanePad);
                   const midiCh = studioTrackOutputsMidi(tr)
                     ? studioMidiChannelForTrack(i, studioTracks)
@@ -21551,15 +21575,24 @@ export default function StudioEditor2Screen({
                     </div>
                   );
                 })}
+              </div>
+              </div>
 
-                {/* â”€â”€ Master bus â€” Ohm Studio style, teal accent â”€â”€ */}
+                {/* ── Master bus — pinned right; track strips scroll independently ── */}
                 {(() => {
                   const mvDb  = formatMixerFaderDb(masterVolume);
                   const faderMasterHot = mixerFaderActive?.kind === 'master';
                   return (
                     <div
+                      data-studio-mixer-master-pinned
                       className="flex flex-col shrink-0 h-full"
-                      style={{ width: MIXER_STRIP_W_PX, background: '#0e0e16', borderLeft: '2px solid #2a3a34' }}
+                      style={{
+                        width: MIXER_STRIP_W_PX,
+                        background: '#0e0e16',
+                        borderLeft: '2px solid #2a3a34',
+                        boxShadow: '-6px 0 14px rgba(0,0,0,0.55)',
+                        zIndex: 2,
+                      }}
                     >
                       <div
                         className="shrink-0 flex items-center justify-center px-0.5 w-full"
@@ -21762,8 +21795,6 @@ export default function StudioEditor2Screen({
     </div>
   );
                 })()}
-
-              </div>
             </div>
             {mixerAudioInputPopover != null &&
               studioTracks[mixerAudioInputPopover.trackIndex]?.kind === 'audio' &&

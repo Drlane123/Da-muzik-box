@@ -80,6 +80,7 @@ import {
   isGrooveLabTransportRunning,
   setCreationBeatLabTransportRunning,
   setGrooveLabScreenActive,
+  setLab808ScreenActive,
   type CreationMetronomeClickBuffers,
   type CreationScheduledMetroNode,
 } from '@/app/lib/creationStation/creationTransportSync';
@@ -6890,6 +6891,13 @@ function CreationStationScreenBody({
     const active = isScreenActive && tab === 'groove-lab';
     setGrooveLabScreenActive(active);
     return () => setGrooveLabScreenActive(false);
+  }, [isScreenActive, tab]);
+
+  /** Keep shared AudioContext running while 808 Lab is open (pads / MPC / tone grid). */
+  useEffect(() => {
+    const active = isScreenActive && tab === '808-lab';
+    setLab808ScreenActive(active);
+    return () => setLab808ScreenActive(false);
   }, [isScreenActive, tab]);
 
   /** Beat Lab / NEW SYNTH use local lookahead MET — never stack on master-clock worker clicks. */

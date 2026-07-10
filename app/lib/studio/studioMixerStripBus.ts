@@ -81,6 +81,35 @@ type MasterMeterTap = {
 };
 
 let masterMeterTap: MasterMeterTap | null = null;
+/** Stable master → output wire — meter tap rebuild must not disconnect this path. */
+let masterBusOutputWired: { masterBus: GainNode; downstream: AudioNode } | null = null;
+
+function ensureMasterBusOutput(masterBus: GainNode, downstream: AudioNode): void {
+  if (
+    masterBusOutputWired
+    && masterBusOutputWired.masterBus === masterBus
+    && masterBusOutputWired.downstream === downstream
+  ) {
+    return;
+  }
+  if (
+    masterBusOutputWired
+    && masterBusOutputWired.masterBus === masterBus
+    && masterBusOutputWired.downstream !== downstream
+  ) {
+    try {
+      masterBusOutputWired.masterBus.disconnect(masterBusOutputWired.downstream);
+    } catch {
+      /* */
+    }
+  }
+  try {
+    masterBus.connect(downstream);
+  } catch {
+    /* already wired */
+  }
+  masterBusOutputWired = { masterBus, downstream };
+}
 
 function emptyMeterPeaks(): MeterPeaks {
   return { peakL: 0, peakR: 0, rmsL: 0, rmsR: 0 };
@@ -314,12 +343,7 @@ function ensureMasterMeterTap(ctx: AudioContext, masterBus: GainNode, downstream
   passL.gain.value = 1;
   passR.gain.value = 1;
 
-  try {
-    masterBus.disconnect(downstream);
-  } catch {
-    /* first wire */
-  }
-  masterBus.connect(downstream);
+  ensureMasterBusOutput(masterBus, downstream);
 
   masterBus.connect(splitter);
   splitter.connect(analyserL, 0, 0);
@@ -685,6 +709,7 @@ export function readStudioMixerStripAnalyserSnapshot(
 export function resetStudioMixerStrips(): void {
   for (const ti of [...strips.keys()]) tearDownStrip(ti);
   tearDownMasterMeterTap();
+  masterBusOutputWired = null;
 }
 
 /** Preload meter AudioWorklet before first strip build. */

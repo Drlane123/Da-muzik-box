@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-import type { ScreenId } from '@/app/components/NavigationSidebar';
+import type { ScreenId } from '@/app/lib/navigation/moduleNav';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import { setActiveMidiInputRoute } from '@/app/lib/midi/midiInputBus';
 import { resolveMidiInputRouteId } from '@/app/lib/midi/midiInputFocus';

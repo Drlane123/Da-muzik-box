@@ -1,4 +1,4 @@
-import type { ScreenId } from '@/app/components/NavigationSidebar';
+import type { ScreenId } from '@/app/lib/navigation/moduleNav';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import { creationSubScreenToTab } from '@/app/lib/creationStation/creationSubScreens';
 import { MIDI_INPUT_ROUTES } from '@/app/lib/midi/midiInputBus';

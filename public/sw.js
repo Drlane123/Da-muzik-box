@@ -1,5 +1,5 @@
 /** Bump when shipping a new live build — triggers “Update now” in installed desktop app. */
-const SHELL_CACHE = 'da-muzik-box-shell-v1';
+const SHELL_CACHE = 'da-muzik-box-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
