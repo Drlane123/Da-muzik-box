@@ -28,6 +28,7 @@ import { MusicBoxOverviewModal } from '@/app/components/MusicBoxOverviewHub';
 import TouchDeviceBootstrap from '@/app/components/TouchDeviceBootstrap';
 import KeyboardShortcutsBootstrap from '@/app/components/KeyboardShortcutsBootstrap';
 import MidiInputFocus from '@/app/components/MidiInputFocus';
+import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
 
 import NavigationSidebar, { type ScreenId } from '@/app/components/NavigationSidebar';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
@@ -551,6 +552,7 @@ export default function App() {
       {!bootSplashDone ? (
         <DaMuzikBoxBootSplash onComplete={() => setBootSplashDone(true)} />
       ) : null}
+      <PwaUpdateBanner />
     </SettingsProvider>
   );
 }

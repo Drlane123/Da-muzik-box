@@ -1,0 +1,26 @@
+{
+  "name": "Da Muzik Box",
+  "short_name": "Da Muzik Box",
+  "description": "Professional browser-based DAW — Beat Lab, Studio Editor, Groove Lab, and more.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "categories": ["music", "productivity"],
+  "icons": [
+    {
+      "src": "/splash/da-muzik-box-loader.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/splash/da-muzik-box-loader.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

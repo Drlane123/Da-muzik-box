@@ -13,6 +13,7 @@ import {
   applySe2OwnerStartupTemplateToSession,
   maybeCaptureExistingSessionAsOwnerStartup,
 } from './app/lib/studio/se2OwnerStartupTemplate'
+import { registerDaMuzikBoxPwa } from './app/lib/pwa/registerAppPwa'
 
 applyBeatLabFactoryDefaultsIfNeeded()
 maybeCaptureExistingSessionAsOwnerStartup()
@@ -20,6 +21,7 @@ applySe2FactoryDefaultsIfNeeded()
 applySe2OwnerStartupTemplateToSession()
 
 if (typeof window !== 'undefined') {
+  void registerDaMuzikBoxPwa()
   ;(window as unknown as { __dmbResetSe2ToFactory?: () => void }).__dmbResetSe2ToFactory = () => {
     forceApplySe2FactoryDefaults()
     window.location.reload()
