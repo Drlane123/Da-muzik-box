@@ -12,6 +12,7 @@ vite.config.ts.timestamp-*.mjs
 *-source-backup-*.zip
 modified-today-*.zip
 BACKUP-MANIFEST-*.txt
+_musio-create-ref/
 .cursor/workspace-data/
 *.local
 
