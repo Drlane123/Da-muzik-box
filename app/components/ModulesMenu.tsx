@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import {
   ChevronDown,
@@ -20,7 +20,7 @@ import {
   type CreationSubScreenId,
 } from '@/app/lib/creationStation/creationSubScreens';
 import {
-  loadNavItemsFromStorage,
+  DEFAULT_NAV_ITEMS,
   type NavItem,
   type ScreenId,
 } from '@/app/lib/navigation/moduleNav';
@@ -100,7 +100,7 @@ export default function ModulesMenu({
   const [open, setOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [submenuAnchor, setSubmenuAnchor] = useState<DOMRect | null>(null);
-  const items = useMemo(() => loadNavItemsFromStorage(), []);
+  const items = DEFAULT_NAV_ITEMS;
 
   useEffect(() => {
     if (!open) return;
