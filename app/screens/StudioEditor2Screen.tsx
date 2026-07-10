@@ -194,6 +194,12 @@ import {
   se2ClipUsesAlignStretchPlayback,
 } from '@/app/lib/studio/se2TrackAlign';
 import {
+  se2AudioClipIntersectsLoopRegion,
+  se2AudioClipLoopOccurrences,
+  se2AudioClipPreviewScheduleKeyLoopLap,
+  se2AudioPreviewPurgeLoopLapKeys,
+} from '@/app/lib/studio/se2AudioLoopPreview';
+import {
   STUDIO_A2M_DEFAULT_MODE,
   studioClampMidiNotesToTimeline,
   studioDefaultInstrumentForA2mMode,
@@ -719,10 +725,13 @@ import {
   readStudioMasterBusMeter,
   readStudioMixerStripMeter,
   resetStudioMixerMeterPeaks,
+  setStudioMixerStripGraphPlaybackLocked,
+  isStudioMixerStripGraphPlaybackLocked,
 } from '@/app/lib/studio/studioMixerStripBus';
 import {
   resolveStudioTrackPlaybackInput,
   getStudioTrackInsertPreStrip,
+  getStudioTrackClipPlaybackBus,
   resyncStudioTrackInsertFxStripInputs,
   resetStudioTrackInsertFxStrips,
 } from '@/app/lib/studio/studioTrackInsertFxStrip';
@@ -1795,7 +1804,7 @@ function se2TrackPlaybackInput(
 
 function ensureSe2MixerStrips(ctx: AudioContext, bus: GainNode, masterOut: AudioNode): boolean {
   const rebuilt = ensureStudioMixerStrips(ctx, bus, MAX_STUDIO_TRACKS, masterOut);
-  if (rebuilt) {
+  if (rebuilt && !isStudioMixerStripGraphPlaybackLocked()) {
     resyncStudioTrackInsertFxStripInputs(ctx, bus, MAX_STUDIO_TRACKS, masterOut);
   }
   return rebuilt;
@@ -7482,7 +7491,7 @@ export default function StudioEditor2Screen({
       const masterOut = studioMasterOutRef.current ?? ctx.destination;
       const bus = midiPreviewBusRef.current;
       const rebuilt = ensureSe2MixerStrips(ctx, bus, masterOut);
-      if (rebuilt) {
+      if (rebuilt && !isStudioMixerStripGraphPlaybackLocked()) {
         const tracks = studioTracksRef.current;
         for (let ti = 0; ti < tracks.length; ti++) {
           se2TrackPlaybackInput(
@@ -7643,8 +7652,8 @@ export default function StudioEditor2Screen({
       resetStudioTrackVocalFxInserts();
       return;
     }
+    if (runningRef.current) return;
     let cancelled = false;
-    audioPreviewScheduledRef.current.clear();
     void (async () => {
       const ctx = await ensureCtx();
       if (cancelled) return;
@@ -7719,6 +7728,7 @@ export default function StudioEditor2Screen({
       resetStudioTrackInsertFxStrips();
       return;
     }
+    if (runningRef.current) return;
     let cancelled = false;
     void (async () => {
       const ctx = await ensureCtx();
@@ -9041,7 +9051,9 @@ export default function StudioEditor2Screen({
         .then((rendered) => {
           studioVocalFxCacheRef.current.set(cacheKey, rendered);
           studioVocalFxPendingRef.current.delete(cacheKey);
-          audioPreviewScheduledRef.current.clear();
+          if (!runningRef.current) {
+            audioPreviewScheduledRef.current.clear();
+          }
         })
         .catch(() => {
           studioVocalFxPendingRef.current.delete(cacheKey);
@@ -9050,106 +9062,166 @@ export default function StudioEditor2Screen({
     [],
   );
 
-  const refillAudioPreview = useCallback((ctx: AudioContext, ctSnap: number) => {
-    if (!runningRef.current) return;
-    const bus = midiPreviewBusRef.current;
-    if (!bus || ctx.state === 'closed') return;
-    ensureSe2MixerStrips(ctx, bus, studioMasterOutRef.current ?? ctx.destination);
-    const spb = spbFromBpm(bpmRef.current);
-    const origin = originBeatRef.current;
-    const sessionStart = sessionStartRef.current;
-    const horizon = ctSnap + METRO_SCHEDULE_AHEAD_SEC;
-    const tracks = studioTracksRef.current;
-    const carrierTracks = studioEditorVocoderCarrierTracks(tracks);
-    const trackFx = trackFxSlotsRef.current;
-    const scheduled = audioPreviewScheduledRef.current;
-    const buffers = studioAudioBuffersRef.current;
-    const tracking = scheduledPreviewAudioClipsRef.current;
+  const refillAudioPreview = useCallback(
+    (ctx: AudioContext, ctSnap: number, opts?: { loopContinuation?: boolean }) => {
+      if (!runningRef.current) return;
+      const bus = midiPreviewBusRef.current;
+      if (!bus || ctx.state === 'closed') return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume().catch(() => {});
+      }
+      const spb = spbFromBpm(bpmRef.current);
+      const origin = originBeatRef.current;
+      const sessionStart = sessionStartRef.current;
+      if (sessionStart <= 0) return;
+      const horizon = ctSnap + METRO_SCHEDULE_AHEAD_SEC;
+      const tracks = studioTracksRef.current;
+      const carrierTracks = studioEditorVocoderCarrierTracks(tracks);
+      const trackFx = trackFxSlotsRef.current;
+      const scheduled = audioPreviewScheduledRef.current;
+      const buffers = studioAudioBuffersRef.current;
+      const tracking = scheduledPreviewAudioClipsRef.current;
+      const loopOn = loopOnRef.current;
+      const loopStart = loopStartBeatRef.current;
+      const loopEnd = loopEndBeatRef.current;
+      const loopSpan = loopEnd - loopStart;
+      const loopLap = midiPreviewLoopLapRef.current;
+      const loopCatchUpSec = 0.15;
 
-    for (let ti = 0; ti < tracks.length; ti++) {
-      const tr = tracks[ti];
-      if (tr.audioClips.length === 0) continue;
-      if (tr.kind !== 'audio' && tr.kind !== 'trackAlign' && tr.kind !== 'a2m' && tr.kind !== 'synthGeno') continue;
-      const muted = se2EffectiveTrackMuted(ti, trackMutesRef.current, trackSolosRef.current);
-      if (muted) continue;
-      const fxSlots = trackFx[ti] ?? emptyMixerFxSlots();
-      const rawFx = trackVocalFxRef.current[ti] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
-      const effectiveFx = studioEffectiveTrackVocalFx(rawFx, fxSlots);
-      const vocalFx = studioTrackVocalFxActive(effectiveFx);
-      const keyRoot =
-        tr.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
-      const keyMode =
-        tr.a2mKeyMode ?? songKeyModeRef.current;
-      for (const clip of tr.audioClips) {
-        const dryBuf = buffers.get(clip.sourceId);
-        if (!dryBuf) continue;
-        const useLiveVocalFx = vocalFx && studioUseLiveVocalFxPlayback(effectiveFx);
-        const key = se2AudioClipPreviewScheduleKey(
-          tr.id,
-          clip,
-          se2ClipUsesAlignStretchPlayback(tr.kind, clip),
-        );
-        const tClipStart = sessionStart + (clip.startBeat - origin) * spb;
-        const tClipEnd = tClipStart + clip.durationBeats * spb;
-        if (tClipEnd < ctSnap - 0.02) {
-          scheduled.delete(key);
-          continue;
-        }
-        if (tClipStart > horizon) continue;
-        if (scheduled.has(key)) continue;
-        scheduled.add(key);
-        try {
-          const stripIn = se2TrackPlaybackInput(
+      for (let ti = 0; ti < tracks.length; ti++) {
+        const tr = tracks[ti];
+        if (tr.audioClips.length === 0) continue;
+        if (tr.kind !== 'audio' && tr.kind !== 'trackAlign' && tr.kind !== 'a2m' && tr.kind !== 'synthGeno') continue;
+        const muted = se2EffectiveTrackMuted(ti, trackMutesRef.current, trackSolosRef.current);
+        if (muted) continue;
+        const fxSlots = trackFx[ti] ?? emptyMixerFxSlots();
+        const rawFx = trackVocalFxRef.current[ti] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
+        const effectiveFx = studioEffectiveTrackVocalFx(rawFx, fxSlots);
+        const vocalFx = studioTrackVocalFxActive(effectiveFx);
+        const keyRoot = tr.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
+
+        let playbackBus = getStudioTrackClipPlaybackBus(ti);
+        if (!playbackBus) {
+          se2TrackPlaybackInput(
             ctx,
             bus,
             ti,
             trackFxSlotsRef.current[ti] ?? emptyMixerFxSlots(),
             trackInsertFxRacksRef.current[ti] ?? defaultStudioTrackInsertFxRack(),
-    bpmRef.current,
-    studioMasterOutRef.current ?? ctx.destination,
-  );
-          const panMs = trackPansRef.current[ti] ?? 64;
-          const monoT = trackMonosRef.current[ti] ?? false;
-          const faderV = trackVolumesRef.current[ti] ?? MIXER_UNITY_VOL;
-          applyStudioMixerStripMix(ti, {
-            muted,
-            vol127: faderV,
-            pan127: panMs,
-            mono: monoT,
-          });
-          scheduleAudioClipOnPreviewBus({
-            ctx,
-            bus: stripIn,
-            buffer: dryBuf,
-            tClipStart,
-            tClipEnd,
-            tScheduleFrom: ctSnap + 0.002,
-            pan127: panMs,
-            monoTrack: monoT,
-            faderVol127: faderV,
-            tracking,
-            insertSlots: fxSlots,
-            insertRack: trackInsertFxRacksRef.current[ti],
-            bpm: bpmRef.current,
-            pitchMonitorTrackIndex: ti,
-            useLiveVocalFx: Boolean(useLiveVocalFx),
-            vocalFx: useLiveVocalFx ? effectiveFx : undefined,
-            keyRoot,
-            vocalTrackIndex: ti,
-            carrierTracks,
+            bpmRef.current,
+            studioMasterOutRef.current ?? ctx.destination,
+          );
+          playbackBus = getStudioTrackClipPlaybackBus(ti);
+        }
+        if (!playbackBus) continue;
+
+        const panMs = trackPansRef.current[ti] ?? 64;
+        const monoT = trackMonosRef.current[ti] ?? false;
+        const faderV = trackVolumesRef.current[ti] ?? MIXER_UNITY_VOL;
+        applyStudioMixerStripMix(ti, {
+          muted,
+          vol127: faderV,
+          pan127: panMs,
+          mono: monoT,
+        });
+
+        for (const clip of tr.audioClips) {
+          const dryBuf = buffers.get(clip.sourceId);
+          if (!dryBuf) continue;
+          const useLiveVocalFx = vocalFx && studioUseLiveVocalFxPlayback(effectiveFx);
+          const timeStretchAlign = se2ClipUsesAlignStretchPlayback(tr.kind, clip);
+          const sourceOffsetBeats = se2AudioClipSourceOffsetBeats(clip);
+          const occurrences = se2AudioClipLoopOccurrences({
             clipStartBeat: clip.startBeat,
             clipDurationBeats: clip.durationBeats,
-            sourceOffsetSec: se2AudioClipSourceOffsetBeats(clip) * spb,
-            clipWallDurationSec: clip.durationBeats * spb,
-            timeStretchAlign: se2ClipUsesAlignStretchPlayback(tr.kind, clip),
-            alignLockedStretchRate: clip.alignWallStretchRate,
+            sourceOffsetBeats,
+            originBeat: origin,
+            sessionStart,
+            spb,
+            ctSnap,
+            horizon,
+            loopOn,
+            loopStartBeat: loopStart,
+            loopEndBeat: loopEnd,
           });
-        } catch {
-          scheduled.delete(key);
+
+          for (const occ of occurrences) {
+            const inLoopRegion =
+              loopOn &&
+              loopSpan > 1e-6 &&
+              se2AudioClipIntersectsLoopRegion({
+                clipStartBeat: clip.startBeat,
+                clipDurationBeats: clip.durationBeats,
+                loopStartBeat: loopStart,
+                loopEndBeat: loopEnd,
+              });
+            const key = inLoopRegion
+              ? se2AudioClipPreviewScheduleKeyLoopLap(
+                  loopLap,
+                  tr.id,
+                  clip.id,
+                  occ.repeatInLap,
+                  timeStretchAlign,
+                )
+              : se2AudioClipPreviewScheduleKey(tr.id, clip, timeStretchAlign);
+
+            if (occ.tOff < ctSnap - 0.02) {
+              scheduled.delete(key);
+              continue;
+            }
+            const segOffset = occ.segStartBeat - loopStart;
+            const isLoopDownbeat = inLoopRegion && segOffset < 1e-6;
+            if (occ.tOn < ctSnap - 0.03) {
+              const allowLoopReschedule =
+                inLoopRegion &&
+                (opts?.loopContinuation || isLoopDownbeat) &&
+                occ.tOn >= ctSnap - loopCatchUpSec;
+              if (!allowLoopReschedule) {
+                scheduled.add(key);
+                continue;
+              }
+            }
+            if (scheduled.has(key)) continue;
+            scheduled.add(key);
+
+            const segDurBeats = occ.segEndBeat - occ.segStartBeat;
+            try {
+              scheduleAudioClipOnPreviewBus({
+                ctx,
+                bus: playbackBus,
+                buffer: dryBuf,
+                tClipStart: occ.tOn,
+                tClipEnd: occ.tOff,
+                tScheduleFrom: ctSnap + 0.002,
+                pan127: panMs,
+                monoTrack: monoT,
+                faderVol127: faderV,
+                tracking,
+                insertSlots: fxSlots,
+                insertRack: trackInsertFxRacksRef.current[ti],
+                bpm: bpmRef.current,
+                pitchMonitorTrackIndex: ti,
+                useLiveVocalFx: Boolean(useLiveVocalFx),
+                vocalFx: useLiveVocalFx ? effectiveFx : undefined,
+                keyRoot,
+                vocalTrackIndex: ti,
+                carrierTracks,
+                clipStartBeat: occ.occurrenceStartBeat,
+                clipDurationBeats: segDurBeats,
+                sourceOffsetSec: occ.sourceOffsetBeats * spb,
+                clipWallDurationSec: segDurBeats * spb,
+                timeStretchAlign,
+                alignLockedStretchRate: clip.alignWallStretchRate,
+              });
+            } catch {
+              scheduled.delete(key);
+            }
+          }
         }
       }
-    }
-  }, []);
+    },
+    [],
+  );
 
   const refillMetroLoopContinuation = useCallback(
     (ctx: AudioContext, tCapture: number) => {
@@ -9162,7 +9234,7 @@ export default function StudioEditor2Screen({
     (ctx: AudioContext, tCapture: number) => {
       refillMetronome(ctx, tCapture, { loopContinuation: true });
       refillMidiPreview(ctx, tCapture, { loopContinuation: true });
-      refillAudioPreview(ctx, tCapture);
+      refillAudioPreview(ctx, tCapture, { loopContinuation: true });
     },
     [refillAudioPreview, refillMetronome, refillMidiPreview],
   );
@@ -9173,8 +9245,10 @@ export default function StudioEditor2Screen({
       const prevLap = midiPreviewLoopLapRef.current;
       midiPreviewLoopLapRef.current += 1;
       studioMidiPreviewPurgeLoopLapKeys(midiPreviewScheduledRef.current, prevLap);
+      se2AudioPreviewPurgeLoopLapKeys(audioPreviewScheduledRef.current, prevLap);
       midiHardwareScheduledRef.current.clear();
       audioPreviewScheduledRef.current.clear();
+      stopScheduledPreviewAudioClips(scheduledPreviewAudioClipsRef.current);
       silenceSe2SynthPreviewVoices();
 
       const loopStart = loopStartBeatRef.current;
@@ -9641,8 +9715,10 @@ export default function StudioEditor2Screen({
       const bus = midiPreviewBusRef.current;
       if (!bus) return;
       const downstream = studioMasterOutRef.current ?? ctx.destination;
-      ensureSe2MixerStrips(ctx, bus, downstream);
-      primeSe2MixerStripRoutes(ctx, bus, downstream);
+      if (!runningRef.current) {
+        ensureSe2MixerStrips(ctx, bus, downstream);
+        primeSe2MixerStripRoutes(ctx, bus, downstream);
+      }
       if (ctx.state === 'suspended') {
         try {
           await ctx.resume();
@@ -9676,8 +9752,10 @@ export default function StudioEditor2Screen({
       const masterOut = studioMasterOutRef.current;
       if (bus) {
         const downstream = masterOut ?? ctx.destination;
-        ensureSe2MixerStrips(ctx, bus, downstream);
-        primeSe2MixerStripRoutes(ctx, bus, downstream);
+        if (!runningRef.current) {
+          ensureSe2MixerStrips(ctx, bus, downstream);
+          primeSe2MixerStripRoutes(ctx, bus, downstream);
+        }
       }
       if (cancelled) return;
       const loop = (now: number) => {
@@ -17034,6 +17112,7 @@ export default function StudioEditor2Screen({
       const downstream = masterOut ?? ctx.destination;
       ensureSe2MixerStrips(ctx, bus, downstream);
       primeSe2MixerStripRoutes(ctx, bus, downstream);
+      setStudioMixerStripGraphPlaybackLocked(true);
     }
     await Promise.all([
       ...studioTracksRef.current
@@ -17102,6 +17181,7 @@ export default function StudioEditor2Screen({
     cancelScheduledMetroNodes();
     cancelArrangerPreviewScheduling();
     transportPlayStartPerfMsRef.current = 0;
+    setStudioMixerStripGraphPlaybackLocked(false);
     const ctx = ctxRef.current;
     if (!ctx || ctx.state === 'closed') {
       runningRef.current = false;

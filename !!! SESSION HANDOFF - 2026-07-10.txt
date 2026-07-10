@@ -1,0 +1,71 @@
+================================================================================
+★ MAIN SESSION HANDOFF — READ THIS FIRST ★
+================================================================================
+Timestamp: Friday Jul 10, 2026 — 6:29 PM Central (UTC-5)
+User: dale lane (Drlane123)
+Workspace: E:\Da-Music-Box-v4-SOURCE-COMPLETE (E: drive only)
+Live site: https://da-muzik-box.pages.dev
+GitHub: https://github.com/Drlane123/Da-muzik-box (branch: main)
+
+TO RESUME IN CURSOR
+-------------------
+Say: "Continue from SESSION HANDOFF Jul 10 evening" or open this file.
+This chat covered: white-screen recovery, SE2 audio dropout, loop overlap,
+FX suite master power, and a GitHub push for Cloudflare testing.
+
+WHAT WE FIXED THIS SESSION (evening — pushed to GitHub)
+-------------------------------------------------------
+1. SE2 WAV/audio dropout during playback (not loop-related)
+   - Locked mixer strip graph while transport is playing
+   - Stopped insert-FX / vocal effects from rewiring graph mid-play
+   - Stable clip playback bus (getStudioTrackClipPlaybackBus)
+   - Meter worklet load dedupe; no strip rebuild for worklet upgrade mid-play
+   Files: studioMixerStripBus.ts, studioMixerMeterWorklet.ts,
+          studioTrackInsertFxStrip.ts, StudioEditor2Screen.tsx
+
+2. SE2 audio LOOP overlap (loop region on WAV clips)
+   - Stop active buffer sources on loop splice before refill
+   - Loop-aware scheduling (se2AudioLoopPreview.ts + tests)
+   - Per-lap schedule keys; loopContinuation on refill
+   Files: se2AudioLoopPreview.ts, StudioEditor2Screen.tsx
+
+3. DA FX Suite master power button (mixer channel effects box)
+   - Top-right Suite power OFF now disarms ALL modules (gate, comp, drive, etc.)
+   - UI tiles/signal chain show off when suite powered down
+   Files: studioTrackInsertFx.ts, StudioAllInOneFxPanel.tsx, studioFxSuiteWidgets.tsx
+
+4. Earlier same day (already on main before evening push)
+   - Modules menu, mixer master pin, boot/PWA, Beat Pads toolbar (commit acafff0)
+
+DEPLOY / TEST ON OTHER MACHINES
+------------------------------
+- Push to GitHub triggers GitHub Actions → Cloudflare Pages
+- Test URL: https://da-muzik-box.pages.dev
+- Hard refresh after deploy: Ctrl+Shift+R
+- Local dev: bun run dev → http://localhost:5173
+
+KNOWN / DO NOT BREAK
+--------------------
+- Do NOT edit StudioEditor2Screen.tsx for transport clock experiments unless asked
+  (loop/audio fixes in SE2 were user-requested and scoped)
+- Beat Lab transport lock rules still apply (.cursor/rules/)
+- Loop behavior: user said loop is good — don't rework unless they ask
+- Next focus likely: more SE2 polish, synth work, or other in-app tasks
+
+DO NOT COMMIT TO GITHUB
+-----------------------
+- .cache/ drum kits, ONNX, backups
+- GitHub secrets (Cloudflare keys stay in repo Settings)
+
+FOR THE NEXT AGENT
+------------------
+User wants to return to THIS thread/history as main context.
+Audio + loop + FX suite power are the latest verified work.
+Ask what to tackle next inside the app after they test on laptop/Cloudflare.
+
+================================================================================
+Earlier same day (morning handoff — still valid)
+================================================================================
+- GitHub + Cloudflare Pages CI green
+- PWA install path in place
+- Session workflow: edit on E: → push GitHub → auto-deploy

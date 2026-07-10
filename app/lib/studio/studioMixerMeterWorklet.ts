@@ -12,6 +12,8 @@ export function ensureStudioChannelMeterWorklet(ctx: AudioContext): Promise<void
   if (typeof AudioWorkletNode === 'undefined') {
     return Promise.reject(new Error('AudioWorklet not supported'));
   }
+  /** Reuse in-flight load — parallel ensureCtx/play must not reset addModule mid-flight. */
+  if (loadPromise && loadedCtx === ctx) return loadPromise;
   loadedCtx = ctx;
   loaded = false;
   loadPromise = ctx.audioWorklet

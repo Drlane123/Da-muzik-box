@@ -319,6 +319,28 @@ export function studioInsertFxSuitePowered(rack: StudioTrackInsertFxRack): boole
   return rack.suiteOn === true;
 }
 
+/** Master power off — bypass suite and disarm every module (gate, comp, drive, …). */
+export function studioInsertFxSuiteMasterPowerOff(
+  rack: StudioTrackInsertFxRack,
+): StudioTrackInsertFxRack {
+  const base = cloneStudioTrackInsertFxRack(rack);
+  return {
+    ...base,
+    suiteOn: false,
+    analogSaturation: { level: 0 },
+    eq: { ...base.eq, enabled: false },
+    deEsser: { ...base.deEsser, enabled: false },
+    gate: { ...base.gate, enabled: false },
+    compressor: { ...base.compressor, enabled: false },
+    saturation: { ...base.saturation, enabled: false },
+    filter: { ...base.filter, enabled: false },
+    chorus: { ...base.chorus, enabled: false },
+    delay: { ...base.delay, enabled: false },
+    reverb: { ...base.reverb, enabled: false },
+    limiter: { ...base.limiter, enabled: false },
+  };
+}
+
 /** True when any DA FX Suite module is armed (excludes Spectrum Forge + vocal FX). */
 export function studioInsertFxSuiteActive(rack: StudioTrackInsertFxRack): boolean {
   return (

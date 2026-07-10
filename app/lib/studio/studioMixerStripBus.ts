@@ -83,6 +83,16 @@ type MasterMeterTap = {
 let masterMeterTap: MasterMeterTap | null = null;
 /** Stable master → output wire — meter tap rebuild must not disconnect this path. */
 let masterBusOutputWired: { masterBus: GainNode; downstream: AudioNode } | null = null;
+/** While SE2 transport is running, never tear down strip nodes (disconnects live WAV/MIDI). */
+let stripGraphPlaybackLocked = false;
+
+export function setStudioMixerStripGraphPlaybackLocked(locked: boolean): void {
+  stripGraphPlaybackLocked = locked;
+}
+
+export function isStudioMixerStripGraphPlaybackLocked(): boolean {
+  return stripGraphPlaybackLocked;
+}
 
 function ensureMasterBusOutput(masterBus: GainNode, downstream: AudioNode): void {
   if (
@@ -318,9 +328,8 @@ function masterTapNeedsRebuild(
   downstream: AudioNode,
 ): boolean {
   if (!masterMeterTap) return true;
+  if (stripGraphPlaybackLocked) return false;
   if (masterMeterTap.ctx !== ctx || masterMeterTap.downstream !== downstream) return true;
-  const workletUsable = studioChannelMeterWorkletUsable(ctx);
-  if (workletUsable && !masterMeterTap.meterWorklet) return true;
   return false;
 }
 
@@ -468,11 +477,10 @@ function peaksToSnapshot(
 }
 
 function stripNeedsRebuild(existing: StripNodes | undefined, ctx: AudioContext): boolean {
+  if (stripGraphPlaybackLocked && existing) return false;
   if (!existing || existing.input.context !== ctx || existing.version !== STRIP_BUS_VERSION) {
     return true;
   }
-  const workletUsable = studioChannelMeterWorkletUsable(ctx);
-  if (workletUsable && !existing.meterWorklet) return true;
   return false;
 }
 

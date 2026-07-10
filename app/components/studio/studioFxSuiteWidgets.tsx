@@ -23,6 +23,7 @@ import {
 } from '@/app/lib/studio/studioTrackAnalyserBus';
 import { useStudioAnalyserLevels } from '@/app/hooks/useStudioAnalyserLevels';
 import type { StudioTrackInsertFxRack } from '@/app/lib/studio/studioTrackInsertFx';
+import { studioInsertFxSuitePowered } from '@/app/lib/studio/studioTrackInsertFx';
 import {
   DEESSER_AMOUNT_MAX,
   DEESSER_FREQ_MAX_HZ,
@@ -3191,6 +3192,7 @@ export const SUITE_MODULES: { id: SuiteModuleId; label: string; accent: string; 
 ];
 
 export function suiteModuleEnabled(rack: StudioTrackInsertFxRack, id: SuiteModuleId): boolean {
+  if (!studioInsertFxSuitePowered(rack)) return false;
   switch (id) {
     case 'eq':
       return rack.eq.enabled;

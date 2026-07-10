@@ -39,6 +39,7 @@ import {
   STUDIO_EQ_PRESETS,
   cloneStudioTrackInsertFxRack,
   normalizeStudioFilter,
+  studioInsertFxSuiteMasterPowerOff,
   studioTrackInsertFxRacksEqual,
   STUDIO_DEESSER_AMOUNT_MAX,
   STUDIO_DEESSER_FREQ_MAX,
@@ -220,7 +221,11 @@ export function StudioAllInOneFxPanel({
 
   const toggleSuitePower = useCallback(() => {
     const r = draftRackRef.current;
-    patchRack({ ...r, suiteOn: !r.suiteOn }, { immediate: true });
+    if (r.suiteOn) {
+      patchRack(studioInsertFxSuiteMasterPowerOff(r), { immediate: true });
+    } else {
+      patchRack({ ...r, suiteOn: true }, { immediate: true });
+    }
   }, [patchRack]);
 
   const toggleModule = useCallback(

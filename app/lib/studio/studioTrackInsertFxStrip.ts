@@ -22,6 +22,7 @@ import { releaseSpectrumForgeBus, resetAllSpectrumForgeBuses } from '@/app/lib/s
 import {
   ensureStudioMixerStrips,
   getStudioMixerStripInput,
+  isStudioMixerStripGraphPlaybackLocked,
   resolveStudioMixerStripInput,
 } from '@/app/lib/studio/studioMixerStripBus';
 import {
@@ -410,6 +411,16 @@ export function resolveStudioTrackPlaybackInput(
   bpm: number,
   downstream?: AudioNode,
 ): GainNode {
+  const routeEarly = routes.get(trackIndex);
+  if (
+    isStudioMixerStripGraphPlaybackLocked()
+    && routeEarly?.stripFeed
+    && routeEarly.preStrip
+  ) {
+    retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex);
+    return resolveClipPlaybackBus(trackIndex, routeEarly.preStrip);
+  }
+
   ensureStudioMixerStrips(ctx, masterBus, stripCount, downstream);
   const stripIn = resolveStudioMixerStripInput(ctx, masterBus, trackIndex, stripCount, downstream);
   const route = ensurePreStrip(ctx, trackIndex);
@@ -512,6 +523,13 @@ export function resyncStudioTrackInsertFxStripInputs(
 
 export function getStudioTrackInsertPreStrip(trackIndex: number): GainNode | null {
   return routes.get(trackIndex)?.preStrip ?? null;
+}
+
+/** Stable clip/MIDI bus — preStrip or vocal-stack entry when already wired. */
+export function getStudioTrackClipPlaybackBus(trackIndex: number): GainNode | null {
+  const route = routes.get(trackIndex);
+  if (!route?.preStrip) return null;
+  return resolveClipPlaybackBus(trackIndex, route.preStrip);
 }
 
 export function retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex: number): void {
