@@ -74,7 +74,15 @@ export function grooveLabPlaylineWapiLoopWrapped(
 }
 
 export function cancelGrooveLabPlaylineWapi(refs: GrooveLabPlaylineWapiRefs, el: HTMLElement | null): void {
+  const anim = refs.animRef.current;
   refs.animRef.current = null;
+  if (anim) {
+    try {
+      anim.cancel();
+    } catch {
+      /* already cancelled */
+    }
+  }
   if (!el) return;
   el.getAnimations().forEach((a) => a.cancel());
   el.style.removeProperty('will-change');

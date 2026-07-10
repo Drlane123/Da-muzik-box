@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkles } from 'lucide-react';
+import { HelpCircle, Sparkles } from 'lucide-react';
 
 import { MelodyMatchPanel } from '@/app/components/creation/MelodyMatchPanel';
 import { useMasterClock } from '@/app/context/MasterClockContext';
@@ -41,6 +41,12 @@ import {
   voiceMidiNoteFromFrequency,
   voiceMidiPitchEvent,
 } from '@/app/lib/creationStation/voiceToMidiEffect';
+import { HARMONY_MATCH_HELP_INTRO_STORAGE } from '@/app/lib/vocalLab/vocalLabInstructions';
+import {
+  VocalLabHelpProvider,
+  VocalLabHelpTip,
+  useVocalLabHelpContext,
+} from '@/app/components/vocalLab/VocalLabHelpHub';
 
 export interface HarmonyMatchScreenProps {
   onOpenGrooveLab: () => void;
@@ -309,6 +315,7 @@ export default function HarmonyMatchScreen({ onOpenGrooveLab }: HarmonyMatchScre
   );
 
   return (
+    <VocalLabHelpProvider autoIntro introTab="harmony" introStorageKey={HARMONY_MATCH_HELP_INTRO_STORAGE}>
     <div
       style={{
         flex: 1,
@@ -332,11 +339,15 @@ export default function HarmonyMatchScreen({ onOpenGrooveLab }: HarmonyMatchScre
       >
         <Sparkles size={18} color="#7cf4c6" />
         <div>
-          <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: 0.4 }}>Harmony Match</div>
+          <div style={{ fontSize: 14, fontWeight: 900, letterSpacing: 0.4, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            Harmony Match
+            <VocalLabHelpTip tab="harmony" title="Harmony Match — melody to chords" />
+          </div>
           <div style={{ fontSize: 10, color: '#7a7a88', marginTop: 2 }}>
             Hum or upload a melody → pick a progression → open in Groove Lab
           </div>
         </div>
+        <HarmonyMatchHowToBtn />
       </header>
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 18 }}>
@@ -364,6 +375,7 @@ export default function HarmonyMatchScreen({ onOpenGrooveLab }: HarmonyMatchScre
               voiceMidiLive ? voiceMidiCaptureCount : melodyPitchEvents.length
             }
             onToggleVoiceMidiLive={toggleVoiceMidiLive}
+            helpTip={<VocalLabHelpTip tab="harmony" title="HUM · FILE · LIVE · MATCH" />}
           />
         </div>
 
@@ -377,5 +389,32 @@ export default function HarmonyMatchScreen({ onOpenGrooveLab }: HarmonyMatchScre
         </p>
       </div>
     </div>
+    </VocalLabHelpProvider>
+  );
+}
+
+function HarmonyMatchHowToBtn() {
+  const { openHelp } = useVocalLabHelpContext();
+  return (
+    <button
+      type="button"
+      onClick={() => openHelp('harmony')}
+      style={{
+        marginLeft: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 10px',
+        borderRadius: 6,
+        border: '1px solid rgba(244, 114, 182, 0.35)',
+        background: 'rgba(244, 114, 182, 0.1)',
+        color: '#f472b6',
+        fontSize: 10,
+        fontWeight: 800,
+        cursor: 'pointer',
+      }}
+    >
+      <HelpCircle size={12} /> HOW TO
+    </button>
   );
 }

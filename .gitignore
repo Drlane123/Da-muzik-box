@@ -1,9 +1,18 @@
 # Dependencies
 node_modules/
 
-# Build / cache
+# Build / cache (all on E: — see bunfig.toml + vite.config.ts)
 dist/
 .vite/
+.vite-cache/
+.cache/
+vite.config.ts.timestamp-*.mjs
+
+# Local backups (keep on E: only)
+*-source-backup-*.zip
+modified-today-*.zip
+BACKUP-MANIFEST-*.txt
+.cursor/workspace-data/
 *.local
 
 # Env & secrets

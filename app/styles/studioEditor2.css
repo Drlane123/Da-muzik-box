@@ -1,0 +1,943 @@
+/* Studio Editor 2 — Rajdhani pro-audio typography (matches FX Suite / Mikron style) */
+[data-studio-editor-2] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-studio-editor-2] .se2-type-title {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+[data-studio-editor-2] .se2-type-label {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+[data-studio-editor-2] .se2-type-micro {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+[data-studio-editor-2] .se2-type-value {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Beat Pads dock — Electric-style tech wordmark (Michroma + angle brackets) */
+[data-studio-editor-2] .se2-beat-pads-electric-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  font-family: 'Michroma', 'Orbitron', 'Audiowide', system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #f2f2f2;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
+}
+
+[data-studio-editor-2] .se2-beat-pads-electric-title-bracket {
+  font-family: 'Orbitron', 'Michroma', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+  color: #e0e0e0;
+  opacity: 0.92;
+  text-shadow: none;
+}
+
+[data-studio-editor-2] .se2-beat-pads-electric-title-word {
+  letter-spacing: 0.28em;
+}
+
+/* Beat Pads dock — modern horizontal volume slider (24px — matches Export / Master / Slave) */
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-strip {
+  min-height: 24px;
+  max-height: 24px;
+  line-height: 1;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-save {
+  flex-shrink: 0;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider {
+  --se2-bp-vol-accent: #7cf4c6;
+  width: 5rem;
+  height: 14px;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__track {
+  position: absolute;
+  inset: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(255, 255, 255, 0.06) 100%);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.65),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--se2-bp-vol-accent) 55%, #0a1410) 0%,
+    var(--se2-bp-vol-accent) 100%
+  );
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--se2-bp-vol-accent) 45%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: width 40ms linear;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__sweet-spot {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.72) 45%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  box-shadow: 0 0 6px color-mix(in srgb, var(--se2-bp-vol-accent) 70%, white);
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__input {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: transparent;
+  border: none;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--se2-bp-vol-accent) 85%, white);
+  background: radial-gradient(
+    circle at 35% 30%,
+    #ffffff 0%,
+    var(--se2-bp-vol-accent) 42%,
+    #0d1814 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 10px color-mix(in srgb, var(--se2-bp-vol-accent) 55%, transparent);
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__input::-moz-range-track {
+  height: 4px;
+  background: transparent;
+  border: none;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-vol-slider__input::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--se2-bp-vol-accent) 85%, white);
+  background: radial-gradient(
+    circle at 35% 30%,
+    #ffffff 0%,
+    var(--se2-bp-vol-accent) 42%,
+    #0d1814 100%
+  );
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 0 10px color-mix(in srgb, var(--se2-bp-vol-accent) 55%, transparent);
+}
+
+/* Numeric readouts (BPM, bars, time, channel #, dB) — replace generic mono */
+[data-studio-editor-2] .font-mono {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+[data-studio-editor-2] header button[role='tab'] {
+  font-family: inherit;
+  letter-spacing: 0.1em;
+}
+
+/* Header pills — File menu, Track view, Piano, Mix, Loop, Song, MIDI, How-to */
+[data-studio-editor-2] [data-studio-se2-header-pill] {
+  height: 24px;
+  min-height: 24px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border-radius: 0.375rem;
+  border: 1px solid #2a2a32;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55);
+  color: #c8c8d4;
+}
+
+[data-studio-editor-2] [data-studio-se2-header-pill][data-active='true'] {
+  border-color: rgba(124, 244, 198, 0.38);
+  background: rgba(124, 244, 198, 0.14);
+  color: #7cf4c6;
+  box-shadow:
+    0 0 0 1px rgba(124, 244, 198, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-studio-editor-2] [data-studio-se2-header-pill] .se2-header-pill-label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  color: #8a8a98;
+}
+
+[data-studio-editor-2] [data-studio-se2-header-pill] .se2-header-pill-action {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+[data-studio-editor-2] [data-studio-se2-header-pill] .se2-header-pill-action:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+[data-studio-editor-2] [data-studio-se2-header-pill][data-midi-on='true'] {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: rgba(0, 229, 255, 0.14);
+  color: #00e5ff;
+  box-shadow:
+    0 0 0 1px rgba(0, 229, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-studio-editor-2] [data-studio-se2-header-pill][data-how-to='true'] {
+  border-color: rgba(124, 244, 198, 0.38);
+  background: rgba(124, 244, 198, 0.1);
+  color: #7cf4c6;
+}
+
+/* Legacy alias — file menu chip */
+[data-studio-editor-2] [data-studio-se2-file-menu-chip] {
+  gap: 8px;
+  min-width: 8.5rem;
+  justify-content: center;
+  cursor: default;
+}
+
+[data-studio-editor-2] [data-studio-se2-song-key-chip] {
+  min-width: 8.5rem;
+  justify-content: center;
+}
+
+[data-studio-editor-2] [data-studio-se2-file-menu-chip] .se2-file-menu-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  line-height: 1;
+  color: #8a8a98;
+}
+
+[data-studio-editor-2] [data-studio-se2-file-menu-chip] button {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  line-height: inherit;
+  color: #c8c8d4;
+  cursor: pointer;
+}
+
+[data-studio-transport] button {
+  font-family: inherit;
+}
+
+/* Footer Bars / Time / BPM — caption above each readout box */
+[data-studio-transport] .se2-transport-pos-label {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+[data-studio-transport] .se2-transport-pos-sig {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  font-weight: 600;
+  color: #6a6a78;
+}
+
+/* Footer timeline zoom — pill track + glow thumb */
+[data-studio-transport] .se2-transport-zoom {
+  min-width: 5.25rem;
+  user-select: none;
+  margin-left: 0.125rem;
+}
+
+[data-studio-transport] .se2-transport-zoom-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: #6a6a78;
+}
+
+[data-studio-transport] .se2-transport-zoom-value {
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #7cf4c6;
+  text-shadow: 0 0 10px rgba(124, 244, 198, 0.22);
+}
+
+[data-studio-transport] .se2-transport-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 76px;
+  height: 5px;
+  margin: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(
+    90deg,
+    rgba(124, 244, 198, 0.9) 0%,
+    rgba(124, 244, 198, 0.45) var(--se2-zoom-fill, 0%),
+    #12121a var(--se2-zoom-fill, 0%),
+    #12121a 100%
+  );
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+[data-studio-transport] .se2-transport-zoom-slider:hover {
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.55),
+    0 0 14px rgba(124, 244, 198, 0.14);
+}
+
+[data-studio-transport] .se2-transport-zoom-slider:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.55),
+    0 0 0 2px rgba(124, 244, 198, 0.28);
+}
+
+[data-studio-transport] .se2-transport-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -1px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f0fff9 0%, #7cf4c6 50%, #2d8a6a 100%);
+  border: 2px solid #0a0a10;
+  box-shadow:
+    0 0 0 1px rgba(124, 244, 198, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 0 12px rgba(124, 244, 198, 0.35);
+  cursor: grab;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+[data-studio-transport] .se2-transport-zoom-slider:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.1);
+  box-shadow:
+    0 0 0 1px rgba(124, 244, 198, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.5),
+    0 0 16px rgba(124, 244, 198, 0.5);
+}
+
+[data-studio-transport] .se2-transport-zoom-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+}
+
+[data-studio-transport] .se2-transport-zoom-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f0fff9 0%, #7cf4c6 50%, #2d8a6a 100%);
+  border: 2px solid #0a0a10;
+  box-shadow:
+    0 0 0 1px rgba(124, 244, 198, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 0 12px rgba(124, 244, 198, 0.35);
+  cursor: grab;
+}
+
+[data-studio-transport] .se2-transport-zoom-slider:active::-moz-range-thumb {
+  cursor: grabbing;
+  transform: scale(1.1);
+}
+
+[data-studio-mixer] .text-\[9px\].font-bold.uppercase,
+[data-studio-mixer] .text-\[8px\].font-bold.uppercase {
+  letter-spacing: 0.14em;
+}
+
+/* Track column — FX Suite Rajdhani (names, labels, channel #, lane controls) */
+[data-studio-track-view] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Nudge lane names + control boxes off the left accent rail */
+[data-studio-track-view] > div {
+  padding-left: 6px;
+  box-sizing: border-box;
+}
+
+[data-studio-track-view] button,
+[data-studio-track-view] span {
+  font-family: inherit;
+}
+
+[data-studio-track-view] button {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+[data-studio-track-view] .se2-type-label {
+  letter-spacing: 0.06em;
+}
+
+[data-studio-track-view] .se2-type-micro {
+  letter-spacing: 0.04em;
+}
+
+/* Track display only — lane labels & in-column selectors (not mixer / piano toolbar) */
+[data-studio-track-view] [data-studio-add-track-trigger] {
+  font-size: 14px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+
+[data-studio-track-view] [data-studio-add-track-trigger] + button + button span {
+  font-size: 10px !important;
+  letter-spacing: 0.04em !important;
+}
+
+[data-studio-track-view] button.flex.flex-1.flex-col [data-studio-midi-instrument-trigger],
+[data-studio-track-view] button.flex.flex-1.flex-col > span button,
+[data-studio-track-view] button.flex.flex-1.flex-col > button:not(.flex-col) {
+  font-size: 12px !important;
+  padding: 2px 5px !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1.2 !important;
+}
+
+[data-studio-track-view] .text-\[11px\] {
+  font-size: 11px;
+}
+
+[data-studio-track-view] .text-\[12px\] {
+  font-size: 12px;
+}
+
+[data-studio-track-view] .text-\[13px\] {
+  font-size: 13px;
+}
+
+[data-studio-track-view] .font-mono,
+[data-studio-track-view] .font-mono.tabular-nums {
+  font-family: inherit !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+[data-studio-track-view] .uppercase,
+[data-studio-track-view] .se2-type-label,
+[data-studio-track-view] .se2-type-micro {
+  text-transform: uppercase;
+}
+
+[data-studio-midi-context] .font-mono {
+  font-weight: 600;
+}
+
+/* Piano roll toolbar — same Rajdhani / spaced caps as FX Suite */
+[data-studio-piano-roll-toolbar],
+[data-studio-midi-context] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-studio-piano-roll-toolbar] button,
+[data-studio-piano-roll-toolbar] select,
+[data-studio-piano-roll-toolbar] input,
+[data-studio-piano-roll-toolbar] label,
+[data-studio-piano-roll-toolbar] span,
+[data-studio-midi-context] button,
+[data-studio-midi-context] select,
+[data-studio-midi-context] input {
+  font-family: inherit;
+}
+
+[data-studio-piano-roll-toolbar] button,
+[data-studio-midi-context] button {
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+[data-studio-piano-roll-toolbar] > div {
+  row-gap: 0.5rem;
+}
+
+/* Each bordered control sits in its own slot — matches rhythm-edit 1×/2× spacing */
+[data-studio-piano-roll-toolbar] .pr-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+}
+
+[data-studio-piano-roll-toolbar] .pr-toolbar-chip {
+  margin-left: 4px;
+  margin-right: 4px;
+}
+
+/* Keep quantize / octave row clear of the transport footer */
+[data-studio-editor-2] [data-studio-midi-context] {
+  margin-bottom: 2px;
+}
+
+[data-studio-piano-roll-toolbar] .font-mono,
+[data-studio-midi-context] .font-mono {
+  font-family: inherit !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* DawMiniMenu dropdown (portaled) */
+[data-studio-daw-mini-menu] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-studio-daw-mini-menu] button {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* Generate menu — timeline + piano roll */
+[data-studio-track-generate-menu],
+[data-studio-track-generate-trigger] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-studio-track-generate-menu] button {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* Harmony panel (portaled) */
+[data-studio-harmony-panel] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-studio-harmony-panel] button,
+[data-studio-harmony-panel] select,
+[data-studio-harmony-panel] label,
+[data-studio-harmony-panel] span {
+  font-family: inherit;
+}
+
+[data-studio-harmony-panel] button {
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+[data-studio-track-key-menu] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-studio-track-key-menu] button {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* Track column selectors — FX Suite Rajdhani (portaled menus + triggers) */
+[data-studio-add-track-popover],
+[data-studio-add-track-trigger],
+[data-studio-midi-instrument-popover],
+[data-studio-midi-instrument-trigger],
+[data-studio-a2m-mode-popover],
+[data-studio-drum-pattern-menu],
+[data-studio-beatlab-pattern-menu] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-studio-add-track-popover] button,
+[data-studio-add-track-trigger],
+[data-studio-midi-instrument-popover] button,
+[data-studio-midi-instrument-trigger],
+[data-studio-a2m-mode-popover] button,
+[data-studio-drum-pattern-menu] button,
+[data-studio-beatlab-pattern-menu] button {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+[data-studio-add-track-popover] [data-track-kind-label] {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+[data-studio-add-track-popover] [data-track-kind-hint] {
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
+[data-studio-add-track-popover] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 244, 198, 0.45) rgba(255, 255, 255, 0.06);
+}
+
+[data-studio-midi-instrument-popover] button[role='option'] {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  padding: 4px 10px !important;
+}
+
+/* Top header — Track view, Piano, Mix, Loop, Song, Normalize, Consolidate */
+[data-studio-editor-2] header[data-studio-se2-header] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-studio-editor-2] header[data-studio-se2-header] [role='tab'],
+[data-studio-editor-2] header[data-studio-se2-header] button {
+  font-family: inherit;
+}
+
+[data-studio-editor-2] header[data-studio-se2-header] [role='tab'] {
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+
+[data-studio-se2-header-chip],
+[data-studio-consolidate-menu] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-studio-se2-header-chip] button,
+[data-studio-se2-header-chip] input,
+[data-studio-se2-header-chip] span,
+[data-studio-song-key-menu] button,
+[data-studio-consolidate-menu] button,
+[data-studio-consolidate-menu] input,
+[data-studio-consolidate-menu] label,
+[data-studio-consolidate-menu] span {
+  font-family: inherit;
+}
+
+[data-studio-se2-header-chip] .se2-type-label {
+  letter-spacing: 0.12em;
+}
+
+[data-studio-song-key-menu] button {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  font-size: 12px;
+  text-transform: none;
+}
+
+[data-studio-consolidate-menu] button {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+[data-studio-se2-project-menu],
+[data-studio-se2-export-menu],
+[data-studio-se2-song-menu],
+[data-studio-consolidate-menu],
+[data-studio-song-key-menu],
+[data-studio-se2-dropdown] {
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+[data-studio-se2-dropdown] button,
+[data-studio-se2-project-menu] button,
+[data-studio-se2-export-menu] button,
+[data-studio-se2-song-menu] button,
+[data-studio-consolidate-menu] button,
+[data-studio-song-key-menu] button,
+[data-studio-se2-dropdown] label,
+[data-studio-se2-dropdown] input,
+[data-studio-se2-dropdown] p,
+[data-studio-se2-dropdown] span {
+  font-family: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+}
+
+[data-studio-se2-dropdown] .se2-dd-caption {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #8a8a98;
+  margin: 0;
+}
+
+[data-studio-se2-dropdown] .se2-dd-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #c8c8d4;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+[data-studio-se2-dropdown] .se2-dd-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+[data-studio-se2-dropdown] .se2-dd-hint {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #6a6a78;
+  margin: 0;
+}
+
+[data-studio-se2-dropdown] .se2-dd-footnote {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: #5a5a68;
+  margin: 0;
+}
+
+[data-studio-se2-dropdown] .se2-dd-input {
+  width: 2.75rem;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  border-radius: 4px;
+  border: 1px solid #2a2a32;
+  color: #c8c8d4;
+  background: transparent;
+  padding: 2px 4px;
+  outline: none;
+}
+
+[data-studio-se2-dropdown] .se2-dd-chip {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  border-radius: 4px;
+  border: 1px solid #2a2a32;
+  color: #8a8a98;
+  background: transparent;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+[data-studio-se2-dropdown] .se2-dd-action {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  border-radius: 4px;
+  border: 1px solid #2a2a32;
+  color: #8a8a98;
+  background: transparent;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+[data-studio-se2-dropdown] .se2-dd-action--primary {
+  border-color: rgba(124, 244, 198, 0.35);
+  color: #7cf4c6;
+  background: rgba(124, 244, 198, 0.1);
+}
+
+[data-studio-se2-dropdown] .se2-dd-track-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #c8c8d4;
+}
+
+[data-studio-se2-dropdown] .se2-dd-track-meta {
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: #6a6a78;
+}
+
+/* Lane selectors — instrument, drums, A2M (track column triggers) */
+[data-studio-drum-pattern-trigger],
+[data-studio-a2m-mode-trigger] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* SE2 MIDI Composer — Rajdhani panel (matches track / A2M dropdown typography) */
+[data-se2-midi-composer-panel],
+[data-se2-chord-genie-presets] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-se2-midi-composer-panel] [data-se2-mc-title] {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+[data-se2-midi-composer-panel] [data-se2-mc-label],
+[data-se2-chord-genie-presets] [data-se2-mc-label] {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+[data-se2-midi-composer-panel] [data-se2-mc-body],
+[data-se2-chord-genie-presets] [data-se2-mc-body],
+[data-se2-chord-genie-presets][data-se2-mc-body] {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.45;
+}
+
+[data-se2-midi-composer-panel] [data-se2-mc-body],
+[data-se2-midi-composer-panel] [data-se2-mc-input],
+[data-se2-midi-composer-panel] [data-se2-mc-select],
+[data-se2-midi-composer-panel] [data-se2-mc-btn],
+[data-se2-chord-genie-presets] [data-se2-mc-input],
+[data-se2-chord-genie-presets] [data-se2-mc-btn] {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+[data-se2-midi-composer-panel] [data-se2-mc-chat] {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  line-height: 1.45;
+}
+
+[data-se2-midi-composer-toggle] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

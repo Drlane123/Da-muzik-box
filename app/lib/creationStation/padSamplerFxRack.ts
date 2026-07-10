@@ -6,6 +6,7 @@
 import type { StoredPadSample } from '@/app/lib/padSampleStorage';
 
 export type PadSamplerDelayNote =
+  | '1/32'
   | '1/16'
   | '1/8'
   | '1/8t'
@@ -16,6 +17,7 @@ export type PadSamplerDelayNote =
   | '1bar';
 
 export const PAD_SAMPLER_DELAY_NOTE_OPTIONS: { id: PadSamplerDelayNote; label: string }[] = [
+  { id: '1/32', label: '1/32' },
   { id: '1/16', label: '1/16' },
   { id: '1/8', label: '1/8' },
   { id: '1/8t', label: '1/8T' },
@@ -26,8 +28,17 @@ export const PAD_SAMPLER_DELAY_NOTE_OPTIONS: { id: PadSamplerDelayNote; label: s
   { id: '1bar', label: '1 bar' },
 ];
 
+/** Beat Pads delay tab — primary tempo-sync divisions. */
+export const BEAT_PADS_DELAY_TEMPO_NOTE_OPTIONS: { id: PadSamplerDelayNote; label: string }[] = [
+  { id: '1/4', label: '1/4' },
+  { id: '1/8', label: '1/8' },
+  { id: '1/16', label: '1/16' },
+  { id: '1/32', label: '1/32' },
+];
+
 /** Length as fraction of a quarter note at project BPM. */
 const DELAY_NOTE_QUARTER_MUL: Record<PadSamplerDelayNote, number> = {
+  '1/32': 0.125,
   '1/16': 0.25,
   '1/8': 0.5,
   '1/8t': 1 / 3,
@@ -71,6 +82,15 @@ export type PadSamplerEqFx = {
   midQ: number;
 };
 
+/** Output limiter + soft clip — Cubase Pad FX right column (always available). */
+export type PadSamplerLimiterFx = {
+  enabled: boolean;
+  /** Ceiling / threshold dB −24 … 0. */
+  ceilingDb: number;
+  /** 0 = hard brick, 100 = soft clip (waveshaper + knee). */
+  softClip: number;
+};
+
 export type PadSamplerCompressorFx = {
   enabled: boolean;
   /** Threshold dB −48 … 0 (`DynamicsCompressorNode.threshold`). */
@@ -83,6 +103,12 @@ export type PadSamplerCompressorFx = {
   kneeDb: number;
   /** Makeup gain after compression, dB 0 … 18. */
   makeupDb: number;
+  /** De-esser before compressor — tames sibilance / hiss. */
+  deEsserEnabled: boolean;
+  /** Sibilance focus ~4k–10k Hz. */
+  deEsserFreqHz: number;
+  /** Reduction strength 0…1. */
+  deEsserAmount: number;
 };
 
 export type PadSamplerFxRack = {
@@ -90,6 +116,7 @@ export type PadSamplerFxRack = {
   compressor: PadSamplerCompressorFx;
   /** 0…1 soft-clip drive. */
   drive: number;
+  limiter: PadSamplerLimiterFx;
   delay: PadSamplerDelayFx;
   reverb: PadSamplerReverbFx;
 };
@@ -101,9 +128,9 @@ export function defaultPadSamplerFxRack(): PadSamplerFxRack {
       lowGainDb: 0,
       midGainDb: 0,
       highGainDb: 0,
-      lowFreqHz: 150,
+      lowFreqHz: 120,
       midFreqHz: 1000,
-      highFreqHz: 5000,
+      highFreqHz: 8000,
       midQ: 1,
     },
     compressor: {
@@ -114,8 +141,12 @@ export function defaultPadSamplerFxRack(): PadSamplerFxRack {
       releaseSec: 0.22,
       kneeDb: 8,
       makeupDb: 0,
+      deEsserEnabled: false,
+      deEsserFreqHz: 6500,
+      deEsserAmount: 0.55,
     },
     drive: 0,
+    limiter: { enabled: false, ceilingDb: -3, softClip: 55 },
     delay: {
       enabled: false,
       syncToBpm: true,
@@ -203,6 +234,15 @@ export function fxRackFromStored(row: StoredPadSample): PadSamplerFxRack {
       ? row.samplerFxDrive
       : 0;
   d.drive = Math.max(0, Math.min(1, drive));
+  if (row.samplerFxLimiterOn) {
+    d.limiter.enabled = true;
+    if (typeof row.samplerFxLimiterCeilDb === 'number') {
+      d.limiter.ceilingDb = Math.max(-24, Math.min(0, row.samplerFxLimiterCeilDb));
+    }
+    if (typeof row.samplerFxLimiterSoftClip === 'number') {
+      d.limiter.softClip = Math.max(0, Math.min(100, row.samplerFxLimiterSoftClip));
+    }
+  }
   if (row.samplerFxDelayOn) {
     d.delay.enabled = true;
     d.delay.syncToBpm = row.samplerFxDelaySync !== false;
@@ -270,6 +310,16 @@ export function writeFxRackToStored(row: StoredPadSample, rack: PadSamplerFxRack
   }
   const drive = Math.max(0, Math.min(1, rack.drive));
   row.samplerFxDrive = drive > 0.004 ? drive : undefined;
+  const limiter = rack.limiter;
+  if (limiter.enabled) {
+    row.samplerFxLimiterOn = true;
+    row.samplerFxLimiterCeilDb = Math.max(-24, Math.min(0, limiter.ceilingDb));
+    row.samplerFxLimiterSoftClip = Math.max(0, Math.min(100, Math.round(limiter.softClip)));
+  } else {
+    row.samplerFxLimiterOn = undefined;
+    row.samplerFxLimiterCeilDb = undefined;
+    row.samplerFxLimiterSoftClip = undefined;
+  }
   const delay = rack.delay;
   if (delay.enabled) {
     row.samplerFxDelayOn = true;
@@ -326,9 +376,62 @@ function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
 }
 
+/** Split-band de-esser — high band compressed then merged (runs before compressor). */
+export const DEESSER_FREQ_MIN_HZ = 2500;
+export const DEESSER_FREQ_MAX_HZ = 16000;
+/** UI + DSP ceiling — 150% for aggressive de-hiss / de-ess. */
+export const DEESSER_AMOUNT_MAX = 1.5;
+
+export type DeEsserParams = {
+  freqHz: number;
+  amount: number;
+};
+
+export function connectDeEsser(
+  ctx: AudioContext,
+  input: AudioNode,
+  params: DeEsserParams,
+): AudioNode {
+  const freq = Math.max(DEESSER_FREQ_MIN_HZ, Math.min(DEESSER_FREQ_MAX_HZ, params.freqHz));
+  const amount = Math.max(0, Math.min(DEESSER_AMOUNT_MAX, params.amount));
+  const t = amount / DEESSER_AMOUNT_MAX;
+
+  const lowPass = ctx.createBiquadFilter();
+  lowPass.type = 'lowpass';
+  lowPass.frequency.value = freq;
+  lowPass.Q.value = 0.707;
+
+  const highPass = ctx.createBiquadFilter();
+  highPass.type = 'highpass';
+  highPass.frequency.value = freq * 0.9;
+  highPass.Q.value = 0.707;
+
+  const ess = ctx.createDynamicsCompressor();
+  ess.threshold.value = -10 - t * 38;
+  ess.ratio.value = 2 + t * 18;
+  ess.attack.value = 0.00012;
+  ess.release.value = 0.018 + (1 - t) * 0.065;
+  ess.knee.value = Math.max(0, 10 - t * 10);
+
+  const hiTrim = ctx.createGain();
+  hiTrim.gain.value = Math.max(0.08, 1 - t * 0.78);
+
+  const merge = ctx.createGain();
+  merge.gain.value = 1;
+
+  input.connect(lowPass);
+  input.connect(highPass);
+  highPass.connect(ess);
+  ess.connect(hiTrim);
+  lowPass.connect(merge);
+  hiTrim.connect(merge);
+
+  return merge;
+}
+
 /**
  * Parallel insert FX — dry → `dryOut`, wet → `wetOut` (wet bus keeps ringing after sample ends).
- * Chain: EQ → compressor (+ makeup) → drive → taps for delay/reverb.
+ * Chain: EQ → de-esser → compressor (+ makeup) → drive → taps for delay/reverb.
  */
 export function connectPadSamplerFxRack(
   ctx: AudioContext,
@@ -366,6 +469,14 @@ export function connectPadSamplerFxRack(
     nodes.push(low, mid, high);
   }
 
+  if (rack.compressor.deEsserEnabled) {
+    split = connectDeEsser(ctx, split, {
+      freqHz: rack.compressor.deEsserFreqHz,
+      amount: rack.compressor.deEsserAmount,
+    });
+    nodes.push(split);
+  }
+
   if (rack.compressor.enabled) {
     const c = ctx.createDynamicsCompressor();
     c.threshold.value = Math.max(-48, Math.min(0, rack.compressor.thresholdDb));
@@ -388,6 +499,28 @@ export function connectPadSamplerFxRack(
     split.connect(sh);
     split = sh;
     nodes.push(sh);
+  }
+
+  if (rack.limiter.enabled) {
+    const lim = ctx.createDynamicsCompressor();
+    const ceil = Math.max(-24, Math.min(0, rack.limiter.ceilingDb));
+    const soft = Math.max(0, Math.min(100, rack.limiter.softClip));
+    lim.threshold.value = ceil;
+    lim.knee.value = soft * 0.38;
+    lim.ratio.value = 20;
+    lim.attack.value = 0.001;
+    lim.release.value = 0.07 + (100 - soft) * 0.002;
+    split.connect(lim);
+    split = lim;
+    nodes.push(lim);
+    if (soft > 1.5) {
+      const clip = ctx.createWaveShaper();
+      clip.curve = makeSoftClipCurve(soft / 100);
+      clip.oversample = '2x';
+      lim.connect(clip);
+      split = clip;
+      nodes.push(clip);
+    }
   }
 
   const dry = ctx.createGain();
@@ -444,6 +577,7 @@ export function clonePadSamplerFxRack(rack: PadSamplerFxRack): PadSamplerFxRack 
     eq: { ...rack.eq },
     compressor: { ...rack.compressor },
     drive: rack.drive,
+    limiter: { ...defaultPadSamplerFxRack().limiter, ...rack.limiter },
     delay: { ...rack.delay },
     reverb: { ...rack.reverb },
   };
@@ -453,7 +587,9 @@ export function padSamplerFxRackIsActive(rack: PadSamplerFxRack): boolean {
   return (
     rack.eq.enabled ||
     rack.compressor.enabled ||
+    rack.compressor.deEsserEnabled ||
     rack.drive > 0.004 ||
+    rack.limiter.enabled ||
     rack.delay.enabled ||
     rack.reverb.enabled
   );

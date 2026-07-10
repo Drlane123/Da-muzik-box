@@ -71,7 +71,7 @@ const MODE_INTERVALS: Record<Mode, readonly number[]> = {
 export const GROOVE_LAB_PATTERN_COLS_PER_BAR = 16;
 
 /** Per-bar degree shift (scale steps) for longer loops — repeats every 4 bars. */
-const GROOVE_BAR_PHRASE: Partial<Record<GrooveLabBassGrooveId, readonly number[]>> = {
+export const GROOVE_BAR_PHRASE: Partial<Record<GrooveLabBassGrooveId, readonly number[]>> = {
   'trap-808': [0, 0, 2, 0],
   'trap-808-slide': [0, 5, 0, 4],
   'drill-808': [0, 0, 7, 5],

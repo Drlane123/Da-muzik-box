@@ -1,0 +1,497 @@
+'use client';
+
+import { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  BASS_LOW_BASS_ORDER,
+  BASS_LOW_BASS_PRESETS,
+  TRAP_HOLD_808_ORDER,
+  TRAP_HOLD_808_PRESETS,
+  type BassLowBassPresetId,
+  type TrapHold808PresetId,
+} from '@/app/lib/creationStation/eightZeroEightVoice';
+import {
+  downloadLab808ToneMidi,
+  downloadLab808ToneWav,
+  renderLab808ToneToWav,
+} from '@/app/lib/creationStation/lab808Export';
+import { LAB808_DISPLAY_NAME } from '@/app/lib/creationStation/lab808UiTheme';
+import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
+import { previewSe2Lab808Note } from '@/app/lib/studio/se2Lab808Preview';
+import { Se2Lab808ChordLockPanel } from '@/app/components/studio/Se2Lab808ChordLockPanel';
+import { Se2Lab808DrumGrid } from '@/app/components/studio/Se2Lab808DrumGrid';
+import { Se2Lab808RootScope } from '@/app/components/studio/Se2Lab808RootScope';
+import { Se2Lab808TonePads } from '@/app/components/studio/Se2Lab808TonePads';
+import {
+  se2Lab808ChordLockKey,
+  se2Lab808ProgressionRoots,
+  se2Lab808ResolveHarmonyTrack,
+  type Se2Lab808ChordLockHarmonyTrack,
+} from '@/app/lib/studio/se2Lab808ChordLock';
+import { se2Lab808GenerateRootGridPattern } from '@/app/lib/studio/se2Lab808RootGridGenerate';
+import { se2Lab808ToneGridHasHits } from '@/app/lib/studio/se2Lab808DrumPattern';
+import {
+  se2Lab808ToneGridExportRenderOpts,
+  se2Lab808ToneGridToExportNotes,
+  se2Lab808ToneGridToRollNotes,
+  se2Lab808WavBytesToAudioBuffer,
+  type Se2Lab808ToneGridRollNote,
+} from '@/app/lib/studio/se2Lab808ToneGridExport';
+import type { Se2Lab808Track } from '@/app/lib/studio/se2Lab808Track';
+import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
+import { studioKeyLabel, type StudioDetectedKeyMode } from '@/app/lib/studio/studioAudioClipAnalysis';
+import type { CSSProperties } from 'react';
+
+export type Se2Lab808PanelTrack = Se2Lab808Track & {
+  id: string;
+  colorHex?: string;
+  name?: string;
+  laneNumber?: number;
+};
+
+export type Se2Lab808PanelProps = {
+  track: Se2Lab808PanelTrack;
+  voice: Se2Lab808VoiceParams;
+  bpm: number;
+  disabled?: boolean;
+  songKeyRoot: number;
+  songKeyMode: ChordMode;
+  studioTracks: readonly Se2Lab808ChordLockHarmonyTrack[];
+  lanePad: number;
+  getAudioContext: () => AudioContext;
+  getPreviewDestination: (ctx: AudioContext) => AudioNode;
+  onVoiceChange: (voice: Se2Lab808VoiceParams) => void;
+  onExportToneGridToPianoRoll?: (notes: Se2Lab808ToneGridRollNote[]) => void;
+  onExportToneGridWavToTrack?: (args: {
+    buffer: AudioBuffer;
+    loopBars: number;
+    bpm: number;
+    sourceTrackName: string;
+  }) => void;
+};
+
+const laneBtn = (active: boolean, accent: string): CSSProperties => ({
+  padding: '6px 8px',
+  borderRadius: 6,
+  border: `1px solid ${active ? `${accent}aa` : '#333340'}`,
+  background: active ? `${accent}22` : 'rgba(255,255,255,0.03)',
+  color: active ? accent : '#a8a8b8',
+  fontSize: 10,
+  fontWeight: 800,
+  lineHeight: 1.05,
+  minHeight: 28,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  cursor: 'pointer',
+  width: '100%',
+  textAlign: 'center',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+});
+
+const sideLabel: CSSProperties = {
+  fontSize: 8,
+  fontWeight: 800,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  color: '#8a8a98',
+};
+
+const genBtn = (accent: string, enabled: boolean, compact = false): CSSProperties => ({
+  padding: compact ? '6px 5px' : '6px 8px',
+  borderRadius: 6,
+  border: `1px solid ${enabled ? `${accent}88` : '#333340'}`,
+  background: enabled ? `${accent}18` : 'rgba(255,255,255,0.03)',
+  color: enabled ? accent : '#6a6a78',
+  fontSize: compact ? 9 : 8,
+  fontWeight: 800,
+  lineHeight: 1.05,
+  minHeight: compact ? 28 : undefined,
+  letterSpacing: '0.03em',
+  textTransform: 'uppercase',
+  cursor: enabled ? 'pointer' : 'default',
+  width: compact ? 'auto' : '100%',
+  minWidth: compact ? 72 : undefined,
+  whiteSpace: compact ? 'nowrap' : undefined,
+  textAlign: 'center',
+  display: compact ? 'flex' : undefined,
+  alignItems: compact ? 'center' : undefined,
+  justifyContent: compact ? 'center' : undefined,
+  opacity: enabled ? 1 : 0.55,
+});
+
+export function Se2Lab808Panel({
+  track,
+  voice,
+  bpm,
+  disabled = false,
+  songKeyRoot,
+  songKeyMode,
+  studioTracks,
+  lanePad,
+  getAudioContext,
+  getPreviewDestination,
+  onVoiceChange,
+  onExportToneGridToPianoRoll,
+  onExportToneGridWavToTrack,
+}: Se2Lab808PanelProps) {
+  const accent = track.colorHex ?? '#E8784A';
+  const isKick = voice.soundLane === 'kick';
+  const presetOptions = isKick ? TRAP_HOLD_808_ORDER : BASS_LOW_BASS_ORDER;
+  const presetId = isKick ? voice.kickPresetId : voice.bassPresetId;
+
+  const [livePitchClass, setLivePitchClass] = useState<number | null>(null);
+  const [selectedRootIndex, setSelectedRootIndex] = useState<number | null>(null);
+  const [gridStatus, setGridStatus] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const exportStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const toneGridHasHits = useMemo(
+    () => se2Lab808ToneGridHasHits(voice.toneGridSteps),
+    [voice.toneGridSteps],
+  );
+
+  const flashExportStatus = useCallback((msg: string) => {
+    setExportStatus(msg);
+    if (exportStatusTimerRef.current) clearTimeout(exportStatusTimerRef.current);
+    exportStatusTimerRef.current = setTimeout(() => {
+      exportStatusTimerRef.current = null;
+      setExportStatus(null);
+    }, 4000);
+  }, []);
+
+  const toneExportNotes = useMemo(() => se2Lab808ToneGridToExportNotes(voice), [voice]);
+  const toneExportOpts = useMemo(
+    () => se2Lab808ToneGridExportRenderOpts(voice, bpm, track.name),
+    [voice, bpm, track.name],
+  );
+
+  const handleExportMidi = useCallback(() => {
+    if (!toneGridHasHits || exportBusy) return;
+    downloadLab808ToneMidi(
+      toneExportNotes,
+      toneExportOpts,
+      `808Lab_${voice.soundLane}`,
+    );
+    flashExportStatus('✓ MIDI downloaded');
+  }, [toneExportNotes, toneExportOpts, toneGridHasHits, exportBusy, voice.soundLane, flashExportStatus]);
+
+  const handleExportWav = useCallback(async () => {
+    if (!toneGridHasHits || exportBusy) return;
+    setExportBusy(true);
+    setExportStatus('Rendering WAV…');
+    try {
+      await downloadLab808ToneWav(toneExportNotes, toneExportOpts, `808Lab_${voice.soundLane}`);
+      flashExportStatus('✓ WAV downloaded');
+    } catch (err) {
+      flashExportStatus(err instanceof Error ? err.message : 'WAV export failed');
+    } finally {
+      setExportBusy(false);
+    }
+  }, [toneExportNotes, toneExportOpts, toneGridHasHits, exportBusy, voice.soundLane, flashExportStatus]);
+
+  const handleToPianoRoll = useCallback(() => {
+    if (!toneGridHasHits || exportBusy || !onExportToneGridToPianoRoll) return;
+    onExportToneGridToPianoRoll(se2Lab808ToneGridToRollNotes(voice));
+    flashExportStatus('✓ Sent to piano roll');
+  }, [toneGridHasHits, exportBusy, onExportToneGridToPianoRoll, voice, flashExportStatus]);
+
+  const handleToTrack = useCallback(async () => {
+    if (!toneGridHasHits || exportBusy || !onExportToneGridWavToTrack) return;
+    setExportBusy(true);
+    setExportStatus('Bouncing to track…');
+    try {
+      const wav = await renderLab808ToneToWav(toneExportNotes, toneExportOpts);
+      const buffer = await se2Lab808WavBytesToAudioBuffer(getAudioContext(), wav);
+      onExportToneGridWavToTrack({
+        buffer,
+        loopBars: voice.toneGridLoopBars,
+        bpm,
+        sourceTrackName: track.name ?? '808 Lab',
+      });
+      flashExportStatus('✓ Added audio track');
+    } catch (err) {
+      flashExportStatus(err instanceof Error ? err.message : 'Export to track failed');
+    } finally {
+      setExportBusy(false);
+    }
+  }, [
+    toneGridHasHits,
+    exportBusy,
+    onExportToneGridWavToTrack,
+    toneExportNotes,
+    toneExportOpts,
+    getAudioContext,
+    voice.toneGridLoopBars,
+    bpm,
+    track.name,
+    flashExportStatus,
+  ]);
+
+  const toneGridExport = useMemo(
+    () =>
+      onExportToneGridToPianoRoll || onExportToneGridWavToTrack
+        ? {
+            busy: exportBusy,
+            status: exportStatus,
+            hasHits: toneGridHasHits,
+            onExportMidi: handleExportMidi,
+            onExportWav: handleExportWav,
+            onToPianoRoll: handleToPianoRoll,
+            onToTrack: handleToTrack,
+          }
+        : undefined,
+    [
+      onExportToneGridToPianoRoll,
+      onExportToneGridWavToTrack,
+      exportBusy,
+      exportStatus,
+      toneGridHasHits,
+      handleExportMidi,
+      handleExportWav,
+      handleToPianoRoll,
+      handleToTrack,
+    ],
+  );
+
+  const progressionRoots = useMemo(
+    () =>
+      se2Lab808ProgressionRoots({
+        tracks: studioTracks,
+        lab808TrackId: track.id,
+        lock: voice.chordLock,
+        songKeyRoot,
+        songKeyMode,
+        loopBars: voice.toneGridLoopBars,
+      }),
+    [studioTracks, track.id, voice.chordLock, voice.toneGridLoopBars, songKeyRoot, songKeyMode],
+  );
+  const chordRootLock = voice.chordLock.enabled && progressionRoots.length > 0;
+
+  const harmonySource = useMemo(
+    () => se2Lab808ResolveHarmonyTrack(studioTracks, voice.chordLock, track.id),
+    [studioTracks, voice.chordLock, track.id],
+  );
+  const lockKey = useMemo(
+    () => se2Lab808ChordLockKey(voice.chordLock, harmonySource, songKeyRoot, songKeyMode),
+    [voice.chordLock, harmonySource, songKeyRoot, songKeyMode],
+  );
+  const keyLabel = studioKeyLabel(lockKey.keyRoot, lockKey.keyMode as StudioDetectedKeyMode);
+
+  const previewMidi = useCallback(
+    (midi: number) => {
+      if (disabled) return;
+      const ctx = getAudioContext();
+      previewSe2Lab808Note(
+        ctx,
+        getPreviewDestination(ctx),
+        midi,
+        100,
+        voice,
+        bpm,
+        isKick ? 0.35 : 0.75,
+      );
+      setLivePitchClass(((midi % 12) + 12) % 12);
+      window.setTimeout(() => setLivePitchClass(null), 140);
+    },
+    [bpm, disabled, getAudioContext, getPreviewDestination, isKick, voice],
+  );
+
+  const onPadPlay = useCallback((padIndex: number, midi: number) => {
+    setSelectedRootIndex(padIndex);
+    setLivePitchClass(((midi % 12) + 12) % 12);
+    window.setTimeout(() => setLivePitchClass(null), 140);
+  }, []);
+
+  const canGenerate = progressionRoots.length > 0;
+
+  const applyGeneratedGrid = useCallback(
+    (seed: number) => {
+      const result = se2Lab808GenerateRootGridPattern({
+        roots: progressionRoots,
+        loopBars: voice.toneGridLoopBars,
+        soundLane: voice.soundLane,
+        tonePadBaseMidi: voice.tonePadBaseMidi,
+        seed,
+      });
+      onVoiceChange({
+        ...voice,
+        toneGridSteps: result.pattern,
+        tonePadBaseMidi: result.tonePadBaseMidi,
+        rootGenSeed: seed,
+      });
+      setGridStatus(result.status);
+      window.setTimeout(() => setGridStatus(null), 4500);
+    },
+    [onVoiceChange, progressionRoots, voice],
+  );
+
+  const handleGenerateRoots = useCallback(() => {
+    if (!canGenerate) return;
+    applyGeneratedGrid(voice.rootGenSeed ?? 1);
+  }, [applyGeneratedGrid, canGenerate, voice.rootGenSeed]);
+
+  const handleRegenerateRoots = useCallback(() => {
+    if (!canGenerate) return;
+    applyGeneratedGrid((voice.rootGenSeed ?? 1) + 1);
+  }, [applyGeneratedGrid, canGenerate, voice.rootGenSeed]);
+
+  const tonePadsShared = {
+    voice,
+    bpm,
+    accent,
+    disabled,
+    chordRootLock,
+    progressionRoots,
+    selectedRootIndex,
+    onPadPlay,
+    getAudioContext,
+    getPreviewDestination,
+    onVoiceChange,
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 p-2" data-se2-lab808-panel>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[9px] font-black uppercase tracking-wide" style={{ color: accent }}>
+          {LAB808_DISPLAY_NAME}
+        </span>
+        <span className="text-[8px]" style={{ color: '#6a6a78' }}>
+          Standalone lane — not linked to Creation Station
+        </span>
+      </div>
+
+      <Se2Lab808DrumGrid
+        voice={voice}
+        bpm={bpm}
+        accent={accent}
+        disabled={disabled}
+        getAudioContext={getAudioContext}
+        getPreviewDestination={getPreviewDestination}
+        onVoiceChange={onVoiceChange}
+        toneGridExport={toneGridExport}
+        aboveGrid={
+          <div className="flex items-start gap-2 min-w-0 w-full">
+            <Se2Lab808TonePads {...tonePadsShared} padsOnly size="large" />
+
+            <aside className="flex flex-col gap-2.5 shrink-0 min-w-0" style={{ width: 172 }}>
+              <div className="flex flex-col gap-1">
+                <span style={sideLabel}>Lane</span>
+                <div className="flex items-stretch gap-2">
+                  <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      style={laneBtn(isKick, accent)}
+                      onClick={() => onVoiceChange({ ...voice, soundLane: 'kick' })}
+                    >
+                      808 Kick
+                    </button>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      style={laneBtn(!isKick, accent)}
+                      onClick={() => onVoiceChange({ ...voice, soundLane: 'bass' })}
+                    >
+                      Bass Low
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-1 shrink-0 items-stretch">
+                    <button
+                      type="button"
+                      disabled={disabled || !canGenerate}
+                      style={genBtn('#ca8a04', canGenerate && !disabled, true)}
+                      onClick={handleGenerateRoots}
+                      title="Write chord / key roots onto the tone grid"
+                    >
+                      Generate roots
+                    </button>
+                    <button
+                      type="button"
+                      disabled={disabled || !canGenerate}
+                      style={genBtn(accent, canGenerate && !disabled, true)}
+                      onClick={handleRegenerateRoots}
+                      title="Try a new trap pocket for the same roots"
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-0">
+                <label style={sideLabel}>Preset</label>
+                <select
+                  disabled={disabled}
+                  value={presetId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (isKick) {
+                      onVoiceChange({ ...voice, kickPresetId: id as TrapHold808PresetId });
+                    } else {
+                      onVoiceChange({ ...voice, bassPresetId: id as BassLowBassPresetId });
+                    }
+                  }}
+                  className="w-full rounded border px-2 py-1.5 text-[9px] outline-none"
+                  style={{
+                    borderColor: '#333340',
+                    background: '#0a0a10',
+                    color: '#e0e0ea',
+                    maxWidth: '100%',
+                  }}
+                >
+                  {presetOptions.map((id) => {
+                    const label = isKick
+                      ? TRAP_HOLD_808_PRESETS[id as TrapHold808PresetId].label
+                      : BASS_LOW_BASS_PRESETS[id as BassLowBassPresetId].label;
+                    return (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <Se2Lab808ChordLockPanel
+                lock={voice.chordLock}
+                rootCount={progressionRoots.length}
+                connected={progressionRoots.length > 0}
+                disabled={disabled}
+                songKeyRoot={songKeyRoot}
+                songKeyMode={songKeyMode}
+                lab808TrackId={track.id}
+                tracks={studioTracks}
+                lanePad={lanePad}
+                onLockChange={(chordLock) => onVoiceChange({ ...voice, chordLock })}
+              />
+
+              <span className="text-[7px] font-semibold leading-tight text-center" style={{ color: '#8a8a98' }}>
+                {gridStatus ??
+                  (canGenerate
+                    ? `${voice.toneGridLoopBars}-bar grid · ${keyLabel}`
+                    : 'Select key or chord lane')}
+              </span>
+            </aside>
+
+            <div className="flex-1 flex justify-end items-start min-w-[180] pl-1">
+              <Se2Lab808RootScope
+                dialSize={176}
+                keyRoot={lockKey.keyRoot}
+                keyMode={lockKey.keyMode}
+                keyLabel={keyLabel}
+                progressionRoots={progressionRoots}
+                livePitchClass={livePitchClass}
+                selectedRootIndex={selectedRootIndex}
+                disabled={disabled}
+                onSelectRoot={setSelectedRootIndex}
+                onPreviewMidi={previewMidi}
+              />
+            </div>
+          </div>
+        }
+      />
+    </div>
+  );
+}

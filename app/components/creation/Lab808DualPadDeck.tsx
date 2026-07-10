@@ -12,6 +12,7 @@ import type { Lab808ProgressionRoot } from '@/app/lib/creationStation/lab808Chor
 import type { Lab808ChordLockSource } from '@/app/lib/creationStation/lab808ChordLockSources';
 import type { Lab808SoundLane } from '@/app/lib/creationStation/eightZeroEightVoice';
 import type { LabMpcKitId } from '@/app/lib/creationStation/labMpcKits';
+import { Lab808HelpTip } from '@/app/components/creation/Lab808HelpHub';
 
 export type Lab808PadDeckBank = 'drums' | 'tone';
 
@@ -216,8 +217,9 @@ export function Lab808DualPadDeck({
             flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.02em', color: '#f0f0f0', lineHeight: 1.1 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 16, fontWeight: 900, letterSpacing: '-0.02em', color: '#f0f0f0', lineHeight: 1.1 }}>
             808 LAB
+            <Lab808HelpTip tab="overview" title="808 Lab quick start" />
           </span>
           <span style={{ fontSize: 10, fontWeight: 700, color: '#555', letterSpacing: '0.1em' }}>PADS + PIANO ROLL</span>
         </div>
@@ -244,6 +246,7 @@ export function Lab808DualPadDeck({
         }}
         aria-label="808 Lab sync"
       >
+        <Lab808HelpTip tab="sync" title="808 LINK · BPM · PLAY mirror" />
         <button
           type="button"
           onClick={() => onInternal808LinkChange?.(!internal808Link)}

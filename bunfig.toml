@@ -1,0 +1,3 @@
+# All Bun install cache for this project lives on E: — never C:
+[install.cache]
+dir = ".cache/bun/install/cache"

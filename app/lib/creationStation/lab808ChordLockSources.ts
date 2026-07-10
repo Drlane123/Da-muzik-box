@@ -19,6 +19,7 @@ import {
 } from '@/app/lib/creationStation/lab808ChordRoots';
 import { readChordSync } from '@/app/lib/chordBuilderSync';
 import {
+  grooveLabChordHitsForBarLeadLock,
   grooveLabChordHitsForTransport,
   GROOVE_LAB_SLOTS_PER_BAR,
   grooveLabChannelIds,
@@ -185,19 +186,19 @@ function segmentsToProgressionRoots(segments: RootSegment[], octaveShift: number
 const GROOVE_SLOTS_PER_BEAT = GROOVE_LAB_SLOTS_PER_BAR / LAB808_BEATS_PER_BAR;
 
 /**
- * One 808 root per chord change — grouped by bar so bar-2 chords land on beat 4 (not a late slot).
- * Multiple chord columns inside one bar keep per-column timing (quick changes).
+ * One 808 root per bar on the downbeat — Groove CHORD rhythm edits (1+3, 2+4, chops)
+ * stay on the chord roll but do not add extra 808 hits.
  */
 function grooveLabChordColumnsToRootSegments(
-  transportHits: readonly GrooveRollHit[],
+  lockHits: readonly GrooveRollHit[],
   keyRoot: number,
   mode: ChordMode,
   subHits: readonly GrooveRollHit[] = [],
 ): RootSegment[] {
-  if (transportHits.length === 0) return [];
+  if (lockHits.length === 0) return [];
 
   const byBar = new Map<number, GrooveRollHit[]>();
-  for (const h of transportHits) {
+  for (const h of lockHits) {
     const bar = Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR);
     const list = byBar.get(bar) ?? [];
     list.push(h);
@@ -217,44 +218,17 @@ function grooveLabChordColumnsToRootSegments(
   for (const bar of [...byBar.keys()].sort((a, b) => a - b)) {
     const barHits = byBar.get(bar)!;
     const subsInBar = subsByBar.get(bar) ?? [];
-    const byCol = new Map<number, GrooveRollHit[]>();
-    for (const h of barHits) {
-      const list = byCol.get(h.slot) ?? [];
-      list.push(h);
-      byCol.set(h.slot, list);
-    }
-    const cols = [...byCol.keys()].sort((a, b) => a - b);
-    const barDownbeatBeat = bar * LAB808_BEATS_PER_BAR;
+    const downbeatSlot = bar * GROOVE_LAB_SLOTS_PER_BAR;
+    const downbeatHits = barHits.filter((h) => h.slot === downbeatSlot);
+    const hitsForRoot = downbeatHits.length > 0 ? downbeatHits : barHits;
+    const rootMidi = infer808RootMidiForColumn(hitsForRoot, subsInBar, keyRoot, mode);
 
-    if (cols.length <= 1) {
-      const colHits = byCol.get(cols[0]!) ?? barHits;
-      const rootMidi = infer808RootMidiForColumn(colHits, subsInBar, keyRoot, mode);
-      const sustainSlots = Math.max(
-        GROOVE_SLOTS_PER_BEAT,
-        ...colHits.map((h) => h.sustainSlots),
-      );
-      segments.push({
-        startBeat: barDownbeatBeat,
-        durBeats: Math.max(1, sustainSlots / GROOVE_SLOTS_PER_BEAT),
-        midi: rootMidi,
-        chord: cbPianoMidiToNoteName(rootMidi),
-      });
-      continue;
-    }
-
-    for (const col of cols) {
-      const colHits = byCol.get(col)!;
-      const rootMidi = infer808RootMidiForColumn(colHits, subsInBar, keyRoot, mode);
-      segments.push({
-        startBeat: col / GROOVE_SLOTS_PER_BEAT,
-        durBeats: Math.max(
-          0.25,
-          Math.max(...colHits.map((h) => h.sustainSlots)) / GROOVE_SLOTS_PER_BEAT,
-        ),
-        midi: rootMidi,
-        chord: cbPianoMidiToNoteName(rootMidi),
-      });
-    }
+    segments.push({
+      startBeat: bar * LAB808_BEATS_PER_BAR,
+      durBeats: LAB808_BEATS_PER_BAR,
+      midi: rootMidi,
+      chord: cbPianoMidiToNoteName(rootMidi),
+    });
   }
 
   return extendRootSegmentDurations(segments);
@@ -271,25 +245,25 @@ export function grooveLabChordStackAtBeat(startBeat: number): {
   const chordCh = pickGrooveLabChordChannel(notesByChannel, readGrooveLabChordChannelPref());
   if (chordCh == null) return null;
 
-  const chordHits = (notesByChannel[chordCh] ?? []).filter((h) => h.midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN);
+  const bars = Math.max(1, barCount ?? 16);
+  const chordHits = sanitizeGrooveLabChordChannelHits(
+    (notesByChannel[chordCh] ?? []).filter((h) => h.midi >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN),
+    bars,
+  );
   if (chordHits.length === 0) return null;
 
-  const bars = Math.max(1, barCount ?? 16);
-  const transportHits = grooveLabChordHitsForTransport(chordHits, bars);
-  const targetSlot = Math.round(Math.max(0, startBeat) * GROOVE_SLOTS_PER_BEAT);
-
-  let column = transportHits.filter((h) => h.slot === targetSlot);
+  const bar = Math.floor(Math.max(0, startBeat) / LAB808_BEATS_PER_BAR);
+  const downbeatSlot = bar * GROOVE_LAB_SLOTS_PER_BAR;
+  const lockHits = grooveLabChordHitsForBarLeadLock(chordHits);
+  let column = lockHits.filter((h) => h.slot === downbeatSlot);
   if (column.length === 0) {
-    let bestSlot = targetSlot;
-    let bestDist = Infinity;
-    for (const h of transportHits) {
-      const d = Math.abs(h.slot - targetSlot);
-      if (d < bestDist) {
-        bestDist = d;
-        bestSlot = h.slot;
-      }
-    }
-    column = transportHits.filter((h) => h.slot === bestSlot);
+    const transportHits = grooveLabChordHitsForTransport(chordHits, bars);
+    const barHits = transportHits.filter(
+      (h) => Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR) === bar,
+    );
+    if (barHits.length === 0) return null;
+    const earliestSlot = Math.min(...barHits.map((h) => h.slot));
+    column = barHits.filter((h) => h.slot === earliestSlot);
   }
   if (column.length === 0) return null;
   const midis = [...new Set(column.map((h) => Math.round(h.midi)))].sort((a, b) => a - b);
@@ -324,12 +298,12 @@ export function grooveLabSessionToProgressionRoots(
       if (grooveLabIsBassSubMidi(h.midi)) subHits.push(h);
     }
   }
-  const transportHits = grooveLabChordHitsForTransport(chordHits, bars);
+  const lockHits = grooveLabChordHitsForBarLeadLock(chordHits);
   const sync = readChordSync();
   const keyRoot = sync?.keyRoot ?? 0;
   const mode = (sync?.mode as ChordMode) ?? 'major';
 
-  const segments = grooveLabChordColumnsToRootSegments(transportHits, keyRoot, mode, subHits);
+  const segments = grooveLabChordColumnsToRootSegments(lockHits, keyRoot, mode, subHits);
   return segmentsToProgressionRoots(segments, octaveShift);
 }
 

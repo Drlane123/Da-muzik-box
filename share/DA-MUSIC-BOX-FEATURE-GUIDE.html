@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Da Music Box — Full Feature Guide</title>
+  <meta name="description" content="Da Music Box music production suite: Mastering Bay, Studio Editor 2 with built-in auto-tune and vocoder, Creation Station, AI Vocal Lab, AI Music Match." />
+  <!-- Open Graph — fill og:image after you add share/screenshots/hero.png -->
+  <meta property="og:title" content="Da Music Box — Music Production Suite" />
+  <meta property="og:description" content="128-bar DAW, built-in auto-tune &amp; vocoder, Beat Lab, Groove Lab, Mastering Bay, and more. Full feature guide." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="screenshots/01-mastering-bay.png" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --card: #12121a;
+      --border: #2a2a38;
+      --text: #e8e8f0;
+      --muted: #8a8a9a;
+      --accent: #c084fc;
+      --orange: #ff9f43;
+      --cyan: #67e8f9;
+      --green: #7cf4c6;
+      --gold: #fbbf24;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 16px;
+    }
+    a { color: var(--cyan); }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 24px 20px 80px; }
+    header.hero {
+      text-align: center;
+      padding: 48px 20px 40px;
+      background: linear-gradient(180deg, #1a1028 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    header.hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.75rem, 5vw, 2.5rem);
+      background: linear-gradient(90deg, var(--accent), var(--orange), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header.hero .tagline { color: var(--muted); font-size: 1.05rem; max-width: 640px; margin: 0 auto 24px; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 28px; }
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card);
+    }
+    .badge.hot { border-color: var(--orange); color: var(--orange); background: rgba(255,159,67,0.1); }
+    .badge.voc { border-color: var(--cyan); color: var(--cyan); background: rgba(103,232,249,0.1); }
+    .share-bar {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+      margin-top: 20px;
+    }
+    .btn {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); background: #1a1a28; }
+    .btn.primary { background: linear-gradient(135deg, #6d28d9, #9333ea); border-color: #a855f7; }
+    .btn.primary:hover { filter: brightness(1.1); }
+    .copy-toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--green); color: #0a0a0f; padding: 12px 24px;
+      border-radius: 8px; font-weight: 700; font-size: 0.9rem;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 9999;
+    }
+    .copy-toast.show { opacity: 1; }
+    nav.toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin-bottom: 40px;
+    }
+    nav.toc h2 { margin: 0 0 12px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+    nav.toc ol { margin: 0; padding-left: 20px; }
+    nav.toc li { margin: 6px 0; }
+    nav.toc a { text-decoration: none; }
+    nav.toc a:hover { text-decoration: underline; }
+    section { margin-bottom: 48px; }
+    section h2 {
+      font-size: 1.5rem;
+      margin: 0 0 6px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--border);
+    }
+    section h2 .num { color: var(--accent); margin-right: 8px; }
+    section .caption { color: var(--muted); font-style: italic; margin-bottom: 16px; font-size: 0.95rem; }
+    section h3 { color: var(--gold); font-size: 1.1rem; margin: 24px 0 10px; }
+    section h4 { color: var(--cyan); font-size: 0.95rem; margin: 18px 0 8px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin: 16px 0;
+    }
+    .card.highlight { border-color: var(--orange); box-shadow: 0 0 24px rgba(255,159,67,0.12); }
+    .card.vocoder { border-color: var(--cyan); box-shadow: 0 0 24px rgba(103,232,249,0.1); }
+    ul { padding-left: 1.25rem; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; }
+    th { background: #1a1a24; color: var(--accent); }
+    .screenshot {
+      margin: 20px 0;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #0e0e16;
+    }
+    .screenshot img {
+      width: 100%;
+      display: block;
+      min-height: 200px;
+      object-fit: cover;
+      background: #0e0e16;
+    }
+    .screenshot .placeholder {
+      display: none;
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      background: repeating-linear-gradient(-45deg, #101018, #101018 8px, #14141e 8px, #14141e 16px);
+    }
+    .screenshot.missing img { display: none; }
+    .screenshot.missing .placeholder { display: block; }
+    .screenshot figcaption {
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      background: var(--card);
+    }
+    .flow {
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      background: #06060c;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      white-space: pre;
+      color: #a0a0b8;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+    .feature-pill {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin: 3px 4px 3px 0;
+      background: #1e1e2a;
+      border: 1px solid var(--border);
+    }
+    #social-copy {
+      width: 100%;
+      min-height: 140px;
+      background: #06060c;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 14px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+      margin-top: 12px;
+    }
+    footer {
+      text-align: center;
+      padding: 32px 20px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<div class="copy-toast" id="toast">Copied to clipboard!</div>
+
+<header class="hero">
+  <h1>Da Music Box</h1>
+  <p class="tagline">Music Production Suite — real harmony, real grids, real synths. AI when you want it — never instead of your ear.</p>
+  <div class="badge-row">
+    <span class="badge hot">Built-in Auto-Tune</span>
+    <span class="badge voc">Built-in Vocoder</span>
+    <span class="badge">Mastering Bay</span>
+    <span class="badge">128-Bar DAW</span>
+    <span class="badge">Beat Lab</span>
+    <span class="badge">Groove Lab</span>
+    <span class="badge">AI Music Match</span>
+  </div>
+  <p style="font-size:0.85rem;color:var(--muted);max-width:640px;margin:0 auto 16px;">
+    <strong>Da Music Box</strong> = this app (Beat Lab, SE2, Mastering Bay).
+    <strong><a href="STUDIO-PILOT-GUIDE.html" style="color:var(--cyan)">StudioPilot</a></strong> =
+    separate product — <a href="https://studiopilotmusic.com" target="_blank" rel="noopener" style="color:var(--cyan)">studiopilotmusic.com</a> — AI control for Ableton Live.
+  </p>
+  <div class="share-bar">
+    <button class="btn primary" type="button" onclick="copySocial()">Copy for Reddit / Facebook</button>
+    <button class="btn" type="button" onclick="copyOverview()">Copy short overview</button>
+    <a class="btn" href="STUDIO-PILOT-GUIDE.html">StudioPilot guide</a>
+    <button class="btn" type="button" onclick="window.print()">Print / Save PDF</button>
+  </div>
+  <textarea id="social-copy" readonly aria-label="Social media post text"></textarea>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#mastering">Mastering Bay</a></li>
+      <li><a href="#se2">Studio Editor 2 (DAW)</a></li>
+      <li><a href="#vocal-dsp">★ Auto-Tune &amp; Vocoder (mixer channels)</a></li>
+      <li><a href="#se2-lanes">SE2 specialized lanes</a></li>
+      <li><a href="#creation">Creation Station</a></li>
+      <li><a href="#vocal-lab">AI Vocal Lab</a></li>
+      <li><a href="#music-match">AI Music Match</a></li>
+      <li><a href="#routing">How everything connects</a></li>
+      <li><a href="#screenshots">Screenshot gallery</a></li>
+    </ol>
+  </nav>
+
+  <!-- MASTERING BAY -->
+  <section id="mastering">
+    <h2><span class="num">1.</span> Mastering Bay</h2>
+    <p class="caption">Finish your mix — professional mastering rack with meters, presets, and export.</p>
+
+    <figure class="screenshot" data-shot="screenshots/01-mastering-bay.png">
+      <img src="screenshots/01-mastering-bay.png" alt="Mastering Bay — meters, rack, source track" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 Add screenshot: <code>share/screenshots/01-mastering-bay.png</code><br>Full Mastering Bay — meters + Bass X → DMB Match → Master X1 + source waveform</div>
+      <figcaption>Mastering Bay — load a stereo mix, process through the rack, export a finished master.</figcaption>
+    </figure>
+
+    <p>Mastering Bay is the suite's dedicated mastering workstation. Load a finished stereo mix along the bottom, process through a three-unit rack, watch meters at the top, and export a mastered file ready for streaming, club, or radio.</p>
+
+    <div class="card">
+      <strong>Signal chain:</strong>
+      <div class="flow">In → Bass X → DMB Match → Master X1 → Out
+(Optional De-Noise — before or after Master X1)</div>
+    </div>
+
+    <table>
+      <tr><th>Zone</th><th>What you see</th></tr>
+      <tr><td>Top</td><td>Master meters — peak, RMS, loudness readouts</td></tr>
+      <tr><td>Middle</td><td>Bass X · DMB Match · Master X1 rack units</td></tr>
+      <tr><td>Bottom</td><td>Stereo source track — waveform, transport, clip gain</td></tr>
+      <tr><td>Side</td><td>VU meter sidebar</td></tr>
+    </table>
+
+    <h3>Rack units</h3>
+    <ul>
+      <li><strong>Bass X</strong> — Sub enhancement, drive, tone (Sub · Drive · Tone tabs)</li>
+      <li><strong>DMB Match</strong> — Reference matching — amount, tone, dynamics, loudness, width</li>
+      <li><strong>Master X1</strong> — EQ, transients, compression, stereo, limiting, loudness target</li>
+      <li><strong>De-Noise</strong> — Hiss reduction and click/pop catch (optional placement)</li>
+    </ul>
+    <p><strong>Presets:</strong> Club Ready · Streaming Clean · Warm Low End · Radio Loud · Trap 808 Punch · Podcast Clear — plus save your own with rename. <strong>Export:</strong> Save New Master with title, artist, album, ISRC, cover art, 44.1/48 kHz.</p>
+  </section>
+
+  <!-- SE2 -->
+  <section id="se2">
+    <h2><span class="num">2.</span> Studio Editor 2</h2>
+    <p class="caption">The suite DAW — arrange, edit, mix, and export full songs on a 128-bar timeline.</p>
+
+    <figure class="screenshot" data-shot="screenshots/02-se2-timeline.png">
+      <img src="screenshots/02-se2-timeline.png" alt="Studio Editor 2 timeline" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 Add: <code>share/screenshots/02-se2-timeline.png</code> — full 128-bar arrange view</div>
+      <figcaption>Studio Editor 2 — timeline, piano roll, mixer, loop region, transport.</figcaption>
+    </figure>
+
+    <p>The center of Da Music Box. MIDI + audio lanes, piano roll, mixer console, vocal recording, and specialized track types — Beat Pads, Drum Generator, Synth Geno, Groove Lead, Geno Ultra, Geno Bass, Guitar, Hum Capture, Audio→MIDI, Rhythm Edit, and more.</p>
+    <div>
+      <span class="feature-pill">128 bars</span>
+      <span class="feature-pill">Piano roll</span>
+      <span class="feature-pill">Mixer</span>
+      <span class="feature-pill">Loop region</span>
+      <span class="feature-pill">Audio lanes</span>
+      <span class="feature-pill">MIDI export</span>
+      <span class="feature-pill">WAV export</span>
+    </div>
+  </section>
+
+  <!-- VOCAL DSP - HIGHLIGHT -->
+  <section id="vocal-dsp">
+    <h2><span class="num">★</span> Built-in Auto-Tune &amp; Vocoder</h2>
+    <p class="caption">Per-channel vocal FX on the SE2 mixer — not a plugin add-on. Pitch Tune + Vocoder on every audio lane.</p>
+
+    <figure class="screenshot" data-shot="screenshots/03-vocal-dsp-suite.png">
+      <img src="screenshots/03-vocal-dsp-suite.png" alt="Vocal DSP Suite — Pitch Tune and Vocoder" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <strong>Priority screenshot</strong><br><code>share/screenshots/03-vocal-dsp-suite.png</code><br>Vocal DSP Suite — Pitch Tune DSP + Vocoder DSP power toggles</div>
+      <figcaption>Vocal DSP Suite — two engines side by side on the mixer channel.</figcaption>
+    </figure>
+
+    <div class="grid-2">
+      <figure class="screenshot" data-shot="screenshots/04-pitch-tune.png">
+        <img src="screenshots/04-pitch-tune.png" alt="Pitch Tune auto-tune" onerror="this.closest('.screenshot').classList.add('missing')" />
+        <div class="placeholder">📷 <code>04-pitch-tune.png</code> — Pitch Tune ON, scope, presets</div>
+        <figcaption>Pitch Tune (Auto-Tune) — live pitch correction.</figcaption>
+      </figure>
+      <figure class="screenshot" data-shot="screenshots/05-vocoder.png">
+        <img src="screenshots/05-vocoder.png" alt="Vocoder" onerror="this.closest('.screenshot').classList.add('missing')" />
+        <div class="placeholder">📷 <code>05-vocoder.png</code> — Vocoder ON, Funk Talk Box or Robot</div>
+        <figcaption>Vocoder — talk-box, robot, cyber character.</figcaption>
+      </figure>
+    </div>
+
+    <div class="card highlight">
+      <h3 style="margin-top:0;color:var(--orange)">Pitch Tune (Auto-Tune)</h3>
+      <p>Real-time pitch correction on <strong>audio lanes</strong> and <strong>Audio→MIDI lanes</strong>. Open <strong>Vocal FX</strong> or <strong>Insert FX</strong> on the mixer strip → turn <strong>Pitch Tune DSP</strong> ON.</p>
+      <p><strong>Presets:</strong> Modern (hard snap) · Natural (transparent) · Iconic Hard · Rap Tight · R&B Melodic · Vintage</p>
+      <p><strong>Faders:</strong> RETUNE · SPEED · FLEX · HUMAN · TRACK — plus Scale + Key tied to your song</p>
+      <p><strong>Pitch source (pick one):</strong> From audio · Audio→MIDI on this lane · MIDI from another channel</p>
+      <p><strong>Live pitch scope</strong> shows detected pitch and correction in real time while transport plays. Mic routes through FX live — no record-arm needed for monitoring.</p>
+    </div>
+
+    <div class="card vocoder">
+      <h3 style="margin-top:0;color:var(--cyan)">Vocoder</h3>
+      <p>Full vocoder engine on the same mixer channel. Turn <strong>Vocoder DSP</strong> ON for talk-box, robot, and cyber vocal character.</p>
+      <p><strong>Presets:</strong> Robot · Transform · Traditional Funk Talk Box · Talk Box · Cyber · Warm Vox</p>
+      <p><strong>Faders:</strong> WET · ROBOT · FORM · ATK · REL · NOISE · FOCUS · VIB</p>
+      <p><strong>Carrier:</strong> Voice pitch (classic talk-box) OR MIDI carrier from any MIDI lane</p>
+    </div>
+
+    <div class="card">
+      <strong>Mixer signal flow:</strong>
+      <div class="flow">Audio lane input
+    ↓
+Insert FX on mixer strip
+    ├── Pitch Tune DSP  (auto-tune)
+    ├── Vocoder DSP     (talk-box / robot)
+    ├── Gate · EQ · Comp · Reverb · Delay
+    ↓
+Channel fader → pan → master bus</div>
+      <p style="margin-bottom:0">Each lane keeps its <strong>own</strong> Pitch Tune and Vocoder settings. Song-key aware. Works with Audio→MIDI conversion on the same lane.</p>
+    </div>
+  </section>
+
+  <!-- SE2 LANES -->
+  <section id="se2-lanes">
+    <h2><span class="num">3.</span> SE2 Specialized Lanes</h2>
+
+    <figure class="screenshot" data-shot="screenshots/06-synth-geno.png">
+      <img src="screenshots/06-synth-geno.png" alt="Synth Geno" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>06-synth-geno.png</code> — Synth Geno Geno Build 1</div>
+      <figcaption>Synth Geno — Geno Build 1, Geno Build 2, Fusion / Note Flex.</figcaption>
+    </figure>
+
+    <figure class="screenshot" data-shot="screenshots/07-beat-pads.png">
+      <img src="screenshots/07-beat-pads.png" alt="Beat Pads" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>07-beat-pads.png</code> — SE2 Beat Pads step grid</div>
+      <figcaption>Beat Pads — 16 pads, step sequencer, Pattern Bank inside SE2.</figcaption>
+    </figure>
+
+    <h3>Synth Geno</h3>
+    <ul>
+      <li><strong>Geno Build 1</strong> — Live chord pads, 8-bar loop (chords, arp, bass), glide on bass &amp; chords</li>
+      <li><strong>Geno Build 2</strong> — 4/8-bar progression loops, era/genre triggers, stack chords + melody + bass</li>
+      <li><strong>Fusion / Note Flex</strong> — Sound field + Prompt field, SpaceWalk macros, Pad · Melody · Bass roll</li>
+      <li><strong>Lock Groove Lead</strong> — one-click lead lane locked to Geno chords</li>
+    </ul>
+
+    <h3>Beat Pads</h3>
+    <p>Full drum machine in SE2 — 16 pads, step sequencer, Pattern Bank (Trap, R&B, Pop, Drill, Lo-Fi), lane placements, match chords, sync slave/master/off, export WAV/MIDI.</p>
+
+    <h3>Drum Generator</h3>
+    <p>MIDI ch 10 producer kits — Pop, Trap, K-pop, R&B, Dance, Drill, Lo-Fi. Generate from chords, Bank 2 match cards, re-roll variations, 16 pad sound swaps.</p>
+
+    <h3>Audio → MIDI</h3>
+    <p>Drop audio → Melodic, Bass line, or Drums conversion. Edit on piano roll. Can feed Pitch Tune / Vocoder pitch routing.</p>
+
+    <h3>Rhythm Edit</h3>
+    <p>Chord cards above the roll — hits, beats, apply to roll, loop length. Separate from Progression+.</p>
+
+    <h3>SE2 Chord Generator &amp; Progression+</h3>
+    <p>4/8-bar chord sketch lane vs chord timeline on instrument tracks — LOAD ALL, apply MIDI, orch hits, Groove Lead melody.</p>
+
+    <h3>Hum Capture</h3>
+    <p>Hum or sing → melody roll → piano roll. Key lock, match chords, instrument preview. SE2-local (no RVC here).</p>
+
+    <h3>Groove Lead</h3>
+    <p>WaveLeaf synth — R&B Silk, Gospel Cry, Neo Glide. Generate melody from linked chords.</p>
+
+    <h3>Geno Ultra Synth</h3>
+    <p>3 oscillators, filter, 2 LFOs, mod matrix, ARP with Chord Lock (Detect · Follow · Lock Chord).</p>
+
+    <h3>Geno Bass Synth (Geno Bass 52)</h3>
+    <p>55 factory bass sounds — Mooga, Retro, FM, analog, sub/808, funk. Wood-grain panel, C1–G3 roll.</p>
+
+    <h3>Guitar</h3>
+    <p>Loop player — R&B, Pop, Country, Funk, Blues, Rock, Latin, K-pop. Strummer, FX, quick licks, key convert.</p>
+  </section>
+
+  <!-- CREATION STATION -->
+  <section id="creation">
+    <h2><span class="num">4.</span> Creation Station</h2>
+    <p class="caption">Where beats, chords, bass, and groove are born — linked, not isolated.</p>
+
+    <figure class="screenshot" data-shot="screenshots/08-groove-lab.png">
+      <img src="screenshots/08-groove-lab.png" alt="Groove Lab" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>08-groove-lab.png</code> — Groove Lab Progression + timeline</div>
+      <figcaption>Groove Lab — progression-first harmony, 100+ genre packs.</figcaption>
+    </figure>
+
+    <figure class="screenshot" data-shot="screenshots/09-beat-lab.png">
+      <img src="screenshots/09-beat-lab.png" alt="Beat Lab" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>09-beat-lab.png</code> — Beat Lab 16 pads + CH 17–32 synth</div>
+      <figcaption>Beat Lab — sixteen pads, sixteen synth lanes, one locked transport.</figcaption>
+    </figure>
+
+    <figure class="screenshot" data-shot="screenshots/10-chord-builder.png">
+      <img src="screenshots/10-chord-builder.png" alt="Chord Builder" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>10-chord-builder.png</code> — Chord Builder pads + tabs</div>
+      <figcaption>Chord Builder — theory-aware harmony feeding the whole station.</figcaption>
+    </figure>
+
+    <figure class="screenshot" data-shot="screenshots/11-808-lab.png">
+      <img src="screenshots/11-808-lab.png" alt="808 Lab" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>11-808-lab.png</code> — 808 Lab Chord Lock + bass roll</div>
+      <figcaption>808 Lab — trap sub-bass, MPC grid, chord-locked roots.</figcaption>
+    </figure>
+
+    <h3>Beat Lab</h3>
+    <p>CH 1–16 drum pads + CH 17–32 NEW SYNTH melodic lanes. Pattern Bank, Crew Kits, Banks A–H, GRID / ROLL / SYNTH views. Export MIDI/WAV to SE2.</p>
+
+    <h3>Groove Lab</h3>
+    <p>Progression panel, genre packs, 8-bar sketch, Rhythm Edit chops, Orchid strip, CH 33–48 roles, guitar &amp; orchestra panels, MATCH BASS.</p>
+
+    <h3>Chord Builder</h3>
+    <p>Key + mode + genre, scale pads, AUTO-GENERATE SONG, SMART VOICINGS. Export: MIDI → SYNTH, WAV → Pad, Roots → 808, song cluster.</p>
+
+    <h3>808 Lab</h3>
+    <p>Kick/bass roll + MPC drum grid. <strong>Chord Lock</strong> from Chord Builder, Groove Lab, or Beat Lab NEW SYNTH. GENERATE ROOTS, +CHORDS, BPM sync, Session Link.</p>
+
+    <h3>Kit Generator</h3>
+    <p>Procedural 16-pad kits (House, Trap, Lo-fi, R&B, Dance, Disco) — browser-only, no network. Full kit + pattern in one click.</p>
+
+    <h3>Chord / Bass Sequencer</h3>
+    <p>Step-sequenced chords (4–32 steps) with auto-locked bass — SUB/ELEC/PLUCK voices, anchor &amp; motion patterns, bass piano roll, export WAV/MIDI/PAD.</p>
+  </section>
+
+  <!-- AI VOCAL LAB -->
+  <section id="vocal-lab">
+    <h2><span class="num">5.</span> AI Vocal Lab</h2>
+    <p class="caption">Hum-to-MIDI · voice tools · enhancement — AI assists, you finish.</p>
+
+    <figure class="screenshot" data-shot="screenshots/12-ai-vocal-lab.png">
+      <img src="screenshots/12-ai-vocal-lab.png" alt="AI Vocal Lab" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>12-ai-vocal-lab.png</code> — Neural Hum pitch scope</div>
+      <figcaption>AI Vocal Lab — Neural Hum, RVC, Voice Swap, Enhancement Suite.</figcaption>
+    </figure>
+
+    <h3>Vocal Lab (Neural Hum)</h3>
+    <p>Hum or sing → melody roll → render. Key lock, 4/8 bars, mini keyboard, export WAV/MP3 → SE2, Groove Lab, Beat Lab NEW SYNTH.</p>
+
+    <h3>Melody-to-MIDI</h3>
+    <p>Record or upload monophonic audio → transcribe → piano roll. Transposition, tempo scale, quantize, confidence. Export .mid or to SE2.</p>
+
+    <h3>Harmony Match</h3>
+    <p>Hum, file, or live capture → MATCH candidates → load progression into <strong>Groove Lab</strong> → MATCH BASS.</p>
+  </section>
+
+  <!-- AI MUSIC MATCH -->
+  <section id="music-match">
+    <h2><span class="num">6.</span> AI Music Match</h2>
+    <p class="caption">Vocal stem in → key detect → chord roll + bass → Groove Lab or Studio Editor 2. 100% offline.</p>
+
+    <figure class="screenshot" data-shot="screenshots/13-ai-music-match.png">
+      <img src="screenshots/13-ai-music-match.png" alt="AI Music Match" onerror="this.closest('.screenshot').classList.add('missing')" />
+      <div class="placeholder">📷 <code>13-ai-music-match.png</code> — stem upload + matched chord roll</div>
+      <figcaption>AI Music Match — chords + bass matched to your vocal, no drums.</figcaption>
+    </figure>
+
+    <p>Upload vocal/melody stem → pick analysis source (Vocals, Instruments, Bass, Full mix) → Genre + Mood → up to 6 chord candidates with auto bass → preview → one tap to Groove Lab or SE2.</p>
+  </section>
+
+  <!-- ROUTING -->
+  <section id="routing">
+    <h2><span class="num">7.</span> How Everything Connects</h2>
+
+    <div class="flow">┌─────────────────────────────────────────────────────────────┐
+│  CREATION STATION                                           │
+│  Beat Lab ── Groove Lab ── Chord Builder ── 808 Lab         │
+│       │            │              │              │            │
+│       └────────────┴──────────────┴──────────────┘            │
+│                         │ MIDI / WAV                          │
+└─────────────────────────┼───────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  STUDIO EDITOR 2                                            │
+│  Timeline · Piano Roll · Mixer                              │
+│  ★ Pitch Tune (Auto-Tune) + Vocoder on audio channels       │
+│  Synth Geno · Beat Pads · Drum Gen · Groove Lead · Guitar   │
+│                         │ stereo bounce                     │
+└─────────────────────────┼───────────────────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│  MASTERING BAY                                              │
+│  Bass X → DMB Match → Master X1 → Export Master WAV         │
+└─────────────────────────────────────────────────────────────┘
+
+  AI Vocal Lab ──→ SE2 / Groove Lab / Beat Lab
+  AI Music Match ──→ Groove Lab / SE2
+  Harmony Match  ──→ Groove Lab</div>
+
+    <table>
+      <tr><th>From</th><th>To</th><th>How</th></tr>
+      <tr><td>Chord Builder</td><td>Beat Lab SYNTH</td><td>MIDI → SYNTH</td></tr>
+      <tr><td>Chord Builder</td><td>808 Lab</td><td>Roots → 808</td></tr>
+      <tr><td>Groove Lab</td><td>Beat Lab</td><td>Send to NEW SYNTH</td></tr>
+      <tr><td>AI Music Match</td><td>Groove Lab</td><td>Load matched progression</td></tr>
+      <tr><td>Neural Hum</td><td>SE2</td><td>Export MIDI + WAV</td></tr>
+      <tr><td>SE2 audio lane</td><td>Pitch Tune / Vocoder</td><td>Vocal FX on mixer strip</td></tr>
+      <tr><td>SE2</td><td>Mastering Bay</td><td>Bounce stereo mix</td></tr>
+    </table>
+  </section>
+
+  <!-- SCREENSHOT GALLERY -->
+  <section id="screenshots">
+    <h2><span class="num">8.</span> Screenshot Gallery</h2>
+    <p>Add PNG/JPG files to <code>share/screenshots/</code> using the filenames in <code>README-SCREENSHOTS.txt</code>. Refresh this page to see them.</p>
+    <p><strong>Priority for social posts:</strong> #03 Vocal DSP Suite, #04 Pitch Tune, #05 Vocoder, #09 Beat Lab, #08 Groove Lab, #01 Mastering Bay.</p>
+  </section>
+
+</div>
+
+<footer>
+  <p><strong>Da Music Box</strong> — Music Production Suite</p>
+  <p>Real harmony. Real production. Built-in auto-tune &amp; vocoder. AI when you want it — never instead of your ear.</p>
+  <p style="margin-top:16px;font-size:0.75rem">File: E:\Da-Music-Box-v4-SOURCE-COMPLETE\share\DA-MUSIC-BOX-FEATURE-GUIDE.html</p>
+</footer>
+
+<script>
+const SOCIAL_POST = `🎛️ DA MUSIC BOX — Full Music Production Suite
+
+One app from first chord to final master:
+
+🔊 MASTERING BAY — Bass X → DMB Match → Master X1, presets, export with cover art
+
+🎚️ STUDIO EDITOR 2 — 128-bar DAW with piano roll + mixer
+★ BUILT-IN AUTO-TUNE (Pitch Tune) on every audio channel — Modern, Natural, Rap Tight, R&B presets
+★ BUILT-IN VOCODER — Robot, Funk Talk Box, Cyber, Warm Vox — per-channel on the mixer
+
+Also in SE2: Synth Geno · Beat Pads · Drum Generator · Groove Lead · Geno Ultra · Geno Bass · Guitar · Hum Capture · Audio→MIDI · Rhythm Edit
+
+🎹 CREATION STATION
+• Beat Lab — 16 pads + 16 synth lanes
+• Groove Lab — 100+ genre progressions
+• Chord Builder · 808 Lab · Kit Generator · Chord/Bass Sequencer
+
+🎤 AI VOCAL LAB — Neural Hum, Melody-to-MIDI, Harmony Match
+🎵 AI MUSIC MATCH — vocal stem → matched chords + bass (offline)
+
+Chord-theory-first. AI assists — you finish. MIDI + WAV export everywhere.
+
+#musicproduction #beatmaker #DAW #autotune #vocoder #hiphop #RnB #trap`;
+
+const OVERVIEW = `Da Music Box is a complete music production suite: Creation Station (Beat Lab, Groove Lab, Chord Builder, 808 Lab), Studio Editor 2 (128-bar DAW with built-in auto-tune and vocoder on mixer channels), Mastering Bay, AI Vocal Lab, and AI Music Match. Real harmony, real grids, real synths.`;
+
+document.getElementById('social-copy').value = SOCIAL_POST;
+
+function showToast() {
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function copySocial() {
+  navigator.clipboard.writeText(SOCIAL_POST).then(showToast).catch(() => {
+    const ta = document.getElementById('social-copy');
+    ta.select();
+    document.execCommand('copy');
+    showToast();
+  });
+}
+
+function copyOverview() {
+  navigator.clipboard.writeText(OVERVIEW).then(showToast);
+}
+</script>
+
+</body>
+</html>

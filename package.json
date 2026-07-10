@@ -16,7 +16,8 @@
 		"link-server:stub": "node -e \"process.env.LINK_STUB='1';require('./scripts/link-server.cjs')\"",
 		"export": "npm run build && npm run package-export",
 		"package-export": "node scripts/export.js",
-		"build:sound-families": "node scripts/build-sound-families.mjs"
+		"build:sound-families": "node scripts/build-sound-families.mjs",
+		"validate:vocal-dsp": "bun run scripts/validate-vocal-dsp.ts"
 	},
 	"keywords": [
 		"daw",

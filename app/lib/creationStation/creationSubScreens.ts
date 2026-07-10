@@ -30,7 +30,7 @@ export const CREATION_SUB_SCREENS: {
   { id: 'chord-builder', label: 'Chord Builder', shortLabel: 'Chord' },
   { id: 'more', label: 'More', shortLabel: 'More', navVisible: false },
   { id: '808-lab', label: '808 Lab', shortLabel: '808' },
-  { id: 'drum-kit-generator', label: 'Drum Kit Generator', shortLabel: 'Kit Gen' },
+  { id: 'drum-kit-generator', label: 'Kit Generator → Beat Lab', shortLabel: 'Kit Generator → Beat Lab' },
   { id: 'chord-bass-sequencer', label: 'Chord / Bass Sequencer', shortLabel: 'Chord/Bass' },
 ];
 

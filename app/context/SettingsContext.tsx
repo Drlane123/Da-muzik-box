@@ -3,6 +3,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 import type { TouchInputMode } from '@/app/lib/touch/touchDevice';
+import type { AudioLatencyHint, AudioSampleRateSetting } from '@/app/lib/audioDeviceInfo';
+import type { MidiPortRoutingMap } from '@/app/lib/midi/midiDevices';
 
 export interface Settings {
   masterVolume: number;
@@ -13,10 +15,16 @@ export interface Settings {
   audioLatency: number;
   audioInput: string;
   audioOutput: string;
+  /** Preferred engine sample rate — `'device'` uses the browser default. */
+  audioSampleRate: AudioSampleRateSetting;
+  /** Maps to AudioContext `latencyHint` (closest browser equivalent to DAW block size). */
+  audioLatencyHint: AudioLatencyHint;
   /** Listen to Web MIDI inputs (USB keyboards, audio interface MIDI). */
   midiInputEnabled: boolean;
-  /** `'all'` or a `MIDIInput.id` from the browser. */
+  /** `'all'` or a `MIDIInput.id` from the browser. Legacy fallback when `midiPortRouting` has no entry. */
   midiInputDeviceId: string;
+  /** Per-port Receive / Send toggles (Studio One–style External Devices). */
+  midiPortRouting: MidiPortRoutingMap;
   /**
    * Touchscreen / stylus optimizations (larger taps, pointer→mouse bridge for grids and faders).
    * `auto` — on when this device has touch; `on` — always; `off` — never.
@@ -33,8 +41,11 @@ const DEFAULT_SETTINGS: Settings = {
   audioLatency: 0,
   audioInput: 'default',
   audioOutput: 'default',
+  audioSampleRate: 'device',
+  audioLatencyHint: 'interactive',
   midiInputEnabled: false,
   midiInputDeviceId: 'all',
+  midiPortRouting: {},
   touchInput: 'auto',
 };
 

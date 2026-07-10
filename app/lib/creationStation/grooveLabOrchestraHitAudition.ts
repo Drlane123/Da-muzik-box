@@ -23,8 +23,8 @@ export type PlayGrooveLabOrchestraHitOpts = {
   velocity01?: number;
   orchestraChannel: number;
   channelVolumes?: Record<number, number>;
-  /** MIDI from roll — used for synth fallback pitch only. */
-  fallbackMidi?: number;
+  /** Roll / chord MIDI — pitch-shifts the sample (same idea as guitar licks). */
+  targetMidi?: number;
 };
 
 export function scheduleGrooveLabOrchestraTransportHit(
@@ -40,15 +40,20 @@ export function scheduleGrooveLabOrchestraTransportHit(
   const vel = opts.velocity01 ?? 0.9;
   const dest = resolveGrooveLabChannelDest(ctx, opts.orchestraChannel, opts.channelVolumes);
   resumeGrooveLabAudioContext(ctx);
+  const targetMidi =
+    opts.targetMidi != null && Number.isFinite(opts.targetMidi)
+      ? Math.round(opts.targetMidi)
+      : undefined;
 
   void ensureOrchestraHitBuffer(ctx, def).then(() => {
     const played = playOrchestraHitSample(ctx, def, at, vel, {
       outputNode: dest,
-      nativePitch: def.nativePitch,
+      nativePitch: targetMidi == null,
+      targetMidi: targetMidi ?? def.rootMidi,
     });
     if (!played) {
       const fallback = def.fallbackSynth as GrooveLabLeadSoundId;
-      const midi = opts.fallbackMidi ?? def.rootMidi;
+      const midi = targetMidi ?? def.rootMidi;
       playGrooveLabLeadSound(ctx, midi, fallback, at, vel, 120, 1.1, {
         pitchRegister: 'melody',
         monophonic: false,
@@ -73,6 +78,7 @@ export function auditionGrooveLabOrchestraHit(
   hitId: OrchestraHitId | string,
   orchestraChannel: number,
   channelVolumes?: Record<number, number>,
+  targetMidi?: number,
 ): void {
   scheduleGrooveLabOrchestraTransportHit(ctx, {
     hitId,
@@ -80,5 +86,6 @@ export function auditionGrooveLabOrchestraHit(
     velocity01: 0.95,
     orchestraChannel,
     channelVolumes,
+    targetMidi,
   });
 }

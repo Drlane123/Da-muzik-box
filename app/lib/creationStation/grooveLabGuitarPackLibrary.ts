@@ -17,7 +17,7 @@ import {
 } from '@/app/lib/creationStation/grooveLabPitch';
 import {
   GROOVE_LAB_SLOTS_PER_BAR,
-  grooveLabChordAttackColumns,
+  grooveLabChordBarFirstAttackColumns,
   grooveLabSlotsPerCell,
   grooveLabTotalSlots,
   normalizeGrooveBarCount,
@@ -160,7 +160,7 @@ export function buildGuitarPackRoll(
   const slotsPerBar = GROOVE_LAB_SLOTS_PER_BAR;
   const cellStep = grooveLabSlotsPerCell(opts.quantize);
   const refMidi = opts.referenceMidi ?? GROOVE_LAB_BASS_REFERENCE_MIDI;
-  const columns = grooveLabChordAttackColumns(opts.chordHits, {
+  const columns = grooveLabChordBarFirstAttackColumns(opts.chordHits, {
     keyRoot: opts.keyRoot,
     mode: opts.mode,
     referenceMidi: refMidi,

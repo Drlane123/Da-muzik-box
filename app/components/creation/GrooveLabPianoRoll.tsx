@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from 'react';
 import { Eraser, Maximize2, Minimize2, MousePointer2, Pencil, ZoomIn, ZoomOut } from 'lucide-react';
+import { GrooveLabHelpTip } from '@/app/components/creation/GrooveLabHelpHub';
 import { chordBassSeqChannelLabel } from '@/app/lib/creationStation/chordBassSequencerSession';
 import {
   GROOVE_LAB_BASS_NOTE_COLOR,
@@ -196,6 +197,15 @@ const RULER_BAR_H = 18;
 const RULER_MEASURE_H = 16;
 const RULER_QUANT_H = 14;
 const RULER_TOTAL_H = RULER_BAR_H + RULER_MEASURE_H + RULER_QUANT_H;
+
+/** Sticky chrome above note layers — matches Beat Lab roll (keys/ruler stay on top while scrolling). */
+const GROOVE_ROLL_Z_PLAYHEAD = 30;
+const GROOVE_ROLL_Z_CORNER = 21;
+const GROOVE_ROLL_Z_RULER = 20;
+const GROOVE_ROLL_Z_KEYS = 19;
+const GROOVE_ROLL_Z_CELLS_PAINT = 6;
+const GROOVE_ROLL_Z_NOTES = 5;
+const GROOVE_ROLL_Z_GRID = 1;
 
 /** Full chromatic keyboard C1–C6 (same range as 808 Lab). */
 const GROOVE_PIANO_ROWS = LAB808_PIANO_ROWS;
@@ -1692,7 +1702,10 @@ export function GrooveLabPianoRoll({
       {showFullChrome ? (
       <div style={{ flexShrink: 0, marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
-          <span style={{ fontSize: 9, fontWeight: 900, color: '#7cf4c6' }}>PIANO ROLL</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9, fontWeight: 900, color: '#7cf4c6' }}>
+            PIANO ROLL
+            <GrooveLabHelpTip tab="roll" title="Piano roll editor help" />
+          </span>
           <span style={{ fontSize: 9, color: '#67e8f9', fontWeight: 800 }}>{channelLabel}</span>
           <span style={{ fontSize: 8, color: '#6b7280' }}>
             {allHits.length} note{allHits.length === 1 ? '' : 's'}
@@ -1740,18 +1753,6 @@ export function GrooveLabPianoRoll({
               noteCount={melodyLayerNoteCount}
               onOctaveDown={onMelodyOctaveDown}
               onOctaveUp={onMelodyOctaveUp}
-            />
-          ) : null}
-          {(!layerScope || layerScope === 'chord' || layerScope === 'sample') &&
-          onChordOctaveDown &&
-          onChordOctaveUp ? (
-            <GrooveOctaveShiftButtons
-              layerLabel="CHORD"
-              accentColor="#86efac"
-              borderColor="#22c55e"
-              noteCount={chordStackNoteCount}
-              onOctaveDown={onChordOctaveDown}
-              onOctaveUp={onChordOctaveUp}
             />
           ) : null}
           {onClearAllSubRoots ? (
@@ -1866,7 +1867,7 @@ export function GrooveLabPianoRoll({
           {onTransportRewind && onTransportStop && onTransportPlayPause && onTransportFastForward ? (
             <OrchidTransportControls
               playing={transportPlaying}
-              disabled={transportDisabled}
+              playDisabled={transportDisabled}
               onRewind={onTransportRewind}
               onStop={onTransportStop}
               onPlayPause={onTransportPlayPause}
@@ -2124,7 +2125,6 @@ export function GrooveLabPianoRoll({
             width: 'max-content',
             minWidth: '100%',
             position: 'relative',
-            isolation: 'isolate',
           }}
         >
           {playheadElRef ? (
@@ -2139,7 +2139,7 @@ export function GrooveLabPianoRoll({
                 height: RULER_TOTAL_H + gridBodyH + VEL_LANE_H,
                 background: 'transparent',
                 pointerEvents: 'none',
-                zIndex: 30,
+                zIndex: GROOVE_ROLL_Z_PLAYHEAD,
                 opacity: transportNotStopped ? 1 : 0.42,
               }}
             >
@@ -2173,7 +2173,7 @@ export function GrooveLabPianoRoll({
               flexShrink: 0,
               position: 'sticky',
               top: 0,
-              zIndex: 7,
+              zIndex: GROOVE_ROLL_Z_RULER,
               background: '#030508',
             }}
           >
@@ -2184,7 +2184,7 @@ export function GrooveLabPianoRoll({
                 height: RULER_TOTAL_H,
                 position: 'sticky',
                 left: 0,
-                zIndex: 8,
+                zIndex: GROOVE_ROLL_Z_CORNER,
                 boxSizing: 'border-box',
                 display: 'flex',
                 flexDirection: 'column',
@@ -2210,7 +2210,7 @@ export function GrooveLabPianoRoll({
                 flexShrink: 0,
                 position: 'sticky',
                 left: 0,
-                zIndex: 9,
+                zIndex: GROOVE_ROLL_Z_KEYS,
                 background: '#030508',
               }}
             >
@@ -2265,6 +2265,7 @@ export function GrooveLabPianoRoll({
                 minWidth: gridWidth,
                 flexShrink: 0,
                 position: 'relative',
+                zIndex: GROOVE_ROLL_Z_GRID,
               }}
             >
             <div
@@ -2312,7 +2313,7 @@ export function GrooveLabPianoRoll({
               </div>
 
               {/* Vertical grid — bar edge + 4 measures + quantize columns */}
-              <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
+              <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: GROOVE_ROLL_Z_GRID }}>
                 {gridColLines.map((line) => {
                   const st = grooveLabGridLineStyle(line.kind) ?? grooveLabGridLineStyle('snap');
                   return (
@@ -2338,7 +2339,7 @@ export function GrooveLabPianoRoll({
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  zIndex: cellsAboveNotes ? 6 : 1,
+                  zIndex: cellsAboveNotes ? GROOVE_ROLL_Z_CELLS_PAINT : GROOVE_ROLL_Z_GRID,
                   pointerEvents: 'auto',
                 }}
               >
@@ -2410,7 +2411,7 @@ export function GrooveLabPianoRoll({
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  zIndex: cellsAboveNotes ? 4 : 10,
+                  zIndex: cellsAboveNotes ? GROOVE_ROLL_Z_NOTES - 1 : GROOVE_ROLL_Z_NOTES,
                   pointerEvents: 'none',
                 }}
               >
@@ -2544,7 +2545,7 @@ export function GrooveLabPianoRoll({
                                   : layer === 'chord'
                                     ? 0.82 + note.vel * 0.12
                                     : 0.75 + note.vel * 0.25,
-                              zIndex: isRz || isSel ? 5 : 4,
+                              zIndex: isRz || isSel ? GROOVE_ROLL_Z_NOTES : GROOVE_ROLL_Z_NOTES - 1,
                               boxSizing: 'border-box',
                               overflow: 'hidden',
                               pointerEvents: 'auto',

@@ -11,6 +11,7 @@ import { inferWaveLeafKeyFromChordHits } from '@/app/lib/creationStation/waveLea
 import { grooveLabClampBassRootMidi } from '@/app/lib/creationStation/grooveLabPitch';
 import {
   grooveLabChordAnchorsFromHits,
+  grooveLabChordHitsForBarLeadLock,
   grooveLabInferComposerBarCount,
   sanitizeGrooveLabChordChannelHits,
   type GrooveLabQuantize,
@@ -37,6 +38,8 @@ export type GenerateWaveLeafPhraseParams = {
   bpm?: number;
   /** Bass / keypad root for harmony column inference (not lead register). */
   bassRootMidi?: number;
+  /** Keep complete melodic phrases (Studio Editor 2 piano roll). */
+  fullPhrase?: boolean;
 };
 
 /** How many chord columns the lead generator can lock to. */
@@ -44,7 +47,8 @@ export function waveLeafMelodyGenColumnCount(
   chordHits: readonly GrooveRollHit[],
   opts: { barCount: number; keyRoot: number; mode: ChordMode; bassRootMidi: number },
 ): number {
-  const lane = sanitizeGrooveLabChordChannelHits([...chordHits], opts.barCount);
+  const lockHits = grooveLabChordHitsForBarLeadLock(chordHits);
+  const lane = sanitizeGrooveLabChordChannelHits([...lockHits], opts.barCount);
   if (lane.length === 0) return 0;
   return grooveLabChordAnchorsFromHits(lane, {
     keyRoot: opts.keyRoot,
@@ -64,7 +68,10 @@ export function generateWaveLeafPhraseFromChords(params: GenerateWaveLeafPhraseP
     params.keyRoot,
     params.mode,
   );
-  const harmony = grooveComposerHarmonyFromChordHits(params.chordHits, {
+  const lockHits = grooveLabChordHitsForBarLeadLock(params.chordHits, {
+    quantize: params.quantize,
+  });
+  const harmony = grooveComposerHarmonyFromChordHits(lockHits, {
     keyRoot: lockedKey.keyRoot,
     mode: lockedKey.mode,
     referenceMidi: harmonyRef,
@@ -92,9 +99,10 @@ export function generateWaveLeafPhraseFromChords(params: GenerateWaveLeafPhraseP
     seed: params.seed,
     rates: { melody: rate, riff: rate, arp: rate },
     movement,
-    chordHits: params.chordHits,
+    chordHits: lockHits,
     chordFit,
     phraseGrid,
+    fullPhrase: params.fullPhrase,
   });
 
   return {

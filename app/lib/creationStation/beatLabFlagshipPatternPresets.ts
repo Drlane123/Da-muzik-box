@@ -9,6 +9,14 @@
 
 import type { PatternPreset } from '@/app/lib/patternPresets';
 import type { BeatLabProducerKitId } from '@/app/lib/creationStation/beatLabProducerKits';
+import { danceInDaClubPocket } from '@/app/lib/creationStation/beatLabDancePatternGrid';
+import {
+  trapCoreMetro,
+  trapCoreSouth,
+  trapHatsEightThenRoll,
+  trapKickMinimal,
+  trapSnare24,
+} from '@/app/lib/creationStation/beatLabTrapPatternGrid';
 
 const R = 8;
 const S = 16;
@@ -45,15 +53,8 @@ export const BEAT_LAB_FLAGSHIP_DRUM_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 140,
-    desc: 'Metro-style pocket — kick 1 & 2.5, stacked clap 2 & 4, 16th hats, 808 body under the one',
-    pattern: grid([
-      [0, 0], [0, 6], [0, 10], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7],
-      [3, 8], [3, 9], [3, 10], [3, 11], [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 6], [4, 14],
-      [6, 0], [6, 10],
-    ]),
+    desc: 'Metro bounce — sync kick, snare bar-push, steady→roll hats, 808 lock',
+    pattern: grid(trapCoreMetro()),
   },
   {
     id: 'trap-flag-atl-slab',
@@ -61,15 +62,8 @@ export const BEAT_LAB_FLAGSHIP_DRUM_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 142,
-    desc: 'Southern bounce — syncopated kicks, double clap tail, rim pushes, hat roll into bar 4',
-    pattern: grid([
-      [0, 0], [0, 3], [0, 7], [0, 10], [0, 14],
-      [1, 7],
-      [2, 4], [2, 12], [2, 13],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 10], [4, 14],
-      [7, 6], [7, 14],
-    ]),
+    desc: 'Southern bounce — sync kick phrase, triplet hat fill, rim push',
+    pattern: grid(trapCoreSouth()),
   },
   {
     id: 'trap-flag-trunk808',
@@ -77,12 +71,12 @@ export const BEAT_LAB_FLAGSHIP_DRUM_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 145,
-    desc: 'Long 808 tail — sparse trunk kicks, clap 2 & 4, dense hats, sub body on the downbeats',
+    desc: 'Long 808 tail — sparse kick, snap 2 & 4, 8ths→roll hats, sub lock',
     pattern: grid([
-      [0, 0], [0, 8], [0, 11], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7],
-      [3, 8], [3, 9], [3, 10], [3, 11], [3, 12], [3, 13], [3, 14], [3, 15],
+      ...trapKickMinimal(),
+      [0, 14],
+      ...trapSnare24(),
+      ...trapHatsEightThenRoll(),
       [4, 7], [4, 15],
       [6, 0], [6, 8], [6, 14],
     ]),
@@ -155,15 +149,9 @@ export const BEAT_LAB_FLAGSHIP_DRUM_PATTERNS: readonly PatternPreset[] = [
     name: 'Club Pocket · Bounce',
     genre: 'Dance',
     role: 'drums',
-    bpm: 126,
-    desc: 'Pop-club bounce — 4x4 with syncopated kick pickups, 16th hats, clap on 2 & 4',
-    pattern: grid([
-      [0, 0], [0, 4], [0, 6], [0, 8], [0, 10], [0, 12], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7],
-      [3, 8], [3, 9], [3, 10], [3, 11], [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 6], [4, 14],
-    ]),
+    bpm: 90,
+    desc: 'In Da Club pocket @ 90 — bounce kick 3·8·11·16, snare+clap 2 & 4, 8th hats',
+    pattern: grid(danceInDaClubPocket()),
   },
   {
     id: 'dance-flag-lift',

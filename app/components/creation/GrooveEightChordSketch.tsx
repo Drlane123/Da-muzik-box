@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { X } from 'lucide-react';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { parseChordSymbolToken } from '@/app/lib/creationStation/chordProgressionParse';
 import {
@@ -17,10 +18,18 @@ import {
   newProgressionStepId,
   type GrooveProgressionStep,
 } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
+import { se2PrimaryChordLabelsPerBar } from '@/app/lib/studio/se2ChordGeneratorPassingRhythm';
 
 export type GrooveSketchBarCount = 4 | 8;
 const BEATS_PER_BAR = 4;
 const BAR_MIN_WIDTH = 96;
+/** SE2 embed: always lay out as 8 bars wide so 4-bar phrases use larger cards (no inner scroll). */
+const EMBED_LAYOUT_BAR_COUNT = 8;
+
+/** Modest type bump for SE2 compact embed — layout sizes stay the same. */
+function sketchFs(px: number, compactEmbed: boolean, extra = 2): number {
+  return compactEmbed ? px + extra : px;
+}
 
 export type SketchSlot = {
   label: string;
@@ -75,6 +84,18 @@ export interface GrooveEightChordSketchProps {
   autoSongBankTempo?: boolean;
   onBpmChange?: (bpm: number) => void;
   onSongBankTempoNote?: (note: string | null) => void;
+  /** Fires when a song bank / sketch fill produces playable steps — seeds rhythm edit box. */
+  onSketchStepsReady?: (steps: GrooveProgressionStep[]) => void;
+  /** Keep Studio LOOP LENGTH in sync when phrase length changes or sketch sends to timeline. */
+  onLoopBarsChange?: (bars: GrooveSketchBarCount) => void;
+  /** SE2 Geno Chord Creator — export label + hide Groove main-builder send. */
+  studioGenoChordCreator?: boolean;
+  /** When set, reload card slots from main timeline (e.g. after Generate). */
+  draftSyncToken?: number;
+  /** Keep phrase length aligned with SE2 loop length (4 / 8). */
+  loopBars?: GrooveSketchBarCount;
+  /** Narrow column embed in SE2 Chord Generator header (shorter bar cards, horizontal scroll). */
+  compactEmbed?: boolean;
 }
 
 export function GrooveEightChordSketch({
@@ -97,16 +118,39 @@ export function GrooveEightChordSketch({
   autoSongBankTempo = true,
   onBpmChange,
   onSongBankTempoNote,
+  onSketchStepsReady,
+  onLoopBarsChange,
+  studioGenoChordCreator = false,
+  draftSyncToken,
+  loopBars: controlledLoopBars,
+  compactEmbed = false,
 }: GrooveEightChordSketchProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const [sketchBarCount, setSketchBarCount] = useState<GrooveSketchBarCount>(8);
-  const [slots, setSlots] = useState<SketchSlot[]>(() => emptySlots(8));
+  const [sketchBarCount, setSketchBarCount] = useState<GrooveSketchBarCount>(
+    () => controlledLoopBars ?? 8,
+  );
+  const [slots, setSlots] = useState<SketchSlot[]>(() => emptySlots(controlledLoopBars ?? 8));
   const [sketchLoopOn, setSketchLoopOn] = useState(false);
   /** True while this sketch started play/loop (so bar highlight follows sketch, not pack/timeline). */
   const [sketchDrivingAudition, setSketchDrivingAudition] = useState(false);
   const [selectedBar, setSelectedBar] = useState(0);
   const [pickedChord, setPickedChord] = useState<string | null>(null);
   const [songBankId, setSongBankId] = useState(DEFAULT_GROOVE_8BAR_SONG_ID);
+  const lastDraftSyncTokenRef = useRef(0);
+
+  useEffect(() => {
+    if (controlledLoopBars == null) return;
+    lastDraftSyncTokenRef.current = 0;
+    setSketchBarCount(controlledLoopBars);
+    setSlots((prev) => {
+      const fresh = emptySlots(controlledLoopBars);
+      for (let i = 0; i < Math.min(controlledLoopBars, prev.length); i++) {
+        fresh[i] = prev[i]!;
+      }
+      return fresh;
+    });
+    setSelectedBar((i) => Math.min(i, controlledLoopBars - 1));
+  }, [controlledLoopBars]);
 
   useEffect(() => {
     if (!auditionPlaying) {
@@ -114,6 +158,28 @@ export function GrooveEightChordSketch({
       setSketchDrivingAudition(false);
     }
   }, [auditionPlaying]);
+
+  useEffect(() => {
+    if (!studioGenoChordCreator || draftSyncToken == null || draftSyncToken === 0) return;
+    if (mainTimelineSteps.length === 0) return;
+    if (lastDraftSyncTokenRef.current === draftSyncToken) return;
+    lastDraftSyncTokenRef.current = draftSyncToken;
+    const barCount = controlledLoopBars ?? sketchBarCount;
+    const labels = se2PrimaryChordLabelsPerBar(mainTimelineSteps, barCount, defaultCardBeats);
+    const next = labels.map((label) => ({
+      label: label === '—' ? '' : label,
+      rest: false,
+    }));
+    setSlots(next);
+    setSelectedBar(0);
+  }, [
+    studioGenoChordCreator,
+    draftSyncToken,
+    mainTimelineSteps,
+    controlledLoopBars,
+    sketchBarCount,
+    defaultCardBeats,
+  ]);
 
   const stopSketchAudition = useCallback(() => {
     setSketchLoopOn(false);
@@ -126,17 +192,26 @@ export function GrooveEightChordSketch({
     [slots, defaultCardBeats],
   );
 
-  const setSketchLength = useCallback((next: GrooveSketchBarCount) => {
-    setSketchBarCount(next);
-    setSlots((prev) => {
-      const fresh = emptySlots(next);
-      for (let i = 0; i < Math.min(next, prev.length); i++) {
-        fresh[i] = prev[i]!;
+  const setSketchLength = useCallback(
+    (next: GrooveSketchBarCount) => {
+      if (studioGenoChordCreator && controlledLoopBars != null) {
+        if (next === controlledLoopBars) return;
+        onLoopBarsChange?.(next);
+        return;
       }
-      return fresh;
-    });
-    setSelectedBar((i) => Math.min(i, next - 1));
-  }, []);
+      setSketchBarCount(next);
+      onLoopBarsChange?.(next);
+      setSlots((prev) => {
+        const fresh = emptySlots(next);
+        for (let i = 0; i < Math.min(next, prev.length); i++) {
+          fresh[i] = prev[i]!;
+        }
+        return fresh;
+      });
+      setSelectedBar((i) => Math.min(i, next - 1));
+    },
+    [controlledLoopBars, onLoopBarsChange, studioGenoChordCreator],
+  );
   const hasPlayable = sketchSteps.some(
     (s) => !s.rest && s.label.trim() && parseChordSymbolToken(s.label),
   );
@@ -233,66 +308,155 @@ export function GrooveEightChordSketch({
     const bank = GROOVE_8BAR_SONG_BANK.find((b) => b.id === id);
     if (!bank) return;
     setSongBankId(id);
-    setSlots(songBankToEightBarSketch(bank.chords, sketchBarCount));
+    const nextSlots = songBankToEightBarSketch(bank.chords, sketchBarCount);
+    setSlots(nextSlots);
     setSelectedBar(0);
+    onLoopBarsChange?.(sketchBarCount);
+    onSketchStepsReady?.(sketchToSteps(nextSlots, defaultCardBeats));
     if (autoSongBankTempo && onBpmChange) {
       const resolved = resolve8BarSongPresetTempo(bank);
       onBpmChange(resolved.bpm);
       onSongBankTempoNote?.(resolved.note);
     }
-  }, [sketchBarCount, autoSongBankTempo, onBpmChange, onSongBankTempoNote]);
+  }, [
+    sketchBarCount,
+    autoSongBankTempo,
+    onBpmChange,
+    onSongBankTempoNote,
+    onSketchStepsReady,
+    onLoopBarsChange,
+    defaultCardBeats,
+  ]);
 
   const studioLabel = grooveBranding ? 'GROOVE' : 'ORCHID';
   const filledCount = slots.filter((s) => !s.rest && s.label.trim()).length;
+  const barMinWidth = compactEmbed ? 62 : BAR_MIN_WIDTH;
+  const barCardMinHeight = compactEmbed ? 148 : 108;
+  const embedBarGap = compactEmbed ? 4 : 6;
+  const embedTrackWidthPx = compactEmbed
+    ? EMBED_LAYOUT_BAR_COUNT * barMinWidth + (EMBED_LAYOUT_BAR_COUNT - 1) * embedBarGap
+    : 0;
+  const embedBarCardWidthPx = compactEmbed
+    ? (embedTrackWidthPx - (sketchBarCount - 1) * embedBarGap) / sketchBarCount
+    : barMinWidth;
+  /** Closed header matches open card-row width (always 8-bar span in SE2 embed). */
+  const embedPanelWidthPx = compactEmbed ? embedTrackWidthPx + 48 : undefined;
 
   return (
     <div
       style={{
-        marginBottom: 10,
+        marginBottom: compactEmbed ? 0 : studioGenoChordCreator ? 4 : 10,
         border: `1px solid ${open ? '#3b82f666' : '#1a2438'}`,
-        borderRadius: 8,
+        borderRadius: compactEmbed ? 6 : 8,
         background: open ? '#0a1018' : '#080a0e',
-        overflow: 'hidden',
+        overflow: compactEmbed ? 'visible' : studioGenoChordCreator ? 'visible' : 'hidden',
+        width: embedPanelWidthPx,
+        minWidth: compactEmbed ? embedPanelWidthPx : undefined,
+        maxWidth: compactEmbed ? embedPanelWidthPx : undefined,
+        marginRight: compactEmbed ? 'auto' : undefined,
       }}
     >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        title="8-bar chord phrase — chord bank + song presets. Main builder unchanged until you send."
+      <div
         style={{
-          width: '100%',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          padding: '8px 10px',
-          background: open ? '#0e1a28' : 'transparent',
-          border: 'none',
-          color: open ? '#93c5fd' : '#6b7280',
-          fontSize: 9,
-          fontWeight: 900,
-          cursor: 'pointer',
-          letterSpacing: 0.3,
+          alignItems: 'stretch',
+          gap: compactEmbed && open ? 4 : 0,
         }}
       >
-        <span>
-          {open ? '▼' : '▸'} {sketchBarCount}-CHORD SONG SKETCH
-          <span style={{ color: '#4b5563', fontWeight: 700, marginLeft: 6 }}>
-            ({sketchBarCount} bars · chord bank)
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          title="Song sketch — chord bank + presets. Open to edit, close when done."
+          style={{
+            flex: 1,
+            minWidth: 0,
+            width: compactEmbed ? '100%' : undefined,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: compactEmbed ? 4 : 8,
+            padding: compactEmbed ? '8px 12px' : '8px 10px',
+            minHeight: compactEmbed ? 34 : undefined,
+            background: open ? '#0e1a28' : 'transparent',
+            border: 'none',
+            color: open ? '#93c5fd' : '#6b7280',
+            fontSize: sketchFs(9, compactEmbed),
+            fontWeight: 900,
+            cursor: 'pointer',
+            letterSpacing: 0.3,
+          }}
+        >
+          <span className="truncate text-left">
+            {open ? '▼' : '▸'} {sketchBarCount}-BAR SKETCH
+            {!compactEmbed ? (
+              <span style={{ color: '#4b5563', fontWeight: 700, marginLeft: 6 }}>
+                ({sketchBarCount} bars · chord bank)
+              </span>
+            ) : null}
           </span>
-        </span>
-        <span style={{ fontSize: 8, color: filledCount >= sketchBarCount ? '#86efac' : '#fde68a' }}>
-          {filledCount}/{sketchBarCount} bars
-        </span>
-      </button>
+          <span
+            className="shrink-0"
+            style={{ fontSize: sketchFs(8, compactEmbed), color: filledCount >= sketchBarCount ? '#86efac' : '#fde68a' }}
+          >
+            {filledCount}/{sketchBarCount}
+          </span>
+        </button>
+        {open ? (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            title="Close sketch"
+            aria-label="Close sketch"
+            style={{
+              flexShrink: 0,
+              alignSelf: 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: compactEmbed ? 32 : 34,
+              height: compactEmbed ? 32 : 34,
+              margin: compactEmbed ? '0 6px 0 0' : '0 8px 0 0',
+              border: '1px solid #e85d7588',
+              borderRadius: 6,
+              background: '#1a1014',
+              color: '#f0a0b0',
+              cursor: 'pointer',
+            }}
+          >
+            <X size={compactEmbed ? 16 : 18} strokeWidth={2.5} aria-hidden />
+          </button>
+        ) : null}
+      </div>
 
       {open ? (
-        <div style={{ padding: '0 10px 10px' }}>
+        <div
+          style={{
+            padding: compactEmbed ? '10px 12px 16px' : '0 10px 10px',
+            minHeight: compactEmbed ? 380 : undefined,
+          }}
+        >
+          {!compactEmbed ? (
           <p style={{ margin: '0 0 8px', fontSize: 8, color: '#6b7280', lineHeight: 1.45 }}>
             Choose <strong style={{ color: '#93c5fd' }}>4 or 8 bars</strong>. Card length (½ bar vs full bar) follows
             the progression builder toggle. Song bank fills the visible bars.
           </p>
+          ) : null}
 
+          {studioGenoChordCreator && compactEmbed ? (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={sectionLabel}>PHRASE LENGTH</span>
+              {([4, 8] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSketchLength(n)}
+                  style={miniBtn(sketchBarCount === n, false, '#112015', '#7cf4c6', compactEmbed)}
+                >
+                  {n} BARS
+                </button>
+              ))}
+            </div>
+          ) : !studioGenoChordCreator ? (
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             <span style={sectionLabel}>PHRASE LENGTH</span>
             {([4, 8] as const).map((n) => (
@@ -306,14 +470,19 @@ export function GrooveEightChordSketch({
               </button>
             ))}
           </div>
+          ) : null}
 
           <div style={{ marginBottom: 8 }}>
-            <div style={sectionLabel}>SONG BANK</div>
-            <GrooveSongBankPicker value={songBankId} onSelect={loadSongBank} />
+            <div style={sketchSectionLabel(compactEmbed)}>SONG BANK</div>
+            <GrooveSongBankPicker
+              value={songBankId}
+              onSelect={loadSongBank}
+              compact={studioGenoChordCreator}
+            />
             <button
               type="button"
               onClick={() => loadSongBank(songBankId)}
-              style={{ ...miniBtn(true), marginTop: 6, fontSize: 9, padding: '6px 10px' }}
+              style={{ ...miniBtn(true, false, '#112015', '#86efac', compactEmbed), marginTop: 6, padding: '6px 10px' }}
             >
               LOAD {sketchBarCount}-BAR SONG
             </button>
@@ -359,40 +528,61 @@ export function GrooveEightChordSketch({
           ) : null}
 
           <div style={{ marginBottom: 8 }}>
-            <div style={sectionLabel}>CHORD BANK — click hear · double-click bar {selectedBar + 1}</div>
-            {GROOVE_CHORD_PALETTE.map((section) => (
-              <div key={section.title} style={{ marginBottom: 5 }}>
-                <div style={{ fontSize: 7, color: '#374151', fontWeight: 800, marginBottom: 3 }}>
-                  {section.title}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                  {section.chords.map((ch) => (
-                    <button
-                      key={`${section.title}-${ch}`}
-                      type="button"
-                      onClick={() => previewChord(ch)}
-                      onDoubleClick={(e) => {
-                        e.preventDefault();
-                        placeChord(ch, selectedBar);
-                      }}
-                      title={`Hear · double-click = bar ${selectedBar + 1}`}
-                      style={{
-                        ...bankChipStyle,
-                        background: pickedChord === ch ? '#15321e' : bankChipStyle.background,
-                        border: `1px solid ${pickedChord === ch ? '#4ade80' : '#1f3a29'}`,
-                      }}
-                    >
-                      {ch}
-                    </button>
-                  ))}
-                </div>
+            {studioGenoChordCreator ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }}>
+                <GrooveChordPaletteDropdown
+                  pickedChord={pickedChord}
+                  selectedBar={selectedBar}
+                  onPreview={previewChord}
+                  onPlace={(ch) => placeChord(ch, selectedBar)}
+                />
+                {nextChords.length > 0 ? (
+                  <GrooveNextChordsDropdown
+                    suggestions={nextChords}
+                    selectedBar={firstEmptyBar(slots, sketchBarCount)}
+                    onPreview={previewChord}
+                    onPlace={(label) => placeChord(label)}
+                  />
+                ) : null}
               </div>
-            ))}
+            ) : (
+              <>
+                <div style={sectionLabel}>CHORD BANK — click hear · double-click bar {selectedBar + 1}</div>
+                {GROOVE_CHORD_PALETTE.map((section) => (
+                  <div key={section.title} style={{ marginBottom: 5 }}>
+                    <div style={{ fontSize: 7, color: '#374151', fontWeight: 800, marginBottom: 3 }}>
+                      {section.title}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {section.chords.map((ch) => (
+                        <button
+                          key={`${section.title}-${ch}`}
+                          type="button"
+                          onClick={() => previewChord(ch)}
+                          onDoubleClick={(e) => {
+                            e.preventDefault();
+                            placeChord(ch, selectedBar);
+                          }}
+                          title={`Hear · double-click = bar ${selectedBar + 1}`}
+                          style={{
+                            ...bankChipStyle,
+                            background: pickedChord === ch ? '#15321e' : bankChipStyle.background,
+                            border: `1px solid ${pickedChord === ch ? '#4ade80' : '#1f3a29'}`,
+                          }}
+                        >
+                          {ch}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
-          {nextChords.length > 0 ? (
+          {!studioGenoChordCreator && nextChords.length > 0 ? (
             <div style={{ marginBottom: 8 }}>
-              <div style={sectionLabel}>NEXT CHORDS (for bar {firstEmptyBar(slots) + 1})</div>
+              <div style={sectionLabel}>NEXT CHORDS (for bar {firstEmptyBar(slots, sketchBarCount) + 1})</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {nextChords.map((s) => (
                   <button
@@ -421,23 +611,27 @@ export function GrooveEightChordSketch({
                 if (auditionPlaying) stopSketchAudition();
                 else playSketchOnce();
               }}
-              style={miniBtn(hasPlayable, auditionPlaying)}
+              style={miniBtn(hasPlayable, auditionPlaying, '#112015', '#86efac', compactEmbed)}
             >
-              {auditionPlaying ? '■ STOP' : '▶ PLAY 8 BARS'}
+              {auditionPlaying ? '■ STOP' : `▶ PLAY ${sketchBarCount} BARS`}
             </button>
             <button
               type="button"
               disabled={!hasPlayable}
               onClick={toggleSketchLoop}
-              style={miniBtn(hasPlayable, sketchLoopOn, '#0e2838', '#67e8f9')}
+              style={miniBtn(hasPlayable, sketchLoopOn, '#0e2838', '#67e8f9', compactEmbed)}
             >
-              {sketchLoopOn ? '↻ LOOP ON' : '↻ LOOP 8'}
+              {sketchLoopOn ? '↻ LOOP ON' : `↻ LOOP ${sketchBarCount}`}
             </button>
             <button
               type="button"
               disabled={packChordLabels.length === 0}
-              onClick={() => setSlots(chordLabelsToEightBarSketch(packChordLabels, sketchBarCount))}
-              style={miniBtn(packChordLabels.length > 0)}
+              onClick={() => {
+                const next = chordLabelsToEightBarSketch(packChordLabels, sketchBarCount);
+                setSlots(next);
+                onSketchStepsReady?.(sketchToSteps(next, defaultCardBeats));
+              }}
+              style={miniBtn(packChordLabels.length > 0, false, '#112015', '#86efac', compactEmbed)}
               title="Repeat current pack loop across all 8 bars (4-chord packs fill ×2)"
             >
               PACK → 8 BARS
@@ -445,12 +639,16 @@ export function GrooveEightChordSketch({
             <button
               type="button"
               disabled={mainTimelineSteps.length === 0}
-              onClick={() => setSlots(stepsToSketch(mainTimelineSteps))}
-              style={miniBtn(mainTimelineSteps.length > 0)}
+              onClick={() => {
+                const next = stepsToSketch(mainTimelineSteps, sketchBarCount);
+                setSlots(next);
+                onSketchStepsReady?.(sketchToSteps(next, defaultCardBeats));
+              }}
+              style={miniBtn(mainTimelineSteps.length > 0, false, '#112015', '#86efac', compactEmbed)}
             >
               FROM TIMELINE
             </button>
-            <button type="button" onClick={() => setSlots(emptySlots())} style={miniBtn(true)}>
+            <button type="button" onClick={() => setSlots(emptySlots(sketchBarCount))} style={miniBtn(true, false, '#112015', '#86efac', compactEmbed)}>
               CLEAR
             </button>
             {onDropToRoll ? (
@@ -461,34 +659,42 @@ export function GrooveEightChordSketch({
                   setSketchLoopOn(false);
                   setSketchDrivingAudition(false);
                   onStopAudition();
+                  onLoopBarsChange?.(sketchBarCount);
                   onDropToRoll(sketchSteps);
                 }}
-                style={miniBtn(hasPlayable, false, '#0e2838', '#67e8f9')}
-                title="Green chords only (C4+) — no blue bass. Use + MATCH BASS in progression for 808."
+                style={miniBtn(hasPlayable, false, '#0e2838', '#67e8f9', compactEmbed)}
+                title={
+                  studioGenoChordCreator
+                    ? 'Stamp chord MIDI on this SE2 lane piano roll'
+                    : 'Green chords only (C4+) — no blue bass. Use + MATCH BASS in progression for 808.'
+                }
               >
-                DROP 8 TO ROLL
+                {studioGenoChordCreator ? `EXPORT ${sketchBarCount} TO TRACK` : `DROP ${sketchBarCount} TO ROLL`}
               </button>
             ) : null}
+            {!studioGenoChordCreator ? (
             <button
               type="button"
               disabled={!hasPlayable}
               onClick={() => {
+                onLoopBarsChange?.(sketchBarCount);
                 onSendToMainTimeline(sketchSteps);
                 setSketchLoopOn(false);
                 setSketchDrivingAudition(false);
               }}
               style={{
-                ...miniBtn(hasPlayable, false, '#15321e', '#4ade80'),
+                ...miniBtn(hasPlayable, false, '#15321e', '#4ade80', compactEmbed),
                 marginLeft: onDropToRoll ? undefined : 'auto',
               }}
             >
               SEND TO MAIN BUILDER →
             </button>
+            ) : null}
           </div>
 
           <div
             style={{
-              overflowX: 'auto',
+              overflowX: compactEmbed ? 'visible' : 'auto',
               paddingBottom: 4,
               marginBottom: 4,
             }}
@@ -496,9 +702,11 @@ export function GrooveEightChordSketch({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${sketchBarCount}, ${BAR_MIN_WIDTH}px)`,
-                gap: 6,
-                minWidth: sketchBarCount * (BAR_MIN_WIDTH + 6),
+                gridTemplateColumns: `repeat(${sketchBarCount}, ${compactEmbed ? embedBarCardWidthPx : barMinWidth}px)`,
+                gap: compactEmbed ? 4 : 6,
+                minWidth: compactEmbed
+                  ? embedTrackWidthPx
+                  : sketchBarCount * (barMinWidth + (compactEmbed ? 4 : 6)),
               }}
             >
               {slots.map((slot, i) => {
@@ -543,14 +751,14 @@ export function GrooveEightChordSketch({
                         : selected
                           ? '0 0 10px #22c55e33'
                           : undefined,
-                      minHeight: 108,
+                      minHeight: barCardMinHeight,
                       cursor: 'pointer',
                       transition: 'background 0.08s ease, border-color 0.08s ease, box-shadow 0.08s ease',
                     }}
                   >
                     <span
                       style={{
-                        fontSize: 8,
+                        fontSize: sketchFs(8, compactEmbed),
                         color: playing ? '#67e8f9' : selected ? '#86efac' : '#4b5563',
                         fontWeight: 800,
                         textAlign: 'center',
@@ -571,7 +779,7 @@ export function GrooveEightChordSketch({
                           borderRadius: 4,
                           background: 'transparent',
                           color: '#6b7280',
-                          fontSize: 10,
+                          fontSize: sketchFs(10, compactEmbed),
                           fontWeight: 800,
                           cursor: 'pointer',
                         }}
@@ -597,7 +805,7 @@ export function GrooveEightChordSketch({
                           border: `1px solid ${valid ? '#1f3a29' : '#7f1d1d'}`,
                           borderRadius: 4,
                           padding: '6px 2px',
-                          fontSize: 13,
+                          fontSize: sketchFs(13, compactEmbed, 3),
                           fontWeight: 900,
                           fontFamily: 'monospace',
                           textAlign: 'center',
@@ -614,7 +822,7 @@ export function GrooveEightChordSketch({
                             label: slot.rest ? pickedChord ?? '' : slot.label,
                           });
                         }}
-                        style={tinyBtn()}
+                        style={tinyBtn(compactEmbed)}
                         title="Rest"
                       >
                         {slot.rest ? '♪' : '—'}
@@ -626,7 +834,7 @@ export function GrooveEightChordSketch({
                             e.stopPropagation();
                             previewBar(i);
                           }}
-                          style={tinyBtn()}
+                          style={tinyBtn(compactEmbed)}
                         >
                           ▶
                         </button>
@@ -637,23 +845,296 @@ export function GrooveEightChordSketch({
               })}
             </div>
           </div>
+          {!compactEmbed ? (
           <p style={{ margin: 0, fontSize: 7, color: '#4b5563' }}>
             Tip: 4-chord packs use <strong style={{ color: '#93c5fd' }}>PACK → 8 BARS</strong> to repeat
             the loop twice. Play always runs <strong style={{ color: '#86efac' }}>8 bars</strong> (rests
             where empty).
           </p>
+          ) : null}
         </div>
       ) : null}
     </div>
   );
 }
 
+const SE2_SKETCH_DROPDOWN_SURFACE = '#080c14';
+const SE2_SKETCH_DROPDOWN_BORDER = 'rgba(77,168,255,0.22)';
+
+function GrooveSketchListDropdown({
+  triggerLabel,
+  emptyLabel,
+  sections,
+  accentHex = '#4DA8FF',
+}: {
+  triggerLabel: string;
+  emptyLabel: string;
+  sections: readonly {
+    title: string;
+    items: readonly {
+      key: string;
+      label: string;
+      meta?: string;
+      onHear: () => void;
+      onUse: () => void;
+    }[];
+  }[];
+  accentHex?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t || rootRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', dismiss, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', dismiss, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const itemCount = sections.reduce((n, s) => n + s.items.length, 0);
+
+  return (
+    <div ref={rootRef} style={{ flex: '1 1 180px', minWidth: 160, maxWidth: 280 }}>
+      <div style={{ ...sketchSectionLabel(true), marginBottom: 4 }}>{triggerLabel}</div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          minHeight: 32,
+          padding: '6px 10px',
+          background: open ? '#101828' : SE2_SKETCH_DROPDOWN_SURFACE,
+          color: '#dbeafe',
+          border: `1px solid ${open ? accentHex : SE2_SKETCH_DROPDOWN_BORDER}`,
+          borderRadius: 6,
+          fontSize: 12,
+          fontWeight: 800,
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ flex: 1, lineHeight: 1.3 }}>
+          {itemCount > 0 ? `${itemCount} chords` : emptyLabel}
+        </span>
+        <span style={{ color: open ? accentHex : '#6b7280', fontSize: 14 }}>{open ? '▴' : '▾'}</span>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          style={{
+            marginTop: 4,
+            maxHeight: 220,
+            overflowY: 'auto',
+            border: `1px solid ${SE2_SKETCH_DROPDOWN_BORDER}`,
+            borderRadius: 6,
+            background: SE2_SKETCH_DROPDOWN_SURFACE,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+          }}
+        >
+          {sections.map((section) => (
+            <div key={section.title}>
+              <div
+                style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 1,
+                  padding: '5px 10px',
+                  fontSize: 10,
+                  fontWeight: 900,
+                  letterSpacing: 0.4,
+                  color: accentHex,
+                  background: SE2_SKETCH_DROPDOWN_SURFACE,
+                  borderBottom: `1px solid ${SE2_SKETCH_DROPDOWN_BORDER}`,
+                }}
+              >
+                {section.title}
+              </div>
+              {section.items.map((item) => (
+                <GrooveSketchDropdownRow
+                  key={item.key}
+                  label={item.label}
+                  meta={item.meta}
+                  accentHex={accentHex}
+                  onHear={item.onHear}
+                  onUse={item.onUse}
+                  onClose={() => setOpen(false)}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GrooveSketchDropdownRow({
+  label,
+  meta,
+  accentHex,
+  onHear,
+  onUse,
+  onClose,
+}: {
+  label: string;
+  meta?: string;
+  accentHex: string;
+  onHear: () => void;
+  onUse: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '6px 8px',
+        borderBottom: `1px solid ${SE2_SKETCH_DROPDOWN_BORDER}`,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onHear}
+        title="Hear chord"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 6px',
+          border: 'none',
+          borderRadius: 4,
+          background: 'transparent',
+          color: '#86efac',
+          fontSize: 12,
+          fontWeight: 900,
+          fontFamily: 'monospace',
+          cursor: 'pointer',
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ color: accentHex, fontSize: 10 }}>▶</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        {meta ? <span style={{ color: '#6b7280', fontSize: 10, fontWeight: 700 }}>{meta}</span> : null}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onUse();
+          onClose();
+        }}
+        title="Place on selected bar"
+        style={{
+          ...tinyBtn(true),
+          color: accentHex,
+          borderColor: `${accentHex}55`,
+          padding: '3px 6px',
+        }}
+      >
+        →
+      </button>
+    </div>
+  );
+}
+
+function GrooveChordPaletteDropdown({
+  pickedChord,
+  selectedBar,
+  onPreview,
+  onPlace,
+}: {
+  pickedChord: string | null;
+  selectedBar: number;
+  onPreview: (label: string) => void;
+  onPlace: (label: string) => void;
+}) {
+  const sections = useMemo(
+    () =>
+      GROOVE_CHORD_PALETTE.map((section) => ({
+        title: section.title,
+        items: section.chords.map((ch) => ({
+          key: `${section.title}-${ch}`,
+          label: ch,
+          onHear: () => onPreview(ch),
+          onUse: () => onPlace(ch),
+        })),
+      })),
+    [onPreview, onPlace],
+  );
+
+  return (
+    <GrooveSketchListDropdown
+      triggerLabel={`CHORD BANK · bar ${selectedBar + 1}${pickedChord ? ` · ${pickedChord}` : ''}`}
+      emptyLabel="Pick a chord…"
+      sections={sections}
+      accentHex="#4DA8FF"
+    />
+  );
+}
+
+function GrooveNextChordsDropdown({
+  suggestions,
+  selectedBar,
+  onPreview,
+  onPlace,
+}: {
+  suggestions: readonly { roman: string; label: string; strength: number }[];
+  selectedBar: number;
+  onPreview: (label: string) => void;
+  onPlace: (label: string) => void;
+}) {
+  const sections = useMemo(
+    () => [
+      {
+        title: `Next chords · bar ${selectedBar + 1}`,
+        items: suggestions.map((s) => ({
+          key: `${s.roman}-${s.label}`,
+          label: s.label,
+          meta: `${s.strength}%`,
+          onHear: () => onPreview(s.label),
+          onUse: () => onPlace(s.label),
+        })),
+      },
+    ],
+    [onPlace, onPreview, selectedBar, suggestions],
+  );
+
+  return (
+    <GrooveSketchListDropdown
+      triggerLabel="NEXT CHORDS"
+      emptyLabel="No suggestions yet"
+      sections={sections}
+      accentHex="#7cf4c6"
+    />
+  );
+}
+
 function GrooveSongBankPicker({
   value,
   onSelect,
+  compact = false,
 }: {
   value: string;
   onSelect: (id: string) => void;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [hoverId, setHoverId] = useState<string | null>(null);
@@ -710,17 +1191,17 @@ function GrooveSongBankPicker({
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 10,
-          minHeight: 40,
-          padding: '8px 12px',
-          background: open ? '#0e1a28' : '#0a0e16',
+          minHeight: compact ? 32 : 40,
+          padding: compact ? '6px 10px' : '8px 12px',
+          background: open ? '#101828' : SE2_SKETCH_DROPDOWN_SURFACE,
           color: '#dbeafe',
-          border: `2px solid ${open ? '#3b82f6' : '#1e3a5f'}`,
+          border: `1px solid ${open ? '#4DA8FF' : compact ? SE2_SKETCH_DROPDOWN_BORDER : '#1e3a5f'}`,
           borderRadius: 6,
-          fontSize: 12,
+          fontSize: compact ? 12 : 12,
           fontWeight: 800,
           cursor: 'pointer',
           textAlign: 'left',
-          boxShadow: open ? '0 0 0 1px #3b82f633' : undefined,
+          boxShadow: open && !compact ? '0 0 0 1px #3b82f633' : undefined,
         }}
       >
         <span style={{ flex: 1, lineHeight: 1.35 }}>{currentLabel}</span>
@@ -779,14 +1260,16 @@ function GrooveSongBankPicker({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => scrollList(-140)}
-            aria-label="Scroll song bank up"
-            style={songBankScrollBtnStyle}
-          >
-            ▲ SCROLL UP
-          </button>
+          {!compact ? (
+            <button
+              type="button"
+              onClick={() => scrollList(-140)}
+              aria-label="Scroll song bank up"
+              style={songBankScrollBtnStyle}
+            >
+              ▲ SCROLL UP
+            </button>
+          ) : null}
 
           <div
             ref={listRef}
@@ -794,9 +1277,9 @@ function GrooveSongBankPicker({
             role="listbox"
             aria-label="Song bank presets"
             style={{
-              maxHeight: 300,
+              maxHeight: compact ? 220 : 300,
               overflowY: 'auto',
-              padding: '4px 6px 6px',
+              padding: compact ? '4px 4px 6px' : '4px 6px 6px',
             }}
           >
             {GROOVE_8BAR_SONG_BANK_SECTIONS.map((section) => (
@@ -807,7 +1290,7 @@ function GrooveSongBankPicker({
                     top: 0,
                     zIndex: 1,
                     padding: '6px 10px 4px',
-                    fontSize: 10,
+                    fontSize: compact ? 12 : 10,
                     fontWeight: 900,
                     letterSpacing: 0.5,
                     color: '#60a5fa',
@@ -871,14 +1354,16 @@ function GrooveSongBankPicker({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => scrollList(140)}
-            aria-label="Scroll song bank down"
-            style={songBankScrollBtnStyle}
-          >
-            ▼ SCROLL DOWN
-          </button>
+          {!compact ? (
+            <button
+              type="button"
+              onClick={() => scrollList(140)}
+              aria-label="Scroll song bank down"
+              style={songBankScrollBtnStyle}
+            >
+              ▼ SCROLL DOWN
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -899,13 +1384,17 @@ const songBankScrollBtnStyle: CSSProperties = {
   cursor: 'pointer',
 };
 
-const sectionLabel: CSSProperties = {
-  fontSize: 8,
-  color: '#93c5fd',
-  fontWeight: 900,
-  letterSpacing: 0.4,
-  marginBottom: 4,
-};
+const sectionLabel: CSSProperties = sketchSectionLabel(false);
+
+function sketchSectionLabel(compactEmbed = false): CSSProperties {
+  return {
+    fontSize: sketchFs(8, compactEmbed),
+    color: '#93c5fd',
+    fontWeight: 900,
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  };
+}
 
 const bankChipStyle: CSSProperties = {
   background: '#0d1812',
@@ -924,6 +1413,7 @@ function miniBtn(
   active = false,
   bg = '#112015',
   color = '#86efac',
+  compactEmbed = false,
 ): CSSProperties {
   return {
     background: enabled ? (active ? '#1a3a2a' : bg) : '#111',
@@ -931,22 +1421,22 @@ function miniBtn(
     border: `1px solid ${enabled ? '#1f3a29' : '#222'}`,
     borderRadius: 5,
     padding: '4px 8px',
-    fontSize: 8,
+    fontSize: sketchFs(8, compactEmbed),
     fontWeight: 900,
     cursor: enabled ? 'pointer' : 'not-allowed',
   };
 }
 
-function tinyBtn(): CSSProperties {
+function tinyBtn(compactEmbed = false): CSSProperties {
   return {
     background: '#111820',
     color: '#93c5fd',
     border: '1px solid #1e3a5f',
     borderRadius: 4,
     padding: '2px 5px',
-    fontSize: 7,
+    fontSize: sketchFs(7, compactEmbed),
     fontWeight: 900,
     cursor: 'pointer',
-    minWidth: 22,
+    minWidth: compactEmbed ? 26 : 22,
   };
 }

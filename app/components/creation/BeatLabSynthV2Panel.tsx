@@ -60,6 +60,8 @@ type Props = {
   onAuditionTouch?: () => void;
   onApplyBassLaneNotes?: (bassLaneNotes: BeatLabMidiNote[]) => void;
   onApplyHarmonyLaneNotes?: (harmonyLaneNotes: BeatLabMidiNote[]) => void;
+  /** Parent owns vertical scroll (e.g. SE2 floating panel). */
+  scrollContained?: boolean;
 };
 
 const FX_GRAPH_H = 50;
@@ -604,6 +606,7 @@ export function BeatLabSynthV2Panel({
   onAuditionTouch,
   onApplyBassLaneNotes,
   onApplyHarmonyLaneNotes,
+  scrollContained = false,
 }: Props) {
   const lane = bassLane;
   const [auditionOn, setAuditionOn] = useState(false);
@@ -681,11 +684,11 @@ export function BeatLabSynthV2Panel({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        flex: '1 1 auto',
-        minHeight: 0,
-        overflow: 'auto',
-        padding: 10,
-        gap: 10,
+        flex: scrollContained ? '0 0 auto' : '1 1 auto',
+        minHeight: scrollContained ? undefined : 0,
+        overflow: scrollContained ? 'visible' : 'auto',
+        padding: scrollContained ? 6 : 10,
+        gap: scrollContained ? 8 : 10,
         background: 'linear-gradient(180deg, #06080f 0%, #050507 100%)',
         borderTop: '1px solid rgba(124, 244, 198, 0.16)',
       }}

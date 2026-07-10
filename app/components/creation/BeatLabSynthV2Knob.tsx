@@ -1,7 +1,7 @@
 /**
  * Vital-style rotary control: drag up/down (and optional horizontal fine adjust).
  */
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useId, useRef } from 'react';
 
 export type SynthRoundKnobProps = {
   label: string;
@@ -19,6 +19,8 @@ export type SynthRoundKnobProps = {
   accent?: string;
   defaultValue?: number;
   disabled?: boolean;
+  /** Glass / glow skin for Beat Lab pad FX panels. */
+  variant?: 'default' | 'modern';
 };
 
 export function SynthRoundKnob({
@@ -33,9 +35,12 @@ export function SynthRoundKnob({
   accent = '#58c4ff',
   defaultValue,
   disabled = false,
+  variant = 'default',
 }: SynthRoundKnobProps) {
+  const gradId = useId().replace(/:/g, '');
   const startRef = useRef<{ val: number; y: number; x: number } | null>(null);
   const def = defaultValue ?? (min + max) / 2;
+  const modern = variant === 'modern';
 
   const t = Math.max(0, Math.min(1, (value - min) / (max - min || 1)));
   /** Pointer angle — 7 o'clock idle to clockwise sweep ~270° */
@@ -80,6 +85,10 @@ export function SynthRoundKnob({
     startRef.current = null;
   }, []);
 
+  const onLostPointerCapture = useCallback(() => {
+    startRef.current = null;
+  }, []);
+
   const onDoubleClick = useCallback(() => {
     if (!disabled) onChange(def);
   }, [def, disabled, onChange]);
@@ -88,17 +97,19 @@ export function SynthRoundKnob({
 
   return (
     <div
+      className={modern ? 'beat-pads-fx-knob' : undefined}
       role="presentation"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onLostPointerCapture={onLostPointerCapture}
       onDoubleClick={onDoubleClick}
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 2,
+        gap: modern ? 3 : 2,
         minWidth: size + 4,
         opacity: disabled ? 0.45 : 1,
         cursor: disabled ? 'default' : 'ns-resize',
@@ -107,38 +118,96 @@ export function SynthRoundKnob({
       }}
       title={`${label} — drag up/down, double-click reset`}
     >
-      <svg width={size} height={size} style={{ overflow: 'visible', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}>
-        <circle cx={cx} cy={cy} r={size * 0.4} fill="#141820" stroke="#2a3548" strokeWidth={1.8} />
-        <circle cx={cx} cy={cy} r={rTrack} fill="none" stroke="#1e2736" strokeWidth={4} opacity={0.9} />
+      <svg
+        width={size}
+        height={size}
+        style={{
+          overflow: 'visible',
+          filter: modern
+            ? `drop-shadow(0 0 6px ${accent}55) drop-shadow(0 2px 4px rgba(0,0,0,0.55))`
+            : 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))',
+        }}
+      >
+        {modern ? (
+          <defs>
+            <radialGradient id={gradId} cx="35%" cy="30%" r="70%">
+              <stop offset="0%" stopColor="#2a3348" />
+              <stop offset="55%" stopColor="#121722" />
+              <stop offset="100%" stopColor="#07090f" />
+            </radialGradient>
+          </defs>
+        ) : null}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={size * 0.4}
+          fill={modern ? `url(#${gradId})` : '#141820'}
+          stroke={modern ? 'rgba(255,255,255,0.12)' : '#2a3548'}
+          strokeWidth={modern ? 1.4 : 1.8}
+        />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={rTrack}
+          fill="none"
+          stroke={modern ? 'rgba(255,255,255,0.06)' : '#1e2736'}
+          strokeWidth={modern ? 3.2 : 4}
+          opacity={0.95}
+        />
         <circle
           cx={cx}
           cy={cy}
           r={rTrack}
           fill="none"
           stroke={accent}
-          strokeWidth={4}
+          strokeWidth={modern ? 3.2 : 4}
           strokeLinecap="round"
           strokeDasharray={`${t * Math.PI * 2 * rTrack * 0.75} ${999}`}
           transform={`rotate(-135 ${cx} ${cy})`}
-          opacity={0.95}
+          opacity={modern ? 1 : 0.95}
         />
-        <circle cx={cx} cy={cy} r={size * 0.13} fill="#0c0e14" stroke="#3a4458" strokeWidth={1.2} />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={size * 0.13}
+          fill={modern ? '#0a0d14' : '#0c0e14'}
+          stroke={modern ? 'rgba(255,255,255,0.18)' : '#3a4458'}
+          strokeWidth={1.2}
+        />
         <line
           x1={cx}
           y1={cy}
           x2={cx + rNeedle * Math.cos(rad)}
           y2={cy + rNeedle * Math.sin(rad)}
-          stroke="#eef2ff"
-          strokeWidth={2.2}
+          stroke={modern ? '#f8fafc' : '#eef2ff'}
+          strokeWidth={modern ? 2.4 : 2.2}
           strokeLinecap="round"
         />
       </svg>
-      <span style={{ fontSize: 7, color: '#7a8899', fontWeight: 700, textAlign: 'center', maxWidth: 56, lineHeight: 1.15 }}>
+      <span
+        style={{
+          fontSize: modern ? 6 : 7,
+          color: modern ? '#8b96a8' : '#7a8899',
+          fontWeight: modern ? 800 : 700,
+          letterSpacing: modern ? '0.12em' : 0,
+          textTransform: modern ? 'uppercase' : 'none',
+          textAlign: 'center',
+          maxWidth: 56,
+          lineHeight: 1.15,
+        }}
+      >
         {label}
       </span>
-      <span style={{ fontSize: 8, color: '#cfd8ea', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+      <span
+        style={{
+          fontSize: modern ? 9 : 8,
+          color: modern ? '#eef2f8' : '#cfd8ea',
+          fontWeight: 800,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
         {display}
-        {unit ? <span style={{ color: '#5a6a7a', marginLeft: 2 }}>{unit}</span> : null}
+        {unit ? <span style={{ color: modern ? '#7a8798' : '#5a6a7a', marginLeft: 2 }}>{unit}</span> : null}
       </span>
     </div>
   );

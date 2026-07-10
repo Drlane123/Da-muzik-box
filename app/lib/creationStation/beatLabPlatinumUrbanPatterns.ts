@@ -1,0 +1,368 @@
+/**
+ * Platinum Urban Series — BeatPads Pattern Bank B (Trap / Hip-Hop / R&B / Pop).
+ *
+ * Trap · Hip-Hop tab uses proven hand-tuned grids from the Street / Signature Trap
+ * series (Metro, ATL, TM88, Zay pockets) — not algorithmic stutter rolls.
+ *
+ * Row layout: 0=Kick  1=Snare  2=Clap  3=Hi-Hat  4=Open Hat  5=TomHi  6=808  7=Rim/Perc
+ */
+
+import type { PatternPreset } from '@/app/lib/patternPresets';
+import {
+  trapAtlMemphisBounce,
+  trapBackbeatStack,
+  trapCoreClassic,
+  trapCoreFinisher,
+  trapCoreMetro,
+  trapCoreSouth,
+  trapHatsEightThenRoll,
+  trapHatsRollEnd,
+  trapHatsSteadyThenRoll,
+  trapHatsTwoStep,
+  trapKickBarRush,
+  trapOh24,
+  trapSnare24,
+  trapSnareBarPush,
+} from '@/app/lib/creationStation/beatLabTrapPatternGrid';
+import {
+  platinumPopBar,
+  platinumPopHatStack,
+  platinumPopKickBarA,
+  platinumPopKickBarB,
+  platinumPopPercPush,
+  platinumRnbClosedHats,
+  platinumRnbKickPocket,
+  platinumRnbClapBeat3,
+  platinumRnbOpenHatBreath,
+  platinumRnbSnareGhost,
+  platinumRnbTrapsoulBar,
+} from '@/app/lib/creationStation/beatLabPlatinumUrbanEngine';
+
+const R = 8;
+const S = 16;
+
+function grid(hits: ReadonlyArray<[number, number]>): boolean[][] {
+  const g: boolean[][] = Array.from({ length: R }, () => new Array<boolean>(S).fill(false));
+  for (const [row, step] of hits) {
+    if (row >= 0 && row < R && step >= 0 && step < S) g[row]![step] = true;
+  }
+  return g;
+}
+
+export function isBeatLabPlatinumUrbanPattern(presetId: string): boolean {
+  return presetId.startsWith('platinum-');
+}
+
+export const BEAT_LAB_PLATINUM_URBAN_PATTERNS: readonly PatternPreset[] = [
+  // ── Trap · Hip-Hop (pro hand-tuned — Street / Signature Trap pockets) ───────
+  {
+    id: 'platinum-trap-metro-bounce',
+    name: 'Metro · Bounce',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 142,
+    desc: 'Current Metro pocket — sync kick 1/&2/3/&4, snap snare+clap 2 & 4, steady→roll hats',
+    pattern: grid(trapCoreMetro()),
+  },
+  {
+    id: 'platinum-trap-chrome-atl',
+    name: 'Chrome · ATL',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 142,
+    desc: 'ATL club bounce — metro kick, hard 2 & 4, 8ths→roll, open hat lift on &4',
+    pattern: grid([
+      [0, 0], [0, 6], [0, 10], [0, 14],
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsEightThenRoll(),
+      ...trapOh24(),
+    ]),
+  },
+  {
+    id: 'platinum-trap-redd-block',
+    name: 'Redd · Block Stomp',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 145,
+    desc: 'Redd Block / Memphis stomp — kick bar rush, snap 2 & 4, 8ths→roll, rim grit',
+    pattern: grid([
+      [0, 0], [0, 6], [0, 10], [0, 11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsEightThenRoll(),
+      [4, 10], [4, 14],
+      [7, 2], [7, 6], [7, 10], [7, 14],
+    ]),
+  },
+  {
+    id: 'platinum-trap-phantom-roll',
+    name: 'Phantom · Roll',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 144,
+    desc: 'Drop finisher — sync into 3, kick bar rush, snap 2 & 4 + push, steady→burst hats',
+    pattern: grid([
+      [0, 0], [0, 6], [0, 10], [0, 11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      [1, 15],
+      ...trapHatsSteadyThenRoll(),
+      [4, 10], [4, 14],
+    ]),
+  },
+  {
+    id: 'platinum-trap-vault-mirage',
+    name: 'Vault · Mirage',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 147,
+    desc: 'Pink Vault ATL — sync into 3 + bar rush, snare pocket 2 & 4, 8ths→roll, block perc',
+    pattern: grid([
+      ...trapAtlMemphisBounce(),
+      [7, 3], [7, 11],
+    ]),
+  },
+  {
+    id: 'platinum-trap-southside',
+    name: 'Southside · Stack',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 142,
+    desc: 'Southern bounce — sync kick phrase, triplet hat fill, rim push, 808 follows kick',
+    pattern: grid(trapCoreSouth()),
+  },
+  {
+    id: 'platinum-trap-tm88-haze',
+    name: 'TM88 · Night Haze',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 146,
+    desc: 'TM88 night pocket — sync kick, snap 2 & 4 + bar double, steady→roll, breathed OH',
+    pattern: grid([
+      [0, 0], [0, 6], [0, 10], [0, 14],
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      [1, 15],
+      ...trapHatsSteadyThenRoll(),
+      [4, 7], [4, 15],
+      [7, 5], [7, 13],
+    ]),
+  },
+  {
+    id: 'platinum-trap-zay-slide',
+    name: 'Zay · Tunnel Slide',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 74,
+    desc: 'Zay 808 Mafia tunnel @ felt 74 — metro kick + slide pickup, snare+clap 2 & 4, two-step→roll',
+    pattern: grid([
+      [0, 0], [0, 6], [0, 10], [0, 11], [0, 14],
+      ...trapBackbeatStack(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
+      [4, 14],
+    ]),
+  },
+  {
+    id: 'platinum-trap-bell-stack',
+    name: 'Bell Trap · Stack',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 146,
+    desc: 'Bell bounce club — metro kick, snare+clap stacked 2 & 4, two-step hats → bar-end roll',
+    pattern: grid([
+      [0, 0], [0, 6], [0, 10], [0, 14],
+      ...trapBackbeatStack(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
+      [4, 14],
+    ]),
+  },
+  {
+    id: 'platinum-trap-trunk-pressure',
+    name: 'Trunk · SK Pressure',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 145,
+    desc: 'Trunk 808 pressure — sync kicks + bar rush, snap 2 & 4, hat burst, 808 locked to kick',
+    pattern: grid([
+      [0, 0], [0, 8], [0, 10], [0, 11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsEightThenRoll(),
+      [4, 6], [4, 14],
+      [6, 0], [6, 8], [6, 11], [6, 14],
+    ]),
+  },
+  {
+    id: 'platinum-trap-classic-pocket',
+    name: 'Cyborg · Classic',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 140,
+    desc: 'Canonical trap — sparse kick, snap 2 & 4, 8ths→roll hats, OH on &s, 808 on 1 & 3',
+    pattern: grid(trapCoreClassic()),
+  },
+  {
+    id: 'platinum-trap-hat-finisher',
+    name: 'Hat Roll · Finisher',
+    genre: 'Platinum Trap',
+    role: 'drums',
+    bpm: 150,
+    desc: 'Drop finisher — lean kick + bar rush, dense hat burst, open lift, 808 tail',
+    pattern: grid(trapCoreFinisher()),
+  },
+
+  // ── Modern R&B / Trapsoul (80–100 BPM) ────────────────────────────────────
+  {
+    id: 'platinum-rnb-trapsoul-night',
+    name: 'Trapsoul · Night',
+    genre: 'Platinum R&B',
+    role: 'drums',
+    bpm: 88,
+    desc: 'Beat-3 snare + ghost rim after beat 4, open hat &1/&3, laid-back kick',
+    pattern: grid(platinumRnbTrapsoulBar(false)),
+  },
+  {
+    id: 'platinum-rnb-ghost-bounce',
+    name: 'Ghost Bounce · Trapsoul',
+    genre: 'Platinum R&B',
+    role: 'drums',
+    bpm: 92,
+    desc: 'Mandatory soft rim ghost on & after 4 — clap stack beat 3, OH choke pocket',
+    pattern: grid([
+      ...platinumRnbKickPocket(),
+      ...platinumRnbSnareGhost(),
+      [2, 8],
+      ...platinumRnbClosedHats(),
+      ...platinumRnbOpenHatBreath(),
+      [6, 0],
+      [6, 10],
+      [7, 13],
+    ]),
+  },
+  {
+    id: 'platinum-rnb-space-breath',
+    name: 'Space · Breath',
+    genre: 'Platinum R&B',
+    role: 'drums',
+    bpm: 86,
+    desc: 'Sparse pocket — minimal kick on beat 3 pickup, ghost rim, breathed hats',
+    pattern: grid([
+      [0, 10], [0, 14],
+      ...platinumRnbSnareGhost(),
+      [2, 8],
+      [3, 4], [3, 8], [3, 12],
+      ...platinumRnbOpenHatBreath(),
+      [6, 0], [6, 10],
+    ]),
+  },
+  {
+    id: 'platinum-rnb-velvet-late',
+    name: 'Velvet · Late Night',
+    genre: 'Platinum R&B',
+    role: 'drums',
+    bpm: 90,
+    desc: 'Sparse 40% pocket — minimal kick, open hat breathing, soft ghost stack',
+    pattern: grid([
+      [0, 0],
+      [0, 14],
+      ...platinumRnbSnareGhost(),
+      [2, 8],
+      [3, 4],
+      [3, 8],
+      [3, 12],
+      ...platinumRnbOpenHatBreath(),
+      [6, 0],
+      [7, 2],
+      [7, 10],
+    ]),
+  },
+  {
+    id: 'platinum-rnb-silk-groove',
+    name: 'Silk Groove · R&B',
+    genre: 'Platinum R&B',
+    role: 'drums',
+    bpm: 96,
+    desc: 'Full trapsoul — behind-grid kick, beat-3 snare, OH &1/&3, shaker air',
+    pattern: grid([
+      [0, 0],
+      [0, 7],
+      [0, 11],
+      ...platinumRnbSnareGhost(),
+      ...platinumRnbClapBeat3(),
+      ...platinumRnbClosedHats(),
+      ...platinumRnbOpenHatBreath(),
+      [6, 0],
+      [6, 14],
+      [7, 0],
+      [7, 8],
+    ]),
+  },
+
+  // ── Modern Pop / Radio (100–120 BPM) ──────────────────────────────────────
+  {
+    id: 'platinum-pop-sync-bar-a',
+    name: 'Pop Sync · Bar A',
+    genre: 'Platinum Pop',
+    role: 'drums',
+    bpm: 110,
+    desc: 'Afrobeats-adjacent kick — beat 1 + & of 2, perc pushed 5–12 ticks early',
+    pattern: grid(platinumPopBar('A')),
+  },
+  {
+    id: 'platinum-pop-sync-bar-b',
+    name: 'Pop Sync · Bar B',
+    genre: 'Platinum Pop',
+    role: 'drums',
+    bpm: 110,
+    desc: 'Alternating pop pocket — beat 1, 3, & of 4 + micro-timing percussion',
+    pattern: grid(platinumPopBar('B')),
+  },
+  {
+    id: 'platinum-pop-radio-drive',
+    name: 'Radio Drive · Pop',
+    genre: 'Platinum Pop',
+    role: 'drums',
+    bpm: 115,
+    desc: 'Syncopated kick cycle A+B merge feel — stacked clap 2&4, driving shaker push',
+    pattern: grid([
+      ...platinumPopKickBarA(),
+      ...platinumPopKickBarB(),
+      [1, 4],
+      [1, 12],
+      [2, 4],
+      [2, 12],
+      ...platinumPopHatStack(),
+      ...platinumPopPercPush(),
+      [4, 6],
+    ]),
+  },
+  {
+    id: 'platinum-pop-afro-pocket',
+    name: 'Afro Pocket · Pop',
+    genre: 'Platinum Pop',
+    role: 'drums',
+    bpm: 108,
+    desc: 'Reggaeton-adjacent sync kick, early percussion swing, open lift on &2',
+    pattern: grid([
+      [0, 0],
+      [0, 6],
+      [0, 8],
+      [0, 14],
+      [1, 4],
+      [1, 12],
+      [2, 4],
+      [2, 12],
+      ...platinumPopHatStack(),
+      ...platinumPopPercPush(),
+      [4, 6],
+      [7, 3],
+      [7, 11],
+    ]),
+  },
+];

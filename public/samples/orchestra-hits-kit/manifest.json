@@ -1,0 +1,5 @@
+{
+  "version": 2,
+  "deprecated": "Beat Pads kit now uses public/samples/orchestra-hits/*.wav (real stabs).",
+  "see": "/samples/orchestra-hits/manifest.json"
+}

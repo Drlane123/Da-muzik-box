@@ -106,7 +106,7 @@ export type ChordBuilderPianoRollProps = {
   playheadVariant?: 'default' | 'groove-mount' | 'hidden';
   /** Optional outer scroll container (Beat Lab SYNTH follow-scroll). */
   scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
-  headerTitle?: string;
+  headerTitle?: React.ReactNode;
   headerHint?: string;
 };
 

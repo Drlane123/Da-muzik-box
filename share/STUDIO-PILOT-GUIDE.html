@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StudioPilot — AI Control for Ableton Live</title>
+  <meta name="description" content="StudioPilot connects Claude or Codex to Ableton Live — 200+ actions, waveform analysis, arrange, mix, and master. studiopilotmusic.com" />
+  <meta property="og:title" content="StudioPilot — AI Control for Ableton Live" />
+  <meta property="og:description" content="Turn plain producer requests into real Ableton actions. Arrange, mix, master — with AI that can see your sound." />
+  <meta property="og:url" content="https://studiopilotmusic.com" />
+  <meta property="og:type" content="website" />
+  <style>
+    :root {
+      --bg: #08080e;
+      --card: #111118;
+      --border: #2a2a38;
+      --text: #ececf4;
+      --muted: #8a8a9a;
+      --accent: #00e5ff;
+      --gold: #fbbf24;
+      --green: #7cf4c6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 16px;
+    }
+    a { color: var(--accent); }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 24px 20px 64px; }
+    header {
+      text-align: center;
+      padding: 48px 20px 36px;
+      background: linear-gradient(180deg, #0a1820 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }
+    header .sub { color: var(--muted); max-width: 560px; margin: 0 auto 20px; }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(0,229,255,0.4);
+      color: var(--accent);
+      background: rgba(0,229,255,0.08);
+      margin-bottom: 20px;
+    }
+    .cta {
+      display: inline-block;
+      margin: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 700;
+      text-decoration: none;
+      font-size: 0.95rem;
+    }
+    .cta.primary { background: var(--accent); color: #0a0a0f; }
+    .cta.secondary { border: 1px solid var(--border); color: var(--text); background: var(--card); }
+    .note-box {
+      background: rgba(251,191,36,0.08);
+      border: 1px solid rgba(251,191,36,0.35);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 24px 0;
+      font-size: 0.9rem;
+    }
+    section { margin-bottom: 40px; }
+    section h2 {
+      font-size: 1.35rem;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+    }
+    section h3 { color: var(--gold); font-size: 1.05rem; margin: 20px 0 8px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin: 14px 0;
+    }
+    .card.accent { border-color: rgba(0,229,255,0.45); }
+    ul { padding-left: 1.2rem; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin: 12px 0; }
+    th, td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; }
+    th { background: #14141e; color: var(--accent); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+    .flow {
+      font-family: ui-monospace, monospace;
+      font-size: 0.78rem;
+      background: #06060c;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      white-space: pre-wrap;
+      color: #a0a0b8;
+    }
+    .compare { font-size: 0.85rem; }
+    .btn-copy {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+    #social { width: 100%; min-height: 120px; background: #06060c; border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 12px; font-family: inherit; font-size: 0.88rem; margin-top: 10px; }
+    footer { text-align: center; padding: 28px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="badge">Built for Ableton Live</span>
+  <h1>StudioPilot</h1>
+  <p class="sub"><strong>AI Control for Ableton Live</strong> — not a chatbot beside your DAW. StudioPilot connects to Ableton so the assistant can create clips, control tracks, arrange sections, inspect audio, and move the session forward.</p>
+  <p>
+    <a class="cta primary" href="https://studiopilotmusic.com" target="_blank" rel="noopener">studiopilotmusic.com</a>
+    <a class="cta secondary" href="DA-MUSIC-BOX-FEATURE-GUIDE.html">Da Music Box guide →</a>
+  </p>
+  <button class="btn-copy" type="button" onclick="copyPost()">Copy for Reddit / Facebook</button>
+  <textarea id="social" readonly></textarea>
+</header>
+
+<div class="wrap">
+
+  <div class="note-box">
+    <strong>StudioPilot ≠ Da Music Box.</strong> They are two different products.
+    <strong>StudioPilot</strong> is an Ableton Live AI control kit (studiopilotmusic.com).
+    <strong>Da Music Box</strong> is the standalone music production suite app (Beat Lab, SE2, Mastering Bay, etc.).
+  </div>
+
+  <section>
+    <h2>What StudioPilot is</h2>
+    <p>StudioPilot is a <strong>producer workflow box</strong> that sits around Ableton Live. You talk to it in plain language — it turns requests into <strong>200+ real Ableton actions</strong>: drums, basslines, MIDI clips, scenes, locators, mix moves, and master passes.</p>
+    <p>AI can't hear your music. StudioPilot's built-in analyser reads <strong>waveforms and spectrograms</strong> so the assistant can spot clashes, find key, score your own samples, and guide mix and master decisions visually.</p>
+
+    <div class="flow">Producer types plain language
+        ↓
+StudioPilot (Claude or Codex / ChatGPT)
+        ↓
+200+ Ableton actions — clips, tracks, MIDI, devices, arrangement, mix, master
+        ↓
+Finished track inside YOUR session, YOUR sounds</div>
+  </section>
+
+  <section>
+    <h2>What it does</h2>
+    <div class="grid-2">
+      <div class="card accent">
+        <h3 style="margin-top:0;color:var(--accent)">Create</h3>
+        <ul>
+          <li>Drum patterns, basslines, MIDI clips, scenes</li>
+          <li>Starting points without menu-diving</li>
+          <li>“Make a garage drum loop” · “Write a bassline in F minor”</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Edit</h3>
+        <ul>
+          <li>Quantize, humanize velocity, transpose MIDI</li>
+          <li>Clip gain, audio pitch, warp markers</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Arrange</h3>
+        <ul>
+          <li>Turn loops into song sections</li>
+          <li>Locators, intros, builds, drops, breakdowns</li>
+          <li>Duplicate clips to arrangement, loop points</li>
+        </ul>
+      </div>
+      <div class="card accent">
+        <h3 style="margin-top:0;color:var(--accent)">Analyze</h3>
+        <ul>
+          <li>Waveform + spectrogram of YOUR loops</li>
+          <li>Band energy, brightness, rhythmic density</li>
+          <li>Key detection · anti-clash scoring for your library</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Mix</h3>
+        <ul>
+          <li>Balance, pan, sends to reverb/delay</li>
+          <li>High-pass tops, side-chain bass to kick</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0">Master</h3>
+        <ul>
+          <li>Master bus: EQ, glue comp, limiter</li>
+          <li>Target LUFS · match reference track</li>
+          <li>Analyze exported stems and tighten final file</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>The special ingredient — AI sees your sound</h2>
+    <div class="card accent">
+      <p>Most AI tools generate generic audio. StudioPilot reads what's <em>already in your session</em>:</p>
+      <table>
+        <tr><th>Reads</th><th>So it can</th></tr>
+        <tr><td>Band energy &amp; brightness</td><td>Know where each loop sits in the spectrum</td></tr>
+        <tr><td>Rhythmic density</td><td>Layer sparse parts over busy ones without collision</td></tr>
+        <tr><td>Key detection</td><td>Keep new basslines and parts in tune</td></tr>
+        <tr><td>Anti-clash scoring</td><td>Rank your own samples by how well they fill open pockets</td></tr>
+      </table>
+      <p><em>Example:</em> “Best match: Percussion 10 sits in the open mid pocket — can't fight your kick, bass, or hats.”</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>How you set it up</h2>
+    <table>
+      <tr><th>Option</th><th>How</th></tr>
+      <tr><td><strong>Claude</strong></td><td>Open the StudioPilot setup folder with Claude — guides config and Ableton connection</td></tr>
+      <tr><td><strong>Codex (ChatGPT)</strong></td><td>Open the project in Codex — included instructions, files, producer commands</td></tr>
+      <tr><td><strong>Standalone app</strong></td><td>One-click, no agent — <em>private beta, coming soon</em></td></tr>
+    </table>
+    <p>Works on <strong>macOS &amp; Windows</strong>. Requires Ableton Live + Claude or Codex for the current setup kit. Small Ableton bridge (control surface) included in the kit.</p>
+    <p><strong>Setup Kit:</strong> €29.99 one-time · masterclass · video walkthroughs · command library · free MIDI packs · community support · standalone beta access.</p>
+    <p><a class="cta primary" href="https://studiopilotmusic.com" target="_blank" rel="noopener">Get The Setup Kit — studiopilotmusic.com</a></p>
+  </section>
+
+  <section>
+    <h2>Example command</h2>
+    <div class="card">
+      <p><strong>What a producer types:</strong></p>
+      <p style="font-style:italic;color:var(--green)">“Make a tight 8-bar house idea, create drums and bass, add a breakdown locator, and clean up the timing.”</p>
+      <ol>
+        <li>Creates MIDI clips and names the tracks</li>
+        <li>Adds notes, timing, velocity, and loop lengths</li>
+        <li>Sets tempo, locators, scenes, and arrangement points</li>
+        <li>Adjusts clips, devices, sends, and mix parameters</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="compare">
+    <h2>StudioPilot vs Da Music Box</h2>
+    <table>
+      <tr><th></th><th>StudioPilot</th><th>Da Music Box</th></tr>
+      <tr><td><strong>What it is</strong></td><td>AI control kit for <strong>Ableton Live</strong></td><td>Standalone <strong>music production suite app</strong></td></tr>
+      <tr><td><strong>Platform</strong></td><td>Ableton + Claude/Codex</td><td>Own DAW (SE2), Beat Lab, Groove Lab, etc.</td></tr>
+      <tr><td><strong>AI role</strong></td><td>Plain-language → 200+ Ableton actions</td><td>Neural Hum, Melody-to-MIDI, Harmony Match, AI Music Match</td></tr>
+      <tr><td><strong>Audio analysis</strong></td><td>Waveform/spectrogram clash scoring in Ableton</td><td>Mastering Bay, AI Music Match (offline harmony)</td></tr>
+      <tr><td><strong>Vocals</strong></td><td>Mix/master in Ableton session</td><td>Built-in <strong>auto-tune + vocoder</strong> on SE2 mixer</td></tr>
+      <tr><td><strong>Website</strong></td><td><a href="https://studiopilotmusic.com">studiopilotmusic.com</a></td><td>Da Music Box app (Play Store)</td></tr>
+    </table>
+    <p>Many producers use <strong>both</strong>: sketch and finish inside Da Music Box, or use StudioPilot to finish Ableton sessions with AI-driven arrangement and mix passes.</p>
+  </section>
+
+</div>
+
+<footer>
+  <p><strong>StudioPilot</strong> — <a href="https://studiopilotmusic.com">studiopilotmusic.com</a></p>
+  <p>AI Control for Ableton Live · Stop scrolling samples. Start finishing tracks.</p>
+  <p style="margin-top:12px;font-size:0.75rem">Guide file: E:\Da-Music-Box-v4-SOURCE-COMPLETE\share\STUDIO-PILOT-GUIDE.html</p>
+</footer>
+
+<script>
+const POST = `🎛️ STUDIO PILOT — AI Control for Ableton Live
+https://studiopilotmusic.com
+
+Not a chatbot beside your DAW. StudioPilot CONNECTS to Ableton — 200+ real actions:
+
+✅ Create — drums, basslines, MIDI clips, scenes from plain language
+✅ Arrange — intros, builds, drops, locators, turn loops into full sections
+✅ Analyze — waveform + spectrogram so AI can SEE your sound (clash scoring, key detect)
+✅ Mix — levels, pan, sends, side-chain, high-pass
+✅ Master — EQ, glue, limiter, LUFS target, reference match
+
+AI can't hear — StudioPilot lets it read your loops and score layers that fill open pockets instead of fighting your kick/bass.
+
+Setup: Claude or Codex (ChatGPT) + Ableton · macOS & Windows
+Setup Kit €29.99 · standalone app in beta
+
+(Different from Da Music Box — the standalone production suite app with Beat Lab, SE2, Mastering Bay, built-in auto-tune & vocoder)
+
+#Ableton #musicproduction #AI #StudioPilot #producer`;
+
+document.getElementById('social').value = POST;
+function copyPost() {
+  navigator.clipboard.writeText(POST).catch(() => {
+    const t = document.getElementById('social');
+    t.select();
+    document.execCommand('copy');
+  });
+  alert('Copied!');
+}
+</script>
+
+</body>
+</html>

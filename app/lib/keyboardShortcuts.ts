@@ -15,13 +15,26 @@ export const KEYBOARD_SHORTCUTS = {
   HELP_ALT: { key: '?', ctrl: false, shift: false, alt: false },
 };
 
+function modifierKey(event: KeyboardEvent): boolean {
+  const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().includes('MAC');
+  return isMac ? event.metaKey : event.ctrlKey;
+}
+
+export function isTypingTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  return Boolean(el.closest('input, textarea, select, [contenteditable="true"]'));
+}
+
 export function matchesShortcut(
   event: KeyboardEvent,
   shortcut: typeof KEYBOARD_SHORTCUTS[keyof typeof KEYBOARD_SHORTCUTS]
 ): boolean {
+  const needsMod = shortcut.ctrl;
+  const mod = modifierKey(event);
   return (
     event.key.toLowerCase() === shortcut.key.toLowerCase() &&
-    event.ctrlKey === shortcut.ctrl &&
+    (needsMod ? mod : !mod && !event.metaKey && !event.ctrlKey) &&
     event.shiftKey === shortcut.shift &&
     event.altKey === shortcut.alt
   );
@@ -44,13 +57,7 @@ export function setupKeyboardShortcuts(
   return (event: KeyboardEvent) => {
     if (!settings.keyboardShortcutsEnabled) return;
 
-    // Prevent shortcuts when typing in inputs
-    if (
-      event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement
-    ) {
-      return;
-    }
+    if (isTypingTarget(event.target)) return;
 
     if (matchesShortcut(event, KEYBOARD_SHORTCUTS.PLAY_PAUSE)) {
       event.preventDefault();

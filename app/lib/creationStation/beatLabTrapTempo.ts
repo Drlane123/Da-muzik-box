@@ -28,7 +28,11 @@ export function beatLabTrapPresetUsesProducerGrid(
   preset: Pick<PatternPreset, 'genre' | 'role'>,
   producerGridBpm: number,
 ): boolean {
-  return preset.genre === 'Trap' && preset.role === 'drums' && producerGridBpm > TRAP_FELT_BPM_CEILING;
+  return (
+    (preset.genre === 'Trap' || preset.genre === 'Platinum Trap') &&
+    preset.role === 'drums' &&
+    producerGridBpm > TRAP_FELT_BPM_CEILING
+  );
 }
 
 /** Producer grid BPM when this trap preset uses double-time authoring (undefined otherwise). */

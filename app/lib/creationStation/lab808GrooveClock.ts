@@ -22,6 +22,17 @@ export function readLab808GrooveClock(): Lab808GrooveClockSnap | null {
   return grooveClockSnap;
 }
 
+/** Groove Lab transport → shared anchor for 808 kick/bass + MPC when Session Link / PLAY mirror is active. */
+export function syncLab808GrooveClockFromGrooveTransport(
+  snap: Lab808GrooveClockSnap | null,
+): void {
+  if (!snap || snap.sessionStart <= 0 || snap.loopSlots <= 0) {
+    publishLab808GrooveClock(null);
+    return;
+  }
+  publishLab808GrooveClock(snap);
+}
+
 /** Same `when` as `refillGrooveLabTransport` chord events at `startBeat` (quarter notes). */
 export function lab808AudioTimeAtChordBeat(
   startBeat: number,

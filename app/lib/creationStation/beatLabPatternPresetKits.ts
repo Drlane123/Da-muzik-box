@@ -9,12 +9,33 @@ import type { BeatLabProducerKitId } from '@/app/lib/creationStation/beatLabProd
 import { BEAT_LAB_FLAGSHIP_KIT_ORDER } from '@/app/lib/creationStation/beatLabProducerKits';
 import { BEAT_LAB_FLAGSHIP_PATTERN_KIT_MAP } from '@/app/lib/creationStation/beatLabFlagshipPatternPresets';
 import { BEAT_LAB_SIGNATURE_TRAP_KIT_MAP } from '@/app/lib/creationStation/beatLabSignatureTrapPatterns';
+import { BEAT_LAB_STREET_TRAP_KIT_MAP } from '@/app/lib/creationStation/beatLabStreetTrapPatterns';
+import { BEAT_LAB_MODERN_RNB_KIT_MAP } from '@/app/lib/creationStation/beatLabModernRnbPatterns';
+import { BEAT_LAB_MIAMI_PATTERN_KIT_MAP } from '@/app/lib/creationStation/beatLabAfroReggaeMiamiPatterns';
+import { BEAT_LAB_DISCO_HOUSE_DRIVE_IDS } from '@/app/lib/creationStation/beatLabDiscoExpandedPatterns';
+
+/** Core trap presets — explicit 808-kick kits (base drums; user adds sub in sound family). */
+const BEAT_LAB_CORE_TRAP_PATTERN_KIT_MAP: Readonly<
+  Partial<Record<string, BeatLabProducerKitId>>
+> = {
+  'trap-17': 'trapTrunk808',
+};
+
+/** Pure disco presets — LM-2 kick/snare + crisp hats (Donna Summer / SNF era). */
+const BEAT_LAB_DISCO_PATTERN_KIT_MAP: Readonly<
+  Partial<Record<string, BeatLabProducerKitId>>
+> = Object.fromEntries(
+  BEAT_LAB_DISCO_HOUSE_DRIVE_IDS.map((id) => [id, 'houseDrive' as BeatLabProducerKitId]),
+);
 
 const DEFAULT_POOL: BeatLabProducerKitId[] = ['trapDarkVault', 'clubPocket'];
 
 /** Preset has an explicit crew-kit pairing (signature or flagship). */
 export function beatLabPatternHasPairedKit(presetId: string): boolean {
   return !!(
+    BEAT_LAB_MIAMI_PATTERN_KIT_MAP[presetId] ??
+    BEAT_LAB_MODERN_RNB_KIT_MAP[presetId] ??
+    BEAT_LAB_STREET_TRAP_KIT_MAP[presetId] ??
     BEAT_LAB_SIGNATURE_TRAP_KIT_MAP[presetId] ??
     BEAT_LAB_FLAGSHIP_PATTERN_KIT_MAP[presetId]
   );
@@ -23,6 +44,16 @@ export function beatLabPatternHasPairedKit(presetId: string): boolean {
 /** Genre → rotating kit IDs. Flagship kits first (banks A–H lineup). */
 const PRESET_GENRE_KIT_POOLS: Partial<Record<string, BeatLabProducerKitId[]>> = {
   Trap: [
+    'trapStreetCyborgWoofer',
+    'trapStreetBedrockSlab',
+    'trapStreetZayTunnel',
+    'trapStreetPinkVault',
+    'trapStreetReddBlock',
+    'trapStreetTm88Night',
+    'trapStreetTrunkSk',
+    'trapStreetJcStack',
+    'trapStreetGuudSine',
+    'trapStreetNegativeFloor',
     'trapDarkVault',
     'trapSlabAtl',
     'trapTrunk808',
@@ -35,15 +66,26 @@ const PRESET_GENRE_KIT_POOLS: Partial<Record<string, BeatLabProducerKitId[]>> = 
     'trapAnalogRoom',
   ],
   'R&B': [
+    'rnbModern808NightGrind',
+    'rnbModern808NightGrindV2',
+    'rnbModern808AfterDark',
+    'rnbModern808VelvetSub',
+    'rnbModern808HeavyPulse',
+    'rnbClassicSilkRoom',
+    'rnbClassicVelvetPocket',
+    'rnbHybrid808Bloom',
+    'rnbHybridSlowBurn',
     'smoothRnb',
     'rnbVelvetBloom',
     'rnbNeoStack',
-    'clubPocket',
   ],
   House: ['houseDrive', 'clubPocket', 'bell808', 'mudFloor'],
   Dance: ['houseDrive', 'clubPocket', 'bell808', 'mudFloor', 'nightSub'],
   Disco: ['bell808', 'clubPocket', 'houseDrive', 'mudFloor'],
   Techno: ['ironSlide', 'mudFloor', 'bell808', 'vault808'],
+  Afro: ['clubPocket', 'smoothRnb', 'mudFloor', 'bell808', 'houseDrive'],
+  Reggae: ['smoothRnb', 'clubPocket', 'mudFloor', 'rnbVelvetBloom'],
+  'Up Tempo': ['miamiBass808', 'trunkRattle', 'vault808', 'trapTrunk808', 'nightSub', 'long808Hits', 'slab808'],
 };
 
 function fnv1aPresetHash(id: string): number {
@@ -57,6 +99,11 @@ function fnv1aPresetHash(id: string): number {
 
 export function beatLabProducerKitIdForPatternPreset(preset: PatternPreset): BeatLabProducerKitId {
   const explicit =
+    BEAT_LAB_CORE_TRAP_PATTERN_KIT_MAP[preset.id] ??
+    BEAT_LAB_DISCO_PATTERN_KIT_MAP[preset.id] ??
+    BEAT_LAB_MIAMI_PATTERN_KIT_MAP[preset.id] ??
+    BEAT_LAB_MODERN_RNB_KIT_MAP[preset.id] ??
+    BEAT_LAB_STREET_TRAP_KIT_MAP[preset.id] ??
     BEAT_LAB_SIGNATURE_TRAP_KIT_MAP[preset.id] ??
     BEAT_LAB_FLAGSHIP_PATTERN_KIT_MAP[preset.id];
   if (explicit) return explicit;
@@ -70,16 +117,22 @@ export function beatLabProducerKitIdForPatternPreset(preset: PatternPreset): Bea
 export function beatLabDefaultKitForPatternBank(bankId: string): BeatLabProducerKitId {
   switch (bankId) {
     case 'trap':
-      return 'trapDarkVault';
+      return 'trapStreetCyborgWoofer';
     case 'rnb':
       return 'smoothRnb';
     case 'house':
     case 'dance':
       return 'houseDrive';
     case 'disco':
-      return 'bell808';
+      return 'houseDrive';
     case 'techno':
       return 'ironSlide';
+    case 'afro':
+      return 'clubPocket';
+    case 'reggae':
+      return 'smoothRnb';
+    case 'miami':
+      return 'miamiBass808';
     default:
       return BEAT_LAB_FLAGSHIP_KIT_ORDER[0] ?? 'trapDarkVault';
   }

@@ -19,6 +19,15 @@ export const CREATION_SESSION_LINK_CHANGED = 'da-creation-session-link-changed';
 /** Beat Lab → linked module transport (Groove / 808 listen when play-linked). */
 export const CREATION_BEATLAB_PLAY_MIRROR_EVENT = 'da-beatlab-play-mirror';
 
+/** Groove Lab PLAY → Beat Lab (reverse of Session Link Sync — optional toggle on Groove tab). */
+export const GROOVE_LAB_BEATLAB_MIRROR_STORAGE = 'da-groove-lab-beatlab-mirror-v1';
+export const GROOVE_LAB_BEATLAB_MIRROR_CHANGED = 'da-groove-beatlab-mirror-changed';
+export const GROOVE_LAB_BEATLAB_MIRROR_EVENT = 'da-groove-lab-beatlab-mirror';
+
+export type GrooveLabBeatlabMirrorDetail = {
+  action: Lab808TransportMirrorAction;
+};
+
 export type CreationBeatlabPlayMirrorTarget = 'groove-lab' | '808-lab' | 'chord-builder';
 
 export type CreationBeatlabPlayMirrorDetail = {
@@ -42,7 +51,7 @@ const DEFAULT_STATE: CreationSessionLinkState = {
   },
   playLinked: {
     'new-synth': false,
-    'groove-lab': true,
+    'groove-lab': false,
     '808-lab': false,
     'chord-builder': false,
   },
@@ -128,26 +137,63 @@ export function dispatchCreation808PlayMirror(action: Lab808TransportMirrorActio
   );
 }
 
+/** Mirror play only to play-linked modules that are mounted (hidden mount on Beat Lab tab). */
+export type CreationSessionPlayMirrorVisibility = {
+  grooveLab?: boolean;
+  eightOhEight?: boolean;
+  chordBuilder?: boolean;
+};
+
+export function readGrooveLabBeatlabPlayMirror(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(GROOVE_LAB_BEATLAB_MIRROR_STORAGE) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function storeGrooveLabBeatlabPlayMirror(on: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(GROOVE_LAB_BEATLAB_MIRROR_STORAGE, on ? '1' : '0');
+  } catch {
+    /* quota */
+  }
+  window.dispatchEvent(new CustomEvent(GROOVE_LAB_BEATLAB_MIRROR_CHANGED));
+}
+
+/** Groove Lab transport → Beat Lab grid when Groove tab BeatLab toggle is on. */
+export function dispatchGrooveLabBeatlabPlayMirror(action: Lab808TransportMirrorAction): void {
+  if (typeof window === 'undefined' || !readGrooveLabBeatlabPlayMirror()) return;
+  window.dispatchEvent(
+    new CustomEvent<GrooveLabBeatlabMirrorDetail>(GROOVE_LAB_BEATLAB_MIRROR_EVENT, {
+      detail: { action },
+    }),
+  );
+}
+
 export function dispatchCreationSessionPlayMirror(
   action: Lab808TransportMirrorAction,
   state: CreationSessionLinkState,
+  visible: CreationSessionPlayMirrorVisibility = {},
 ): void {
   if (typeof window === 'undefined') return;
-  if (state.playLinked['groove-lab']) {
+  if (state.playLinked['groove-lab'] && (visible.grooveLab ?? false)) {
     window.dispatchEvent(
       new CustomEvent<CreationBeatlabPlayMirrorDetail>(CREATION_BEATLAB_PLAY_MIRROR_EVENT, {
         detail: { action, target: 'groove-lab' },
       }),
     );
   }
-  if (state.playLinked['808-lab']) {
+  if (state.playLinked['808-lab'] && (visible.eightOhEight ?? false)) {
     window.dispatchEvent(
       new CustomEvent<CreationBeatlabPlayMirrorDetail>(CREATION_BEATLAB_PLAY_MIRROR_EVENT, {
         detail: { action, target: '808-lab' },
       }),
     );
   }
-  if (state.playLinked['chord-builder']) {
+  if (state.playLinked['chord-builder'] && (visible.chordBuilder ?? false)) {
     window.dispatchEvent(
       new CustomEvent<CreationBeatlabPlayMirrorDetail>(CREATION_BEATLAB_PLAY_MIRROR_EVENT, {
         detail: { action, target: 'chord-builder' },

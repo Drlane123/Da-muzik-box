@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
+  BEAT_LAB_EXTRA_DEFAULT_KITS,
   BEAT_LAB_FLAGSHIP_KIT_ORDER,
   beatLabProducerKitMeta,
   type BeatLabProducerKitId,
@@ -28,6 +29,7 @@ function DefaultKitMenuPortal({
   triggerEl,
   onClose,
   onPick,
+  onPickExtra,
   disabled,
   activeBank,
   loadingKitId,
@@ -36,6 +38,7 @@ function DefaultKitMenuPortal({
   triggerEl: HTMLElement | null;
   onClose: () => void;
   onPick: (kitId: BeatLabProducerKitId, bankIndex: number) => void;
+  onPickExtra?: (kitId: BeatLabProducerKitId) => void;
   disabled: boolean;
   activeBank: number;
   loadingKitId?: BeatLabProducerKitId | null;
@@ -168,6 +171,53 @@ function DefaultKitMenuPortal({
           </button>
         );
       })}
+      {BEAT_LAB_EXTRA_DEFAULT_KITS.length > 0 ? (
+        <div
+          style={{
+            borderTop: '1px solid rgba(255, 200, 80, 0.2)',
+            marginTop: 4,
+            paddingTop: 4,
+          }}
+        >
+          {BEAT_LAB_EXTRA_DEFAULT_KITS.map((kitId) => {
+            const meta = beatLabProducerKitMeta(kitId);
+            if (!meta) return null;
+            const isLoading = loadingKitId === kitId;
+            const letter = FLAGSHIP_BANK_LETTERS[activeBank] ?? String(activeBank + 1);
+            return (
+              <button
+                key={kitId}
+                type="button"
+                disabled={disabled || isLoading || typeof onPickExtra !== 'function'}
+                role="option"
+                title={`${meta.title} → current bank ${letter} (16 chromatic hit pads)`}
+                onClick={() => {
+                  if (disabled || isLoading || typeof onPickExtra !== 'function') return;
+                  onPickExtra(kitId);
+                  onClose();
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  background: 'rgba(124, 244, 198, 0.06)',
+                  color: '#d8f8ec',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: disabled || isLoading ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.45 : 1,
+                }}
+              >
+                Bank {letter} · {isLoading ? 'Loading…' : meta.title}
+                <span style={{ marginLeft: 6, fontSize: 9, color: MINT, fontWeight: 800 }}>· hits</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>,
     document.body,
   );
@@ -186,7 +236,7 @@ export function BeatLabDefaultKitsButton({
 }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const count = BEAT_LAB_FLAGSHIP_KIT_ORDER.length;
+  const count = BEAT_LAB_FLAGSHIP_KIT_ORDER.length + BEAT_LAB_EXTRA_DEFAULT_KITS.length;
 
   return (
     <>
@@ -222,6 +272,7 @@ export function BeatLabDefaultKitsButton({
         loadingKitId={loadingKitId}
         onClose={() => setOpen(false)}
         onPick={onLoadKitToBank}
+        onPickExtra={(kitId) => onLoadKitToBank(kitId, activeBank)}
       />
     </>
   );

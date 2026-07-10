@@ -4,6 +4,7 @@
  */
 
 import { resolveGrooveLabAudioDest } from '@/app/lib/creationStation/grooveLabAudio';
+import { isGrooveLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
 import { getSharedAudioOutput } from '@/app/lib/creationStation/sharedAudioOutput';
 
 export type ChordVoiceCategory = 'piano' | 'strings' | 'keys' | 'blend';
@@ -258,15 +259,59 @@ function unmuteChordBus(bus: GainNode | null, ctx: AudioContext | null): void {
   }
 }
 
+/** Disconnect audition bus so old oscillators cannot stack when the bus is unmuted again. */
+function tearDownChordBus(
+  bus: GainNode | null,
+  ctx: AudioContext | null,
+  clear: () => void,
+): void {
+  if (bus && ctx) {
+    const t = ctx.currentTime;
+    try {
+      bus.gain.cancelScheduledValues(t);
+      bus.gain.setValueAtTime(0, t);
+      bus.disconnect();
+    } catch {
+      /* closed */
+    }
+  }
+  clear();
+}
+
+/** Stop progression-builder preview — tears down bus (does not merely mute). */
+export function haltProgressionAuditionVoices(): void {
+  tearDownChordBus(progressionAuditionBus, progressionAuditionBusCtx, () => {
+    progressionAuditionBus = null;
+    progressionAuditionBusCtx = null;
+    progressionAuditionBusDest = null;
+  });
+}
+
+/** @deprecated Fresh bus is created on the next `withProgressionAuditionBus` call. */
+export function restoreProgressionAuditionVoices(): void {
+  unmuteChordBus(progressionAuditionBus, progressionAuditionBusCtx);
+}
+
+/** Tear down Groove Lab transport chord bus — always (Groove STOP must not skip while flag is stale). */
+export function haltGrooveLabTransportChordVoices(): void {
+  tearDownChordBus(grooveLabTransportChordBus, grooveLabTransportChordBusCtx, () => {
+    grooveLabTransportChordBus = null;
+    grooveLabTransportChordBusCtx = null;
+    grooveLabTransportChordBusDest = null;
+  });
+}
+
 /** Immediate silence for transport + progression chord voices (Groove Lab STOP / Beat Lab shared output). */
 export function haltChordSequencerTransportVoices(): void {
-  muteChordBus(grooveLabTransportChordBus, grooveLabTransportChordBusCtx);
-  muteChordBus(progressionAuditionBus, progressionAuditionBusCtx);
+  if (!isGrooveLabTransportRunning()) {
+    haltGrooveLabTransportChordVoices();
+  }
+  haltProgressionAuditionVoices();
 }
 
 export function restoreChordSequencerTransportVoices(): void {
   unmuteChordBus(grooveLabTransportChordBus, grooveLabTransportChordBusCtx);
-  unmuteChordBus(progressionAuditionBus, progressionAuditionBusCtx);
+  restoreProgressionAuditionVoices();
 }
 
 function connectOut(

@@ -40,6 +40,11 @@ import {
   readWaveLeafPreviewQuantize,
   WAVE_LEAF_SETTINGS_KEYS,
 } from '@/app/lib/creationStation/waveLeafSettings';
+import {
+  bypassWaveLeafLeadChopGate,
+  readWaveLeafLeadChopEnabledFromStorage,
+  writeWaveLeafLeadChopRuntime,
+} from '@/app/lib/creationStation/waveLeafLeadChop';
 
 function readStoredFloat(key: string, fallback: number, min: number, max: number): number {
   if (typeof window === 'undefined') return fallback;
@@ -51,6 +56,19 @@ function readStoredFloat(key: string, fallback: number, min: number, max: number
   }
   return fallback;
 }
+
+export type WaveLeafSe2ControlledSettings = {
+  presetId: WaveLeafPresetId;
+  categoryIdx: number;
+  glideMs: number;
+  brightness: number;
+  warmth: number;
+  drive: number;
+  output: number;
+  vibratoDepthCents: number;
+  phraseQuantize: GrooveLabQuantize;
+  leadChopOn: boolean;
+};
 
 export type WaveLeafSynthPanelProps = {
   channel: number;
@@ -70,6 +88,17 @@ export type WaveLeafSynthPanelProps = {
   onMelodyGenerated?: (hits: GrooveRollHit[], loopBars: number) => void;
   canUndoMelody?: boolean;
   onUndoMelody?: () => void;
+  /** Studio Editor 2 — per-lane voice; skips Groove Lab localStorage when set. */
+  se2Controlled?: WaveLeafSe2ControlledSettings;
+  onSe2SettingsChange?: (patch: Partial<WaveLeafSe2ControlledSettings>) => void;
+  getPreviewDestination?: (ctx: AudioContext) => AudioNode;
+  se2RollHint?: string;
+  /** SE2 — key detect menu beside Audition (Groove Lead dock). */
+  headerKeyMenu?: React.ReactNode;
+  /** SE2 Groove Lead — preview keyboard span (defaults to Groove Lab C5–C6). */
+  previewKeysMinMidi?: number;
+  previewKeysMaxMidi?: number;
+  previewKeysRegisterLabel?: string;
 };
 
 export function WaveLeafSynthPanel({
@@ -90,31 +119,46 @@ export function WaveLeafSynthPanel({
   onMelodyGenerated,
   canUndoMelody = false,
   onUndoMelody,
+  se2Controlled,
+  onSe2SettingsChange,
+  getPreviewDestination,
+  se2RollHint,
+  headerKeyMenu,
+  previewKeysMinMidi,
+  previewKeysMaxMidi,
+  previewKeysRegisterLabel,
 }: WaveLeafSynthPanelProps) {
-  const [presetId, setPresetId] = useState<WaveLeafPresetId>(readWaveLeafPresetId);
+  const se2Mode = Boolean(se2Controlled);
+  const [presetId, setPresetId] = useState<WaveLeafPresetId>(
+    () => se2Controlled?.presetId ?? readWaveLeafPresetId(),
+  );
   const [categoryIdx, setCategoryIdx] = useState(() =>
-    waveLeafPresetBankIndex(readWaveLeafPresetId()),
+    se2Controlled?.categoryIdx ?? waveLeafPresetBankIndex(readWaveLeafPresetId()),
   );
   const [glideMs, setGlideMs] = useState(() =>
+    se2Controlled?.glideMs ??
     readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.glide, waveLeafPreset(readWaveLeafPresetId()).glideMs, 0, 480),
   );
   const [brightness, setBrightness] = useState(() =>
-    readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.bright, 1, 0.35, 1.6),
+    se2Controlled?.brightness ?? readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.bright, 1, 0.35, 1.6),
   );
   const [warmth, setWarmth] = useState(() =>
-    readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.warm, 1, 0.5, 1.4),
+    se2Controlled?.warmth ?? readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.warm, 1, 0.5, 1.4),
   );
   const [drive, setDrive] = useState(() =>
-    readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.drive, 0.12, 0, 1),
+    se2Controlled?.drive ?? readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.drive, 0.12, 0, 1),
   );
-  const [output, setOutput] = useState(() => readStoredFloat('wave-leaf-output', 0.82, 0.2, 1));
+  const [output, setOutput] = useState(() => se2Controlled?.output ?? readStoredFloat('wave-leaf-output', 0.82, 0.2, 1));
   const [vibratoDepthCents, setVibratoDepthCents] = useState(() =>
-    readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.vibrato, 0, 0, 80),
+    se2Controlled?.vibratoDepthCents ?? readStoredFloat(WAVE_LEAF_SETTINGS_KEYS.vibrato, 0, 0, 80),
   );
   /** null = off — preview keys / roll unchanged (short single note). */
   const [phraseMode, setPhraseMode] = useState<WaveLeafPhraseMode | null>(null);
   const [phraseQuantize, setPhraseQuantize] = useState<GrooveLabQuantize>(() =>
-    readWaveLeafPreviewQuantize(quantize),
+    se2Controlled?.phraseQuantize ?? readWaveLeafPreviewQuantize(quantize),
+  );
+  const [leadChopOn, setLeadChopOn] = useState(
+    () => se2Controlled?.leadChopOn ?? readWaveLeafLeadChopEnabledFromStorage(),
   );
   const cancelPhraseRef = useRef<(() => void) | null>(null);
   const heldPreviewMidiRef = useRef<number | null>(null);
@@ -127,12 +171,70 @@ export function WaveLeafSynthPanel({
   );
   const padPreviewHold = useMemo(() => waveLeafPresetPreviewHoldBeats(preset), [preset]);
 
+  const skipSe2EmitRef = useRef(false);
+
+  useEffect(() => {
+    if (!se2Controlled) return;
+    skipSe2EmitRef.current = true;
+    setPresetId(se2Controlled.presetId);
+    setCategoryIdx(se2Controlled.categoryIdx);
+    setGlideMs(se2Controlled.glideMs);
+    setBrightness(se2Controlled.brightness);
+    setWarmth(se2Controlled.warmth);
+    setDrive(se2Controlled.drive);
+    setOutput(se2Controlled.output);
+    setVibratoDepthCents(se2Controlled.vibratoDepthCents);
+    setPhraseQuantize(se2Controlled.phraseQuantize);
+    setLeadChopOn(se2Controlled.leadChopOn);
+    queueMicrotask(() => {
+      skipSe2EmitRef.current = false;
+    });
+  }, [se2Controlled]);
+
+  useEffect(() => {
+    if (!se2Mode || skipSe2EmitRef.current) return;
+    onSe2SettingsChange?.({
+      presetId,
+      categoryIdx,
+      glideMs,
+      brightness,
+      warmth,
+      drive,
+      output,
+      vibratoDepthCents,
+      phraseQuantize,
+      leadChopOn,
+    });
+  }, [
+    se2Mode,
+    onSe2SettingsChange,
+    presetId,
+    categoryIdx,
+    glideMs,
+    brightness,
+    warmth,
+    drive,
+    output,
+    vibratoDepthCents,
+    phraseQuantize,
+    leadChopOn,
+  ]);
+
+  const resolvePreviewDest = useCallback(
+    (ctx: AudioContext) => {
+      if (getPreviewDestination) return getPreviewDestination(ctx);
+      return resolveGrooveLabChannelDest(ctx, channel, channelVolumes);
+    },
+    [getPreviewDestination, channel, channelVolumes],
+  );
+
   useEffect(() => {
     writeWaveLeafRuntimeSettings(
       { preset, glideMs, brightness, warmth, drive, vibratoDepthCents },
       { outputGain: output },
     );
-    if (typeof window === 'undefined') return;
+    writeWaveLeafLeadChopRuntime(leadChopOn, phraseQuantize);
+    if (se2Mode || typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(WAVE_LEAF_SETTINGS_KEYS.preset, presetId);
       window.localStorage.setItem(WAVE_LEAF_SETTINGS_KEYS.glide, String(glideMs));
@@ -142,10 +244,24 @@ export function WaveLeafSynthPanel({
       window.localStorage.setItem(WAVE_LEAF_SETTINGS_KEYS.vibrato, String(vibratoDepthCents));
       window.localStorage.setItem(WAVE_LEAF_SETTINGS_KEYS.previewQuantize, phraseQuantize);
       window.localStorage.setItem('wave-leaf-output', String(output));
+      window.localStorage.setItem('wave-leaf-lead-chop-enabled', leadChopOn ? '1' : '0');
+      window.localStorage.setItem('wave-leaf-lead-chop-quantize', phraseQuantize);
     } catch {
       /* */
     }
-  }, [preset, presetId, glideMs, brightness, warmth, drive, vibratoDepthCents, output, phraseQuantize]);
+  }, [
+    preset,
+    presetId,
+    glideMs,
+    brightness,
+    warmth,
+    drive,
+    vibratoDepthCents,
+    output,
+    phraseQuantize,
+    leadChopOn,
+    se2Mode,
+  ]);
 
   const stopPhrasePreview = useCallback(() => {
     cancelPhraseRef.current?.();
@@ -159,7 +275,8 @@ export function WaveLeafSynthPanel({
   const playDefaultPreview = useCallback(
     (midi: number, holdBeats: number) => {
       runWithGrooveLabAudio(getAudioContext, (ctx, when) => {
-        const dest = resolveGrooveLabChannelDest(ctx, channel, channelVolumes);
+        if (!se2Mode) bypassWaveLeafLeadChopGate(ctx, channel);
+        const dest = resolvePreviewDest(ctx);
         playWaveLeafNote(ctx, midi, when, {
           preset,
           glideMs,
@@ -173,13 +290,15 @@ export function WaveLeafSynthPanel({
           outputGain: output,
           destination: dest,
           monophonic: true,
+          monoGroup: se2Mode ? `se2-wave-leaf-preview-${channel}` : undefined,
         });
       });
     },
     [
       getAudioContext,
       channel,
-      channelVolumes,
+      se2Mode,
+      resolvePreviewDest,
       preset,
       glideMs,
       brightness,
@@ -201,7 +320,7 @@ export function WaveLeafSynthPanel({
       cancelPhraseRef.current?.();
 
       runWithGrooveLabAudio(getAudioContext, (ctx, t0) => {
-        const dest = resolveGrooveLabChannelDest(ctx, channel, channelVolumes);
+        const dest = resolvePreviewDest(ctx);
         const playScheduled = (noteMidi: number, whenSec: number, hold: number) => {
           playWaveLeafNote(ctx, noteMidi, whenSec, {
             preset,
@@ -216,6 +335,7 @@ export function WaveLeafSynthPanel({
             outputGain: output,
             destination: dest,
             monophonic: true,
+            monoGroup: se2Mode ? `se2-wave-leaf-preview-${channel}` : undefined,
           });
         };
 
@@ -246,8 +366,9 @@ export function WaveLeafSynthPanel({
       bpm,
       phraseQuantize,
       phraseMode,
+      se2Mode,
+      resolvePreviewDest,
       channel,
-      channelVolumes,
       preset,
       glideMs,
       brightness,
@@ -343,10 +464,11 @@ export function WaveLeafSynthPanel({
             />
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
           {onPreviewRoll ? (
             <PluginBtn label="▶ AUDITION" accent={WAVE_LEAF_UI.accentHi} onClick={onPreviewRoll} />
           ) : null}
+          {headerKeyMenu}
           {onClearHits ? (
             <PluginBtn
               label="CLEAR"
@@ -569,6 +691,54 @@ export function WaveLeafSynthPanel({
             accent="#b8a0ff"
           />
           <SynthRoundKnob label="OUT" value={output} min={0.2} max={1} onChange={setOutput} size={32} accent={WAVE_LEAF_UI.accent} />
+          <button
+            type="button"
+            className="groove-lead-type-label"
+            title={
+              leadChopOn
+                ? `Rhythmic chop ON — synced to ${phraseQuantize} grid during ▶ play`
+                : 'Rhythmic chop — gates the lead in time with BPM (works during ▶ play)'
+            }
+            onClick={() => {
+              setLeadChopOn((prev) => {
+                const next = !prev;
+                if (!next) {
+                  try {
+                    const ctx = getAudioContext();
+                    if (ctx && ctx.state !== 'closed') {
+                      bypassWaveLeafLeadChopGate(ctx, channel);
+                    }
+                  } catch {
+                    /* */
+                  }
+                }
+                return next;
+              });
+            }}
+            style={{
+              marginTop: 4,
+              width: '100%',
+              maxWidth: 52,
+              padding: '6px 4px',
+              borderRadius: 5,
+              cursor: 'pointer',
+              fontSize: 7,
+              fontWeight: 900,
+              letterSpacing: 0.4,
+              lineHeight: 1.2,
+              border: `1px solid ${leadChopOn ? WAVE_LEAF_UI.presetBorderOn : WAVE_LEAF_UI.border}`,
+              background: leadChopOn
+                ? `linear-gradient(145deg, ${WAVE_LEAF_UI.presetOn}, ${WAVE_LEAF_UI.bgModule})`
+                : 'rgba(0,0,0,0.35)',
+              color: leadChopOn ? WAVE_LEAF_UI.accentHi : WAVE_LEAF_UI.textDim,
+              boxShadow: leadChopOn ? `0 0 10px ${WAVE_LEAF_UI.accent}55` : 'none',
+            }}
+          >
+            CHOP
+            <span style={{ display: 'block', fontSize: 6, fontWeight: 700, opacity: 0.85 }}>
+              {leadChopOn ? phraseQuantize : 'OFF'}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -594,12 +764,16 @@ export function WaveLeafSynthPanel({
             onGenerated={onMelodyGenerated}
             canUndo={canUndoMelody}
             onUndo={onUndoMelody}
+            fullPhrase
           />
         ) : null}
         <div style={{ marginTop: 6 }}>
           <WaveLeafPreviewKeys
             onPlayMidi={(midi) => previewNote(midi, padPreviewHold, true)}
             onReleaseMidi={stopPhrasePreview}
+            midiMin={previewKeysMinMidi}
+            midiMax={previewKeysMaxMidi}
+            registerLabel={previewKeysRegisterLabel}
           />
         </div>
         <p
@@ -611,8 +785,12 @@ export function WaveLeafSynthPanel({
             textAlign: 'center',
           }}
         >
-          Draw <strong style={{ color: WAVE_LEAF_UI.accent }}>Groove Lead</strong> on the bottom piano roll when{' '}
-          {chordBassSeqChannelLabel(channel)} is selected — complements Groove chord on CH 34.
+          {se2RollHint ?? (
+            <>
+              Draw <strong style={{ color: WAVE_LEAF_UI.accent }}>Groove Lead</strong> on the bottom piano roll when{' '}
+              {chordBassSeqChannelLabel(channel)} is selected — complements Groove chord on CH 34.
+            </>
+          )}
         </p>
       </div>
     </div>

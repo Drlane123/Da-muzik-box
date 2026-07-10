@@ -18,7 +18,7 @@ export const GROOVE_ORCHESTRA_HIT_DEFAULT: OrchestraHitId = 'orchHit_brass';
 export const GROOVE_ORCHESTRA_HIT_SOUNDS: OrchestraHitSoundDef[] = getLoadedOrchestraHitDefs().map((d) => ({
   id: d.id,
   label: d.label,
-  describe: `Orchestra hit — ${d.label}`,
+  describe: `Cinematic sample — ${d.label}`,
 }));
 
 export const GROOVE_ORCHESTRA_HIT_MAP: Record<string, OrchestraHitSoundDef> = (() => {
@@ -37,6 +37,6 @@ export function refreshOrchestraHitSoundCatalog(): OrchestraHitSoundDef[] {
   return getLoadedOrchestraHitDefs().map((d) => ({
     id: d.id,
     label: d.label,
-    describe: `Orchestra hit — ${d.label}`,
+    describe: `Cinematic sample — ${d.label}`,
   }));
 }

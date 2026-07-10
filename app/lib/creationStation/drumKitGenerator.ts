@@ -5,7 +5,7 @@
 
 import type { StoredPadSample } from '@/app/lib/padSampleStorage';
 
-export type DrumKitGeneratorStyle = 'house' | 'trap' | 'lofi';
+export type DrumKitGeneratorStyle = 'house' | 'trap' | 'lofi' | 'rnb' | 'dance' | 'disco';
 
 export type CreationDrumPattern = boolean[][];
 
@@ -89,8 +89,18 @@ export function synthesizeKitPadBuffer(
 ): AudioBuffer {
   const rng = mulberry32(seed * 9973 + padIndex * 104729);
   const styleGain =
-    style === 'house' ? 1.05 : style === 'trap' ? 1.12 : 0.92;
-  const decayMul = style === 'lofi' ? 0.82 : 1;
+    style === 'house'
+      ? 1.05
+      : style === 'trap'
+        ? 1.12
+        : style === 'dance'
+          ? 1.1
+          : style === 'disco'
+            ? 1.08
+            : style === 'rnb'
+              ? 0.9
+              : 0.92;
+  const decayMul = style === 'lofi' || style === 'rnb' ? 0.82 : 1;
 
   const durBase = 0.14 + padIndex * 0.004;
   const dur = Math.min(0.42, durBase * (style === 'trap' ? 1.05 : 1));
@@ -104,7 +114,7 @@ export function synthesizeKitPadBuffer(
     for (let i = 0; i < n; i++) {
       const t = i / sampleRate;
       const env = Math.exp(-t * (22 * decayMul) * (style === 'trap' ? 1.08 : 1));
-      const f0 = style === 'lofi' ? 95 : 118;
+      const f0 = style === 'lofi' || style === 'rnb' ? 95 : style === 'dance' ? 122 : 118;
       const f = f0 * Math.exp(-t * (38 + padIndex)) + 42;
       const body = Math.sin(2 * Math.PI * f * t) * env * 0.88 * styleGain;
       const click = i < 45 ? noise(0.45) * (1 - i / 45) : 0;
@@ -205,11 +215,20 @@ export function buildKitGroovePattern(opts: {
     const rCol = mulberry32(seed + c * 2654435761)();
 
     let kick = false;
-    if (style === 'house') {
+    if (style === 'house' || style === 'disco' || style === 'dance') {
       kick = stepInQuarter === 0;
     } else if (style === 'trap') {
       kick = stepInQuarter === 0 && (beatInBar % 2 === 0 || (beatInBar === 3 && rCol > 0.55));
       if (stepInQuarter === Math.max(1, Math.floor(sub * 0.5)) && beatInBar === 3 && rCol > 0.72) kick = true;
+    } else if (style === 'rnb') {
+      kick =
+        stepInQuarter === 0 &&
+        (beatInBar === 0 ||
+          (beatInBar === 2 && rCol > 0.38) ||
+          (beatInBar === 3 && rCol > 0.52));
+      if (!kick && beatInBar === 2 && stepInQuarter === Math.floor(sub * 0.5) && rCol > 0.68) {
+        kick = true;
+      }
     } else {
       kick = stepInQuarter === 0 && (beatInBar === 0 || beatInBar === 2);
     }
@@ -219,17 +238,23 @@ export function buildKitGroovePattern(opts: {
       out[1]![c] = true;
     }
 
-    if (out[1]![c] && (style === 'house' ? rCol > 0.55 : rCol > 0.35)) {
+    if (out[1]![c] && clapOnSnare(style, rCol)) {
       out[2]![c] = true;
     }
 
     if (sub >= 2) {
       const eighth = Math.max(1, Math.floor(sub / 2));
-      if (style === 'house') {
+      if (style === 'house' || style === 'disco') {
         if (stepInQuarter % eighth === 0 && rCol > 0.08) out[3]![c] = true;
+        if (style === 'disco' && sub >= 4 && rCol > 0.42) out[3]![c] = true;
+      } else if (style === 'dance') {
+        const sixt = Math.max(1, Math.floor(sub / 4));
+        if (stepInQuarter % sixt === 0 && rCol > 0.1) out[3]![c] = true;
       } else if (style === 'trap') {
         const sixt = Math.max(1, Math.floor(sub / 4));
         if (stepInQuarter % sixt === 0 && rCol > 0.18) out[3]![c] = true;
+      } else if (style === 'rnb') {
+        if ((stepInQuarter === 0 || stepInQuarter === eighth) && rCol > 0.14) out[3]![c] = true;
       } else {
         if ((stepInQuarter === 0 || stepInQuarter === eighth) && rCol > 0.25) out[3]![c] = true;
       }
@@ -239,12 +264,21 @@ export function buildKitGroovePattern(opts: {
       out[4]![c] = true;
     }
 
-    if (style !== 'trap' && stepInQuarter % Math.max(1, Math.floor(sub / 2)) === 0 && rCol > 0.5) {
+    if (style === 'rnb') {
+      if (beatInBar === 3 && stepInQuarter === Math.floor(sub * 0.75) && rCol > 0.78) out[12]![c] = true;
+    } else if (style !== 'trap' && stepInQuarter % Math.max(1, Math.floor(sub / 2)) === 0 && rCol > 0.5) {
       out[12]![c] = true;
     }
   }
 
   return out;
+}
+
+function clapOnSnare(style: DrumKitGeneratorStyle, r: number): boolean {
+  if (style === 'house') return r > 0.55;
+  if (style === 'rnb') return r > 0.62;
+  if (style === 'disco' || style === 'dance') return r > 0.42;
+  return r > 0.35;
 }
 
 function openHatStep(
@@ -256,5 +290,10 @@ function openHatStep(
 ): boolean {
   if (style === 'house') return beatInBar === 3 && stepInQuarter === Math.floor(sub * 0.75) && r > 0.4;
   if (style === 'trap') return beatInBar === 2 && stepInQuarter === 0 && r > 0.65;
+  if (style === 'disco') {
+    return (beatInBar === 1 || beatInBar === 3) && stepInQuarter === Math.floor(sub / 2) && r > 0.32;
+  }
+  if (style === 'dance') return stepInQuarter === Math.floor(sub * 0.75) && r > 0.28;
+  if (style === 'rnb') return beatInBar === 2 && stepInQuarter === Math.floor(sub / 2) && r > 0.58;
   return beatInBar === 1 && stepInQuarter === Math.floor(sub / 2) && r > 0.55;
 }

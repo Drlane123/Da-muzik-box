@@ -1,13 +1,16 @@
 import { useMasterClock, LOOP_BAR_OPTIONS, PPQ, type QuantizeValue } from '@/app/context/MasterClockContext';
 import type { ScreenId } from '@/app/components/NavigationSidebar';
 
-import { Play, Square, Pause, Circle, Repeat, SkipBack, Save, Plus, Trash2, Settings } from 'lucide-react';
+import { Play, Square, Pause, Circle, Repeat, SkipBack, Save, Plus, Trash2, Settings, Sparkles } from 'lucide-react';
 
 const DMB_STUDIO_PRECOUNT_CANCEL = 'dmb-studio-precount-cancel';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 
 import MasterVU from './MasterVU';
+
+import { Se2FeatureShowcaseTicker } from '@/app/components/studio/Se2FeatureShowcaseTicker';
+import { Se2PerformanceStrip } from '@/app/components/studio/Se2PerformanceStrip';
 
 import { saveService } from '@/app/lib/saveService';
 import { getStudioProjectJsonForCloudSave } from '@/app/lib/studioProjectBridge';
@@ -18,9 +21,11 @@ const QUANTIZE_OPTIONS: QuantizeValue[] = ['1/4', '1/8', '1/16', '1/32', '1/16T'
 
 export default function TitleBar({
   onOpenSettings,
+  onOpenOverview,
   activeScreen,
 }: {
   onOpenSettings?: () => void;
+  onOpenOverview?: () => void;
   activeScreen?: ScreenId;
 }) {
   const [saveMessage, setSaveMessage] = useState('');
@@ -65,6 +70,7 @@ export default function TitleBar({
   const loopDisabledScreens: ScreenId[] = [
     'vocal-lab',
     'ai-song',
+    'ai-music-match',
     'ai-pattern',
     'melody-transcription',
     'harmony-match',
@@ -72,12 +78,14 @@ export default function TitleBar({
     'export',
     'studio-editor-2',
     'creation-station',
+    'master-arranger',
   ];
   const loopDisabledForScreen = !!activeScreen && loopDisabledScreens.includes(activeScreen);
   const topLoopDisabled = loopDisabledForScreen;
-  /** Studio Editor 2 and Creation Station use in-screen transport; top master controls stay inert. */
-  const disableMasterTransport =
-    activeScreen === 'studio-editor-2' || activeScreen === 'creation-station';
+  /** Global title-bar transport only on legacy Studio Editor (v1); every other module has its own controls. */
+  const showMasterTransportBar = activeScreen === 'studio-editor';
+  const hideMasterTransportBar = !showMasterTransportBar;
+  const disableMasterTransport = hideMasterTransportBar;
 
   const selectedLoopLength = loopEndBar - loopStartBar + 1;
   const loopLengthSelectOptions = useMemo(() => {
@@ -170,13 +178,38 @@ export default function TitleBar({
   const transportIconBtn =
     'w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90 active:opacity-70';
 
+  const toolbarGap = 'gap-3';
+
+  const platinumSuiteStyle = {
+    fontFamily: 'Rajdhani, system-ui, sans-serif',
+    fontWeight: 600,
+    fontSize: 13,
+    letterSpacing: '0.28em',
+    textTransform: 'uppercase' as const,
+    background:
+      'linear-gradient(180deg, #ffffff 0%, #eef2f5 18%, #c5ced6 38%, #f4f7f9 52%, #9aa8b4 72%, #dce3e9 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    filter: 'drop-shadow(0 1px 1px rgba(0, 0, 0, 0.65))',
+    whiteSpace: 'nowrap' as const,
+  };
+
   return (
     <div
-      className="flex items-center gap-2 px-3 py-1 select-none w-full min-w-0"
-      style={{ background: '#0a0a0a', borderBottom: '2px solid #1a1a1a', height: 72, minHeight: 72 }}
+      className="select-none w-full min-w-0 shrink-0 px-3 py-1"
+      style={{
+        background: '#0a0a0a',
+        borderBottom: '2px solid #1a1a1a',
+        minHeight: 72,
+        display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr',
+        alignItems: 'center',
+        columnGap: 12,
+      }}
     >
-      {/* Logo — Da Music Box | Gen-DAW ··· Hybrid */}
-      <div className="flex items-center shrink-0 mr-2">
+      {/* Left — logo (unchanged) */}
+      <div className="flex items-center shrink-0 justify-self-start min-w-0">
         <div
           style={{
             height: 44,
@@ -206,7 +239,7 @@ export default function TitleBar({
               filter: 'drop-shadow(0 0 10px rgba(255, 183, 77, 0.45))',
             }}
           >
-            Da Music Box
+            Da Muzik Box
           </span>
           <span
             aria-hidden
@@ -262,12 +295,25 @@ export default function TitleBar({
         </div>
       </div>
 
-      {/* Transport + tools — flush right; logo box stays snug on the left */}
-      <div className="flex items-center gap-2 shrink-0 ml-auto overflow-x-auto">
-      <div className="w-px h-8 shrink-0 self-center" style={{ background: '#2a2a2a' }} />
+      {/* Center — title bar (between logo and transport / settings) */}
+      <div className="flex items-center justify-center justify-self-center px-2 pointer-events-none min-w-0">
+        <span style={platinumSuiteStyle}>Music Production Suite</span>
+      </div>
 
+      {/* Right — transport + settings */}
+      <div
+        className={`flex items-center ${toolbarGap} justify-self-end min-w-0 overflow-x-auto overflow-y-hidden`}
+        style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'thin' }}
+      >
+      {!hideMasterTransportBar && (
+      <>
+      <div className="w-px h-8 shrink-0 self-center mx-1" style={{ background: '#2a2a2a' }} />
+
+      {/* Transport + loop on top; compact MASTER VU tucked underneath */}
+      <div className="flex flex-col justify-center gap-1 shrink-0 self-center">
+        <div className={`flex items-center ${toolbarGap} shrink-0`}>
       {/* ── Transport — same 32×32 + border treatment as Settings; active = solid fills like MET/MIDI ── */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <button
           type="button"
           disabled={disableMasterTransport}
@@ -426,26 +472,10 @@ export default function TitleBar({
         </button>
       </div>
 
-      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
-
-      {onOpenSettings && (
-        <button
-          type="button"
-          onClick={onOpenSettings}
-          title="Settings — Audio I/O (Ctrl+,)"
-          className="w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90"
-          style={{ background: '#1a1a1a', color: '#888', border: '1px solid #333' }}
-        >
-          <Settings size={15} />
-        </button>
-      )}
-
-      <MasterVU masterLevel={masterLevel} />
-
-      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+      <div className="w-px h-8 shrink-0 mx-1" style={{ background: '#2a2a2a' }} />
 
       {/* ── Loop ── */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={() => {
             if (loopEnabled) clearLoop();
@@ -493,7 +523,7 @@ export default function TitleBar({
       </div>
 
       {/* ── Quantize ── */}
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <span className="text-xs font-bold" style={{ color: '#555' }}>Q</span>
         <select value={quantize} onChange={e => setQuantize(e.target.value as QuantizeValue)}
           className="h-7 px-1.5 rounded text-xs font-bold outline-none transition-all active:scale-90 active:opacity-70"
@@ -501,8 +531,11 @@ export default function TitleBar({
           {QUANTIZE_OPTIONS.map(q => <option key={q} value={q}>{q}</option>)}
         </select>
       </div>
+        </div>
+        <MasterVU masterLevel={masterLevel} barWidth={200} />
+      </div>
 
-      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+      <div className="w-px h-8 shrink-0 mx-1" style={{ background: '#2a2a2a' }} />
 
       <button
         onClick={() => setMetronomeEnabled(!metronomeEnabled)}
@@ -519,144 +552,8 @@ export default function TitleBar({
         MIDI
       </button>
 
-      <div style={{ position: 'relative' }} ref={saveAsRef}>
-        <button onClick={handleSaveAll} title="Save project with name (Ctrl+S)"
-          className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70 flex items-center gap-1.5"
-          style={{ background: '#1a2a1a', color: '#00ff88', border: '1px solid #00ff8844' }}>
-          <Save size={14} />
-          SAVE
-        </button>
-
-        {showSaveAsDialog && (
-          <div style={{
-            position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            background: '#0f0f0f',
-            border: '2px solid #00ff88',
-            borderRadius: 12,
-            padding: 24,
-            zIndex: 10000,
-            minWidth: 320,
-            maxWidth: 400,
-            boxShadow: '0 20px 60px rgba(0, 255, 136, 0.3), 0 0 40px rgba(0, 255, 136, 0.1)'
-          }}>
-            <h3 style={{ color: '#00ff88', fontSize: 14, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
-              SAVE PROJECT
-            </h3>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 'bold', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Project Name
-              </label>
-              <input
-                type="text"
-                value={saveAsName}
-                onChange={(e) => setSaveAsName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSaveAsConfirm()}
-                placeholder="Enter project name..."
-                autoFocus
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  background: '#1a1a1a',
-                  border: '1px solid #333',
-                  borderRadius: 6,
-                  color: '#00ff88',
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  outline: 'none',
-                  boxSizing: 'border-box',
-                  transition: 'all 0.2s'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = '#00ff88';
-                  e.currentTarget.style.boxShadow = '0 0 8px rgba(0, 255, 136, 0.3)';
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '#333';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <button
-                onClick={handleSaveAsConfirm}
-                style={{
-                  padding: '10px 16px',
-                  background: '#00ff88',
-                  color: '#000',
-                  border: 'none',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.opacity = '0.9';
-                  e.currentTarget.style.transform = 'scale(1.02)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                Save
-              </button>
-              <button
-                onClick={() => setShowSaveAsDialog(false)}
-                style={{
-                  padding: '10px 16px',
-                  background: '#1a1a1a',
-                  color: '#888',
-                  border: '1px solid #444',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#00ff88';
-                  e.currentTarget.style.color = '#00ff88';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#444';
-                  e.currentTarget.style.color = '#888';
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-        {showSaveAsDialog && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.6)',
-            zIndex: 9999,
-            backdropFilter: 'blur(2px)'
-          }} onClick={() => setShowSaveAsDialog(false)} />
-        )}
-      </div>
-
-      {saveMessage && (
-        <span className="text-xs font-bold shrink-0 animate-pulse" style={{ color: '#00ff88' }}>
-          {saveMessage}
-        </span>
-      )}
-
       {/* Pre-Count — metronome clicks before Record (MasterClock record path) */}
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-2 shrink-0">
         <select
           value={countInBeats}
           onChange={(e) => setCountInBeats(Number(e.target.value))}
@@ -720,26 +617,28 @@ export default function TitleBar({
         {patternMode ? 'PAT' : 'SONG'}
       </button>
 
-      <div className="w-px h-8 shrink-0" style={{ background: '#2a2a2a' }} />
+      <div className="w-px h-8 shrink-0 mx-1" style={{ background: '#2a2a2a' }} />
 
       {/* ── Project Management ── */}
-      <div className="flex items-center gap-1 shrink-0">
-        <button onClick={handleSaveAll} title="Save all work (Ctrl+S)"
-          className="px-2 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1"
-          style={{ background: '#1a2a1a', color: '#00ff88', border: '1px solid #00ff8844' }}>
-          <Save size={12} />
-          SAVE
-        </button>
+      <div className="flex items-center gap-2 shrink-0">
+        <div style={{ position: 'relative' }} ref={saveAsRef}>
+          <button onClick={handleSaveAll} title="Save project with name (Ctrl+S)"
+            className="px-2 h-7 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1.5"
+            style={{ background: '#1a2a1a', color: '#00ff88', border: '1px solid #00ff8844' }}>
+            <Save size={14} />
+            SAVE
+          </button>
+        </div>
         <button onClick={() => setShowNewProjectDialog(true)} title="Create new project"
-          className="px-2 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1"
+          className="px-2 h-7 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1"
           style={{ background: '#1a1a2a', color: '#00E5FF', border: '1px solid #00E5FF44' }}>
           <Plus size={12} />
           NEW
         </button>
         <button onClick={handleDeleteProject} title="Delete current project"
-          className="px-1.5 h-6 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-0.5 whitespace-nowrap"
+          className="px-2 h-7 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 flex items-center gap-1 whitespace-nowrap"
           style={{ background: '#2a1a1a', color: '#ff4444', border: '1px solid #ff444444' }}>
-          <Trash2 size={11} />
+          <Trash2 size={12} />
           DEL
         </button>
       </div>
@@ -750,7 +649,158 @@ export default function TitleBar({
         </span>
       )}
 
-      {/* New Project Dialog */}
+      {/* ── Status dot ── */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a',
+            boxShadow: isPlaying ? '0 0 6px #00ff88' : isRecording ? '0 0 6px #ff4444' : 'none' }} />
+        <span className="font-mono" style={{ color: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a', fontSize: 9 }}>
+          {isRecording ? 'REC' : isPlaying ? 'PLAY' : 'STOP'}
+        </span>
+      </div>
+      </>
+      )}
+
+      {activeScreen === 'studio-editor-2' ? (
+        <div className="shrink-0 flex items-center gap-2" style={{ marginRight: 14 }}>
+          <Se2PerformanceStrip />
+          <Se2FeatureShowcaseTicker />
+        </div>
+      ) : null}
+
+      {onOpenOverview && (
+        <button
+          type="button"
+          onClick={onOpenOverview}
+          title="Da Music Box — product overview"
+          className="h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90 gap-1 px-2"
+          style={{ background: '#1a1a1a', color: '#c8d0dc', border: '1px solid rgba(212, 220, 232, 0.25)' }}
+        >
+          <Sparkles size={14} />
+          <span className="hidden sm:inline" style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4 }}>
+            OVERVIEW
+          </span>
+        </button>
+      )}
+      {onOpenSettings && (
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="Settings — Audio I/O (Ctrl+,)"
+          className="w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90"
+          style={{ background: '#1a1a1a', color: '#888', border: '1px solid #333' }}
+        >
+          <Settings size={15} />
+        </button>
+      )}
+      </div>
+
+      {/* Save / New dialogs — always mounted (Ctrl+S works on every screen) */}
+      {showSaveAsDialog && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: '#0f0f0f',
+          border: '2px solid #00ff88',
+          borderRadius: 12,
+          padding: 24,
+          zIndex: 10000,
+          minWidth: 320,
+          maxWidth: 400,
+          boxShadow: '0 20px 60px rgba(0, 255, 136, 0.3), 0 0 40px rgba(0, 255, 136, 0.1)'
+        }}>
+          <h3 style={{ color: '#00ff88', fontSize: 14, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>
+            SAVE PROJECT
+          </h3>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 'bold', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
+              Project Name
+            </label>
+            <input
+              type="text"
+              value={saveAsName}
+              onChange={(e) => setSaveAsName(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSaveAsConfirm()}
+              placeholder="Enter project name..."
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                background: '#1a1a1a',
+                border: '1px solid #333',
+                borderRadius: 6,
+                color: '#00ff88',
+                fontSize: 13,
+                fontFamily: 'monospace',
+                outline: 'none',
+                boxSizing: 'border-box',
+                transition: 'all 0.2s'
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = '#00ff88';
+                e.currentTarget.style.boxShadow = '0 0 8px rgba(0, 255, 136, 0.3)';
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '#333';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <button
+              onClick={handleSaveAsConfirm}
+              style={{
+                padding: '10px 16px',
+                background: '#00ff88',
+                color: '#000',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5
+              }}
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setShowSaveAsDialog(false)}
+              style={{
+                padding: '10px 16px',
+                background: '#1a1a1a',
+                color: '#888',
+                border: '1px solid #444',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {showSaveAsDialog && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          zIndex: 9999,
+          backdropFilter: 'blur(2px)'
+        }} onClick={() => setShowSaveAsDialog(false)} />
+      )}
+
       {showNewProjectDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }} ref={menuRef}>
           <div className="p-6 rounded-xl" style={{ background: '#0a0a0a', border: '1px solid #2a2a2a', minWidth: 300 }}>
@@ -780,17 +830,6 @@ export default function TitleBar({
           </div>
         </div>
       )}
-
-      {/* ── Status dot ── */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        <div className="w-2 h-2 rounded-full shrink-0"
-          style={{ background: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a',
-            boxShadow: isPlaying ? '0 0 6px #00ff88' : isRecording ? '0 0 6px #ff4444' : 'none' }} />
-        <span className="font-mono" style={{ color: isPlaying ? '#00ff88' : isRecording ? '#ff4444' : '#2a2a2a', fontSize: 9 }}>
-          {isRecording ? 'REC' : isPlaying ? 'PLAY' : 'STOP'}
-        </span>
-      </div>
-      </div>
     </div>
   );
 }

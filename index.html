@@ -4,10 +4,81 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Da Music Box</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Michroma&family=Orbitron:wght@700;800&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <title>Da Muzik Box</title>
+    <link rel="stylesheet" href="/styles/da-muzik-boot-splash.css" />
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #050508;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-splash" class="muzik-boot-overlay" aria-live="polite" aria-busy="true">
+        <header class="muzik-boot-header">
+          <h1 class="muzik-boot-gold-title">
+            <span class="muzik-boot-gold-title-line">D A</span>
+            <span class="muzik-boot-gold-title-line">M U Z I K</span>
+            <span class="muzik-boot-gold-title-line muzik-boot-gold-title-line--box">B O X</span>
+          </h1>
+        </header>
+        <div class="muzik-boot-stage">
+        <div class="muzik-boot-cube-wrap">
+          <video
+            class="muzik-boot-cube-video"
+            autoplay
+            loop
+            muted
+            playsinline
+            preload="auto"
+            aria-hidden="true"
+          >
+            <source src="/splash/boot-cube-spin.webm" type="video/webm" />
+            <source src="/splash/boot-cube-spin.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <div class="muzik-boot-load">
+        <div class="muzik-boot-bar-track" aria-hidden="true">
+          <div id="boot-bar-fill" class="muzik-boot-bar-fill" style="width: 0%"></div>
+        </div>
+        <span id="boot-pct" class="muzik-boot-pct">0%</span>
+        <span class="muzik-boot-caption">Starting DA MUZIK BOX...</span>
+        </div>
+        </div>
+        <footer class="muzik-boot-footer" aria-hidden="true">
+          <div class="muzik-boot-footer-meta">
+            <span class="muzik-boot-footer-brand">The Music Box</span>
+            <span class="muzik-boot-footer-dot">·</span>
+            <span class="muzik-boot-footer-gendaw">Gen-DAW</span>
+          </div>
+          <div class="muzik-boot-footer-version">Version 1.4</div>
+        </footer>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var p = 0;
+        var fill = document.getElementById('boot-bar-fill');
+        var pct = document.getElementById('boot-pct');
+        window.__daMuzikBootPct = 0;
+        var id = window.setInterval(function () {
+          if (p >= 26) {
+            window.__daMuzikBootPct = p;
+            window.clearInterval(id);
+            return;
+          }
+          p += 1;
+          window.__daMuzikBootPct = p;
+          if (fill) fill.style.width = p + '%';
+          if (pct) pct.textContent = p + '%';
+        }, 36);
+      })();
+    </script>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>

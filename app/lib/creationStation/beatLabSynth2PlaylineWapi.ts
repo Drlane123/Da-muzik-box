@@ -62,6 +62,34 @@ export function beatLabSynth2BeatFromPlaylineWapiAnim(
   return (phaseMs / d) * Math.max(1e-9, seg.totalBeats);
 }
 
+/** Infinite WAAPI cycle edge — mirrors {@link grooveLabPlaylineWapiLoopWrapped}. */
+export function beatLabSynth2PlaylineWapiLoopWrapped(
+  anim: Animation | null,
+  prevPhaseMsRef: MutableRefObject<number>,
+  cycleSeenRef: MutableRefObject<number>,
+): boolean {
+  if (!anim) return false;
+  const timing = anim.effect?.getComputedTiming?.() ?? anim.effect?.getTiming?.();
+  const rawDur = timing?.duration;
+  const durMs = typeof rawDur === 'number' ? rawDur : rawDur != null ? Number(rawDur) : NaN;
+  if (!Number.isFinite(durMs) || durMs < 16) return false;
+  const phaseMs = Number(anim.currentTime ?? 0);
+  const prev = prevPhaseMsRef.current;
+  const cycle = Math.floor(phaseMs / durMs);
+  const cycleBumped = cycle > cycleSeenRef.current;
+  const phaseRewind = prev >= 0 && phaseMs < prev - durMs * 0.25;
+  prevPhaseMsRef.current = phaseMs;
+  if (cycleBumped || phaseRewind) {
+    if (phaseRewind && !cycleBumped) {
+      cycleSeenRef.current = Math.max(cycleSeenRef.current, cycle);
+    } else {
+      cycleSeenRef.current = cycle;
+    }
+    return true;
+  }
+  return false;
+}
+
 export function cancelBeatLabSynth2PlaylineWapi(
   refs: BeatLabSynth2PlaylineWapiRefs,
   el: HTMLElement | null,
@@ -80,6 +108,8 @@ export type BeatLabSynth2PlaylineWapiOpts = {
   totalBeats: number;
   quarterCols: number;
   colsPerBar: number;
+  /** Override column width (Piano Roll 16th grid). */
+  quarterCellW?: number;
   immediateCompositorStart?: boolean;
 };
 
@@ -105,7 +135,7 @@ export function launchBeatLabSynth2PlaylineWapi(
   const spb = 60 / Math.max(1, bpm);
   const tb = Math.max(1e-9, totalBeats);
   const durationMs = Math.max(16, tb * spb * 1000);
-  const cellW = beatLabSynthQuarterCellW(colsPerBar);
+  const cellW = o.quarterCellW ?? beatLabSynthQuarterCellW(colsPerBar);
   const xEnd = (qc - 1) * cellW;
   const colF = beatLabSynth2BeatToQuarterColF(beatNow, tb, qc);
   const seekRatio = Math.min(1, Math.max(0, colF / Math.max(qc - 1, 1e-9)));
@@ -155,12 +185,14 @@ export function seekRunningBeatLabSynth2PlaylineWapi(
   seg.seekMs = sm;
 }
 
-export function snapBeatLabSynth2PlaylineStatic(o: Omit<BeatLabSynth2PlaylineWapiOpts, 'play' | 'bpm'>): void {
+export function snapBeatLabSynth2PlaylineStatic(
+  o: Omit<BeatLabSynth2PlaylineWapiOpts, 'play' | 'bpm'>,
+): void {
   const { el, beatNow, totalBeats, quarterCols, colsPerBar } = o;
   if (!el) return;
   el.getAnimations().forEach((a) => a.cancel());
   el.style.removeProperty('will-change');
-  const cellW = beatLabSynthQuarterCellW(colsPerBar);
+  const cellW = o.quarterCellW ?? beatLabSynthQuarterCellW(colsPerBar);
   const colF = beatLabSynth2BeatToQuarterColF(beatNow, totalBeats, quarterCols);
   const x = beatLabSynth2QuarterColFToPx(colF, cellW);
   el.style.transform = `translate3d(${x - PLAYLINE_CENTER_X}px, 0, 0)`;

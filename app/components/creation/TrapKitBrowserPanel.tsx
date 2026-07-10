@@ -7,6 +7,7 @@ import {
   type TrapKitCategory,
 } from '@/app/lib/creationStation/trapKitBrowser';
 import { CREATION_PAD_NAMES } from '@/app/lib/sessionChannelTracks';
+import { BeatLabHelpTip } from '@/app/components/creation/BeatLabHelpHub';
 
 export interface TrapKitBrowserPanelProps {
   open: boolean;
@@ -90,8 +91,9 @@ export function TrapKitBrowserPanel({
             background: 'linear-gradient(180deg, #14120c 0%, #0c0c12 100%)',
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 900, color: '#ffd966', letterSpacing: 0.5 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 900, color: '#ffd966', letterSpacing: 0.5 }}>
             KIT BROWSER
+            <BeatLabHelpTip tab="kits" title="How to use Kit browser" />
           </span>
           <span style={{ fontSize: 10, color: '#8a8a9a', fontWeight: 600 }}>
             {categories.length} folders · {files.length} samples · bank {bankLabel}

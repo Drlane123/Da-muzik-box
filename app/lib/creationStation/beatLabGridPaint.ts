@@ -37,11 +37,17 @@ export function beatLabDrumCellFromPointer(
     laneCount: number;
     patternCols: number;
     colOffset: number;
+    /** When set, Y/X are measured from this content box (handles unified vertical scroll). */
+    contentEl?: HTMLElement | null;
   },
 ): { pad: number; patternCol: number; bankCol: number } | null {
-  const rect = scrollEl.getBoundingClientRect();
-  const localX = clientX - rect.left + scrollEl.scrollLeft;
-  const localY = clientY - rect.top + scrollEl.scrollTop;
+  const contentRect = opts.contentEl?.getBoundingClientRect();
+  const localX = contentRect
+    ? clientX - contentRect.left
+    : clientX - scrollEl.getBoundingClientRect().left + scrollEl.scrollLeft;
+  const localY = contentRect
+    ? clientY - contentRect.top
+    : clientY - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop;
   if (localX < 0 || localY < opts.headerH) return null;
   const patternCol = Math.floor(localX / opts.colWidth);
   const pad = Math.floor((localY - opts.headerH) / opts.rowH);

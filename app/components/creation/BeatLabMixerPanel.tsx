@@ -6,8 +6,9 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 
 import {
-  BEAT_LAB_MELODIC_INSTRUMENT_OPTIONS,
-} from '@/app/lib/creationStation/beatLabMelodicSoundfont';
+  BEAT_PADS_SPREAD_MIXER_CH,
+  clampBeatPadsSpreadMixerChannel,
+} from '@/app/lib/creationStation/beatPadsSpreadTrack';
 import {
   getBeatLabChannelMeterLevels,
   computeBeatLabMainBusStereoVu,
@@ -17,6 +18,7 @@ import {
   GrooveStyleTCapPanFader,
   GrooveStyleTCapVolumeFaderStyles,
 } from '@/app/components/creation/GrooveStyleTCapVolumeFader';
+import { BEAT_LAB_MELODIC_INSTRUMENT_OPTIONS } from '@/app/lib/creationStation/beatLabMelodicSoundfont';
 
 const MIXER_CHANNELS = 32;
 const PAN_STORAGE_KEY = 'beat-lab-channel-pans-v1';
@@ -389,6 +391,12 @@ export type BeatLabMixerPanelProps = {
   /** 0–1 app master output (same as deck master). */
   masterOutputLinear: number;
   onMasterVolumeChange: (linear01: number) => void;
+  /** When true, show MAIN + CH 1–16 pads only (Beat Pads overlay entry). */
+  padsOnly?: boolean;
+  /** Beat Pads Spread track on CH 17–32 — shown in pads-only mixer when active. */
+  spreadTrackActive?: boolean;
+  spreadTrackLabel?: string;
+  spreadTrackMixerChannel?: number;
 };
 
 export function BeatLabMixerPanel({
@@ -401,6 +409,10 @@ export function BeatLabMixerPanel({
   setChannelVolume,
   masterOutputLinear,
   onMasterVolumeChange,
+  padsOnly = false,
+  spreadTrackActive = false,
+  spreadTrackLabel = 'Spread',
+  spreadTrackMixerChannel = BEAT_PADS_SPREAD_MIXER_CH,
 }: BeatLabMixerPanelProps) {
   const [panByCh, setPanByCh] = useState<Record<number, number>>({});
   const mixerMeterRootRef = useRef<HTMLDivElement | null>(null);
@@ -501,6 +513,22 @@ export function BeatLabMixerPanel({
     return rows;
   }, [melodicInstrumentIds, melodicStripLabels, padStripLabels]);
 
+  const visibleStrips = useMemo(() => {
+    if (!padsOnly) return strips;
+    const padRows = strips.filter((row) => row.group === 'pad');
+    if (!spreadTrackActive) return padRows;
+    const ch = clampBeatPadsSpreadMixerChannel(spreadTrackMixerChannel);
+    return [
+      ...padRows,
+      {
+        ch,
+        group: 'synth' as const,
+        title: `CH ${ch}`,
+        subtitle: spreadTrackLabel.slice(0, 18),
+      },
+    ];
+  }, [padsOnly, spreadTrackActive, spreadTrackLabel, spreadTrackMixerChannel, strips]);
+
   if (!open) return null;
 
   return (
@@ -534,7 +562,11 @@ export function BeatLabMixerPanel({
               BEAT LAB MIXER
             </div>
             <div style={{ fontSize: 9, color: '#8a9aa4', marginTop: 2, lineHeight: 1.3 }}>
-              MAIN + 32 channels · stereo VU · CH 1–16 pads · CH 17–32 melodic
+              {padsOnly
+                ? spreadTrackActive
+                  ? 'MAIN + CH 1–16 pads + CH 17 Spread · stereo VU'
+                  : 'MAIN + CH 1–16 sampler pads · stereo VU'
+                : 'MAIN + 32 channels · stereo VU · CH 1–16 pads · CH 17–32 melodic'}
             </div>
           </div>
         </div>
@@ -584,14 +616,14 @@ export function BeatLabMixerPanel({
             }}
             aria-hidden
           />
-          {strips.map((row, idx) => {
+          {visibleStrips.map((row, idx) => {
             const pan = panByCh[row.ch] ?? 0;
             const vol = channelVolumes[row.ch] ?? 80;
             const padAccent = '#7cf4c6';
             const synthAccent = '#00E5FF';
             const accent = row.group === 'pad' ? padAccent : synthAccent;
             const leftDivider =
-              idx === 16 ? (
+              !padsOnly && idx === 16 ? (
                 <div
                   key={`div-${row.ch}`}
                   style={{

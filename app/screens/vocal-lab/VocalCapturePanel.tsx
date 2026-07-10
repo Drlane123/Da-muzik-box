@@ -5,18 +5,36 @@ import WaveformCanvas from './WaveformCanvas';
 interface VocalCapturePanelProps {
   hasAudio: boolean;
   isRecording: boolean;
-  isPlaying: boolean;
+  isPlaying?: boolean;
   recordingTime: number;
   onStartRecord: () => void;
   onStopRecord: () => void;
-  onPlayPause: () => void;
+  onPlayPause?: () => void;
   onDelete: () => void;
   onUpload: (file: File) => void;
+  /** Panel heading — defaults to Vocal Capture. */
+  title?: string;
+  accentColor?: string;
+  /** Hide play/pause (Neural Hum uses its own A/B player). */
+  showPreviewPlay?: boolean;
+  /** Live mic stream for level meters while recording. */
+  meterStream?: MediaStream | null;
 }
 
 export default function VocalCapturePanel({
-  hasAudio, isRecording, isPlaying, recordingTime,
-  onStartRecord, onStopRecord, onPlayPause, onDelete, onUpload,
+  hasAudio,
+  isRecording,
+  isPlaying = false,
+  recordingTime,
+  onStartRecord,
+  onStopRecord,
+  onPlayPause,
+  onDelete,
+  onUpload,
+  title = 'Vocal Capture',
+  accentColor = '#D500F9',
+  showPreviewPlay = true,
+  meterStream = null,
 }: VocalCapturePanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -29,8 +47,8 @@ export default function VocalCapturePanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#D500F9' }}>
-          Vocal Capture
+        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: accentColor }}>
+          {title}
         </span>
         {isRecording && (
           <span className="flex items-center gap-1 text-xs font-mono" style={{ color: '#f44' }}>
@@ -41,7 +59,12 @@ export default function VocalCapturePanel({
       </div>
 
       {/* Waveform */}
-      <WaveformCanvas isRecording={isRecording} hasAudio={hasAudio} accentColor="#D500F9" />
+      <WaveformCanvas
+        isRecording={isRecording}
+        hasAudio={hasAudio}
+        accentColor={accentColor}
+        meterStream={meterStream}
+      />
 
       {/* Controls */}
       <div className="flex items-center gap-2">
@@ -63,7 +86,7 @@ export default function VocalCapturePanel({
           </button>
         )}
 
-        {hasAudio && (
+        {hasAudio && showPreviewPlay && onPlayPause && (
           <>
             <button
               onClick={onPlayPause}
@@ -81,6 +104,16 @@ export default function VocalCapturePanel({
               <Trash2 size={12} />
             </button>
           </>
+        )}
+        {hasAudio && !showPreviewPlay && (
+          <button
+            onClick={onDelete}
+            className="w-7 h-7 flex items-center justify-center rounded"
+            style={{ background: '#1a1a1a', color: '#666' }}
+            title="Clear recording"
+          >
+            <Trash2 size={12} />
+          </button>
         )}
 
         <button

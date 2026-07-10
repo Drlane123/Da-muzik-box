@@ -3,6 +3,7 @@ import { GrooveLabComposerPanel } from '@/app/components/creation/GrooveLabCompo
 import { OrchidBassKeypad } from '@/app/components/creation/OrchidBassKeypad';
 import { WaveLeafSynthPanel, type WaveLeafSynthPanelProps } from '@/app/components/creation/WaveLeafSynthPanel';
 import { OrchidChordStrip } from '@/app/components/creation/OrchidChordStrip';
+import type { GrooveLabMidiToVocalBoxPanelProps } from '@/app/components/creation/GrooveLabMidiToVocalBoxPanel';
 import type { GrooveComposerPart } from '@/app/lib/creationStation/grooveComposerEngine';
 import type { GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
 import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
@@ -220,6 +221,7 @@ export interface OrchidPerformancePanelProps {
   rollHasChordsForExport?: boolean;
   rollHasNotesForExport?: boolean;
   padExportEnabled?: boolean;
+  vocalBox?: GrooveLabMidiToVocalBoxPanelProps | null;
 }
 
 export function OrchidPerformancePanel({
@@ -407,6 +409,7 @@ export function OrchidPerformancePanel({
   rollHasChordsForExport,
   rollHasNotesForExport,
   padExportEnabled,
+  vocalBox,
 }: OrchidPerformancePanelProps) {
   const chordBrand = grooveLabChordLabels(grooveBranding);
   const showMelodyComposer =
@@ -542,6 +545,7 @@ export function OrchidPerformancePanel({
           chordStackNoteCount={chordStackNoteCount}
           onChordOctaveDown={onChordOctaveDown}
           onChordOctaveUp={onChordOctaveUp}
+          vocalBox={vocalBox}
         />
       </div>
       <div

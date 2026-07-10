@@ -58,6 +58,11 @@ import {
 import type { ProProgressionEntry } from '@/app/lib/creationStation/professionalChordProgressions';
 import { ProChordProgressionsPanel } from '@/app/components/creation/ProChordProgressionsPanel';
 import {
+  ChordBassSequencerHelpProvider,
+  ChordBassSequencerHelpTip,
+  useChordBassSequencerHelpContext,
+} from '@/app/components/creation/ChordBassSequencerHelpHub';
+import {
   cancelCreationPlaylineWapi,
   launchCreationPlaylineWapi,
 } from '@/app/lib/creationStation/creationPlaylineWapi';
@@ -2010,14 +2015,14 @@ export default function ChordSequencerScreen({
   const [keyRoot, setKeyRoot] = useState(0);
   const [mode, setMode] = useState<ChordMode>(initialGenre.mode);
   const [genreId, setGenreId] = useState(initialGenre.id);
-  const [voicingComplexity, setVoicingComplexity] = useState<VoicingComplexity>('rich');
+  const [voicingComplexity, setVoicingComplexity] = useState<VoicingComplexity>('pro');
   const [octaveShift, setOctaveShift] = useState(0);
 
   // ── CHORDS MUTE ── lets the user solo the bass line without removing
   // any steps. The chord pads dim visually while muted so it's obvious. ──
   const [chordsMuted, setChordsMuted] = useState(false);
   const [chordVoice, setChordVoice] = useState<ChordVoiceId>('grand');
-  const [proProgressionsOpen, setProProgressionsOpen] = useState(false);
+  const [proProgressionsOpen, setProProgressionsOpen] = useState(true);
   const pendingProLoadRef = useRef<ProProgressionEntry | null>(null);
   const [chordVolume, setChordVolume] = useState(0.82);
 
@@ -2209,7 +2214,6 @@ export default function ChordSequencerScreen({
   const [pendingStepPadIdx, setPendingStepPadIdx] = useState<number | null>(null);
 
   const [showChordOptionPanel, setShowChordOptionPanel] = useState(true);
-  const [showHowTo, setShowHowTo] = useState(false);
   const [panelOptionMode, setPanelOptionMode] = useState<PanelOptionMode>('open');
   const [selectedOptionId, setSelectedOptionId] = useState<string>('');
   const [followNextSlot, setFollowNextSlot] = useState(true);
@@ -3951,6 +3955,7 @@ export default function ChordSequencerScreen({
   }, [playing]);
 
   return (
+    <ChordBassSequencerHelpProvider active={isScreenActive !== false} autoIntro>
     <div
       style={{
         display: 'flex',
@@ -3968,8 +3973,9 @@ export default function ChordSequencerScreen({
             <X size={12} />
           </button>
         )}
-        <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.08em', color: '#f0f0f0' }}>
+        <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.08em', color: '#f0f0f0', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           CHORD<span style={{ color: '#67e8f9', margin: '0 3px' }}>/</span>BASS SEQUENCER
+          <ChordBassSequencerHelpTip tab="overview" title="Standard chord step sequencer" />
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 8 }}>
@@ -3979,19 +3985,21 @@ export default function ChordSequencerScreen({
         </div>
 
         <button onClick={() => { setCurrentStep(-1); nextIdxRef.current = 0; }} style={{ marginLeft: 6, background: '#111', color: '#777', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}><SkipBack size={12} /></button>
-        <button
-          onClick={playing ? stopPlayback : startPlayback}
-          style={{ background: playing ? '#16a34a' : '#171717', color: playing ? '#fff' : '#9a9a9a', border: '1px solid #2c2c2c', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800 }}
-        >
-          {playing ? <Square size={12} /> : <Play size={12} />}
-          {playing ? 'STOP' : 'PLAY'}
-        </button>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <button
+            onClick={playing ? stopPlayback : startPlayback}
+            style={{ background: playing ? '#16a34a' : '#171717', color: playing ? '#fff' : '#9a9a9a', border: '1px solid #2c2c2c', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800 }}
+          >
+            {playing ? <Square size={12} /> : <Play size={12} />}
+            {playing ? 'STOP' : 'PLAY'}
+          </button>
+          <ChordBassSequencerHelpTip tab="transport" title="Play, tempo & mute" />
+        </span>
 
-        <button onClick={() => setShowHowTo((v) => !v)} style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 6, padding: '5px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800 }}>
-          <HelpCircle size={12} /> HOW TO
-        </button>
+        <ChordBassSeqHowToBtn />
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <ChordBassSequencerHelpTip tab="export" title="Export, MIDI & 808 help" />
           {/* ── MIDI OUT picker ── routes the live sequencer to an external
               MIDI device / virtual MIDI port. "OFF" means everything still
               plays through the in-app synth only. */}
@@ -4071,18 +4079,6 @@ export default function ChordSequencerScreen({
           overflow: 'hidden',
         }}
       >
-      {showHowTo && (
-        <div style={{ flexShrink: 0, borderBottom: '1px solid #151515', background: '#070707', padding: '6px 12px', fontSize: 10, color: '#9ca3af' }}>
-          Pick chords above · fill <strong style={{ color: '#86efac' }}>STEPS</strong> · bass row sits on the piano keys below. <br />
-          <span style={{ color: '#86efac', fontWeight: 700 }}>EXPORT:</span>{' '}
-          <strong style={{ color: '#22c55e' }}>EXPORT PAD</strong> bakes the sequence into a chord pad,{' '}
-          <strong style={{ color: '#86efac' }}>💾 EXPORT WAV</strong> downloads it as audio, and{' '}
-          <strong style={{ color: '#fde68a' }}>🎼 EXPORT MIDI</strong> downloads a .mid file with chords on ch 1 and the painted bass line on ch 2.{' '}
-          <span style={{ color: '#67e8f9', fontWeight: 700 }}>MIDI OUT:</span>{' '}
-          pick a device from the dropdown to route live playback to external gear or a DAW (Windows = loopMIDI, macOS = IAC Driver).
-        </div>
-      )}
-
       <div
         style={{
           flex: 1,
@@ -4094,6 +4090,7 @@ export default function ChordSequencerScreen({
         }}
       >
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #111', background: '#050505', flexWrap: 'wrap' }}>
+        <ChordBassSequencerHelpTip tab="chords" title="Key, steps & chord pads" />
         <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>KEY</span>
         {KEY_LABELS.map((k, i) => (
           <button key={k} onClick={() => setKeyRoot(i)} style={{ background: keyRoot === i ? '#112015' : '#111', color: keyRoot === i ? '#22c55e' : '#7a7a7a', border: `1px solid ${keyRoot === i ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 6px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{k}</button>
@@ -4192,6 +4189,7 @@ export default function ChordSequencerScreen({
           >
             <Sparkles size={10} style={{ display: 'inline', verticalAlign: -1, marginRight: 3 }} />
             CHORD PROGRESSIONS
+            <ChordBassSequencerHelpTip tab="chords" title="Pro chord progressions" />
           </button>
         </div>
 
@@ -4200,11 +4198,15 @@ export default function ChordSequencerScreen({
             keyRoot={keyRoot}
             mode={mode}
             onLoad={loadProfessionalProgression}
+            defaultCategoryId="rnb-eras"
           />
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 800 }}>CHORD PADS · {genreProfile.label}</span>
+          <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            CHORD PADS · {genreProfile.label}
+            <ChordBassSequencerHelpTip tab="chords" title="Chord scale pads" />
+          </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <button onClick={() => setShowChordOptionPanel((v) => !v)} style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '3px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
               {showChordOptionPanel ? 'HIDE PANEL' : 'OPEN PANEL'}
@@ -4843,7 +4845,10 @@ export default function ChordSequencerScreen({
             >
               {stepSeqCollapsed ? '▸' : '▾'}
             </button>
-            <span style={{ fontSize: 9, color: '#86efac', fontWeight: 900, letterSpacing: 0.3 }}>STEPS · {stepCount}</span>
+            <span style={{ fontSize: 9, color: '#86efac', fontWeight: 900, letterSpacing: 0.3, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              STEPS · {stepCount}
+              <ChordBassSequencerHelpTip tab="chords" title="Chord step sequencer" />
+            </span>
             {suggestionLabel && (
               <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 800 }}>
                 Loaded: {suggestionLabel}
@@ -5102,10 +5107,11 @@ export default function ChordSequencerScreen({
         {/* Header strip — voice / pattern / octave / volume / preview / sync */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4, flexWrap: 'wrap' }}>
           <span
-            style={{ fontSize: 10, color: '#c4b5fd', fontWeight: 900, letterSpacing: 0.6 }}
+            style={{ fontSize: 10, color: '#c4b5fd', fontWeight: 900, letterSpacing: 0.6, display: 'inline-flex', alignItems: 'center', gap: 4 }}
             title="Patterns = chord-smart grooves (roots, 3rds, 5ths, walk to next chord). You only need the piano roll to hand-draw. Use AUTO-WRITE TO STEPS to paint the line without opening it."
           >
             BASS LINE
+            <ChordBassSequencerHelpTip tab="bass" title="Bass patterns & voices" />
           </span>
           <button
             onClick={() => setBassEnabled((v) => !v)}
@@ -5444,7 +5450,10 @@ export default function ChordSequencerScreen({
             Per-step slots let Verse play one kit and Chorus another with
             zero mid-playback action from the user. ───────────────────── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px 2px', borderTop: '1px dashed #1a1a1a' }}>
-          <span style={{ fontSize: 9, color: '#9ca3af', fontWeight: 900, letterSpacing: 0.3, marginRight: 2 }}>SLOTS</span>
+          <span style={{ fontSize: 9, color: '#9ca3af', fontWeight: 900, letterSpacing: 0.3, marginRight: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            SLOTS
+            <ChordBassSequencerHelpTip tab="slots" title="Bass slot bank A–H" />
+          </span>
           {SLOT_IDS.map((id) => {
             const slot = bassSlots[id];
             const filled = slot != null;
@@ -6306,7 +6315,10 @@ export default function ChordSequencerScreen({
                   operates on it; clicking another step's header in the
                   grid moves focus there. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6, flexShrink: 0 }}>
-                <span style={{ fontSize: 10, fontWeight: 900, color: '#fde68a' }}>🎹 PIANO ROLL</span>
+                <span style={{ fontSize: 10, fontWeight: 900, color: '#fde68a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  🎹 PIANO ROLL
+                  <ChordBassSequencerHelpTip tab="roll" title="Bass piano roll editor" />
+                </span>
                 {pianoRollImmersive ? (
                   <span style={{ fontSize: 8, color: '#5eead4', fontWeight: 900, letterSpacing: 0.5 }}>NEAR-FULLSCREEN</span>
                 ) : null}
@@ -8152,5 +8164,19 @@ export default function ChordSequencerScreen({
         </div>
       )}
     </div>
+    </ChordBassSequencerHelpProvider>
+  );
+}
+
+function ChordBassSeqHowToBtn() {
+  const { openHelp } = useChordBassSequencerHelpContext();
+  return (
+    <button
+      type="button"
+      onClick={() => openHelp('overview')}
+      style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 6, padding: '5px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 800 }}
+    >
+      <HelpCircle size={12} /> HOW TO
+    </button>
   );
 }

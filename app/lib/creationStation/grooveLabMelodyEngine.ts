@@ -15,6 +15,7 @@ import {
   waveLeafChordRootPc,
   waveLeafGreenStackMidisAtSlot,
   waveLeafHarmonyColumnAtSlot,
+  waveLeafLeadMidisFromStackVoicing,
   waveLeafPickFromVoicing,
   type WaveLeafStackRole,
 } from '@/app/lib/creationStation/waveLeafChordLock';
@@ -85,6 +86,133 @@ const MELODY_PHRASES: PhraseStepDef[][] = [
   ],
 ];
 
+/**
+ * OpenBeat Mellodo–style transitional leads — lyrical arcs through the full chord stack
+ * (3rd / 5th / 7th / color), pickups into downbeats, chorus lifts. SE2 Groove Lead default.
+ */
+const TRANSITIONAL_LEAD_PHRASES: PhraseStepDef[][] = [
+  [
+    { barInPhrase: 0, step16: 1, dur16: 2, role: 'step', contour: 'up' },
+    { barInPhrase: 0, step16: 3, dur16: 12, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 2, dur16: 7, role: 'fifth', accent: true, contour: 'up' },
+    { barInPhrase: 1, step16: 11, dur16: 4, role: 'third', contour: 'down' },
+  ],
+  [
+    { barInPhrase: 0, step16: 4, dur16: 11, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 0, dur16: 8, role: 'fifth', contour: 'up' },
+    { barInPhrase: 1, step16: 9, dur16: 6, role: 'seventh', accent: true, contour: 'up' },
+    { barInPhrase: 1, step16: 14, dur16: 2, role: 'resolve', contour: 'down' },
+  ],
+  [
+    { barInPhrase: 0, step16: 6, dur16: 9, role: 'fifth', contour: 'hold' },
+    { barInPhrase: 1, step16: 1, dur16: 13, role: 'third', accent: true, contour: 'hold' },
+  ],
+  [
+    { barInPhrase: 0, step16: 2, dur16: 5, role: 'step', contour: 'up' },
+    { barInPhrase: 0, step16: 8, dur16: 7, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 4, dur16: 6, role: 'fifth', contour: 'up' },
+    { barInPhrase: 1, step16: 12, dur16: 3, role: 'seventh', accent: true, contour: 'up' },
+  ],
+  [
+    { barInPhrase: 0, step16: 5, dur16: 10, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 3, dur16: 5, role: 'step', contour: 'up' },
+    { barInPhrase: 1, step16: 8, dur16: 7, role: 'fifth', accent: true, contour: 'hold' },
+  ],
+  [
+    { barInPhrase: 0, step16: 0, dur16: 4, role: 'third', contour: 'hold' },
+    { barInPhrase: 0, step16: 10, dur16: 5, role: 'fifth', contour: 'up' },
+    { barInPhrase: 1, step16: 2, dur16: 11, role: 'third', accent: true, contour: 'hold' },
+    { barInPhrase: 1, step16: 14, dur16: 2, role: 'color', contour: 'down' },
+  ],
+  [
+    { barInPhrase: 0, step16: 7, dur16: 8, role: 'fifth', contour: 'hold' },
+    { barInPhrase: 1, step16: 0, dur16: 6, role: 'seventh', contour: 'up' },
+    { barInPhrase: 1, step16: 7, dur16: 8, role: 'third', accent: true, contour: 'down' },
+  ],
+  [
+    { barInPhrase: 0, step16: 3, dur16: 12, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 5, dur16: 4, role: 'step', contour: 'up' },
+    { barInPhrase: 1, step16: 10, dur16: 5, role: 'fifth', accent: true, contour: 'up' },
+  ],
+  [
+    { barInPhrase: 0, step16: 9, dur16: 6, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 1, dur16: 8, role: 'fifth', contour: 'up' },
+    { barInPhrase: 1, step16: 11, dur16: 4, role: 'resolve', accent: true, contour: 'down' },
+  ],
+  [
+    { barInPhrase: 0, step16: 4, dur16: 11, role: 'fifth', contour: 'hold' },
+    { barInPhrase: 1, step16: 0, dur16: 5, role: 'third', contour: 'down' },
+    { barInPhrase: 1, step16: 6, dur16: 9, role: 'seventh', accent: true, contour: 'up' },
+  ],
+  [
+    { barInPhrase: 0, step16: 1, dur16: 3, role: 'color', contour: 'up' },
+    { barInPhrase: 0, step16: 6, dur16: 9, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 4, dur16: 11, role: 'fifth', accent: true, contour: 'hold' },
+  ],
+  [
+    { barInPhrase: 0, step16: 8, dur16: 7, role: 'third', contour: 'hold' },
+    { barInPhrase: 1, step16: 2, dur16: 6, role: 'fifth', contour: 'up' },
+    { barInPhrase: 1, step16: 9, dur16: 6, role: 'third', accent: true, contour: 'hold' },
+  ],
+];
+
+/** Mellodo / Moog-sine flow — adjacent pool steps only (±1), optional passing tone. */
+type FlowWalkStepDef = {
+  at: number;
+  len: number;
+  delta: -1 | 0 | 1;
+  pass?: boolean;
+  accent?: boolean;
+};
+
+const MELLODO_LEAD_WALKS: readonly (readonly FlowWalkStepDef[])[] = [
+  [
+    { at: 0.06, len: 0.34, delta: 0, accent: true },
+    { at: 0.44, len: 0.14, delta: 1 },
+    { at: 0.6, len: 0.22, delta: 1, accent: true },
+    { at: 0.84, len: 0.1, delta: -1 },
+  ],
+  [
+    { at: 0.08, len: 0.38, delta: 0, accent: true },
+    { at: 0.5, len: 0.16, delta: 1, pass: true },
+    { at: 0.68, len: 0.2, delta: 0 },
+  ],
+  [
+    { at: 0.05, len: 0.22, delta: 0 },
+    { at: 0.3, len: 0.18, delta: 1, accent: true },
+    { at: 0.52, len: 0.3, delta: 0, accent: true },
+    { at: 0.84, len: 0.12, delta: -1 },
+  ],
+  [
+    { at: 0.1, len: 0.28, delta: 1, accent: true },
+    { at: 0.42, len: 0.2, delta: 0 },
+    { at: 0.66, len: 0.14, delta: -1, pass: true },
+    { at: 0.82, len: 0.12, delta: -1 },
+  ],
+  [
+    { at: 0.04, len: 0.4, delta: 0, accent: true },
+    { at: 0.48, len: 0.18, delta: 1 },
+    { at: 0.7, len: 0.16, delta: 0 },
+  ],
+  [
+    { at: 0.07, len: 0.16, delta: 0 },
+    { at: 0.26, len: 0.14, delta: 1, pass: true },
+    { at: 0.42, len: 0.24, delta: 1, accent: true },
+    { at: 0.7, len: 0.18, delta: 0 },
+  ],
+  [
+    { at: 0.09, len: 0.32, delta: 0, accent: true },
+    { at: 0.45, len: 0.12, delta: -1 },
+    { at: 0.6, len: 0.22, delta: 0 },
+  ],
+  [
+    { at: 0.06, len: 0.2, delta: 1 },
+    { at: 0.3, len: 0.26, delta: 1, accent: true },
+    { at: 0.6, len: 0.2, delta: 0 },
+    { at: 0.82, len: 0.1, delta: -1 },
+  ],
+];
+
 /** Tighter rhythm but still stepwise — embellishes the harmony without random leaps. */
 const RIFF_PHRASES: PhraseStepDef[][] = [
   [
@@ -149,6 +277,10 @@ export type GrooveMelodyGenParams = {
   stackChordTonesOnly?: boolean;
   chordHitsForLock?: readonly GrooveRollHit[];
   stackLockMaxLeap?: number;
+  /** SE2 Groove Lead — Mellodo-style transitional arcs through the chord stack. */
+  leadPhraseMode?: 'standard' | 'transitional';
+  /** Geno B01/B02 — chord-tone walks only (no scale passing tones). */
+  disablePassingTones?: boolean;
 };
 
 function phraseRoleToStackRole(role: PhraseToneRole): WaveLeafStackRole {
@@ -187,7 +319,18 @@ function melodyCandidatesForStep(
 
 function melodyMaxLeap(params: GrooveMelodyGenParams, part: 'melody' | 'riff'): number {
   if (params.stackLockMaxLeap != null) return params.stackLockMaxLeap;
+  if (params.leadPhraseMode === 'transitional') return part === 'melody' ? 6 : 5;
   return part === 'melody' ? 5 : 4;
+}
+
+function phraseLibraryForPart(
+  genParams: GrooveMelodyGenParams,
+  part: 'melody' | 'riff',
+): PhraseStepDef[][] {
+  if (genParams.leadPhraseMode === 'transitional' && part === 'melody') {
+    return TRANSITIONAL_LEAD_PHRASES;
+  }
+  return part === 'melody' ? MELODY_PHRASES : RIFF_PHRASES;
 }
 
 function pickMelodyMidiFromCandidates(
@@ -388,12 +531,17 @@ function emitPhraseBlock(
     prevMidiRef,
     genParams,
   } = params;
-  const library = part === 'melody' ? MELODY_PHRASES : RIFF_PHRASES;
+  const library = phraseLibraryForPart(genParams, part);
   const maxLeap = melodyMaxLeap(genParams, part);
   const idx = phraseIndexForBlock(blockStartBar, params.seed, library.length, rnd);
   let steps = library[idx]!;
 
-  if (complexity > 0.72 && part === 'melody' && rnd() > 0.55) {
+  if (
+    complexity > 0.72
+    && part === 'melody'
+    && genParams.leadPhraseMode !== 'transitional'
+    && rnd() > 0.55
+  ) {
     steps = [
       { barInPhrase: 0, step16: 1, dur16: 2, role: 'color' as const, contour: 'up' as const },
       ...steps,
@@ -420,10 +568,19 @@ function emitPhraseBlock(
     const durSlots = Math.max(snap, Math.round(step.dur16 * STEPS_PER_16TH));
     const sustainSlots =
       part === 'melody'
-        ? Math.max(durSlots, Math.round(durSlots * (1.05 + complexity * 0.15)))
+        ? Math.max(
+            durSlots,
+            Math.round(
+              durSlots
+                * (genParams.leadPhraseMode === 'transitional'
+                  ? 1.12 + complexity * 0.2
+                  : 1.05 + complexity * 0.15),
+            ),
+          )
         : Math.max(snap, durSlots);
 
-    const baseVel = part === 'melody' ? 0.76 : 0.8;
+    const baseVel =
+      genParams.leadPhraseMode === 'transitional' ? 0.82 : part === 'melody' ? 0.76 : 0.8;
     const vel = Math.min(
       0.98,
       baseVel + (step.accent ? 0.1 : 0) + (step.dur16 >= 10 ? 0.06 : 0) + rnd() * 0.08,
@@ -466,6 +623,214 @@ function emitSingleBarCoda(
   });
 }
 
+/** Sorted unique chord tones in lead register (full voicing — voice-leading picks the line). */
+function chordTonePoolForFlow(stackLead: readonly number[]): number[] {
+  const sorted = [...new Set(stackLead.map((m) => grooveLabClampMelodyMidi(m)))].sort((a, b) => a - b);
+  const out: number[] = [];
+  const seenPc = new Set<number>();
+  for (const m of sorted) {
+    const pc = ((m % 12) + 12) % 12;
+    if (seenPc.has(pc)) continue;
+    seenPc.add(pc);
+    out.push(m);
+  }
+  return out.length > 0 ? out : [grooveLabClampMelodyMidi(GROOVE_LAB_MELODY_REFERENCE_MIDI)];
+}
+
+function voiceLeadPoolIndex(pool: readonly number[], prevMidi: number | null): number {
+  if (pool.length === 0) return 0;
+  if (prevMidi == null) return Math.min(1, pool.length - 1);
+  let bestIdx = 0;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < pool.length; i += 1) {
+    const leap = Math.abs(pool[i]! - prevMidi);
+    let score = leap * 2.2;
+    if (leap <= 2) score -= 5;
+    if (leap > 7) score += 14;
+    if (score < bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+function snapMelodyToScale(midi: number, keyRoot: number, mode: ChordMode): number {
+  const scale = scaleSemitones(mode);
+  const rootPc = ((Math.round(keyRoot) % 12) + 12) % 12;
+  const targetPc = ((Math.round(midi) % 12) + 12) % 12;
+  let bestMidi = grooveLabClampMelodyMidi(midi);
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (let oct = -2; oct <= 2; oct += 1) {
+    const base = Math.round(midi) + oct * 12;
+    for (const deg of scale) {
+      const candidate = grooveLabClampMelodyMidi(base - targetPc + rootPc + deg);
+      const dist = Math.abs(candidate - midi);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestMidi = candidate;
+      }
+    }
+  }
+  return bestMidi;
+}
+
+function mellodoPassingToneBetween(
+  fromMidi: number,
+  toMidi: number,
+  keyRoot: number,
+  mode: ChordMode,
+): number | null {
+  const gap = Math.abs(toMidi - fromMidi);
+  if (gap < 3 || gap > 7) return null;
+  const mid = Math.round((fromMidi + toMidi) / 2);
+  const snapped = snapMelodyToScale(mid, keyRoot, mode);
+  const fromPc = ((fromMidi % 12) + 12) % 12;
+  const toPc = ((toMidi % 12) + 12) % 12;
+  const passPc = ((snapped % 12) + 12) % 12;
+  if (passPc === fromPc || passPc === toPc) return null;
+  return snapped;
+}
+
+function extendFluentLeadHit(out: GrooveRollHit[], slot: number, sustainSlots: number, vel: number): void {
+  const last = out[out.length - 1];
+  if (!last) return;
+  const end = Math.max(last.slot + last.sustainSlots, slot + sustainSlots);
+  last.sustainSlots = end - last.slot;
+  last.vel = Math.max(last.vel, vel);
+}
+
+/** Same pitch twice in a row → one longer note (no stutter / pseudo-arpeggio). */
+export function grooveLabMergeFluentLeadHits(hits: readonly GrooveRollHit[]): GrooveRollHit[] {
+  const sorted = [...hits].sort((a, b) => a.slot - b.slot || a.midi - b.midi);
+  const out: GrooveRollHit[] = [];
+  for (const h of sorted) {
+    const last = out[out.length - 1];
+    if (last && last.midi === h.midi) {
+      const end = Math.max(last.slot + last.sustainSlots, h.slot + h.sustainSlots);
+      last.sustainSlots = end - last.slot;
+      last.vel = Math.max(last.vel, h.vel);
+      continue;
+    }
+    out.push({ ...h });
+  }
+  return out;
+}
+
+/**
+ * Mellodo / Moog-sine lead — stepwise through chord voicing, passing tones on weak beats.
+ */
+function generateTransitionalChordWeave(params: GrooveMelodyGenParams): GrooveRollHit[] {
+  const {
+    harmony,
+    barCount,
+    quantize,
+    seed,
+    rates,
+    chordHitsForLock,
+    keyRoot,
+    mode,
+    complexity = 0.5,
+  } = params;
+  if (!chordHitsForLock?.length) return [];
+
+  const rnd = mulberry32(seed ^ 0x6d2b_79f5);
+  const rate = rates?.melody ?? quantize;
+  const snap = Math.max(1, Math.round(slotsPerRate(rate)));
+  const loopEndSlot = barCount * GROOVE_LAB_SLOTS_PER_BAR;
+  const out: GrooveRollHit[] = [];
+  let prevMidi: number | null = null;
+  let poolIdx = 0;
+  const cols = harmony.columns;
+  const passChance = params.disablePassingTones ? 0 : 0.55 + complexity * 0.2;
+
+  for (let ci = 0; ci < cols.length; ci += 1) {
+    const col = cols[ci]!;
+    const chordSlot = col.slot;
+    if (chordSlot >= loopEndSlot) continue;
+
+    const nextSlot = cols[ci + 1]?.slot ?? loopEndSlot;
+    const windowSlots = Math.max(snap * 4, nextSlot - chordSlot);
+    const stack = waveLeafGreenStackMidisAtSlot(chordHitsForLock, chordSlot, col);
+    const pool = chordTonePoolForFlow(waveLeafLeadMidisFromStackVoicing(stack));
+    if (pool.length === 0) continue;
+
+    poolIdx = voiceLeadPoolIndex(pool, prevMidi);
+    prevMidi = pool[poolIdx]!;
+
+    const walkIdx =
+      (seed + ci * 31 + grooveLabBarIndexFromSlot(chordSlot) * 17) % MELLODO_LEAD_WALKS.length;
+    const walk = MELLODO_LEAD_WALKS[walkIdx]!;
+
+    for (const step of walk) {
+      const slot = chordSlot + Math.round(step.at * windowSlots);
+      if (slot >= nextSlot - snap) break;
+
+      let nextIdx = Math.max(0, Math.min(pool.length - 1, poolIdx + step.delta));
+      if (step.delta !== 0 && nextIdx === poolIdx && pool.length > 1) {
+        nextIdx = step.delta > 0
+          ? Math.min(pool.length - 1, poolIdx + 1)
+          : Math.max(0, poolIdx - 1);
+      }
+      const fromMidi = pool[poolIdx]!;
+      const toMidi = pool[nextIdx]!;
+
+      if (
+        step.pass
+        && step.delta !== 0
+        && fromMidi !== toMidi
+        && rnd() < passChance
+      ) {
+        const passMidi = mellodoPassingToneBetween(fromMidi, toMidi, keyRoot, mode);
+        if (passMidi != null) {
+          const passSlot = Math.max(chordSlot, slot - snap);
+          const passDur = Math.max(snap, Math.round(step.len * windowSlots * 0.35));
+          const passVel = 0.62 + rnd() * 0.08;
+          if (out.length === 0 || passSlot - out[out.length - 1]!.slot >= snap) {
+            out.push({
+              slot: passSlot,
+              midi: passMidi,
+              sustainSlots: Math.min(passDur, nextSlot - passSlot),
+              vel: passVel,
+            });
+            prevMidi = passMidi;
+          }
+        }
+      }
+
+      poolIdx = nextIdx;
+      const midi = pool[poolIdx]!;
+      const durSlots = Math.max(
+        snap * (step.accent ? 3 : 2),
+        Math.round(step.len * windowSlots),
+      );
+      const sustainSlots = Math.min(
+        Math.max(durSlots, snap * 2),
+        Math.max(snap * 2, nextSlot - slot),
+      );
+      const vel = step.accent ? 0.84 + rnd() * 0.06 : 0.7 + rnd() * 0.1;
+
+      if (midi === prevMidi) {
+        extendFluentLeadHit(out, slot, sustainSlots, vel);
+        continue;
+      }
+
+      const gapOk = out.length === 0 || slot - out[out.length - 1]!.slot >= snap;
+      if (!gapOk) {
+        extendFluentLeadHit(out, slot, sustainSlots, vel);
+        prevMidi = midi;
+        continue;
+      }
+
+      prevMidi = midi;
+      out.push({ slot, midi, sustainSlots, vel });
+    }
+  }
+
+  const fluent = grooveLabMergeFluentLeadHits(out);
+  return trimSustainsForLegato(fluent, snap, true);
+}
+
 function generateMelodyOrRiff(params: GrooveMelodyGenParams): GrooveRollHit[] {
   const {
     part,
@@ -506,7 +871,11 @@ function generateMelodyOrRiff(params: GrooveMelodyGenParams): GrooveRollHit[] {
     }
   }
 
-  return trimSustainsForLegato(out, snap, false);
+  return trimSustainsForLegato(
+    out,
+    snap,
+    params.leadPhraseMode === 'transitional',
+  );
 }
 
 function grooveLabBarIndexFromSlot(slot: number): number {
@@ -528,7 +897,8 @@ function generateSimpleMelody(params: GrooveMelodyGenParams): GrooveRollHit[] {
     if (barStart >= barCount * GROOVE_LAB_SLOTS_PER_BAR) continue;
 
     const slot = col.slot + Math.round((1 + rnd() * 2) * STEPS_PER_16TH);
-    const role: PhraseToneRole = i % 2 === 1 ? 'fifth' : 'third';
+    const roleCycle: PhraseToneRole[] = ['third', 'fifth', 'seventh', 'fifth', 'third', 'color'];
+    const role = roleCycle[i % roleCycle.length]!;
     const candidates = melodyCandidatesForStep(params, col, slot, role, prevMidi);
     const midi = pickVoiceLed(candidates, prevMidi, {
       maxLeap: 5,
@@ -599,14 +969,15 @@ function generateArp(params: GrooveMelodyGenParams): GrooveRollHit[] {
 
   for (let bar = 0; bar < barCount; bar += 1) {
     const barStart = bar * GROOVE_LAB_SLOTS_PER_BAR;
+    const col = params.stackChordTonesOnly
+      ? waveLeafHarmonyColumnAtSlot(harmony, barStart)
+      : grooveMelodyColumnAtBar(harmony, bar);
+    const anchorSlot = params.stackChordTonesOnly ? col.slot : barStart;
     const count = Math.min(arpPattern.length, 2 + Math.round(complexity * 2));
 
     for (let i = 0; i < count; i += 1) {
       const role = arpPattern[i]!;
-      const slot = barStart + Math.round(stepStarts[i]! * STEPS_PER_16TH);
-      const col = params.stackChordTonesOnly
-        ? waveLeafHarmonyColumnAtSlot(harmony, slot)
-        : grooveMelodyColumnAtBar(harmony, bar);
+      const slot = anchorSlot + Math.round(stepStarts[i]! * STEPS_PER_16TH);
       const candidates = melodyCandidatesForStep(params, col, slot, role, prevMidi);
       const midi = pickMelodyMidiFromCandidates(params, candidates, prevMidi, {
         maxLeap: melodyMaxLeap(params, 'melody'),
@@ -628,6 +999,7 @@ export function generateGrooveMelodyPart(params: GrooveMelodyGenParams): GrooveR
   if (params.harmony.columns.length === 0) return [];
   switch (params.part) {
     case 'melody':
+      if (params.leadPhraseMode === 'transitional') return generateTransitionalChordWeave(params);
       if (params.melodyGridEnabled === false) return generateSimpleMelody(params);
       return generateMelodyOrRiff(params);
     case 'riff':

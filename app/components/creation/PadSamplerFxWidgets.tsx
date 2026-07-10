@@ -30,6 +30,10 @@ type VerticalFaderProps = {
   format: (v: number) => string;
   accent: string;
   disabled?: boolean;
+  /** Default 112 — FX Suite uses ~72 for tighter layout */
+  faderHeight?: number;
+  /** Mikron-style Rajdhani lettering (FX Suite panel). */
+  suiteTypography?: boolean;
 };
 
 export function PadFxVerticalFader({
@@ -42,23 +46,32 @@ export function PadFxVerticalFader({
   format,
   accent,
   disabled,
+  faderHeight = 112,
+  suiteTypography = false,
 }: VerticalFaderProps) {
+  const compact = faderHeight < 100;
+  /** FX Suite rows pack many faders — drop negative margins so lanes don't overlap. */
+  const isolatedLane = compact || suiteTypography;
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 4,
+        gap: compact ? 2 : 4,
         opacity: disabled ? 0.45 : 1,
         touchAction: 'none',
+        ...(isolatedLane
+          ? { minWidth: 50, paddingLeft: 6, paddingRight: 6, flexShrink: 0 }
+          : null),
       }}
     >
       <span
+        className={suiteTypography ? 'suite-type-value' : undefined}
         style={{
-          fontSize: 11,
-          fontWeight: 800,
-          color: '#ddd6fe',
+          fontSize: compact ? 9 : 11,
+          fontWeight: suiteTypography ? 600 : 800,
+          color: suiteTypography ? '#c8d4dc' : '#ddd6fe',
           fontVariantNumeric: 'tabular-nums',
         }}
       >
@@ -72,18 +85,24 @@ export function PadFxVerticalFader({
         onChange={onChange}
         accent={accent}
         ariaLabel={label}
-        height={112}
+        height={faderHeight}
         disabled={disabled}
+        style={
+          isolatedLane
+            ? { marginLeft: 0, marginRight: 0, paddingLeft: 6, paddingRight: 6 }
+            : undefined
+        }
       />
       <span
+        className={suiteTypography ? 'suite-type-label' : undefined}
         style={{
-          fontSize: 10,
-          color: '#c4b5fd',
-          fontWeight: 900,
-          letterSpacing: 0.35,
+          fontSize: compact ? 8 : 10,
+          color: suiteTypography ? '#8a96a8' : '#c4b5fd',
+          fontWeight: suiteTypography ? 500 : 900,
+          letterSpacing: suiteTypography ? '0.16em' : 0.35,
           textAlign: 'center',
           maxWidth: 52,
-          lineHeight: 1.15,
+          lineHeight: 1.1,
         }}
       >
         {label}
@@ -521,19 +540,42 @@ export function PadFxInteractiveGraphicEq({
             </g>
           );
         })}
-        <text x={12} y={h - 5} fill="#94a3b8" fontSize={8} fontWeight={800}>
+        <text
+          x={12}
+          y={h - 4}
+          fill="#e8eef8"
+          fontSize={11}
+          fontWeight={900}
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+        >
           20Hz
         </text>
-        <text x={w / 2 - 12} y={h - 5} fill="#94a3b8" fontSize={8} fontWeight={800}>
-          1k
+        <text
+          x={w / 2}
+          y={h - 4}
+          textAnchor="middle"
+          fill="#e8eef8"
+          fontSize={11}
+          fontWeight={900}
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+        >
+          1K
         </text>
-        <text x={w - 42} y={h - 5} fill="#94a3b8" fontSize={8} fontWeight={800}>
-          20k
+        <text
+          x={w - 12}
+          y={h - 4}
+          textAnchor="end"
+          fill="#e8eef8"
+          fontSize={11}
+          fontWeight={900}
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}
+        >
+          20K
         </text>
-        <text x={12} y={14} fill="#a5b4fc" fontSize={8} fontWeight={900}>
+        <text x={12} y={14} fill="#c4b5fd" fontSize={10} fontWeight={900}>
           +12dB
         </text>
-        <text x={12} y={zeroY + 1} fill="#7cf4c6" fontSize={8} fontWeight={900} opacity={0.9}>
+        <text x={12} y={zeroY + 1} fill="#7cf4c6" fontSize={10} fontWeight={900} opacity={0.95}>
           0dB
         </text>
       </svg>

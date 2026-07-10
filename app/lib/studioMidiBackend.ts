@@ -116,8 +116,113 @@ export function studioCreateMidiPreviewBus(ctx: AudioContext, linearGain = 0.32)
   return g;
 }
 
+export function se2WrapBeatInLoop(
+  beat: number,
+  loopOn: boolean,
+  loopStart: number,
+  loopEnd: number,
+): number {
+  if (!loopOn || loopEnd <= loopStart) return beat;
+  const span = loopEnd - loopStart;
+  return loopStart + (((beat - loopStart) % span) + span) % span;
+}
+
 export function studioMidiPreviewScheduleKey(trackId: string, noteIndex: number, startBeat: number): string {
   return `${trackId}:${noteIndex}:${startBeat}`;
+}
+
+/** Non-looping / one-shot preview note. */
+export function studioMidiPreviewScheduleKeyOccurrence(
+  trackId: string,
+  noteIndex: number,
+  occurrenceBeat: number,
+): string {
+  return `${trackId}:${noteIndex}:b${occurrenceBeat.toFixed(4)}`;
+}
+
+/** One WAAPI loop lap — dedupe per note offset + repeat index inside the lap. */
+export function studioMidiPreviewScheduleKeyLoopLap(
+  loopLap: number,
+  trackId: string,
+  noteIndex: number,
+  noteOffsetInLoop: number,
+  repeatInLap: number,
+): string {
+  return `lap${loopLap}:${trackId}:${noteIndex}:o${noteOffsetInLoop.toFixed(4)}:r${repeatInLap}`;
+}
+
+export function studioMidiPreviewPurgeLoopLapKeys(scheduled: Set<string>, lapIndex: number): void {
+  const prefix = `lap${lapIndex}:`;
+  for (const key of [...scheduled]) {
+    if (key.startsWith(prefix)) scheduled.delete(key);
+  }
+}
+
+/**
+ * Loop-region notes: every repeat whose wrapped onset falls in the lookahead window.
+ */
+export function studioMidiPreviewLoopOccurrences(args: {
+  noteStartBeat: number;
+  noteDurationBeats: number;
+  originBeat: number;
+  sessionStart: number;
+  spb: number;
+  ctSnap: number;
+  horizon: number;
+  loopOn: boolean;
+  loopStartBeat: number;
+  loopEndBeat: number;
+}): { occurrenceBeat: number; tOn: number; repeatInLap: number }[] {
+  const {
+    noteStartBeat,
+    noteDurationBeats,
+    originBeat,
+    sessionStart,
+    spb,
+    ctSnap,
+    horizon,
+    loopOn,
+    loopStartBeat,
+    loopEndBeat,
+  } = args;
+  const dur = Math.max(0.04, noteDurationBeats * spb);
+  const loopCatchUpSec = 0.15;
+  const pastCutoff = ctSnap - (loopOn ? loopCatchUpSec : 0.02);
+  const loopSpan = loopEndBeat - loopStartBeat;
+
+  if (loopOn && loopSpan > 1e-6 && noteStartBeat >= loopStartBeat && noteStartBeat < loopEndBeat) {
+    const noteOffset = noteStartBeat - loopStartBeat;
+    const out: { occurrenceBeat: number; tOn: number; repeatInLap: number }[] = [];
+    const beatNow =
+      sessionStart > 0 ? originBeat + Math.max(0, ctSnap - sessionStart) / spb : loopStartBeat;
+    let repeatInLap = Math.max(
+      0,
+      Math.floor((beatNow - loopStartBeat - noteOffset) / loopSpan + 1e-9),
+    );
+    const maxRepeatInLap = 512;
+    while (repeatInLap < maxRepeatInLap) {
+      const occurrenceBeat = loopStartBeat + noteOffset + repeatInLap * loopSpan;
+      if (occurrenceBeat >= loopEndBeat - 1e-6) {
+        repeatInLap += 1;
+        continue;
+      }
+      const tOn = sessionStart + (occurrenceBeat - originBeat) * spb;
+      if (tOn > horizon + 1e-6) break;
+      const schedulable =
+        tOn + dur >= pastCutoff ||
+        tOn >= ctSnap - loopCatchUpSec ||
+        (noteOffset < 1e-6 && repeatInLap === Math.max(0, Math.floor((beatNow - loopStartBeat) / loopSpan + 1e-9)));
+      if (schedulable) out.push({ occurrenceBeat, tOn, repeatInLap });
+      repeatInLap += 1;
+    }
+    return out;
+  }
+
+  const tOn = sessionStart + (noteStartBeat - originBeat) * spb;
+  if (tOn + dur >= pastCutoff && tOn <= horizon + 1e-6) {
+    return [{ occurrenceBeat: noteStartBeat, tOn, repeatInLap: 0 }];
+  }
+  return [];
 }
 
 export type StudioMidiPreviewRefillInput = {
@@ -154,6 +259,10 @@ export function studioRefillMidiPreviewLookahead(input: StudioMidiPreviewRefillI
       const tOff = tOn + dur;
       if (tOff < ctSnap - 0.02) {
         scheduled.delete(key);
+        continue;
+      }
+      if (tOn < ctSnap - 0.03) {
+        scheduled.add(key);
         continue;
       }
       if (tOn > horizon) continue;

@@ -104,12 +104,12 @@ function base64ToUint8(b64: string): Uint8Array {
   return out;
 }
 
-async function audioBufferToWavBase64(buf: AudioBuffer): Promise<string> {
+export async function audioBufferToWavBase64(buf: AudioBuffer): Promise<string> {
   const ab = encodeWavFromAudioBuffer(buf);
   return uint8ToBase64(new Uint8Array(ab));
 }
 
-async function wavBase64ToAudioBuffer(b64: string, ctx: AudioContext): Promise<AudioBuffer> {
+export async function wavBase64ToAudioBuffer(b64: string, ctx: AudioContext): Promise<AudioBuffer> {
   const bytes = base64ToUint8(b64);
   const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   return ctx.decodeAudioData(copy);

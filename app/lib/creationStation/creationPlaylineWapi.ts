@@ -128,7 +128,7 @@ function resolvePlaylineWapiRefs(refs: CreationPlaylineWapiRefs): {
 }
 
 /** SE2 `launchWapiAnims` — seed loop-wrap detect so frame 0 does not false-trigger splice. */
-function seedCreationPlaylineWapiLoopDetect(
+export function seedCreationPlaylineWapiLoopDetect(
   refs: CreationPlaylineWapiRefs,
   useLoopSegment: boolean,
   seekMs: number,
@@ -164,7 +164,7 @@ export function beatFromCreationPlaylineWapiAnim(
       Math.max(seg.loopStartBeat, seg.loopStartBeat + (t / d) * span),
     );
   }
-  /** Open full-span — Groove / NEW SYNTH style phase wrap (infinite WAAPI iterations). */
+  /** Open full-span — Beat Lab repeats pattern in the step scheduler; phase-wrap matches infinite WAAPI. */
   const totalBeats = Math.max(1e-9, seg.periodBeats);
   const d = Math.max(1e-9, seg.durMs);
   const phaseMs = ((animMs % d) + d) % d;
@@ -184,8 +184,7 @@ export function seekRunningCreationPlaylineWapi(
   if (seg.active && seg.seamlessLoop) {
     const ls = seg.loopStartBeat;
     const le = seg.loopEndBeat;
-    const endBeat = Math.max(ls + 1e-9, le - 1e-6);
-    const bn = Math.min(Math.max(beatNow, ls), endBeat);
+    const bn = Math.min(Math.max(beatNow, ls), le);
     seekMs = Math.max(0, Math.min(((bn - ls) / spb) * 1000, seg.durMs));
   } else if (seg.active) {
     seekMs = Math.max(0, Math.min(seg.durMs, ((beatNow - seg.loopStartBeat) / spb) * 1000));
@@ -366,11 +365,10 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
 
   if (useLoopSegment) {
     const lsLoop = o.loopStartBeat;
-    const leLoop = o.loopEndBeat;
+    const leLoop = Math.min(o.loopEndBeat, totalBeatsOpen);
     const spanBeats = Math.max(1e-9, leLoop - lsLoop);
     const durMs = Math.max(16, (spanBeats / (bpm / 60)) * 1000);
-    const endBeat = Math.max(lsLoop + 1e-9, leLoop - 1e-6);
-    const bn = Math.min(Math.max(beatNow, lsLoop), endBeat);
+    const bn = Math.min(Math.max(beatNow, lsLoop), leLoop);
     const seekMs = Math.max(0, Math.min(((bn - lsLoop) / Math.max(1e-9, bpm / 60)) * 1000, durMs));
     wapiSegStateRef.current = {
       active: true,
@@ -383,9 +381,9 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
       seekMs,
     };
     const x0d = creationPlaylineColFAndPx(lsLoop, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
-    let x1d = creationPlaylineColFAndPx(endBeat, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
+    let x1d = creationPlaylineColFAndPx(leLoop, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
     const x0p = creationPlaylineColFAndPx(lsLoop, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).pianoX;
-    let x1p = creationPlaylineColFAndPx(endBeat, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).pianoX;
+    let x1p = creationPlaylineColFAndPx(leLoop, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).pianoX;
     if (Math.abs(x1d - x0d) < 0.5) {
       const midB = lsLoop + spanBeats * 0.5;
       x1d = creationPlaylineColFAndPx(midB, sub, pc, true, lsLoop, leLoop, o.playMode, cw, pcw).drumX;
@@ -413,10 +411,10 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
   }
 
   /**
-   * Open pattern — one period duration, infinite compositor iterations (NEW SYNTH / Groove contract).
-   * Avoids `finished` playState stalling the line while audio/metro keep running.
+   * Open pattern — infinite compositor phase while playing so the playhead keeps moving;
+   * step scheduler modulo handles repeating drum hits; loop brace uses seamless segment above.
    */
-  const totalBeats = Math.max(1e-9, o.totalBeats ?? pc / sub);
+  const totalBeats = totalBeatsOpen;
   const durMs = Math.max(16, totalBeats * spb * 1000);
   const seekMs = Math.max(0, Math.min(beatNow * spb * 1000, durMs));
   const x0d = creationPlaylineColFAndPx(0, sub, pc, o.loopOn, o.loopStartBeat, o.loopEndBeat, o.playMode, cw, pcw).drumX;
@@ -433,8 +431,9 @@ export function launchCreationPlaylineWapi(refs: CreationPlaylineWapiRefs, o: Cr
     beatAtLaunch: beatNow,
     seekMs,
   };
-  const iters = Number.POSITIVE_INFINITY;
-  seedCreationPlaylineWapiLoopDetect(refs, false, seekMs, durMs);
+  const useOpenRepeat = play && !useLoopSegment;
+  const iters = useLoopSegment || useOpenRepeat ? Number.POSITIVE_INFINITY : 1;
+  seedCreationPlaylineWapiLoopDetect(refs, useLoopSegment || useOpenRepeat, seekMs, durMs);
 
   refs.drumAnimRef.current = makeAnimSeg(drumEl, x0d, x1d, durMs, seekMs, iters, CREATION_DRUM_PLAYLINE_CENTER_X);
   refs.pianoAnimRef.current = makeAnimSeg(pianoEl, x0p, x1p, durMs, seekMs, iters, CREATION_PIANO_PLAYLINE_CENTER_X);

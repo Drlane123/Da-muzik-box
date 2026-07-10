@@ -6,6 +6,14 @@ import {
   CHORD_BASS_SEQ_CHANNEL_BASE,
   CHORD_BASS_SEQ_CHANNEL_COUNT,
 } from '@/app/lib/creationStation/chordBassSequencerSession';
+import {
+  grooveLabChannelAudible,
+  isGrooveLabChannelMuted,
+} from '@/app/lib/creationStation/grooveLabChannelMuteSolo';
+import {
+  grooveLabChannelVol127,
+  mixerVolToLinearGain,
+} from '@/app/lib/studio/se2MixerFaderScale';
 
 const CHANNEL_FIRST = CHORD_BASS_SEQ_CHANNEL_BASE;
 const CHANNEL_LAST = CHORD_BASS_SEQ_CHANNEL_BASE + CHORD_BASS_SEQ_CHANNEL_COUNT - 1;
@@ -54,11 +62,30 @@ function bumpChannel(ch: number, monoPeak: number, panSigned: number): void {
   row.r = Math.max(row.r, peak * wr);
 }
 
+/** Strip fader only — drives live CH 33–48 bus gain (mute/solo gates scheduling separately). */
+export function grooveLabChannelFaderGain(
+  ch: number,
+  channelVolumes: Record<number, number> | undefined,
+): number {
+  return mixerVolToLinearGain(grooveLabChannelVol127(channelVolumes?.[ch]));
+}
+
 export function grooveLabChannelVolumeGain(
   ch: number,
   channelVolumes: Record<number, number> | undefined,
 ): number {
-  return Math.max(0, Math.min(1, (channelVolumes?.[ch] ?? 80) / 100));
+  if (!grooveLabChannelAudible(ch)) return 0;
+  return grooveLabChannelFaderGain(ch, channelVolumes);
+}
+
+/** Transport + meters — blocked when muted, solo-law silenced, or fader at floor. */
+export function grooveLabChannelTransportOpen(
+  ch: number,
+  channelVolumes: Record<number, number> | undefined,
+): boolean {
+  if (isGrooveLabChannelMuted(ch)) return false;
+  if (!grooveLabChannelAudible(ch)) return false;
+  return grooveLabChannelFaderGain(ch, channelVolumes) > 0.001;
 }
 
 export function grooveLabMeterPeakFromVelocity(

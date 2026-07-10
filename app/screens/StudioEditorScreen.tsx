@@ -1,4 +1,4 @@
-﻿import {
+import {
   useState,
   useRef,
   useEffect,
@@ -1672,7 +1672,7 @@ export default function StudioEditorScreen({
     },
     onZoomIn: () => setGlobalZoom(Math.min(4, globalZoom + 0.2)),
     onZoomOut: () => setGlobalZoom(Math.max(0.2, globalZoom - 0.2)),
-  }, isStudioScreenActive);
+  }, isStudioScreenActive && settings.keyboardShortcutsEnabled);
 
   const [draggingClip, setDraggingClip] = useState<{ trackId: number; clipId: number } | null>(null);
   const dragStartContentXRef = useRef(0);
@@ -4831,10 +4831,11 @@ export default function StudioEditorScreen({
               {tracks.map(track => {
                 const sessionCh = mixerRoutingChannel(track);
                 const chLab = sessionChDisplayLabel(track, audioTrackDupCounts, displayChannelMap);
-                const isPlaying = false;
-                const volLevel = (channelVolumes[sessionCh] ?? track.volume) / 100;
-                const rmsLevel = isPlaying ? Math.min(1, (channelLevels[sessionCh] ?? 0) * volLevel) : 0;
-                const peakLevel = isPlaying ? Math.min(1, rmsLevel * 1.25) : 0;
+                const rawLevel = channelLevels[sessionCh] ?? 0;
+                const rmsLevel = isTransportRunning
+                  ? Math.min(1, rawLevel)
+                  : Math.min(1, rawLevel * 0.92);
+                const peakLevel = Math.min(1, rmsLevel * 1.25);
                 const pan = trackPans[track.id] ?? 0;
                 const panNorm = Math.max(-1, Math.min(1, pan / 100));
                 const stereoMode = getTrackStereoMode(track);

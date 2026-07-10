@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useMidiInputRoute } from '@/app/hooks/useMidiInputRoute';
+import { MIDI_INPUT_ROUTES } from '@/app/lib/midi/midiInputBus';
 import { Pause, Play, SkipBack, Square } from 'lucide-react';
 import type { ChordMode, ChordSymbol } from '@/app/lib/creationStation/chordBuilder';
 import {
@@ -154,6 +156,10 @@ import EightZeroEightLabDrumMachine, {
   type Lab808DeckTransportState,
   type Lab808DrumTransportHandle,
 } from '@/app/screens/EightZeroEightLabDrumMachine';
+import {
+  Lab808HelpProvider,
+  Lab808HelpTip,
+} from '@/app/components/creation/Lab808HelpHub';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
@@ -467,6 +473,8 @@ export default function EightZeroEightTab({
   const labStripBpm = sync?.bpm ?? fallbackBpm;
   const linkedToGrooveLab =
     transportMirror === 'groove-lab' || followGrooveLabSession === true;
+  const linkedToGrooveLabRef = useRef(linkedToGrooveLab);
+  linkedToGrooveLabRef.current = linkedToGrooveLab;
 
   const apply808Sync = useCallback(() => {
     if (bpmSyncTarget === '808-internal' && !followGrooveLabSession) {
@@ -574,11 +582,11 @@ export default function EightZeroEightTab({
     try {
       if (action === 'play') {
         transport808FiredRef.current.clear();
-        if (followGrooveLabSessionRef.current) {
+        if (labDeckTransportRef.current !== 'playing') deck.transportTogglePlayPause();
+        if (linkedToGrooveLabRef.current) {
           const ctx = getAudioContext();
           if (ctx) primeGrooveLinkedRootsRef.current(ctx);
         }
-        if (labDeckTransportRef.current !== 'playing') deck.transportTogglePlayPause();
       } else if (action === 'pause') {
         if (labDeckTransportRef.current === 'playing') deck.transportTogglePlayPause();
       } else if (action === 'stop') {
@@ -989,7 +997,7 @@ export default function EightZeroEightTab({
         ctx,
         ctSnap,
         loopBeats: lab808LoopBeatsRef.current,
-        useGrooveClock: followGrooveLabSessionRef.current,
+        useGrooveClock: linkedToGrooveLabRef.current,
         lockedRoots: useRoots ? roots : [],
         manualNotes: useRoots ? [] : manual,
         firedKeys: transport808FiredRef.current,
@@ -1274,6 +1282,14 @@ export default function EightZeroEightTab({
     },
     [playHit, soundLane, noteIdForRootIndex],
   );
+
+  useMidiInputRoute(MIDI_INPUT_ROUTES.lab808, {
+    enabled: isScreenActive !== false,
+    onNoteOn: (e) => {
+      if (e.channel === 9) return;
+      playTonePad(e.note, Math.max(0.05, Math.min(1, e.velocity / 127)));
+    },
+  });
 
   const playProgression = useCallback(() => {
     if (!toneAudible) return;
@@ -1834,6 +1850,7 @@ export default function EightZeroEightTab({
   }, [beatAtClientXY, newManualNoteId, playHit, pasteToneRollClipboardAt]);
 
   return (
+    <Lab808HelpProvider active={isScreenActive !== false} autoIntro>
     <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: CB_PIANO_BG, color: '#d0d0d0', fontFamily: "'Inter', system-ui, sans-serif" }}>
       <div
         style={{
@@ -1914,7 +1931,10 @@ export default function EightZeroEightTab({
               <div style={{ fontSize: 11, fontWeight: 800, color: '#8a8a98', padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.30)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 6, letterSpacing: '0.06em' }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, width: '100%' }}>
                 <span style={{ flex: '1 1 140px', minWidth: 0, lineHeight: 1.35 }}>
-                  <span style={{ color: CB_PIANO_MINT }}>808 Kick / Bass roll</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ color: CB_PIANO_MINT }}>808 Kick / Bass roll</span>
+                    <Lab808HelpTip tab="roll" title="Kick / Bass piano roll help" />
+                  </span>
                   {' · '}
                   {nSemitones} keys · {rollRows[nSemitones - 1]}–{rollRows[0]}
                   {import808Hint ? (
@@ -1958,6 +1978,7 @@ export default function EightZeroEightTab({
                   >
                     {labDeckTransport === 'playing' ? <Pause size={LAB808_ROLL_TRANSPORT_ICON} fill="currentColor" /> : <Play size={LAB808_ROLL_TRANSPORT_ICON} fill="currentColor" />}
                   </button>
+                  <Lab808HelpTip tab="transport" title="Transport & tempo help" />
                   {sync?.blocks?.length ? (
                     <button
                       type="button"
@@ -2163,7 +2184,8 @@ export default function EightZeroEightTab({
                   <input type="range" min={0} max={8000} step={10} value={lab808HpHz < 25 ? 0 : lab808HpHz} onChange={(e) => { const v = +e.target.value; setLab808HpHz(v < 25 ? 0 : v); }} style={{ ...lab808FilterRangeStyle('#7cf4c6'), width: 72, height: 4 }} title="High-pass filter" />
                   <span style={lab808RollFxLabel}>LP</span>
                   <input type="range" min={200} max={20000} step={50} value={lab808LpHz >= 200 && lab808LpHz < 19900 ? lab808LpHz : 20000} onChange={(e) => { const v = +e.target.value; setLab808LpHz(v >= 19900 ? 0 : v); }} style={{ ...lab808FilterRangeStyle('#7cf4c6'), width: 72, height: 4 }} title="Low-pass filter" />
-                  <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                  <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Lab808HelpTip tab="export" title="Save & send 808 help" />
                     <GrooveLabExportStrip
                       toolbarInline
                       showExportLabel
@@ -2647,8 +2669,10 @@ export default function EightZeroEightTab({
         >
         <EightZeroEightLabDrumMachine
           ref={lab808DeckTransportRef}
-          active={isScreenActive !== false || linkedToGrooveLab}
-          transportKeepAlive={padDeckBank === 'tone' || linkedToGrooveLab}
+          active={isScreenActive !== false || linkedToGrooveLab || sessionPlayLinked}
+          transportKeepAlive={
+            padDeckBank === 'tone' || linkedToGrooveLab || sessionPlayLinked
+          }
           sequencerVisible={padDeckBank === 'drums'}
           embeddedIn808Lab
           masterLevel={drumEffectiveLevel}
@@ -2661,7 +2685,7 @@ export default function EightZeroEightTab({
           onRefillLockedRoots={refillLockedRootsOnTransport}
           alignTransportToGrooveClock={followGrooveLabSession || linkedToGrooveLab}
           onAfterGrooveAlignedPlay={(ctx) => {
-            if (followGrooveLabSessionRef.current) primeGrooveLinkedRootsRef.current(ctx);
+            if (linkedToGrooveLabRef.current) primeGrooveLinkedRootsRef.current(ctx);
           }}
           onTransportChange={onLabDeckTransportChange}
           onRollDisplayQuarterBeatRef={onRollDisplayQuarterBeatRef}
@@ -2695,5 +2719,6 @@ export default function EightZeroEightTab({
         onCancel={() => setPadExportRequest(null)}
       />
     </div>
+    </Lab808HelpProvider>
   );
 }

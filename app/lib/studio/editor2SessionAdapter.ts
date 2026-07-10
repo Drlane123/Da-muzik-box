@@ -35,9 +35,20 @@ export type Editor2ArrangerTrack = {
   id: string;
   name: string;
   colorHex: string;
-  kind: 'midi' | 'audio';
+  kind: 'midi' | 'audio' | 'trackAlign' | 'a2m' | 'rhythm' | 'glideBass';
+  /** Clip-level Audio → MIDI profile when `kind === 'a2m'`. */
+  a2mMode?: 'melodic' | 'bass' | 'drums';
+  a2mDetectedBpm?: number;
+  a2mKeyRoot?: number;
+  a2mKeyMode?: 'major' | 'minor';
+  trackKeyRoot?: number;
+  trackKeyMode?: 'major' | 'minor';
   notes: Editor2MidiNote[];
   audioClips: Editor2AudioClip[];
+  /** MIDI output channel 1–16 for instrument lanes. */
+  midiChannel?: number;
+  /** GM / synth / bass / drum sound id for this lane. */
+  midiInstrumentId?: string;
   /** Browser `MediaDeviceInfo.deviceId` for record; empty = project default. */
   audioInputDeviceId?: string;
 };
@@ -70,6 +81,8 @@ export function buildStudioSessionFromEditor2Tracks(
   opts: {
     projectName?: string;
     bpm: number;
+    songKeyRoot?: number;
+    songKeyMode?: 'major' | 'minor';
     beatsPerBar: number;
     playheadBeat?: number;
     loopEnabled?: boolean;
@@ -100,7 +113,8 @@ export function buildStudioSessionFromEditor2Tracks(
   for (const t of tracks) {
     const trackId = stableId('e2', [t.id]);
     const mixerChannelId = stableId('mix', [t.id]);
-    const type: StudioTrackType = t.kind === 'audio' ? 'Audio' : 'MIDI';
+    const type: StudioTrackType = t.kind === 'audio' || t.kind === 'trackAlign' ? 'Audio' : 'MIDI';
+    /* `a2m` lanes export as MIDI tracks once notes exist; audio clips stay editor-local for now. */
     const clipIds: string[] = [];
 
     const mixerChannel: StudioMixerChannel = {
@@ -115,7 +129,7 @@ export function buildStudioSessionFromEditor2Tracks(
       solo: false,
     };
 
-    if (t.kind === 'audio') {
+    if (t.kind === 'audio' || t.kind === 'trackAlign') {
       for (const ac of t.audioClips) {
         const clipId = stableId('clip', [t.id, ac.id]);
         const startTick = Math.max(0, Math.round(ac.startBeat * ppq));

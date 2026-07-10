@@ -360,8 +360,53 @@ html.touch-coarse .cs-pad-hit {
  * Size unchanged; color + glow only.
  */
 .beat-lab-drum-grid-scroll {
-  scrollbar-width: thin;
+  scrollbar-width: auto;
   scrollbar-color: #00e5ff #0a0e14;
+  scrollbar-gutter: stable both-edges;
+}
+
+.beat-lab-drum-grid-scroll::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.beat-pads-sequencer-toolbar-actions {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: rgba(6, 8, 12, 0.98);
+}
+
+/** Grid body scrolls vertically; horizontal bar is pinned below. */
+.beat-pads-grid-h-scroll-inner {
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.beat-pads-grid-h-scroll-inner::-webkit-scrollbar {
+  display: none;
+}
+
+.beat-pads-grid-h-scroll {
+  flex-shrink: 0;
+  scrollbar-width: auto;
+  scrollbar-color: #00e5ff #0a0e14;
+}
+
+.beat-pads-grid-h-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+
+.beat-pads-grid-h-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #00e5ff 0%, #00a8c4 100%);
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  border-radius: 3px;
+}
+
+.beat-pads-grid-scroll-host {
+  min-width: 0;
 }
 
 .beat-lab-drum-grid-scroll::-webkit-scrollbar-track {
@@ -393,4 +438,1716 @@ html.touch-coarse .cs-pad-hit {
 .beat-lab-drum-grid-scroll::-webkit-scrollbar-corner {
   background: #0a0e14;
   box-shadow: inset 0 0 4px rgba(0, 229, 255, 0.08);
+}
+
+/** Beat Pads BPM — hide native number spinners (external chevrons only). */
+.beat-pads-bpm-input::-webkit-outer-spin-button,
+.beat-pads-bpm-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/**
+ * Studio Editor 2 — pinned timeline horizontal scrollbar (mint DAW chrome).
+ */
+.studio-editor2-timeline-hbar {
+  height: 14px;
+  min-height: 14px;
+  scrollbar-width: auto;
+  scrollbar-color: #5ee9b4 #0a0a10;
+  scrollbar-gutter: stable;
+}
+
+.studio-editor2-timeline-hbar::-webkit-scrollbar {
+  height: 12px;
+}
+
+.studio-editor2-timeline-hbar::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #0c0c12 0%, #060608 100%);
+  border-top: 1px solid rgba(124, 244, 198, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.studio-editor2-timeline-hbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7cf4c6 0%, #34d399 100%);
+  border: 1px solid rgba(124, 244, 198, 0.35);
+  border-radius: 6px;
+  min-width: 56px;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.25);
+}
+
+.studio-editor2-timeline-hbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #9fffd8 0%, #5ee9b4 100%);
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.4);
+}
+
+.studio-editor2-timeline-hbar::-webkit-scrollbar-corner {
+  background: #0a0a10;
+}
+
+/** Beat Pads — waveform + EQ scope: always side-by-side 50/50 (never stacked). */
+.beat-pads-scope-split {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  grid-template-rows: 1fr !important;
+  column-gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 84px;
+  box-sizing: border-box;
+}
+
+.beat-pads-scope-wave,
+.beat-pads-scope-eq {
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.beat-pads-scope-wave {
+  border: 1px solid rgba(94, 234, 212, 0.35);
+  background: #06080c;
+}
+
+.beat-pads-scope-eq {
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: #080a10;
+}
+
+.beat-pads-scope-wave canvas,
+.beat-pads-scope-eq canvas,
+.beat-pads-scope-single canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 84px;
+}
+
+.beat-pads-fx-box {
+  min-height: 0;
+  border-radius: 8px;
+}
+
+/** Pad grid + FX edit — centered with FX box nudged slightly right. */
+.beat-pads-pad-fx-row {
+  justify-content: center;
+}
+
+.beat-pads-pad-fx-row .beat-pads-fx-box {
+  margin-left: 0.1in;
+  margin-right: auto;
+  align-self: flex-start;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-pad-fx-row {
+  justify-content: center;
+  padding-left: 20px;
+  padding-right: 14px;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-pad-fx-row .beat-pads-fx-box {
+  margin-left: calc(0.12in + 0.25in);
+  width: calc(560px + 0.75in) !important;
+  max-width: calc(560px + 0.75in) !important;
+  flex: 1 1 calc(560px + 0.75in) !important;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-pad-grid {
+  margin-left: 0.5in;
+  /* SE2 only — slightly wider pads; height unchanged */
+  width: calc(70px * 4 + 7px * 3) !important;
+  grid-template-columns: repeat(4, 70px) !important;
+  grid-template-rows: repeat(4, 66px) !important;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-pad-grid .cs-pad-hit {
+  width: 70px !important;
+  max-width: 70px !important;
+  height: 66px !important;
+  max-height: 66px !important;
+}
+
+/** Instrument tab — SE2 FX Suite compact module (viz + vertical faders). */
+.beat-pads-instrument-suite {
+  min-width: 0;
+  max-width: 100%;
+  --bp-inst-caption: 9px;
+  --bp-inst-micro: 10px;
+  --bp-inst-small: 11px;
+  --bp-inst-value: 12px;
+  --bp-inst-label: 11px;
+  --bp-inst-large: 13px;
+  font-size: var(--bp-inst-value);
+}
+
+.beat-pads-instrument-suite [data-studio-fx-suite] {
+  min-width: 0;
+}
+
+/** Readable suite copy inside instrument viz — INPUT / OUTPUT / L / R + readouts. */
+.beat-pads-instrument-suite .suite-type-micro,
+.beat-pads-instrument-suite .suite-type-label {
+  font-size: var(--bp-inst-micro) !important;
+  letter-spacing: 0.06em !important;
+  line-height: 1.1 !important;
+}
+
+.beat-pads-instrument-suite .suite-type-value {
+  font-size: var(--bp-inst-value) !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.1 !important;
+}
+
+.beat-pads-instrument-suite .beat-pads-instrument-suite__faders .suite-type-label,
+.beat-pads-instrument-phase-knobs .suite-type-label,
+.beat-pads-instrument-phase-faders .suite-type-label {
+  font-size: var(--bp-inst-label) !important;
+  letter-spacing: 0.1em !important;
+  line-height: 1.1 !important;
+  max-width: 42px !important;
+}
+
+.beat-pads-instrument-suite .beat-pads-instrument-suite__faders .suite-type-value,
+.beat-pads-instrument-phase-faders .suite-type-value {
+  font-size: var(--bp-inst-value) !important;
+  letter-spacing: 0.04em !important;
+  line-height: 1.1 !important;
+}
+
+.beat-pads-instrument-suite .beat-pads-instrument-suite__faders > div,
+.beat-pads-instrument-phase-faders > div {
+  min-width: 44px !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+  gap: 2px !important;
+}
+
+.beat-pads-instrument-suite--with-knobs .beat-pads-instrument-suite--viz-only,
+.beat-pads-instrument-suite--with-faders .beat-pads-instrument-suite--viz-only {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/** Four phase analog knobs — compact row under instrument viz. */
+.beat-pads-instrument-phase-knobs {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 0 6px 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+.beat-pads-instrument-analog-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 48px;
+  user-select: none;
+  touch-action: none;
+}
+
+.beat-pads-instrument-analog-knob__dial {
+  display: block;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.55));
+}
+
+.beat-pads-instrument-analog-knob__label {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8a96a8;
+  line-height: 1.05;
+  max-width: 52px;
+  text-align: center;
+}
+
+.beat-pads-instrument-analog-knob__value {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: #d8e0ea;
+  line-height: 1.1;
+  text-align: center;
+  max-width: 56px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/** @deprecated fader row — kept if referenced */
+.beat-pads-instrument-phase-faders {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 4px 4px 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.22);
+  --bp-inst-caption: 9px;
+  --bp-inst-micro: 10px;
+  --bp-inst-small: 11px;
+  --bp-inst-value: 12px;
+  --bp-inst-label: 11px;
+  --bp-inst-large: 13px;
+}
+
+.beat-pads-instrument-phase-faders .suite-type-label {
+  font-size: var(--bp-inst-label) !important;
+}
+
+.beat-pads-instrument-suite--viz-only {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+.beat-pads-instrument-suite__viz--full {
+  flex: 1 1 auto;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+}
+
+.beat-pads-fx-edit-body--instrument .beat-pads-fx-edit-scroll {
+  overflow-y: hidden;
+}
+
+.beat-pads-fx-edit-body--instrument .beat-pads-fx-edit-scroll > div:last-of-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.beat-pads-instrument-suite .shrink-0.grid.border-b {
+  height: 18px !important;
+  min-height: 18px !important;
+}
+
+.beat-pads-instrument-suite .shrink-0.grid.border-b .suite-type-micro {
+  font-size: var(--bp-inst-caption) !important;
+}
+
+.beat-pads-instrument-suite .shrink-0.grid.border-b .suite-type-value {
+  font-size: var(--bp-inst-small) !important;
+}
+
+.beat-pads-instrument-suite .beat-pads-instrument-suite__viz .h-full,
+.beat-pads-instrument-suite .beat-pads-instrument-suite__viz [class*='FxSuiteChromeFrame'] {
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.beat-pads-instrument-suite .beat-pads-instrument-suite__viz > * {
+  height: 100% !important;
+}
+
+.beat-pads-instrument-suite .beat-pads-instrument-suite__viz div[style*='min-height'] {
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+.beat-pads-instrument-suite svg text {
+  font-size: 9px !important;
+}
+
+.beat-pads-instrument-suite .text-\[4px\] {
+  font-size: var(--bp-inst-caption) !important;
+}
+
+.beat-pads-instrument-suite .text-\[5px\] {
+  font-size: var(--bp-inst-micro) !important;
+}
+
+.beat-pads-instrument-suite .text-\[6px\] {
+  font-size: var(--bp-inst-micro) !important;
+}
+
+.beat-pads-instrument-suite .text-\[7px\] {
+  font-size: var(--bp-inst-small) !important;
+}
+
+.beat-pads-instrument-suite .text-\[8px\] {
+  font-size: var(--bp-inst-value) !important;
+}
+
+.beat-pads-instrument-suite .text-\[9px\] {
+  font-size: var(--bp-inst-large) !important;
+}
+
+/** Limiter utility tab — full viz + gold controls inside edit body. */
+.beat-pads-limiter-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.beat-pads-limiter-panel__viz {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.beat-pads-limiter-panel__viz > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100% !important;
+}
+
+.beat-pads-limiter-panel__controls {
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.beat-pads-fx-edit-body--limiter {
+  --bp-inst-caption: 9px;
+  --bp-inst-micro: 10px;
+  --bp-inst-small: 11px;
+  --bp-inst-value: 12px;
+  --bp-inst-label: 11px;
+  --bp-inst-large: 13px;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-edit-scroll {
+  overflow-y: hidden;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-edit-scroll > div:last-of-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-limiter-title {
+  font-size: 10px;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-meter-label {
+  font-size: 9px;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-softclip-scale,
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-softclip-scale--inline {
+  font-size: 9px;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-limiter-strip .suite-type-label {
+  font-size: var(--bp-inst-label) !important;
+}
+
+.beat-pads-fx-edit-body--limiter .beat-pads-fx-limiter-strip .suite-type-value {
+  font-size: var(--bp-inst-value) !important;
+}
+
+/** Delay / Reverb send tabs — full-height SE2 viz + knobs (matches Instrument). */
+.beat-pads-send-suite {
+  --bp-inst-caption: 9px;
+  --bp-inst-micro: 10px;
+  --bp-inst-small: 11px;
+  --bp-inst-value: 12px;
+  --bp-inst-label: 11px;
+  --bp-inst-large: 13px;
+}
+
+.beat-pads-send-suite__tempo {
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+.beat-pads-send-suite--reverb .beat-pads-send-suite__knobs {
+  justify-content: center;
+  gap: 24px;
+}
+
+.beat-pads-fx-edit-body--delay .beat-pads-fx-edit-scroll,
+.beat-pads-fx-edit-body--reverb .beat-pads-fx-edit-scroll {
+  overflow-y: hidden;
+}
+
+.beat-pads-fx-edit-body--delay .beat-pads-fx-edit-scroll > div:last-of-type,
+.beat-pads-fx-edit-body--reverb .beat-pads-fx-edit-scroll > div:last-of-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/** SE2 kit bar — Sound Families inline with PAD target + horizontal chip scroll. */
+.beat-pads-geno-sync-trailing {
+  min-width: 0;
+}
+
+.beat-pads-geno-sync-trailing .beat-pads-sound-families-inline {
+  width: 100%;
+  max-width: 100%;
+}
+
+.beat-pads-sound-families-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 244, 198, 0.35) transparent;
+  padding-bottom: 1px;
+}
+
+.beat-pads-sound-families-scroll::-webkit-scrollbar {
+  height: 5px;
+}
+
+.beat-pads-sound-families-scroll::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(124, 244, 198, 0.35);
+}
+
+.beat-pads-sound-families-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/** Harmony strip — SOUND FAMILIES down-pointer (layout height neutral). */
+.beat-pads-sf-arrow-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2px;
+  margin-bottom: -10px;
+  line-height: 0;
+}
+
+.beat-pads-sf-arrow-stack .beat-pads-sf-arrow--2 {
+  margin-top: -9px;
+}
+
+.beat-pads-sf-arrow--1,
+.beat-pads-sf-arrow--2 {
+  animation: beat-pads-sf-arrow-point 1.05s ease-in-out infinite;
+}
+
+.beat-pads-sf-arrow--2 {
+  animation-delay: 0.525s;
+}
+
+@keyframes beat-pads-sf-arrow-point {
+  0%,
+  30% {
+    opacity: 1;
+  }
+  40%,
+  80% {
+    opacity: 0.12;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beat-pads-sf-arrow--1,
+  .beat-pads-sf-arrow--2 {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/**
+ * Beat Pads — Instrument/FX panel matches Pattern Bank + Lane Placements chrome.
+ * CSS class ensures styles survive minify/cache and override legacy flat greys.
+ */
+.beat-pads-fx-panel {
+  box-sizing: border-box;
+  border-radius: 8px !important;
+  border: 1px solid rgba(124, 244, 198, 0.22) !important;
+  background: linear-gradient(165deg, rgba(11, 11, 16, 0.55) 0%, rgba(8, 8, 12, 0.95) 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tabbar {
+  border-bottom: 1px solid rgba(124, 244, 198, 0.12);
+}
+
+.beat-pads-fx-tabbar-pad {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 42%;
+}
+
+.beat-pads-fx-tabbar-pad-name {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  color: #ececf4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+  font-family: Rajdhani, system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.beat-pads-fx-tabbar-tabs {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8bcc8;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab--active {
+  border-color: #7cf4c6 !important;
+  background: rgba(124, 244, 198, 0.12) !important;
+  color: #7cf4c6 !important;
+  font-weight: 900;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab-group {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab-group.beat-pads-fx-tab-group--active {
+  border-color: #7cf4c6 !important;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab-group .beat-pads-fx-tab {
+  border: none;
+  border-radius: 0;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab-group .beat-pads-fx-tab--active {
+  border: none;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab-power {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid rgba(124, 244, 198, 0.12) !important;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8bcc8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-tab-power--on {
+  background: rgba(124, 244, 198, 0.2) !important;
+  color: #7cf4c6 !important;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-phase-tab {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8bcc8;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-phase-tab--active {
+  border-color: #7cf4c6 !important;
+  background: rgba(124, 244, 198, 0.12) !important;
+  color: #7cf4c6 !important;
+  font-weight: 900;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-section-title {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #7cf4c6 !important;
+  text-transform: uppercase;
+}
+
+.beat-pads-fx-panel .beat-pads-fx-row {
+  border-bottom: 1px solid rgba(124, 244, 198, 0.12);
+}
+
+/** Cubase-style Pad FX — pad strip + insert slot bar + 4-column editor */
+.beat-pads-fx-pad-strip {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+}
+
+.beat-pads-fx-pad-strip-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #6a7280;
+  margin-bottom: 2px;
+}
+
+.beat-pads-fx-pad-strip-name {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ececf4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beat-pads-fx-pad-strip-field {
+  min-width: 0;
+}
+
+.beat-pads-fx-pad-strip-field span {
+  display: block;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #9aa3b0;
+  margin-bottom: 2px;
+}
+
+.beat-pads-fx-insert-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px 8px;
+}
+
+.beat-pads-fx-layer-chip {
+  flex: 0 0 auto;
+  width: 72px;
+  min-width: 72px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(124, 244, 198, 0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.beat-pads-fx-layer-chip strong {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #7cf4c6;
+}
+
+.beat-pads-fx-layer-chip span {
+  font-size: 7px;
+  font-weight: 600;
+  color: #9aa3b0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beat-pads-fx-insert-slot {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8bcc8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.beat-pads-fx-insert-slot--active {
+  border-color: #e8b923 !important;
+  background: rgba(232, 185, 35, 0.16) !important;
+  color: #f5e6a8 !important;
+}
+
+.beat-pads-fx-insert-slot--on:not(.beat-pads-fx-insert-slot--active) {
+  border-color: rgba(124, 244, 198, 0.35);
+  color: #d8dee8;
+}
+
+.beat-pads-fx-insert-slot-power {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: #6a7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.beat-pads-fx-insert-slot-power--on {
+  border-color: rgba(124, 244, 198, 0.45) !important;
+  background: rgba(124, 244, 198, 0.18) !important;
+  color: #7cf4c6 !important;
+}
+
+.beat-pads-fx-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid rgba(124, 244, 198, 0.12);
+}
+
+.beat-pads-fx-editor-col {
+  padding: 8px 6px;
+  border-right: 1px solid rgba(124, 244, 198, 0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 152px;
+  box-sizing: border-box;
+}
+
+.beat-pads-fx-editor-col:last-child {
+  border-right: none;
+}
+
+.beat-pads-fx-editor-col--wide {
+  grid-column: span 2;
+}
+
+.beat-pads-fx-editor-knob-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 4px;
+  width: 100%;
+}
+
+.beat-pads-fx-meter-stack {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  justify-content: center;
+  height: 72px;
+  margin-bottom: 4px;
+}
+
+.beat-pads-fx-meter {
+  width: 8px;
+  height: 100%;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.beat-pads-fx-meter::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
+  background: linear-gradient(180deg, #7cf4c6 0%, #58c4ff 100%);
+  opacity: 0.55;
+}
+
+.beat-pads-fx-meter-label {
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #6a7280;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* SE2-style insert bay — viz left, knobs right; sits flush above limiter. */
+.beat-pads-fx-cubase-editor {
+  width: 100%;
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.beat-pads-fx-edit-body {
+  position: relative;
+  isolation: isolate;
+}
+
+.beat-pads-fx-edit-body--padfx {
+  flex: 0 0 auto !important;
+  gap: 0;
+  overflow: visible !important;
+  justify-content: flex-start;
+}
+
+/* Pad FX — content sits under utility row, not pinned to panel bottom. */
+.beat-pads-fx-edit-scroll--padfx {
+  overflow: visible !important;
+  flex: 0 0 auto !important;
+  min-height: 0;
+  justify-content: flex-start;
+}
+
+.beat-pads-fx-edit-body--padfx .beat-pads-fx-insert-bay {
+  overflow: visible;
+  justify-content: flex-start;
+  padding-bottom: 0;
+}
+
+.beat-pads-fx-edit-body--padfx .beat-pads-fx-suite-insert {
+  overflow: visible;
+}
+
+.beat-pads-fx-edit-body--padfx .beat-pads-fx-suite-viz-slot,
+.beat-pads-fx-edit-body--padfx .beat-pads-fx-suite-viz-chrome {
+  overflow: visible;
+}
+
+.beat-pads-fx-edit-body--padfx .beat-pads-fx-suite-viz-chrome {
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Group tab — grid feel only; keep knobs fully visible (no edge clip). */
+.beat-pads-fx-edit-body--group {
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  justify-content: flex-start;
+}
+
+.beat-pads-fx-edit-scroll--group {
+  overflow: visible !important;
+  flex: 0 0 auto !important;
+  padding: 0 4px 6px;
+}
+
+.beat-pads-fx-insert-bay {
+  flex: 0 0 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: 4px;
+}
+
+.beat-pads-fx-suite-insert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 6px;
+  padding: 2px 6px 0;
+  border-top: 1px solid rgba(124, 244, 198, 0.12);
+  box-sizing: border-box;
+  height: 104px;
+  min-height: 104px;
+  max-height: 104px;
+  align-items: stretch;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+.beat-pads-fx-suite-viz-slot {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  align-self: stretch;
+}
+
+.beat-pads-fx-suite-viz-chrome {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  border-radius: 6px;
+  border: 1px solid rgba(58, 58, 72, 0.9);
+  background: linear-gradient(180deg, rgba(8, 8, 14, 0.72) 0%, rgba(4, 4, 8, 0.88) 100%);
+  overflow: hidden;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.beat-pads-fx-suite-readout {
+  display: grid;
+  height: 24px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #1c1c28;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.42) 100%);
+}
+
+.beat-pads-fx-suite-readout-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+  padding: 1px 3px;
+  border-right: 1px solid #1c1c28;
+  overflow: hidden;
+  line-height: 1;
+}
+
+.beat-pads-fx-suite-readout-cell:last-child {
+  border-right: none;
+}
+
+.beat-pads-fx-suite-readout-title {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif !important;
+  font-size: 7px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  color: #9aa3b2 !important;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.beat-pads-fx-suite-readout-value {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.03em !important;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+}
+
+.beat-pads-fx-suite-viz-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 2px;
+  padding: 2px;
+}
+
+.beat-pads-fx-suite-meter-cluster {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  min-height: 0;
+  height: 100%;
+}
+
+.beat-pads-fx-suite-meter-lane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  gap: 1px;
+}
+
+.beat-pads-fx-suite-meter-label {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif !important;
+  font-size: 7px !important;
+  font-weight: 700 !important;
+  line-height: 1;
+  text-align: center;
+  color: #8b93a2 !important;
+  letter-spacing: 0.06em !important;
+}
+
+.beat-pads-fx-suite-meter-well {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #050508 0%, #0a0a12 100%);
+  border: 1px solid #1e1e28;
+}
+
+.beat-pads-fx-suite-meter-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  transition: height 75ms linear;
+}
+
+.beat-pads-fx-suite-graph {
+  min-height: 0;
+  height: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.beat-pads-fx-suite-knob-grid {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  column-gap: 8px;
+  row-gap: 10px;
+  align-content: start;
+  justify-content: end;
+  justify-items: center;
+  padding: 4px 2px 2px 4px;
+  min-width: 0;
+  flex-shrink: 0;
+  height: 104px;
+  box-sizing: border-box;
+}
+
+.beat-pads-fx-suite-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 44px;
+  user-select: none;
+  touch-action: none;
+}
+
+.beat-pads-fx-suite-knob:nth-child(3),
+.beat-pads-fx-suite-knob:nth-child(4) {
+  margin-top: 8px;
+}
+
+.beat-pads-fx-suite-knob:active .beat-pads-fx-suite-knob-dial {
+  transform: scale(0.96);
+}
+
+.beat-pads-fx-suite-knob-dial {
+  display: block;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.55));
+  transition: transform 0.1s ease;
+}
+
+.beat-pads-fx-suite-knob-label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #c4cad4;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beat-pads-fx-suite-knob-value {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #e8b923;
+  line-height: 1.1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  max-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.beat-pads-delay-tempo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 5px;
+  padding: 2px 6px 0;
+  min-width: 0;
+}
+
+.beat-pads-delay-tempo-sync,
+.beat-pads-delay-tempo-note {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #b8bcc8;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.beat-pads-delay-tempo-sync[data-active='true'] {
+  border-color: rgba(110, 181, 255, 0.65);
+  background: rgba(110, 181, 255, 0.16);
+  color: #dbeafe;
+}
+
+.beat-pads-delay-tempo-note[data-active='true'] {
+  border-color: rgba(110, 181, 255, 0.7);
+  background: rgba(110, 181, 255, 0.22);
+  color: #eff6ff;
+}
+
+.beat-pads-delay-tempo-readout {
+  margin-left: auto;
+  font-size: 8px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #7a8494;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 72px;
+  text-align: right;
+}
+
+.beat-pads-fx-limiter-footer {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 0;
+  background: transparent;
+}
+
+.beat-pads-fx-limiter-col {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.beat-pads-fx-limiter-strip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 6px 8px;
+  padding: 5px 8px;
+  min-height: 72px;
+  box-sizing: border-box;
+  border-top: 2px solid rgba(232, 185, 35, 0.55);
+  background: linear-gradient(180deg, rgba(232, 185, 35, 0.16) 0%, rgba(0, 0, 0, 0.55) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.beat-pads-fx-limiter-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+}
+
+.beat-pads-fx-limiter-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
+.beat-pads-fx-limiter-title {
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #9aa3b0;
+}
+
+.beat-pads-fx-softclip-scale {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6a7280;
+  padding: 0 4px;
+}
+
+.beat-pads-fx-softclip-scale--inline {
+  width: auto;
+  min-width: 52px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 4px;
+}
+
+.beat-pads-fx-knob-section {
+  align-items: center;
+}
+
+.beat-pads-fx-knob-section-label {
+  text-transform: uppercase;
+}
+
+.beat-pads-fx-knob {
+  transition: transform 0.12s ease;
+}
+
+.beat-pads-fx-knob:active {
+  transform: scale(0.96);
+}
+
+/** Wave + EQ strip above step grid — locked 50/50 side-by-side. */
+.beat-pads-scope-over-grid {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.beat-pads-scope-over-grid .beat-pads-scope-split {
+  height: 100%;
+  min-height: 0;
+}
+
+.beat-pads-lane-header-controls {
+  flex-shrink: 0;
+}
+
+/** Lane Placements — blue drum-role dropdown (Kick / Snare / …) beside Regen. */
+.beat-pads-drum-role-select,
+.beat-pads-genre-select {
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: dark;
+}
+
+.beat-pads-drum-role-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2393c5fd' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  padding-right: 18px !important;
+}
+
+.beat-pads-genre-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23c4b5fd' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  padding-right: 18px !important;
+}
+
+.beat-pads-drum-role-select:focus,
+.beat-pads-genre-select:focus {
+  outline: none;
+}
+
+.beat-pads-drum-role-select:focus {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.45);
+}
+
+.beat-pads-genre-select:focus {
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.45);
+}
+
+.beat-pads-drum-role-select:disabled,
+.beat-pads-genre-select:disabled {
+  opacity: 0.45;
+}
+
+.beat-pads-drum-role-select option,
+.beat-pads-genre-select option {
+  background-color: #1a1a22;
+  color: #e8e8f0;
+}
+
+/** Pattern Bank — horizontal chip row (scrollbar hidden; use ‹ › buttons). */
+.beat-pads-pattern-bank-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/** Beat Pads — fills main content pane (Beat Lab fit); modules sidebar stays visible. */
+.beat-pads-embedded-root {
+  position: absolute;
+  inset: 0;
+  z-index: 14000;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.beat-lab-drum-machine-overlay {
+  box-sizing: border-box;
+}
+
+/**
+ * SE2 Beat Pads dock ONLY — solid backdrop so SE2 mixer does not bleed through.
+ * Scoped under [data-studio-beat-pads-dock]; Beat Lab portal is never inside this node.
+ */
+[data-studio-beat-pads-dock] .beat-pads-embedded-root {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: 100%;
+  width: 100%;
+}
+
+/** SE2 Beat Pads lane — Beat Lab style full workspace (tracks/mixer hidden). */
+[data-studio-beat-pads-dock][data-studio-beat-pads-fullscreen] {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-harmony-strip {
+  flex-shrink: 0;
+}
+
+[data-studio-beat-pads-dock][data-studio-beat-pads-fullscreen] .beat-pads-machine-chrome {
+  flex-shrink: 0;
+  max-height: min(44vh, 440px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+[data-studio-beat-pads-dock][data-studio-beat-pads-fullscreen] .beat-pads-sequencer-pane {
+  flex: 1 1 0;
+  min-height: 240px;
+  border-top: 1px solid rgba(124, 244, 198, 0.16);
+}
+
+[data-studio-beat-pads-dock][data-studio-beat-pads-sequencer-only] .beat-pads-machine-chrome {
+  display: none !important;
+}
+
+[data-studio-beat-pads-dock][data-studio-beat-pads-sequencer-only] .beat-pads-sequencer-pane {
+  flex: 1 1 auto;
+  min-height: 360px;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-machine-chrome {
+  flex-shrink: 0;
+  max-height: min(38vh, 320px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-sequencer-pane {
+  flex: 1 1 0;
+  min-height: 168px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-studio-beat-pads-dock] .beat-lab-drum-machine-overlay {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-embedded-root {
+  flex: 1 1 auto;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-embedded-root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, #0a1210 0%, #040608 100%);
+  pointer-events: none;
+}
+
+[data-studio-beat-pads-dock] .beat-lab-drum-machine-overlay {
+  position: relative;
+  z-index: 1;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-fx-panel {
+  background: linear-gradient(165deg, #0b0b10 0%, #08080c 100%) !important;
+}
+
+/** Beat Pads — Group tab: live timing / swing / groove preview. */
+.beat-pads-group-tab {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex-shrink: 0;
+  padding-top: 4px;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.beat-pads-group-feel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(124, 244, 198, 0.22);
+  background: rgba(0, 0, 0, 0.22);
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.beat-pads-group-feel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2px 10px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.beat-pads-group-feel-title {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  color: #7cf4c6;
+}
+
+.beat-pads-group-feel-hint {
+  font-size: 8px;
+  font-weight: 700;
+  color: #8a9098;
+  letter-spacing: 0.04em;
+}
+
+.beat-pads-group-feel-viz {
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  padding: 4px 4px 2px;
+  border-radius: 6px;
+  border: 1px solid rgba(124, 244, 198, 0.16);
+  background: linear-gradient(180deg, rgba(8, 10, 14, 0.85) 0%, rgba(4, 6, 10, 0.95) 100%);
+  box-sizing: border-box;
+}
+
+.beat-pads-group-feel-viz-svg {
+  display: block;
+  width: 100%;
+  height: 40px;
+}
+
+.beat-pads-group-feel-viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 2px 4px 2px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: #8a9098;
+  text-transform: uppercase;
+}
+
+.beat-pads-group-feel-viz-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.beat-pads-group-feel-viz-tick {
+  display: inline-block;
+  width: 2px;
+  height: 10px;
+  background: rgba(124, 244, 198, 0.45);
+  border-radius: 1px;
+}
+
+.beat-pads-group-feel-viz-tick--off {
+  background: rgba(196, 181, 253, 0.55);
+  border-left: 2px dashed rgba(196, 181, 253, 0.65);
+  width: 0;
+}
+
+.beat-pads-group-feel-viz-legend-dot {
+  color: #7cf4c6;
+  font-size: 9px;
+}
+
+.beat-pads-group-feel-knobs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 6px;
+  align-items: start;
+  justify-items: center;
+  margin-top: 2px;
+  padding: 4px 2px 2px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.beat-pads-group-feel-knob-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  overflow: visible;
+}
+
+/* Help ? sits on the left of each knob dial (not under it). */
+.beat-pads-group-feel-knob-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.beat-pads-group-feel-knob-row > div:first-child {
+  /* Sit beside the dial (knob has label above + value below). */
+  align-self: center;
+  transform: translateY(-10px);
+  flex-shrink: 0;
+}
+
+.beat-pads-group-feel-knob-cell .beat-pads-mini-help-btn {
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  font-size: 10px !important;
+  flex-shrink: 0;
+}
+
+.beat-pads-group-feel-knob-row > span:nth-of-type(1),
+.beat-pads-group-feel-knob-cell span:nth-of-type(1) {
+  font-size: 8px !important;
+  letter-spacing: 0.12em !important;
+}
+
+.beat-pads-group-feel-knob-row > span:nth-of-type(2),
+.beat-pads-group-feel-knob-cell span:nth-of-type(2) {
+  font-size: 11px !important;
+  line-height: 1.15 !important;
+}
+
+/* 808 Lab — HP/LP filter viz illumination (interior only) */
+.lab808-filter-viz-chrome {
+  overflow: hidden;
+}
+
+.lab808-filter-viz-graph-slot {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.lab808-filter-viz-svg {
+  display: block;
+  overflow: hidden;
+}
+
+@keyframes lab808-filter-pass-pulse {
+  0%,
+  100% {
+    opacity: 0.62;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes lab808-filter-cut-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
+@keyframes lab808-filter-marker-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes lab808-filter-curve-glow {
+  0%,
+  100% {
+    stroke-opacity: 0.88;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+}
+
+.lab808-filter-viz-pass {
+  animation: lab808-filter-pass-pulse 2.4s ease-in-out infinite;
+}
+
+.lab808-filter-viz-cut-hp {
+  animation: lab808-filter-cut-pulse 1.9s ease-in-out infinite;
+}
+
+.lab808-filter-viz-cut-lp {
+  animation: lab808-filter-cut-pulse 2.2s ease-in-out infinite;
+}
+
+.lab808-filter-viz-marker-hp,
+.lab808-filter-viz-marker-lp {
+  animation: lab808-filter-marker-pulse 2s ease-in-out infinite;
+}
+
+.lab808-filter-viz-curve {
+  animation: lab808-filter-curve-glow 2.4s ease-in-out infinite;
 }

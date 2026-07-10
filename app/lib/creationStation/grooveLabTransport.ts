@@ -23,12 +23,13 @@ import {
 import { playGrooveLabBassSound, type GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
 import { scheduleOrchidChord, type OrchidPerformanceMode } from '@/app/lib/creationStation/orchidChordEngine';
 import {
+  restoreChordSequencerTransportVoices,
   withGrooveLabTransportChordRouting,
   type ChordVoiceId,
 } from '@/app/lib/creationStation/chordSequencerVoices';
 import { resolveGrooveLabChannelDest } from '@/app/lib/creationStation/grooveLabAudio';
 import {
-  grooveLabChannelVolumeGain,
+  grooveLabChannelTransportOpen,
   grooveLabMeterPeakFromVelocity,
   scheduleGrooveLabMeterPulseAt,
 } from '@/app/lib/creationStation/grooveLabChannelMeters';
@@ -37,16 +38,15 @@ import {
   WAVE_LEAF_TRANSPORT_ONSET_LEAD_MS,
 } from '@/app/lib/creationStation/waveLeafEngine';
 import { waveLeafIsLeadMidi } from '@/app/lib/creationStation/waveLeafPitch';
-import {
-  readWaveLeafOutputGain,
-  readWaveLeafSynthSettings,
-} from '@/app/lib/creationStation/waveLeafRuntimeSettings';
+import { grooveLabWaveLeafBankOutputGain } from '@/app/lib/creationStation/grooveLabLayers';
+import { readWaveLeafOutputGain, readWaveLeafSynthSettings } from '@/app/lib/creationStation/waveLeafRuntimeSettings';
 import {
   CREATION_LOOP_CHAIN_FLOOR_SEC,
   CREATION_METRO_NODE_EPS_SEC,
   CREATION_SCHEDULE_AHEAD_SEC,
   SE2_AUDIO_START_FLOOR_SEC,
 } from '@/app/lib/creationStation/creationTransportSystem';
+import { isGrooveLabTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
 
 /** @deprecated Use {@link CREATION_SCHEDULE_AHEAD_SEC} — kept for imports. */
 export const GROOVE_LAB_TRANSPORT_LOOKAHEAD_SEC = CREATION_SCHEDULE_AHEAD_SEC;
@@ -66,6 +66,7 @@ export function grooveLabTransportEventKey(cycle: number, ev: GrooveLabTransport
   if (ev.kind === 'bass') return `${cycle}|b|${ev.slot}|${ev.midi}`;
   if (ev.kind === 'melody') return `${cycle}|m|${ev.slot}|${ev.midi}`;
   if (ev.kind === 'guitar') return `${cycle}|g|${ev.slot}|${ev.midi}`;
+  if (ev.kind === 'sample') return `${cycle}|s|${ev.slot}|${ev.midis.join('.')}`;
   return `${cycle}|c|${ev.slot}|${ev.midis.join('.')}`;
 }
 
@@ -246,6 +247,7 @@ export function scheduleGrooveLabTransportEvent(
 
   if (ev.kind === 'guitar') {
     if (opts.guitarChannel == null || !Number.isFinite(opts.guitarChannel)) return;
+    if (!grooveLabChannelTransportOpen(opts.guitarChannel, opts.channelVolumes)) return;
     const soundId = resolveGrooveLabGuitarSoundId(opts.guitarSoundId);
     if (isGuitarLickSampleId(soundId)) {
       const def = getGuitarLickDef(soundId);
@@ -277,10 +279,11 @@ export function scheduleGrooveLabTransportEvent(
     return;
   }
   if (ev.kind === 'melody') {
-    if (opts.leadMuted || !waveLeafIsLeadMidi(ev.midi)) return;
+    if (opts.leadMuted || !(waveLeafIsLeadMidi(ev.midi) || grooveLabIsMelodyMidi(ev.midi))) return;
     const wl = readWaveLeafSynthSettings();
     const melodyCh = opts.melodyChannel;
     if (melodyCh == null || !Number.isFinite(melodyCh)) return;
+    if (!grooveLabChannelTransportOpen(melodyCh, opts.channelVolumes)) return;
     const dest = resolveGrooveLabChannelDest(ctx, melodyCh, opts.channelVolumes);
     const whenLead = when - WAVE_LEAF_TRANSPORT_ONSET_LEAD_MS / 1000;
     const vel = Math.min(1, Math.max(0.05, ev.vel));
@@ -294,7 +297,7 @@ export function scheduleGrooveLabTransportEvent(
       bpm: opts.bpm,
       holdBeats,
       velocity: vel,
-      outputGain: readWaveLeafOutputGain(),
+      outputGain: grooveLabWaveLeafBankOutputGain(readWaveLeafOutputGain()),
       destination: dest,
       monophonic: true,
       transportChordSnap: true,
@@ -314,10 +317,11 @@ export function scheduleGrooveLabTransportEvent(
     if (
       chordCh != null &&
       Number.isFinite(chordCh) &&
-      grooveLabChannelVolumeGain(chordCh, opts.channelVolumes) <= 0.001
+      !grooveLabChannelTransportOpen(chordCh, opts.channelVolumes)
     ) {
       return;
     }
+    restoreChordSequencerTransportVoices();
     const vel = opts.chordVolume * ev.vel;
     const scheduleChord = () =>
       scheduleOrchidChord(ctx, ev.midis, when, sustainSec, opts.chordVoice, vel, {
@@ -343,19 +347,19 @@ export function scheduleGrooveLabTransportEvent(
   if (ev.kind !== 'sample') return;
   const sampleCh = opts.sampleChannel;
   if (sampleCh == null || !Number.isFinite(sampleCh)) return;
-  if (grooveLabChannelVolumeGain(sampleCh, opts.channelVolumes) <= 0.001) return;
+  if (!grooveLabChannelTransportOpen(sampleCh, opts.channelVolumes)) return;
   const hitId = resolveGrooveLabOrchestraHitId(opts.orchestraHitId);
   const def = getOrchestraHitDef(hitId);
   if (def) void ensureOrchestraHitBuffer(ctx, def);
   const vel = Math.min(1, Math.max(0.05, ev.vel));
-  const fallbackMidi = ev.midis.length > 0 ? Math.min(...ev.midis) : def?.rootMidi;
+  const targetMidi = ev.midis.length > 0 ? Math.min(...ev.midis) : undefined;
   scheduleGrooveLabOrchestraTransportHit(ctx, {
     hitId,
     when,
     velocity01: vel,
     orchestraChannel: sampleCh,
     channelVolumes: opts.channelVolumes,
-    fallbackMidi,
+    targetMidi,
   });
 }
 
@@ -404,6 +408,11 @@ export function refillGrooveLabTransport(
   opts: RefillGrooveLabTransportOpts,
 ): void {
   if (evs.length === 0) return;
+  if (!isGrooveLabTransportRunning()) return;
+
+  if (evs.some((ev) => ev.kind === 'chord')) {
+    restoreChordSequencerTransportVoices();
+  }
 
   const now = ctSnap;
   const loopSec = Math.max(opts.secPerSlot, opts.loopSlots * opts.secPerSlot);

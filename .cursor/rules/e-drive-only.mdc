@@ -1,0 +1,41 @@
+---
+description: Canonical project on E: only — no C: paths, caches, or artifacts
+alwaysApply: true
+---
+
+# E: drive only — keep C: clean
+
+The owner works **exclusively** from `E:\Da-Music-Box-v4-SOURCE-COMPLETE`. **Never** write project files, caches, build output, or temp data to `C:`.
+
+## Canonical locations (E:)
+
+| Purpose | Path |
+|---------|------|
+| Source + git | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\` |
+| Vite cache | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.vite-cache\` |
+| Production build | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\dist\` |
+| Bun install cache | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cache\bun\` |
+| Global Bun home (junction) | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cache\bun-global\` |
+| Cursor workspace data (junction) | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cursor\workspace-data\` |
+| Temp / scratch | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cache\temp\` |
+| User drum kits / downloads | `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cache\` |
+
+`vite.config.ts` already pins `cacheDir` and `outDir` to E: when the drive is present.
+
+## Forbidden for agents
+
+- Hard-coded `C:\Users\...` paths in code, scripts, or docs for this project
+- Defaulting caches to `%USERPROFILE%`, `%APPDATA%`, or `%TEMP%` on C: without redirecting to E:
+- Creating duplicate project folders on C:
+- Suggesting the user open or sync from a C: copy of the repo
+
+## When adding tooling
+
+- Put caches under `E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cache\`
+- Use relative paths from the repo root when possible
+- Terminal env in `.vscode/settings.json` sets `TEMP`, `TMP`, and `BUN_INSTALL_CACHE_DIR` on E:
+- Run `scripts/ensure-e-drive-paths.ps1` after a fresh machine setup to recreate junctions
+
+## Note on Cursor IDE
+
+Cursor itself installs under `%APPDATA%\Cursor` on C: (the editor binary). That is **system-level**, not project data. All **project-related** agent terminals, transcripts, and build caches must live on E: via the junctions above.

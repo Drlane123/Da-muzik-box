@@ -1,0 +1,12 @@
+E:\Da-Music-Box-v4-SOURCE-COMPLETE
+
+Primary project location (saved from C: sync 2026-06-07).
+Open in Cursor: File → Open Folder → this path.
+Dev: bun run dev  →  http://localhost:5173
+
+SAVE SOURCE ZIP (double-click this file in this folder):
+  !!! CLICK HERE TO SAVE SOURCE.bat
+
+Or use: SAVE-SOURCE-NOW.bat (same thing)
+
+See also: FIND-SAVE-BUTTON.txt

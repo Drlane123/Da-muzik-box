@@ -48,6 +48,7 @@ export function setTouchPointerBridgeEnabled(enabled: boolean): void {
     installed = true;
     onPointerDown = (pe) => {
       if (pe.pointerType === 'mouse') return;
+      pe.preventDefault();
       activePointerId = pe.pointerId;
       synthMouse('mousedown', pe);
     };

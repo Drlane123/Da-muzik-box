@@ -1,8 +1,9 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { GrooveOctaveShiftButtons } from '@/app/components/creation/GrooveOctaveShiftButtons';
 import { GrooveLabMixerPanel } from '@/app/components/creation/GrooveLabMixerPanel';
 import { GrooveLabGuitarFxStrip } from '@/app/components/creation/GrooveLabGuitarFxStrip';
+import { GrooveLabMidiToVocalBoxPanel, type GrooveLabMidiToVocalBoxPanelProps } from '@/app/components/creation/GrooveLabMidiToVocalBoxPanel';
 import { GrooveLabGuitarPackPanel } from '@/app/components/creation/GrooveLabGuitarPackPanel';
 import type { GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/grooveLabGuitarFx';
 import { OrchidProgressionBuilder } from '@/app/components/creation/OrchidProgressionBuilder';
@@ -43,6 +44,7 @@ import {
   type OrchidPerformanceMode,
 } from '@/app/lib/creationStation/orchidChordEngine';
 import type { OrchidProgressionId } from '@/app/lib/creationStation/grooveLabOrchidMatch';
+import { GrooveLabHelpTip } from '@/app/components/creation/GrooveLabHelpHub';
 
 const CHORD_SOUND_CATEGORIES: { id: ChordVoiceCategory; label: string }[] = [
   { id: 'piano', label: 'PIANO' },
@@ -174,6 +176,8 @@ export interface OrchidChordStripProps {
   chordStackNoteCount?: number;
   onChordOctaveDown?: () => void;
   onChordOctaveUp?: () => void;
+  /** Groove Lab — MIDI melody + lyrics → VocalBox auto-tune preview. */
+  vocalBox?: GrooveLabMidiToVocalBoxPanelProps | null;
 }
 
 export function OrchidChordStrip({
@@ -287,6 +291,7 @@ export function OrchidChordStrip({
   chordStackNoteCount = 0,
   onChordOctaveDown,
   onChordOctaveUp,
+  vocalBox,
   selectedEditChannel,
   onSelectEditChannel,
   channelNoteCounts,
@@ -351,6 +356,9 @@ export function OrchidChordStrip({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
         <span
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
             fontSize: 9,
             fontWeight: 900,
             letterSpacing: 0.6,
@@ -358,6 +366,7 @@ export function OrchidChordStrip({
           }}
         >
           {chordSectionLabel}
+          <GrooveLabHelpTip tab="chords" title="Orchid chord strip help" />
         </span>
         <span style={{ fontSize: 8, color: '#4ade80', fontWeight: 800 }}>green C layer</span>
         <span style={{ fontSize: 11, fontWeight: 900, color: '#ecfdf5' }}>{chordLabel}</span>
@@ -550,6 +559,7 @@ export function OrchidChordStrip({
               {chordAutoAdvance ? 'ADV COL' : 'STAY COL'}
             </button>
           ) : null}
+          {grooveBranding && vocalBox ? <GrooveLabMidiToVocalBoxPanel {...vocalBox} /> : null}
           {onMatchBassToChords ? (
             <button
               type="button"
@@ -1070,78 +1080,91 @@ export function OrchidChordStrip({
                   ) : null}
                   <OrchidTransportControls
                     playing={transportPlaying}
-                    disabled={transportDisabled}
+                    playDisabled={transportDisabled}
                     onRewind={onTransportRewind!}
                     onStop={onTransportStop!}
                     onPlayPause={onTransportPlayPause!}
                     onFastForward={onTransportFastForward!}
                   />
+                  <GrooveLabHelpTip tab="transport" title="Transport & playback help" />
                 </div>
               ) : null}
               {showGrooveMixer ? (
-                <button
-                  type="button"
-                  onClick={() => setGrooveLabMixerOpen((o) => !o)}
-                  title="16-channel Groove Lab mixer · CH 33–48 · CHORD · GROOVE LEAD · work lanes"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    height: 38,
-                    padding: '0 14px',
-                    borderRadius: 7,
-                    border: `1px solid ${grooveLabMixerOpen ? 'rgba(74, 222, 128, 0.65)' : 'rgba(74, 222, 128, 0.35)'}`,
-                    background: grooveLabMixerOpen
-                      ? 'rgba(34, 197, 94, 0.16)'
-                      : 'rgba(5, 12, 8, 0.92)',
-                    color: '#86efac',
-                    fontSize: 12,
-                    fontWeight: 900,
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  <SlidersHorizontal size={18} strokeWidth={2.2} aria-hidden />
-                  Mixer
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setGrooveLabMixerOpen((o) => !o)}
+                    title="16-channel Groove Lab mixer · CH 33–48 · CHORD · GROOVE LEAD · work lanes"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      height: 38,
+                      padding: '0 14px',
+                      borderRadius: 7,
+                      border: `1px solid ${grooveLabMixerOpen ? 'rgba(74, 222, 128, 0.65)' : 'rgba(74, 222, 128, 0.35)'}`,
+                      background: grooveLabMixerOpen
+                        ? 'rgba(34, 197, 94, 0.16)'
+                        : 'rgba(5, 12, 8, 0.92)',
+                      color: '#86efac',
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <SlidersHorizontal size={18} strokeWidth={2.2} aria-hidden />
+                    Mixer
+                  </button>
+                  <GrooveLabHelpTip tab="mixer" title="Groove Lab mixer help" />
+                </>
               ) : null}
             </div>
           ) : null}
           {showGrooveChannelBank ? (
-            <GrooveLabChannelRail
-              embed
-              selectedChannel={selectedEditChannel!}
-              onSelectChannel={onSelectEditChannel!}
-              chordChannel={chordChannel!}
-              melodyChannel={melodyChannel!}
-              guitarChannel={guitarChannel}
-              sampleChannel={sampleChannel}
-              onAssignLayerRole={onAssignLayerRole!}
-              noteCountByChannel={channelNoteCounts}
-              channelVolumes={channelVolumes}
-              setChannelVolume={setChannelVolume}
-            />
-          ) : null}
-          {showGrooveMixer && grooveLabMixerOpen ? (
             <div
               style={{
-                position: 'absolute',
-                left: 0,
-                bottom: '100%',
-                marginBottom: 4,
-                zIndex: 10,
-                maxWidth: 'min(98vw, 980px)',
+                position: 'relative',
+                flex: 1,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
-              <GrooveLabMixerPanel
-                open
-                onClose={() => setGrooveLabMixerOpen(false)}
-                channelVolumes={channelVolumes!}
-                setChannelVolume={setChannelVolume!}
-                chordChannel={chordChannel}
-                melodyChannel={melodyChannel}
+              {showGrooveMixer && grooveLabMixerOpen ? (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    bottom: '100%',
+                    marginBottom: 2,
+                    zIndex: 10,
+                    maxWidth: 'min(98vw, 980px)',
+                  }}
+                >
+                  <GrooveLabMixerPanel
+                    open
+                    onClose={() => setGrooveLabMixerOpen(false)}
+                    channelVolumes={channelVolumes!}
+                    setChannelVolume={setChannelVolume!}
+                    chordChannel={chordChannel}
+                    melodyChannel={melodyChannel}
+                    guitarChannel={guitarChannel}
+                    sampleChannel={sampleChannel}
+                  />
+                </div>
+              ) : null}
+              <GrooveLabChannelRail
+                embed
+                selectedChannel={selectedEditChannel!}
+                onSelectChannel={onSelectEditChannel!}
+                chordChannel={chordChannel!}
+                melodyChannel={melodyChannel!}
                 guitarChannel={guitarChannel}
+                sampleChannel={sampleChannel}
+                onAssignLayerRole={onAssignLayerRole!}
+                noteCountByChannel={channelNoteCounts}
               />
             </div>
           ) : null}

@@ -1,0 +1,27 @@
+SAVE ON E: DRIVE — quick guide
+===============================
+
+WHY CURSOR KEEPS FAILING
+  Cursor uses your C: drive for temp files. When C: is full, saves and
+  terminal commands fail even though E: has plenty of room.
+  Fix: run the .bat files below from Windows File Explorer (double-click).
+
+YOUR BACKUP ZIP (already on E:)
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1715.zip
+
+CHECK SIZE + FILE COUNT (do this now)
+  1. Open File Explorer
+  2. Go to: E:\Da-Music-Box-v4-SOURCE-COMPLETE
+  3. Double-click: CHECK-BACKUP-ON-E.bat
+  4. Read pack-result.txt — shows MB, GB, bytes, and file count
+
+FRESH TIMESTAMPED BACKUP
+  Double-click: SAVE-SOURCE-NOW.bat
+  Creates: E:\Da-Music-Box-v4-SOURCE-COMPLETE_YYYY-MM-DD_HHmm.zip
+  Also writes: E:\SAVE-STAMP-YYYY-MM-DD_HHmm.txt
+
+LIVE SOURCE (always on E:)
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE
+
+Expected size (similar past backups):
+  ~400–850 MB depending on .git history (node_modules NOT included)

@@ -33,6 +33,8 @@ export type CreationTransportPumpOptions = {
   /** Beat Lab recomputes inside `onFrame`; Chord Builder / 808 use the passed `bDisplay`. */
   onFrameRef: MutableRefObject<(bDisplay: number) => void>;
   onAudioContextRebuiltRef?: MutableRefObject<((ctx: AudioContext) => void) | undefined>;
+  /** Beat Lab — keep master-clock oscillator MET off while local buffer-click lookahead runs. */
+  stopMasterMetronomeLoop?: () => void;
 };
 
 export function useCreationTransportPump(

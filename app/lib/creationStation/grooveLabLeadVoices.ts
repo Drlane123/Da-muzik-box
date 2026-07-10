@@ -104,6 +104,14 @@ export function truncateGrooveLabLeadVoiceMonoGroup(whenSec: number, group: stri
   }
 }
 
+/** Transport STOP — choke every registered lead mono group (guitar + synth lanes). */
+export function haltAllGrooveLabLeadVoices(whenSec: number): void {
+  for (const group of [...activeLeadStops.keys()]) {
+    truncateGrooveLabLeadVoiceMonoGroup(whenSec, group);
+  }
+  monoLeadSessions.clear();
+}
+
 function registerMonoLeadStop(
   ctx: AudioContext,
   group: string,

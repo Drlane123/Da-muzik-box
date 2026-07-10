@@ -1,0 +1,519 @@
+/* Da-Muzik Box — 3D mapped cube boot splash */
+
+.muzik-boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: clamp(14px, 3.5vh, 32px) 16px clamp(20px, 5vh, 48px);
+  gap: 0;
+  background: #090a0f;
+  transition: opacity 0.55s ease, visibility 0.55s ease;
+  overflow: hidden;
+}
+
+.muzik-boot-cube-video {
+  width: min(58vmin, 72vw);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  object-position: center center;
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.muzik-boot-cube-stage-spacer {
+  width: 100%;
+  height: 100%;
+  min-height: min(360px, 72vw);
+}
+
+.muzik-boot-header {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding-top: clamp(4px, 1vh, 12px);
+  z-index: 2;
+  position: relative;
+}
+
+.muzik-boot-stage {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+  min-height: 0;
+  margin-top: clamp(4px, 1vh, 12px);
+  padding-bottom: clamp(12px, 3vh, 28px);
+  width: 100%;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+
+.muzik-boot-cube-wrap {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(360px, 84vw);
+  height: min(360px, 72vw);
+  margin-top: clamp(28px, 5.5vh, 48px);
+  transform: translate3d(0, 22px, 0);
+  pointer-events: none;
+  overflow: visible;
+  background: transparent;
+}
+
+.muzik-boot-load {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, 88vw);
+  margin-top: clamp(24px, 7vh, 56px);
+  padding-top: 8px;
+}
+
+.muzik-boot-gold-title {
+  margin: 0;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.muzik-boot-gold-title-line {
+  display: block;
+  font-family: Orbitron, 'Audiowide', 'Exo 2', Rajdhani, sans-serif;
+  font-weight: 800;
+  font-size: clamp(18px, 4.8vw, 30px);
+  letter-spacing: 0.34em;
+  padding-left: 0.34em;
+  background: linear-gradient(135deg, #fff8ec 0%, #ffe082 42%, #ffb74d 78%, #ff8a65 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 18px rgba(255, 183, 77, 0.72)) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.85));
+  line-height: 1.2;
+}
+
+.muzik-boot-gold-title-line:nth-child(2) {
+  font-size: clamp(20px, 5.4vw, 34px);
+  letter-spacing: 0.38em;
+  padding-left: 0.38em;
+}
+
+.muzik-boot-gold-title-line--box {
+  font-size: clamp(22px, 6vw, 38px);
+  letter-spacing: 0.48em;
+  padding-left: 0.48em;
+  margin-top: 2px;
+}
+
+.muzik-boot-overlay.muzik-boot-overlay--out {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.muzik-boot-scene {
+  position: relative;
+  z-index: 1;
+  width: min(300px, 74vw);
+  height: min(300px, 74vw);
+  flex-shrink: 0;
+  perspective: 1100px;
+  perspective-origin: 50% 46%;
+  transform: rotateX(14deg);
+  transform-style: preserve-3d;
+  overflow: visible;
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.65));
+}
+
+.muzik-boot-cube-spin {
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  animation: muzik-boot-cube-spin-y 20s linear infinite;
+  will-change: transform;
+}
+
+.muzik-boot-cube {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: translate3d(0, 0, 0);
+  overflow: visible;
+}
+
+.muzik-boot-cube-corner {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 2px;
+  background:
+    radial-gradient(circle at 38% 32%, #ecd080 0%, #c89848 42%, #8a6428 100%);
+  transform: translate3d(var(--cx, 0px), var(--cy, 0px), var(--cz, 0px));
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.muzik-boot-face {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 101.5%;
+  height: 101.5%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: visible;
+  border-radius: 0;
+  box-shadow: none;
+  background: #c89848;
+  border: none;
+  transform-style: preserve-3d;
+}
+
+.muzik-boot-face-tex {
+  position: absolute;
+  left: -8%;
+  top: -8%;
+  width: 116%;
+  height: 116%;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-position: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* One square texture per face — fills the panel edge to edge */
+.muzik-boot-face-tex--front {
+  background-image: url('/splash/cube-faces/front.jpg');
+}
+
+.muzik-boot-face-tex--back {
+  background-image: url('/splash/cube-faces/back.jpg');
+}
+
+.muzik-boot-face-tex--right {
+  background-image: url('/splash/cube-faces/right.jpg');
+}
+
+.muzik-boot-face-tex--left {
+  background-image: url('/splash/cube-faces/left.jpg');
+}
+
+.muzik-boot-face-tex--top {
+  background-image: url('/splash/cube-faces/top.jpg');
+}
+
+.muzik-boot-face-tex--bottom {
+  background-image: url('/splash/cube-faces/bottom.jpg');
+}
+
+.muzik-boot-face--front {
+  transform: rotateY(0deg) translate3d(0, 0, 151px);
+}
+
+.muzik-boot-face--back {
+  transform: rotateY(180deg) translate3d(0, 0, 151px);
+}
+
+.muzik-boot-face--right {
+  transform: rotateY(90deg) translate3d(0, 0, 151px);
+}
+
+.muzik-boot-face--left {
+  transform: rotateY(-90deg) translate3d(0, 0, 151px);
+}
+
+.muzik-boot-face--top {
+  transform: rotateX(90deg) translate3d(0, 0, 151px);
+}
+
+.muzik-boot-face--bottom {
+  transform: rotateX(-90deg) translate3d(0, 0, 151px);
+}
+
+.muzik-boot-plaque {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 52%;
+  height: 28%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: linear-gradient(165deg, #c9a86a 0%, #8a6d3f 48%, #b89452 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%) rotate(180deg) translateZ(1px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.muzik-boot-plaque-top {
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: clamp(9px, 2.8vw, 14px);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #1a1208;
+  line-height: 1;
+}
+
+.muzik-boot-plaque-rule {
+  width: 72%;
+  height: 1px;
+  margin: 2px 0 1px;
+  background: rgba(26, 18, 8, 0.55);
+}
+
+.muzik-boot-plaque-bot {
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: clamp(10px, 3.2vw, 16px);
+  font-weight: 900;
+  color: #1a1208;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+@keyframes muzik-boot-cube-spin-y {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(360deg);
+  }
+}
+
+.muzik-boot-bar-track {
+  position: relative;
+  z-index: 21;
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(124, 244, 198, 0.45);
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.45),
+    0 0 16px rgba(124, 244, 198, 0.2);
+}
+
+.muzik-boot-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #5eead4 0%, #7cf4c6 45%, #fbbf24 100%);
+  box-shadow: 0 0 14px rgba(124, 244, 198, 0.7);
+}
+
+.muzik-boot-pct {
+  position: relative;
+  z-index: 21;
+  font-family: Rajdhani, system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #7cf4c6;
+  min-width: 3.5ch;
+  text-align: center;
+  text-shadow: 0 0 10px rgba(124, 244, 198, 0.45);
+}
+
+.muzik-boot-caption {
+  position: relative;
+  z-index: 21;
+  font-family: Rajdhani, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8a8a9e;
+  letter-spacing: 0.06em;
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+
+.muzik-boot-footer {
+  position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 108px;
+  margin-top: auto;
+  padding: 0 16px clamp(10px, 2.5vh, 20px);
+  overflow: hidden;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.muzik-boot-rise-field {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 228px;
+  pointer-events: none;
+  overflow: hidden;
+  mask-image: linear-gradient(to top, transparent 0%, #000 8%, #000 92%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 8%, #000 92%, transparent 100%);
+}
+
+.muzik-boot-rise-item {
+  position: absolute;
+  bottom: 0;
+  font-family: Rajdhani, Orbitron, system-ui, sans-serif;
+  font-size: clamp(8px, 2.2vw, 10px);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(124, 244, 198, 0.55);
+  text-shadow: 0 0 12px rgba(124, 244, 198, 0.25);
+  white-space: nowrap;
+  opacity: 0;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  --rise-drift: 0px;
+}
+
+.muzik-boot-rise-item--a {
+  animation-name: muzik-boot-rise-a;
+}
+
+.muzik-boot-rise-item--b {
+  animation-name: muzik-boot-rise-b;
+}
+
+.muzik-boot-footer-meta {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.muzik-boot-footer-brand {
+  font-family: Orbitron, 'Audiowide', Rajdhani, sans-serif;
+  font-weight: 700;
+  font-size: clamp(11px, 2.8vw, 13px);
+  letter-spacing: 0.12em;
+  background: linear-gradient(135deg, #fff8ec 0%, #ffe082 48%, #ffb74d 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 183, 77, 0.35));
+}
+
+.muzik-boot-footer-dot {
+  color: rgba(154, 154, 176, 0.45);
+  font-size: 12px;
+}
+
+.muzik-boot-footer-gendaw {
+  font-family: Orbitron, 'Audiowide', Rajdhani, sans-serif;
+  font-weight: 700;
+  font-size: clamp(10px, 2.6vw, 12px);
+  letter-spacing: 0.28em;
+  color: #9defff;
+  text-shadow: 0 0 10px rgba(99, 230, 255, 0.28);
+}
+
+.muzik-boot-footer-version {
+  position: relative;
+  z-index: 2;
+  font-family: Rajdhani, system-ui, sans-serif;
+  font-size: clamp(10px, 2.5vw, 11px);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: rgba(138, 138, 158, 0.85);
+  text-transform: uppercase;
+}
+
+@keyframes muzik-boot-rise-a {
+  0% {
+    transform: translateX(calc(-50% + var(--rise-drift))) translateY(10px);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.82;
+  }
+  78% {
+    opacity: 0.62;
+  }
+  90% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(calc(-50% + calc(var(--rise-drift) * -0.35))) translateY(-218px);
+    opacity: 0;
+  }
+}
+
+@keyframes muzik-boot-rise-b {
+  0% {
+    transform: translateX(calc(-50% - var(--rise-drift))) translateY(10px);
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.82;
+  }
+  78% {
+    opacity: 0.62;
+  }
+  90% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(calc(-50% - calc(var(--rise-drift) * -0.35))) translateY(-218px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .muzik-boot-cube-spin {
+    animation-duration: 40s;
+  }
+
+  .muzik-boot-rise-item {
+    animation: none;
+    opacity: 0.35;
+    transform: translateX(-50%) translateY(-40px);
+  }
+}

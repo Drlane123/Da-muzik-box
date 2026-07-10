@@ -21,6 +21,8 @@ export type GrooveLabExportStripProps = {
   showExportLabel?: boolean;
   /** Slightly wider MIDI / WAV / TO PAD chips (808 Lab). */
   widerButtons?: boolean;
+  /** Override flex gap between export chips (808 Lab toolbar). */
+  chipGap?: number;
   /** TO PAD picker open — highlight the pad button (Groove Lab / 808 Lab). */
   padPickerOpen?: boolean;
 };
@@ -37,8 +39,8 @@ function exportBtn(
     color: lit ? accent : '#444',
     border: `1px solid ${active ? accent : lit ? accent + '66' : '#222'}`,
     borderRadius: 6,
-    padding: wider ? '5px 16px' : '4px 10px',
-    minWidth: wider ? 58 : undefined,
+    padding: wider ? '5px 14px' : '4px 10px',
+    minWidth: wider ? 56 : undefined,
     fontSize: wider ? 9 : 8,
     fontWeight: 900,
     cursor: lit ? 'pointer' : 'not-allowed',
@@ -62,6 +64,7 @@ export function GrooveLabExportStrip({
   toolbarInline = false,
   showExportLabel = false,
   widerButtons = false,
+  chipGap,
   padPickerOpen = false,
 }: GrooveLabExportStripProps) {
   if (!onExportMidi && !onExportWav && !onExportToPad && !onSendToNewSynth) return null;
@@ -76,7 +79,7 @@ export function GrooveLabExportStrip({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: toolbarInline || compact ? 5 : 8,
+        gap: chipGap ?? (widerButtons ? 8 : toolbarInline || compact ? 6 : 8),
         flexWrap: toolbarInline ? 'nowrap' : 'wrap',
       }}
     >

@@ -13,12 +13,31 @@ export const GROOVE_LAB_MELODY_NOTE_COLOR = '#fbbf24';
 export const GROOVE_LAB_MELODY_NOTE_EDGE = '#b45309';
 export const GROOVE_LAB_MELODY_NOTE_INSET = '#92400e';
 
-/** Roll + transport green chords (user-tuned: previous 0.62 was too hot). */
-export const GROOVE_LAB_CHORD_MIX_GAIN = 0.31;
+/** Roll + transport chord sound bank (pianos/stacks) — not the mixer CH fader. */
+export const GROOVE_LAB_CHORD_MIX_GAIN = 0.04;
+
+/** GUITAR ▾ sound bank — licks + synth voices (not mixer CH fader). */
+export const GROOVE_LAB_GUITAR_BANK_GAIN = 0.08;
+
+/** GROOVE LEAD ▾ sound bank + Wave Leaf engine (not mixer CH fader). */
+export const GROOVE_LAB_LEAD_BANK_GAIN = 0.08;
 
 /** Voice level when chords route through a CH strip — user fader is on the strip bus only. */
 export function grooveLabChordStripVoiceMix(): number {
   return GROOVE_LAB_CHORD_MIX_GAIN;
+}
+
+export function grooveLabGuitarBankVoiceMix(): number {
+  return GROOVE_LAB_GUITAR_BANK_GAIN;
+}
+
+export function grooveLabLeadBankVoiceMix(): number {
+  return GROOVE_LAB_LEAD_BANK_GAIN;
+}
+
+/** Wave Leaf panel gain × lead bank trim (transport + roll preview). */
+export function grooveLabWaveLeafBankOutputGain(panelGain: number): number {
+  return Math.max(0.12, Math.min(1, panelGain * GROOVE_LAB_LEAD_BANK_GAIN));
 }
 
 /** Keypad audition: Groove chord layer under bass when CHORD ON. */

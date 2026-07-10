@@ -1,0 +1,23 @@
+﻿BACKUP IS RUNNING - how to see it
+=================================
+
+Checked: 2026-06-14 14:16:00
+
+tar.exe: YES (process id 19108)
+
+LOOK FOR THIS FILE ON E:\ (not a .zip yet):
+E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1408.zip.part
+Size now: 370.2 MB
+Growing in last 5 sec: True
+
+Lock file:
+  started 2026-06-14 14:08:13 -> E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1408.zip
+
+WHY YOU MIGHT NOT SEE IT:
+- Backup writes to a hidden-looking .zip.part file first
+- It only becomes .zip when fully done (20-40 min)
+- No window pops up when Cursor starts it
+- In Explorer: open E:\ and sort by Date modified
+
+When done you will see:
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1408.zip

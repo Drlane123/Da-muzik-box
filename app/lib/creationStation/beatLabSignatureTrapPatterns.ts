@@ -1,15 +1,41 @@
 /**
  * Beat Lab Signature Trap Series — hand-tuned patterns paired with producer kits.
- * Listed first in the Trap Pattern Bank menu (see patternPresets.ts merge order).
  * Trap `bpm` = producer grid tempo (130–150); transport plays half-time feel via beatLabTrapTempo.ts.
  *
- * Row layout (patternPresets.ts):
- *   0=Kick  1=Snare  2=Clap  3=Hi-Hat  4=Open Hat  5=TomHi  6=808 body  7=Rim/Perc
- * Steps 0,4,8,12 = beats 1–4 in 4/4 @ 16th resolution.
+ * Row layout: 0=Kick  1=Snare  2=Clap  3=Hi-Hat  4=Open Hat  5=TomHi  6=808 body  7=Rim/Perc
  */
 
 import type { PatternPreset } from '@/app/lib/patternPresets';
 import type { BeatLabProducerKitId } from '@/app/lib/creationStation/beatLabProducerKits';
+import {
+  trap808FollowKick,
+  trap808OneThree,
+  trapAtlMemphisBounce,
+  trapBackbeatStack,
+  trapCoreClubBounce,
+  trapCoreDirtySouthClub,
+  trapCoreFinisher,
+  trapCoreHalfTime,
+  trapCoreMetro,
+  trapCoreSouth,
+  trapHatsEightThenRoll,
+  trapHatsRollEnd,
+  trapHatsSteadyThenRoll,
+  trapHatsTripletFill,
+  trapHatsTwoStep,
+  trapKickBarRush,
+  trapKickLean,
+  trapKickMinimal,
+  trapKickSlide,
+  trapKickSparse,
+  trapKickSyncopated,
+  trapOh24,
+  trapOhGroove,
+  trapRimOff,
+  trapSnare24,
+  trapSnareBarPush,
+  trapSnareHalfTime,
+} from '@/app/lib/creationStation/beatLabTrapPatternGrid';
 
 const R = 8;
 const S = 16;
@@ -22,26 +48,18 @@ function grid(hits: ReadonlyArray<[number, number]>): boolean[][] {
   return g;
 }
 
-/** Full 16th closed-hat run (rows 3). */
-function hats16(): ReadonlyArray<[number, number]> {
-  const out: [number, number][] = [];
-  for (let s = 0; s < S; s++) out.push([3, s]);
-  return out;
-}
-
-/** Explicit preset → trap kit (checked before genre hash pool). */
 export const BEAT_LAB_SIGNATURE_TRAP_KIT_MAP: Readonly<
   Partial<Record<string, BeatLabProducerKitId>>
 > = {
-  'trap-sig-night-shift': 'vault808',
+  'trap-sig-night-shift': 'trapDarkVault',
   'trap-sig-southside-stack': 'trapClapStack',
-  'trap-sig-phantom-roll': 'trunkRattle',
-  'trap-sig-chrome-bounce': 'slab808',
-  'trap-sig-mud-stomp': 'mudFloor',
-  'trap-sig-bell-bounce': 'bell808',
-  'trap-sig-vault-mirage': 'vault808',
-  'trap-sig-iron-glide': 'ironSlide',
-  'trap-sig-long-tail': 'long808Hits',
+  'trap-sig-phantom-roll': 'trapTrunk808',
+  'trap-sig-chrome-bounce': 'trapSlabAtl',
+  'trap-sig-mud-stomp': 'trapStreetNegativeFloor',
+  'trap-sig-bell-bounce': 'trapSlabAtl',
+  'trap-sig-vault-mirage': 'trapStreetPinkVault',
+  'trap-sig-iron-glide': 'trapStreetBedrockSlab',
+  'trap-sig-long-tail': 'trapTrunk808',
   'trap-sig-brass-anthem': 'brassTrap',
   'trap-sig-analog-dust': 'trapAnalogRoom',
   'trap-sig-clap-push': 'trapClapStack',
@@ -52,7 +70,6 @@ export const BEAT_LAB_SIGNATURE_TRAP_KIT_MAP: Readonly<
   'trap-sig-hat-finisher': 'trapTrunk808',
 };
 
-/** Signature Trap Series — 17 curated grooves (plus 3 flagship trap patterns elsewhere = 20 total). */
 export function isBeatLabSignatureTrapPattern(presetId: string): boolean {
   return presetId.startsWith('trap-sig-');
 }
@@ -63,14 +80,15 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Night Shift · Lean',
     genre: 'Trap',
     role: 'drums',
-    bpm: 140,
-    desc: 'Late-night pocket — kick 1 & 2.5, stacked clap 2 & 4, rolling 16ths, 808 under the one',
+    bpm: 72,
+    desc: 'Lean night trap @ 72 — late kick pocket, hard trap snare 2 & 4 + push, steady→roll, no sub',
     pattern: grid([
-      [0, 0], [0, 6], [0, 10], [0, 14],
-      [2, 4], [2, 12],
-      ...hats16(),
-      [4, 6], [4, 14],
-      [6, 0], [6, 10],
+      [0, 0], [0, 7], [0, 10], [0, 14],
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      [1, 15],
+      ...trapHatsSteadyThenRoll(),
+      ...trapOh24(),
     ]),
   },
   {
@@ -79,15 +97,8 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 142,
-    desc: 'Southern stack — syncopated kicks, double clap tail on 4, rim pushes on the &',
-    pattern: grid([
-      [0, 0], [0, 3], [0, 7], [0, 10], [0, 14],
-      [1, 7],
-      [2, 4], [2, 12], [2, 13],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 10], [4, 14],
-      [7, 6], [7, 14],
-    ]),
+    desc: 'Southern bounce — sync kick, triplet hat fill, rim accents',
+    pattern: grid(trapCoreSouth()),
   },
   {
     id: 'trap-sig-phantom-roll',
@@ -95,13 +106,15 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 144,
-    desc: 'Sliding kick phrase with bar-end roll, clap 2 & 4, open hat lift before the turn',
+    desc: 'Roll finisher — sync into 3, kick bar rush, snap 2 & 4 + push, steady→burst hats',
     pattern: grid([
-      [0, 0], [0, 5], [0, 8], [0, 11], [0, 13], [0, 14], [0, 15],
-      [2, 4], [2, 12],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 13], [3, 14], [3, 15],
+      [0, 0], [0, 6], [0, 10], [0, 11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      [1, 15],
+      ...trapHatsSteadyThenRoll(),
       [4, 10], [4, 14],
-      [6, 0], [6, 8],
     ]),
   },
   {
@@ -109,14 +122,14 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Chrome · Bounce',
     genre: 'Trap',
     role: 'drums',
-    bpm: 141,
-    desc: 'Bouncy syncopation — kick behind the grid, 8th hats, open lifts on the & of 2 & 4',
+    bpm: 142,
+    desc: 'ATL bounce — metro kick pocket, hard trap snare 2 & 4, 8ths→roll, OH lift',
     pattern: grid([
-      [0, 0], [0, 7], [0, 10], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 14],
-      [4, 6], [4, 14],
-      [6, 0], [6, 8],
+      [0, 0], [0, 6], [0, 10], [0, 14],
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsEightThenRoll(),
+      ...trapOh24(),
     ]),
   },
   {
@@ -124,15 +137,16 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Mud Floor · Stomp',
     genre: 'Trap',
     role: 'drums',
-    bpm: 138,
-    desc: 'Heavy floor — four-on kick pressure, clap stack, sparse hats with late-bar fill',
+    bpm: 143,
+    desc: 'Mud stomp — metro kick + bar rush, hard trap snare 2 & 4, 8ths→roll, rim grit',
     pattern: grid([
-      [0, 0], [0, 4], [0, 8], [0, 10], [0, 12],
-      [2, 4], [2, 12],
-      [3, 0], [3, 4], [3, 8], [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 14],
-      [6, 0], [6, 4],
-      [7, 8],
+      [0, 0], [0, 6], [0, 10], [0, 11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsEightThenRoll(),
+      [4, 10], [4, 14],
+      ...trapRimOff(),
     ]),
   },
   {
@@ -140,15 +154,14 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Bell Trap · Bounce',
     genre: 'Trap',
     role: 'drums',
-    bpm: 143,
-    desc: 'Perc-forward bounce — rim bell accents, lean kick, clap 2 & 4, swung 8th hats',
+    bpm: 146,
+    desc: 'ATL club — metro kick pocket, snare+clap stacked 2 & 4, two-step hats → roll',
     pattern: grid([
-      [0, 0], [0, 6], [0, 11],
-      [2, 4], [2, 12],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 14],
+      [0, 0], [0, 6], [0, 10], [0, 14],
+      ...trapBackbeatStack(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
       [4, 14],
-      [7, 3], [7, 7], [7, 11], [7, 15],
-      [6, 0],
     ]),
   },
   {
@@ -156,14 +169,11 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Vault · Mirage',
     genre: 'Trap',
     role: 'drums',
-    bpm: 146,
-    desc: 'Dark sparse vault — long 808 tail, minimal kick, clap 2 & 4, breathing hat space',
+    bpm: 147,
+    desc: 'Vault ATL bounce — sync into 3 + bar rush, snare pocket 2 & 4, 8ths→roll, block perc',
     pattern: grid([
-      [0, 0], [0, 8], [0, 11],
-      [2, 4], [2, 12],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 14],
-      [4, 6],
-      [6, 0], [6, 8], [6, 14],
+      ...trapAtlMemphisBounce(),
+      [7, 3], [7, 11],
     ]),
   },
   {
@@ -171,15 +181,18 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Iron Slide · Glide',
     genre: 'Trap',
     role: 'drums',
-    bpm: 145,
-    desc: 'Slide pocket — trunk kick on 1 & 3, triplet-lean hats, open stab on the pickup',
+    bpm: 149,
+    desc: 'Memphis club glide — metro kick lock, hard snare 2 & 4, 8th hats → roll, one OH turn',
     pattern: grid([
-      [0, 0], [0, 8], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 1], [3, 2], [3, 4], [3, 5], [3, 6], [3, 8], [3, 9], [3, 10],
-      [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 7], [4, 11],
-      [6, 0], [6, 8], [6, 11],
+      [0, 0], [0, 6], [0, 10], [0, 14],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      [1, 15],
+      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12],
+      ...trapHatsRollEnd(),
+      [4, 14],
+      [7, 6], [7, 14],
     ]),
   },
   {
@@ -187,14 +200,17 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     name: 'Long Hit · Tail',
     genre: 'Trap',
     role: 'drums',
-    bpm: 140,
-    desc: '808 tail focus — two trunk hits per bar, full hat grid, body under downbeats',
+    bpm: 147,
+    desc: 'ATL stomp tail — sync into 3, kick bar rush, snap snare, quarter hats → roll, OH on 4',
     pattern: grid([
-      [0, 0], [0, 8],
-      [2, 4], [2, 12],
-      ...hats16(),
-      [4, 6], [4, 14],
-      [6, 0], [6, 8], [6, 14],
+      [0, 0], [0, 8], [0, 10], [0, 11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      [1, 15],
+      [3, 0], [3, 4], [3, 8], [3, 12],
+      ...trapHatsRollEnd(),
+      [4, 15],
     ]),
   },
   {
@@ -203,13 +219,15 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 148,
-    desc: 'Anthem pressure — steady kick pulse, stacked clap, dense hats, tom accent on 4',
+    desc: 'Anthem pressure — sync kick + bar rush, dense hat finish, tom accent',
     pattern: grid([
-      [0, 0], [0, 4], [0, 6], [0, 8], [0, 12], [0, 14],
-      [2, 4], [2, 12], [2, 13],
-      ...hats16(),
+      [0, 0], [0, 6], [0, 10],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsSteadyThenRoll(),
       [5, 12],
-      [6, 0], [6, 8],
+      ...trap808OneThree(),
     ]),
   },
   {
@@ -218,30 +236,24 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 136,
-    desc: 'Dusty room — behind-the-beat kick, snare layer on 2, rim chatter, breathed hats',
+    desc: 'Dusty room — late kick, two-step hats, rim chatter, breathed OH',
     pattern: grid([
       [0, 0], [0, 9], [0, 14],
-      [1, 4], [1, 12],
-      [2, 12],
-      [3, 0], [3, 3], [3, 6], [3, 9], [3, 12], [3, 15],
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
       [4, 6],
-      [7, 2], [7, 6], [7, 10], [7, 14],
+      ...trapRimOff(),
     ]),
   },
   {
     id: 'trap-sig-clap-push',
-    name: 'Clap Stack · Push',
+    name: 'Snap Stack · Push',
     genre: 'Trap',
     role: 'drums',
     bpm: 142,
-    desc: 'Late clap push — backbeat clap lands behind the grid, snare under clap, 16th drive',
-    pattern: grid([
-      [0, 0], [0, 6], [0, 10], [0, 14],
-      [1, 4], [1, 12],
-      [2, 5], [2, 13],
-      ...hats16(),
-      [4, 10],
-    ]),
+    desc: 'Metro push — sync kick, snare ghost bar-end, steady→roll hats',
+    pattern: grid(trapCoreMetro()),
   },
   {
     id: 'trap-sig-rim-rider',
@@ -249,13 +261,13 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 141,
-    desc: 'Perc groove — rim rides the offbeats, classic clap 2 & 4, syncopated kick',
+    desc: 'Syncopated kick, snap 2 & 4, two-step hats, rim rides 16ths',
     pattern: grid([
       [0, 0], [0, 10], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 14],
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
       [7, 1], [7, 3], [7, 5], [7, 7], [7, 9], [7, 11], [7, 13], [7, 15],
-      [6, 0],
+      ...trap808OneThree(),
     ]),
   },
   {
@@ -264,15 +276,8 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 74,
-    desc: 'Phonk half-time — clap on beat 3 only, rolling kick, 808 body on 1 & 3',
-    pattern: grid([
-      [0, 0], [0, 5], [0, 9], [0, 14],
-      [2, 8],
-      [3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7],
-      [3, 8], [3, 9], [3, 10], [3, 11], [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 7], [4, 15],
-      [6, 0], [6, 8],
-    ]),
+    desc: 'Half-time trap — snare beat 3, lean kick, rolling hats, OH lift',
+    pattern: grid(trapCoreHalfTime()),
   },
   {
     id: 'trap-sig-drill-pocket',
@@ -280,13 +285,11 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 148,
-    desc: 'Trap/drill crossover — sliding kick phrase, snare on the 3-e, double clap tail',
+    desc: 'Trap/drill — slide kick, snap 2 & 4, steady→roll, open stabs',
     pattern: grid([
       [0, 0], [0, 3], [0, 8], [0, 11], [0, 15],
-      [1, 7],
-      [2, 4], [2, 12], [2, 13],
-      [3, 0], [3, 1], [3, 2], [3, 3], [3, 4], [3, 5], [3, 6], [3, 7],
-      [3, 8], [3, 9], [3, 10], [3, 11], [3, 12], [3, 13], [3, 14], [3, 15],
+      ...trapSnare24(),
+      ...trapHatsSteadyThenRoll(),
       [4, 7], [4, 11], [4, 15],
     ]),
   },
@@ -296,11 +299,12 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 134,
-    desc: 'Minimal pressure — two kick hits, clap 2 & 4, hat fill into bar 4, sub on the one',
+    desc: 'Minimal trunk — two kicks, snap 2 & 4, two-step + roll, OH on 4',
     pattern: grid([
-      [0, 0], [0, 14],
-      [2, 4], [2, 12],
-      [3, 0], [3, 4], [3, 8], [3, 12], [3, 13], [3, 14], [3, 15],
+      ...trapKickSparse(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
       [4, 14],
       [6, 0],
     ]),
@@ -311,14 +315,7 @@ export const BEAT_LAB_SIGNATURE_TRAP_PATTERNS: readonly PatternPreset[] = [
     genre: 'Trap',
     role: 'drums',
     bpm: 150,
-    desc: 'Drop finisher — lean kick, clap 2 & 4, 32nd-feel hat roll on beats 3–4',
-    pattern: grid([
-      [0, 0], [0, 6], [0, 10],
-      [2, 4], [2, 12],
-      [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10],
-      [3, 12], [3, 13], [3, 14], [3, 15],
-      [4, 14], [4, 15],
-      [6, 0], [6, 10],
-    ]),
+    desc: 'Drop finisher — lean kick + bar rush, hat burst, open lift',
+    pattern: grid(trapCoreFinisher()),
   },
 ];

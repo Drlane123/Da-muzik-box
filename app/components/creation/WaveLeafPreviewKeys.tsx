@@ -22,6 +22,9 @@ type Props = {
   onReleaseMidi?: () => void;
   playingMidis?: ReadonlySet<number>;
   disabled?: boolean;
+  midiMin?: number;
+  midiMax?: number;
+  registerLabel?: string;
 };
 
 function buildKeysInRange(low: number, high: number) {
@@ -46,13 +49,21 @@ function blackKeyLeftPercent(midi: number, whiteKeys: readonly number[]): number
   return ((whiteIdx + offset) / whiteKeys.length) * 100;
 }
 
-export function WaveLeafPreviewKeys({ onPlayMidi, onReleaseMidi, playingMidis, disabled }: Props) {
+export function WaveLeafPreviewKeys({
+  onPlayMidi,
+  onReleaseMidi,
+  playingMidis,
+  disabled,
+  midiMin = WAVE_LEAF_MIDI_MIN,
+  midiMax = WAVE_LEAF_MIDI_MAX,
+  registerLabel = WAVE_LEAF_REGISTER_LABEL,
+}: Props) {
   const keyPointerRef = useRef({ down: false, lastMidi: 0 });
   const [activeMidi, setActiveMidi] = useState<number | null>(null);
 
   const { whiteKeys, blackKeys } = useMemo(
-    () => buildKeysInRange(WAVE_LEAF_MIDI_MIN, WAVE_LEAF_MIDI_MAX),
-    [],
+    () => buildKeysInRange(midiMin, midiMax),
+    [midiMin, midiMax],
   );
 
   useEffect(() => {
@@ -165,7 +176,7 @@ export function WaveLeafPreviewKeys({ onPlayMidi, onReleaseMidi, playingMidis, d
         }}
       >
         <span style={{ fontSize: 6, fontWeight: 800, color: WAVE_LEAF_UI.textDim, letterSpacing: 0.5 }}>
-          PREVIEW · {WAVE_LEAF_REGISTER_LABEL}
+          PREVIEW · {registerLabel}
         </span>
         <span style={{ fontSize: 6, color: WAVE_LEAF_UI.textDim }}>drag across keys</span>
       </div>

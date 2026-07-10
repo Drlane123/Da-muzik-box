@@ -9,6 +9,9 @@ const STYLES: { id: DrumKitGeneratorStyle; label: string; hint: string }[] = [
   { id: 'house', label: 'House', hint: 'Four-on-the-floor kick, steady hats' },
   { id: 'trap', label: 'Trap', hint: 'Sparse kick, busy hats, backbeat snare' },
   { id: 'lofi', label: 'Lo-fi', hint: 'Softer kit + lighter 2 & 4 pocket' },
+  { id: 'rnb', label: 'R&B', hint: 'Pocket kick, smooth 8th hats, 2 & 4 snare' },
+  { id: 'dance', label: 'Dance', hint: 'Four-on-floor anthem, busy 16th hats' },
+  { id: 'disco', label: 'Disco', hint: 'Classic floor kick, open hats on the &' },
 ];
 
 export function DrumKitGeneratorModal({

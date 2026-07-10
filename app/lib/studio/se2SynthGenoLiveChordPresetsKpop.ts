@@ -1,0 +1,178 @@
+/**
+ * Live Chord presets — K-pop (axis hooks, pre-chorus lifts, EDM drops, K-ballads).
+ * Progressions mirror SE2 guitar K-pop loops + era kpop-eras library — explicit 8-bar loops.
+ */
+import type { Se2SynthGenoLivePresetDef } from '@/app/lib/studio/se2SynthGenoLiveChordPresets';
+import type { Se2SynthGenoLiveGenreId } from '@/app/lib/studio/se2SynthGenoLiveChordTypes';
+
+function defs(genreId: Se2SynthGenoLiveGenreId, items: Se2SynthGenoLivePresetDef[]) {
+  return items.map((item) => ({ ...item, id: `${genreId}-${item.id}` }));
+}
+
+export const SE2_SYNTH_GENO_LIVE_KPOP_DEFS = defs('kpop', [
+  // ── Axis / chart hooks (major) ────────────────────────────────────────────
+  {
+    id: 'idol-axis',
+    name: 'Idol Axis',
+    tag: 'vi–IV–I–V',
+    mode: 'major',
+    bpm: 118,
+    romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
+    loop: ['vi7', 'IVmaj7', 'Imaj7', 'V7', 'vi7', 'IVmaj7', 'Imaj7', 'V7'],
+  },
+  {
+    id: 'chorus-stack',
+    name: 'Chorus Stack',
+    tag: 'IV–I–V–vi',
+    mode: 'major',
+    bpm: 124,
+    romans: ['IVmaj7', 'Imaj7', 'V7', 'vi7'],
+    loop: ['IVmaj7', 'Imaj7', 'V7', 'vi7', 'IVmaj7', 'Imaj7', 'V7', 'vi7'],
+  },
+  {
+    id: 'radio-flip',
+    name: 'Radio Flip',
+    tag: 'I–V–vi–IV',
+    mode: 'major',
+    bpm: 120,
+    romans: ['Imaj7', 'V7', 'vi7', 'IVmaj7'],
+    loop: ['Imaj7', 'V7', 'vi7', 'IVmaj7', 'Imaj7', 'V7', 'vi7', 'IVmaj7'],
+  },
+  {
+    id: 'verse-pocket',
+    name: 'Verse Pocket',
+    tag: 'syncopated',
+    mode: 'major',
+    bpm: 108,
+    romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
+    loop: ['vi7', 'IVmaj7', 'Imaj7', 'V7', 'iii7', 'vi7', 'IVmaj7', 'Imaj7'],
+  },
+  {
+    id: 'pre-chorus',
+    name: 'Pre-Chorus',
+    tag: 'IV–V–iii–vi',
+    mode: 'major',
+    bpm: 122,
+    romans: ['IVmaj7', 'V7', 'iii7', 'vi7'],
+    loop: ['IVmaj7', 'V7', 'iii7', 'vi7', 'IVmaj7', 'V7', 'Imaj7', 'V7'],
+  },
+  {
+    id: 'glow-hook',
+    name: 'Glow Hook',
+    tag: 'maj7 stack',
+    mode: 'major',
+    bpm: 126,
+    romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
+    loop: ['vi7', 'IVmaj7', 'Imaj7', 'V7', 'iii7', 'vi7', 'IVmaj7', 'Imaj7'],
+  },
+  {
+    id: 'maj7-lift',
+    name: 'Maj7 Lift',
+    tag: 'chart',
+    mode: 'major',
+    bpm: 116,
+    romans: ['vi7', 'IVmaj7', 'V7', 'Imaj7'],
+    loop: ['vi7', 'IVmaj7', 'V7', 'Imaj7', 'vi7', 'IVmaj7', 'V7', 'Imaj7'],
+  },
+  {
+    id: 'teen-anthem',
+    name: 'Teen Anthem',
+    tag: 'IV–V–vi–I',
+    mode: 'major',
+    bpm: 128,
+    romans: ['IVmaj7', 'V7', 'vi7', 'Imaj7'],
+    loop: ['IVmaj7', 'V7', 'vi7', 'Imaj7', 'IVmaj7', 'V7', 'vi7', 'Imaj7'],
+  },
+  {
+    id: 'emo-lift',
+    name: 'Emo Lift',
+    tag: 'push',
+    mode: 'major',
+    bpm: 114,
+    romans: ['IVmaj7', 'V7', 'Imaj7', 'V7'],
+    loop: ['IVmaj7', 'V7', 'Imaj7', 'V7', 'vi7', 'IVmaj7', 'Imaj7', 'V7'],
+  },
+  {
+    id: 'festival-drop',
+    name: 'Festival Drop',
+    tag: 'anthem',
+    mode: 'major',
+    bpm: 128,
+    romans: ['IVmaj7', 'Imaj7', 'V7', 'vi7'],
+    loop: ['IVmaj7', 'Imaj7', 'V7', 'vi7', 'IVmaj7', 'Imaj7', 'V7', 'vi7'],
+  },
+  // ── Production colors ─────────────────────────────────────────────────────
+  {
+    id: 'sus-drop',
+    name: 'Sus Drop',
+    tag: 'sus resolve',
+    mode: 'major',
+    bpm: 120,
+    romans: ['Isus4', 'V7', 'vi7', 'IVmaj7'],
+    loop: ['Isus4', 'V7', 'vi7', 'IVmaj7', 'Isus4', 'V7', 'Imaj7', 'V7'],
+  },
+  {
+    id: 'funk-pop',
+    name: 'Funk-Pop',
+    tag: 'ii–V–I–IV',
+    mode: 'major',
+    bpm: 112,
+    romans: ['ii7', 'V7', 'Imaj7', 'IVmaj7'],
+    loop: ['ii7', 'V7', 'Imaj7', 'IVmaj7', 'ii7', 'V7', 'Imaj7', 'IVmaj7'],
+  },
+  {
+    id: 'edm-break',
+    name: 'EDM Break',
+    tag: 'vi–V–IV–I',
+    mode: 'major',
+    bpm: 126,
+    romans: ['vi7', 'V7', 'IVmaj7', 'Imaj7'],
+    loop: ['vi7', 'V7', 'IVmaj7', 'Imaj7', 'vi7', 'V7', 'IVmaj7', 'Imaj7'],
+  },
+  {
+    id: 'house-k',
+    name: 'House K',
+    tag: 'club',
+    mode: 'major',
+    bpm: 124,
+    romans: ['Imaj7', 'V7', 'vi7', 'IVmaj7'],
+    loop: ['Imaj7', 'V7', 'vi7', 'IVmaj7', 'Imaj7', 'V7', 'vi7', 'IVmaj7'],
+  },
+  {
+    id: 'ballad-tear',
+    name: 'K-Ballad',
+    tag: 'ballad',
+    mode: 'major',
+    bpm: 76,
+    romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
+    loop: ['vi7', 'IVmaj7', 'Imaj7', 'V7', 'iii7', 'vi7', 'IVmaj7', 'Imaj7'],
+  },
+  // ── Minor-key K-pop ───────────────────────────────────────────────────────
+  {
+    id: 'dark-verse',
+    name: 'Dark Verse',
+    tag: 'i–bVI–bVII',
+    mode: 'minor',
+    bpm: 104,
+    romans: ['i7', 'bVImaj7', 'bVII', 'bIIImaj7'],
+    loop: ['i7', 'bVImaj7', 'bVII', 'bIIImaj7', 'i7', 'bVImaj7', 'bVII', 'i7'],
+  },
+  {
+    id: 'rnb-k',
+    name: 'R&B K',
+    tag: 'i–iv–bVII',
+    mode: 'minor',
+    bpm: 98,
+    romans: ['i7', 'iv7', 'bVII', 'bVImaj7'],
+    loop: ['i7', 'iv7', 'bVII', 'bVImaj7', 'i7', 'iv7', 'bVII', 'i7'],
+  },
+  {
+    id: 'tiktok-hook',
+    name: 'TikTok Hook',
+    tag: 'short loop',
+    mode: 'major',
+    bpm: 122,
+    romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
+    loop: ['vi7', 'IVmaj7', 'Imaj7', 'V7', 'IVmaj7', 'V7', 'vi7', 'Imaj7'],
+  },
+]);

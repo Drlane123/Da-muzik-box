@@ -149,6 +149,10 @@ import {
 import { scheduleVoicedChordPlayback } from '@/app/lib/creationStation/chordBuilderPlayback';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/creationStation/creationTransportSystem';
 import { useCreationTransportPump } from '@/app/hooks/useCreationTransportPump';
+import {
+  ChordBuilderHelpProvider,
+  ChordBuilderHelpTip,
+} from '@/app/components/creation/ChordBuilderHelpHub';
 
 const MINT = '#7cf4c6';
 const MINT_DIM = 'rgba(124, 244, 198, 0.35)';
@@ -1691,6 +1695,8 @@ export function ChordBuilderTab({
     playheadColRef.current = pos;
   };
 
+  const chordBuilderPumpActive = active || sessionPlayLinked;
+
   useCreationTransportPump(
     {
       ctxRef,
@@ -1702,7 +1708,7 @@ export function ChordBuilderTab({
       lastScheduledQuarterRef,
     },
     {
-      isScreenActive: active,
+      isScreenActive: chordBuilderPumpActive,
       isPlaying,
       getOrCreateAudioContext: () => {
         const c = getAudioContextRef.current();
@@ -1824,6 +1830,7 @@ export function ChordBuilderTab({
 
   useEffect(() => {
     if (active) return;
+    if (sessionPlayLinked) return;
     // ── Hard cleanup when Chord Builder closes ────────────────────────
     // Critical for not bleeding into Beat Lab's audio. The shared
     // AudioContext stays alive between tabs (Beat Lab owns it), so any
@@ -1882,7 +1889,7 @@ export function ChordBuilderTab({
       exportStatusTimerRef.current = null;
     }
     setPlayingMidis(new Set());
-  }, [active, pausePlayback, cancelTransportChords]);
+  }, [active, sessionPlayLinked, pausePlayback, cancelTransportChords]);
 
   function onTogglePlay() {
     if (isPlaying) {
@@ -2763,6 +2770,7 @@ export function ChordBuilderTab({
   if (!active) return null;
 
   return (
+    <ChordBuilderHelpProvider active autoIntro>
     <div
       style={{
         position: 'absolute',
@@ -3040,10 +3048,17 @@ export function ChordBuilderTab({
         hasEdits={editsForActive.added.size > 0 || editsForActive.removed.size > 0}
         sizeMode={pianoRollMode}
         onSizeModeChange={setPianoRollMode}
+        headerTitle={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            PIANO ROLL
+            <ChordBuilderHelpTip tab="roll" title="Piano roll & chord grid help" />
+          </span>
+        }
           />
         </div>
       </div>
     </div>
+    </ChordBuilderHelpProvider>
   );
 }
 
@@ -3131,7 +3146,10 @@ function Header({ onClose }: { onClose: () => void }) {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 12, fontWeight: 900, color: MINT, letterSpacing: 3.5 }}>🎼 CHORD BUILDER</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 900, color: MINT, letterSpacing: 3.5 }}>🎼 CHORD BUILDER</span>
+          <ChordBuilderHelpTip tab="overview" title="Chord Builder quick start" />
+        </span>
         <span style={{ fontSize: 9, fontWeight: 700, color: '#8a8a98', letterSpacing: 0.4 }}>
           drag a chord pad onto any bar of the piano roll · ESC to close
         </span>
@@ -3489,6 +3507,7 @@ function TopToolbar({
       >
         <Square size={11} />
       </button>
+      <ChordBuilderHelpTip tab="transport" title="Transport & tempo help" />
 
       {/* Tempo control group: − [BPM number] +, with Tap Tempo + Sync next
           to it. When Sync is on, the manual controls dim/disable so it's
@@ -3672,6 +3691,7 @@ function TopToolbar({
           );
         })}
       </ToolbarSelect>
+      <ChordBuilderHelpTip tab="sound" title="Voice, voicing & FX help" />
 
       <ToolbarSelect
         label="Voicing"
@@ -4018,6 +4038,7 @@ function TopToolbar({
       {/* Two-way "send" cluster: Save MIDI → .mid file download,
           WAV bounce → a Beat-Lab sample pad. The export side opens a
           4×4 pad picker so the user can target one of the 16 tracks. */}
+      <ChordBuilderHelpTip tab="export" title="Save & send harmony help" />
       <div style={{ position: 'relative', display: 'inline-block' }}>
         <ToolbarButton
           onClick={onSaveMidi}
@@ -4370,8 +4391,9 @@ function ProgressionTabStrip({
         overflowX: 'auto',
       }}
     >
-      <span style={{ fontSize: 9, fontWeight: 800, color: '#8a8a98', letterSpacing: 1.5, marginRight: 8, flexShrink: 0 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 800, color: '#8a8a98', letterSpacing: 1.5, marginRight: 8, flexShrink: 0 }}>
         PROGRESSION
+        <ChordBuilderHelpTip tab="progressions" title="Progressions & song sections" />
       </span>
       {progressions.map((p) => {
         const isActive = p.id === activeId;
@@ -4554,6 +4576,9 @@ function PresetStrip({
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
         <span
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
             fontSize: 9,
             fontWeight: 900,
             color: '#7cf4c6',
@@ -4562,6 +4587,7 @@ function PresetStrip({
           }}
         >
           🎼 CHORD PROGRESSIONS
+          <ChordBuilderHelpTip tab="progressions" title="Genre progression presets" />
         </span>
         <span style={{ fontSize: 9, fontWeight: 700, color: '#a8a8b4', letterSpacing: 0.4 }}>
           · {genre.label.toUpperCase()}
@@ -5439,7 +5465,10 @@ function AiGridTab({
         <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>
           {open ? '▾' : '▸'}
         </span>
-        <span>AI SUGGESTIONS &amp; CHORD GRID</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          AI SUGGESTIONS &amp; CHORD GRID
+          <ChordBuilderHelpTip tab="roll" title="AI suggestions & chord grid" />
+        </span>
         {suggestionCount > 0 && (
           <span
             style={{
@@ -5954,7 +5983,10 @@ function ChordScaleStrip({
           flexWrap: 'wrap',
         }}
       >
-        CHORD SCALE
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          CHORD SCALE
+          <ChordBuilderHelpTip tab="pads" title="Chord scale pads help" />
+        </span>
         <span style={{ fontSize: 8, fontWeight: 600, color: '#54545e', letterSpacing: 0.4 }}>
           click to audition · double-click to add · drag to a piano-roll bar
         </span>

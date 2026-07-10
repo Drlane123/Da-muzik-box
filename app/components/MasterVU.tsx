@@ -12,9 +12,11 @@ function linToDb(lin: number): number {
 
 interface MasterVUProps {
   masterLevel: number;
+  /** Meter width in px — default 120; ~200 sits under transport + loop row */
+  barWidth?: number;
 }
 
-export default function MasterVU({ masterLevel }: MasterVUProps) {
+export default function MasterVU({ masterLevel, barWidth = 120 }: MasterVUProps) {
   const { transport } = useMasterClock();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const peakHoldRef = useRef(0);
@@ -130,14 +132,14 @@ export default function MasterVU({ masterLevel }: MasterVUProps) {
   const color = db >= -6 ? '#ff2222' : db >= -12 ? '#ffcc00' : '#00e676';
 
   return (
-    <div className="flex flex-col gap-0.5 shrink-0">
+    <div className="flex flex-col gap-0.5 shrink-0" style={{ width: barWidth }}>
       <div className="flex items-center justify-between px-0.5">
         <span style={{ fontSize: 7, color: '#444', fontFamily: 'monospace' }}>MASTER</span>
         <span className="font-mono font-bold" style={{ fontSize: 8, color }}>
           {db > -96 ? `${db.toFixed(1)}dB` : '-∞'}
         </span>
       </div>
-      <canvas ref={canvasRef} width={120} height={10} style={{ display: 'block' }} />
+      <canvas ref={canvasRef} width={barWidth} height={10} style={{ display: 'block' }} />
     </div>
   );
 }

@@ -255,6 +255,8 @@ export type PlayGuitarLickSampleOpts = {
   lowCutHz?: number;
   highCutHz?: number;
   transportClean?: boolean;
+  /** Round-robin humanization on top of pitch-shift. */
+  extraDetuneCents?: number;
 };
 
 const activeLickStops = new Map<string, (t: number) => void>();
@@ -303,7 +305,7 @@ export function playGuitarLickSample(
     truncateGrooveLabLeadMonoGroup(Math.max(now, startAt - 0.04), monoGroup);
   }
   const semitoneOffset = targetMidi - def.rootMidi;
-  const detuneCents = semitoneOffset * 100;
+  const detuneCents = semitoneOffset * 100 + (opts?.extraDetuneCents ?? 0);
   const wahAmount = transportClean ? 0 : clamp01(opts?.wahAmount ?? 0);
   const drive = clamp01(opts?.drive ?? 0);
   const distortion = clamp01(opts?.distortion ?? 0);

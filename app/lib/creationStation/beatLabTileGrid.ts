@@ -73,6 +73,8 @@ export function beatLabDrumStepTileLook(args: {
   isNoteSelected: boolean;
   isHead: boolean;
   noteCellRadius: number | string;
+  /** When set and > 1, classic mode keeps full-bleed roll span. */
+  noteLen?: number;
   beatLabGridStepOnFill: () => string;
 }): BeatLabDrumStepTileLook {
   const {
@@ -87,12 +89,14 @@ export function beatLabDrumStepTileLook(args: {
     isNoteSelected,
     isHead,
     noteCellRadius,
+    noteLen,
     beatLabGridStepOnFill,
   } = args;
 
   const cursorBase = 'pointer' as const;
+  const singleHit = on && (noteLen == null || noteLen <= 1);
 
-  if (!tileGrid) {
+  if (!tileGrid && !singleHit) {
     return {
       button: {
         display: 'flex',

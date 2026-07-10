@@ -9,6 +9,20 @@ import {
   type PadSamplerPlaybackOpts,
 } from '@/app/lib/padSampleStorage';
 
+import {
+  BEAT_LAB_STREET_TRAP_KIT_METAS,
+  type BeatLabStreetTrapKitId,
+} from '@/app/lib/creationStation/beatLabStreetTrapKits';
+import {
+  BEAT_LAB_MODERN_RNB_KIT_METAS,
+  type BeatLabModernRnbKitId,
+} from '@/app/lib/creationStation/beatLabModernRnbKits';
+import { BEAT_LAB_ORCHESTRA_HITS_KIT_META, BEAT_LAB_ORCHESTRA_HITS_KIT_REV } from '@/app/lib/creationStation/beatLabOrchestraHitsKit';
+import {
+  BEAT_LAB_CINEMATIC_HITS_KIT_META,
+  BEAT_LAB_CINEMATIC_HITS_KIT_REV,
+} from '@/app/lib/creationStation/beatLabCinematicHitsKit';
+
 export type BeatLabProducerKitId =
   | 'trapDarkVault'
   | 'trapSlabAtl'
@@ -28,10 +42,17 @@ export type BeatLabProducerKitId =
   | 'slab808'
   | 'ironSlide'
   | 'bell808'
-  | 'mudFloor';
+  | 'mudFloor'
+  | 'miamiBass808'
+  | BeatLabStreetTrapKitId
+  | BeatLabModernRnbKitId
+  | 'orchestraHits'
+  | 'cinematicHits';
 
 const SMPLDSNDS_BASE = 'https://smpldsnds.github.io/drum-machines';
 const BUNDLED_SAMPLE_BASE = '/samples/sound-families/';
+/** Kits bundled directly under `public/samples/` (not the trap sound-families tree). */
+const BUNDLED_SAMPLES_ROOT_BASE = '/samples/';
 
 export const BEAT_LAB_PRODUCER_KIT_ATTRIBUTION =
   'Drum one-shots: smpldsnds/drum-machines (public domain).';
@@ -47,6 +68,10 @@ export interface BeatLabProducerPadDef {
   label: string;
   /** Optional punch / tune shaping when the kit loads. */
   sampler?: Partial<PadSamplerPlaybackOpts>;
+  /** Native MIDI pitch of the one-shot (chromatic pads). */
+  rootMidi?: number;
+  /** Full keyboard range via detune from {@link rootMidi}. */
+  chromatic?: boolean;
 }
 
 export interface BeatLabProducerKitMeta {
@@ -63,7 +88,12 @@ function u(rel: string): string {
 
 function padDefUrl(def: BeatLabProducerPadDef): string {
   if (def.localFile) {
-    return `${BUNDLED_SAMPLE_BASE}${def.localFile.replace(/^\//, '')}`;
+    const rel = def.localFile.replace(/^\//, '');
+    const base =
+      rel.startsWith('orchestra-hits-kit/') || rel.startsWith('orchestra-hits/')
+        ? BUNDLED_SAMPLES_ROOT_BASE
+        : BUNDLED_SAMPLE_BASE;
+    return `${base}${rel}`;
   }
   if (!def.relUrl) throw new Error(`Pad ${def.pad} missing relUrl/localFile`);
   return u(def.relUrl);
@@ -79,6 +109,12 @@ export const BEAT_LAB_FLAGSHIP_KIT_ORDER: readonly BeatLabProducerKitId[] = [
   'rnbNeoStack',
   'houseDrive',
   'clubPocket',
+] as const;
+
+/** Extra flagship-style kits — load onto the active bank (not A–H pre-seed). */
+export const BEAT_LAB_EXTRA_DEFAULT_KITS: readonly BeatLabProducerKitId[] = [
+  'cinematicHits',
+  'orchestraHits',
 ] as const;
 
 const LOUD_KICK: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.38, fineSemi: 0 };
@@ -99,6 +135,16 @@ const HEAVY_KICK: Partial<PadSamplerPlaybackOpts> = {
   lpHz: 4500,
 };
 const PUNCH_SNARE: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.28 };
+/** Tight trap snap snare — pad 1 backbeat. */
+const TRAP_TIGHT_SNARE: Partial<PadSamplerPlaybackOpts> = {
+  triggerSnap: 0.56,
+  fineSemi: 0,
+  hpHz: 280,
+  lpHz: 10800,
+  trim0: 0,
+  trim1: 0.82,
+  maxPlaySec: 0.18,
+};
 
 /** TR-808 long-decay kicks (bd0010+ = long haul tails in smpldsnds). */
 const LONG_808_KICK: Partial<PadSamplerPlaybackOpts> = {
@@ -132,7 +178,7 @@ const CLAP_STACK: Partial<PadSamplerPlaybackOpts> = { triggerSnap: 0.32 };
  */
 const KIT_TRAP_DARK_VAULT: readonly BeatLabProducerPadDef[] = [
   { pad: 0, localFile: 'trap-kit/kick/heavy-kick-lv1.wav', label: 'Dark kick', sampler: HEAVY_KICK },
-  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Trap snare', sampler: PUNCH_SNARE },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: TRAP_TIGHT_SNARE },
   { pad: 2, localFile: 'trap-kit/clap/trapaholic-clap-1-1.wav', label: 'Clap main', sampler: CLAP_HIT },
   { pad: 3, localFile: 'trap-kit/hihat/trapaholic-hihat-3.wav', label: 'CH tight' },
   { pad: 4, localFile: 'trap-kit/open-hat/ddw2-open-hat-6-1.wav', label: 'Open hat' },
@@ -156,7 +202,7 @@ const KIT_TRAP_DARK_VAULT: readonly BeatLabProducerPadDef[] = [
 
 const KIT_TRAP_SLAB_ATL: readonly BeatLabProducerPadDef[] = [
   { pad: 0, localFile: 'trap-kit/kick/kick-atl.wav', label: 'ATL kick', sampler: HEAVY_KICK },
-  { pad: 1, localFile: 'trap-kit/snare/deedotluger-snare-6-1.wav', label: 'Slab snare', sampler: PUNCH_SNARE },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: TRAP_TIGHT_SNARE },
   { pad: 2, localFile: 'trap-kit/clap/jc---clap-2-1.wav', label: 'Clap', sampler: CLAP_HIT },
   { pad: 3, localFile: 'trap-kit/hihat/ddw2-hat-1.wav', label: 'CH' },
   { pad: 4, localFile: 'trap-kit/open-hat/ddw2-open-hat-1-1.wav', label: 'OH' },
@@ -175,7 +221,7 @@ const KIT_TRAP_SLAB_ATL: readonly BeatLabProducerPadDef[] = [
 
 const KIT_TRAP_TRUNK_808: readonly BeatLabProducerPadDef[] = [
   { pad: 0, localFile: 'trap-kit/kick/deedotluger-kick-7.wav', label: '808 kick', sampler: LONG_808_KICK },
-  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare-2-1.wav', label: 'Trap snare', sampler: PUNCH_SNARE },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: TRAP_TIGHT_SNARE },
   { pad: 2, localFile: 'trap-kit/clap/trapaholic-clap-14-1.wav', label: 'Clap', sampler: CLAP_HIT },
   { pad: 3, localFile: 'trap-kit/hihat/trapaholic-hihat-23.wav', label: 'CH' },
   { pad: 4, localFile: 'trap-kit/open-hat/deedotluger-open-hat-6.wav', label: 'OH' },
@@ -215,11 +261,39 @@ const KIT_BRASS_TRAP: readonly BeatLabProducerPadDef[] = [
   { pad: 15, relUrl: 'TR-808/kick/bd0075.m4a', label: '808 SUB', sampler: LONG_808_SUB },
 ];
 
-/** Smooth R&B — LM-2 pocket, softer ghost-friendly snare (Beat Lab Pattern Bank pairing). */
+const RNB_DRY_KICK = {
+  triggerSnap: 0.44,
+  fineSemi: 0,
+  hpHz: 72,
+  lpHz: 6800,
+  trim0: 0,
+  trim1: 0.92,
+  maxPlaySec: 0.42,
+} as const;
+const RNB_TIGHT_SNARE = {
+  triggerSnap: 0.54,
+  fineSemi: 0,
+  hpHz: 280,
+  lpHz: 14200,
+  trim0: 0,
+  trim1: 0.9,
+  maxPlaySec: 0.22,
+} as const;
+const RNB_SNAP_LAYER = {
+  triggerSnap: 0.5,
+  fineSemi: 0,
+  hpHz: 300,
+  lpHz: 13800,
+  trim0: 0,
+  trim1: 0.72,
+  maxPlaySec: 0.18,
+} as const;
+
+/** Smooth R&B — dry fat kick, tight trap snare/clap, LM silk hats (Pattern Bank pairing). */
 const KIT_SMOOTH_RNB: readonly BeatLabProducerPadDef[] = [
-  { pad: 0, relUrl: 'LM-2/kick.m4a', label: 'Kick · soft', sampler: { ...LOUD_KICK, triggerSnap: 0.34 } },
-  { pad: 1, relUrl: 'LM-2/snare-h.m4a', label: 'Sn · ghost', sampler: { triggerSnap: 0.2 } },
-  { pad: 2, relUrl: 'LM-2/clap.m4a', label: 'Clap', sampler: CLAP_HIT },
+  { pad: 0, localFile: 'trap-kit/kick/heavy-kick-lv1.wav', label: 'Fat kick', sampler: RNB_DRY_KICK },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: RNB_TIGHT_SNARE },
+  { pad: 2, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: RNB_SNAP_LAYER },
   { pad: 3, relUrl: 'LM-2/hhclosed.m4a', label: 'CH swing' },
   { pad: 4, relUrl: 'LM-2/hhopen.m4a', label: 'OH breathe' },
   { pad: 5, relUrl: 'LM-2/tom-h.m4a', label: 'Tom H' },
@@ -231,20 +305,15 @@ const KIT_SMOOTH_RNB: readonly BeatLabProducerPadDef[] = [
   { pad: 11, relUrl: 'LM-2/ride.m4a', label: 'Ride' },
   { pad: 12, relUrl: 'LM-2/tambourine.m4a', label: 'Tamb lite' },
   { pad: 13, relUrl: 'TR-808/rimshot/rs.m4a', label: 'Rim' },
-  { pad: 14, relUrl: 'LM-2/snare-m.m4a', label: 'Sn back', sampler: { triggerSnap: 0.26 } },
-  {
-    pad: 15,
-    relUrl: 'TR-808/kick/bd0050.m4a',
-    label: 'Sub warm',
-    sampler: { triggerSnap: 0.42, fineSemi: -2, lpHz: 5200 },
-  },
+  { pad: 14, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Sn layer', sampler: RNB_SNAP_LAYER },
+  { pad: 15, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Sn layer', sampler: RNB_SNAP_LAYER },
 ];
 
-/** R&B Velvet Bloom — airy hats + backbeat snare; glue sub only (no trap trunk kick). */
+/** R&B Velvet Bloom — airy hats, tight trap snare/clap. No sub. */
 const KIT_RNB_VELVET_BLOOM: readonly BeatLabProducerPadDef[] = [
-  { pad: 0, relUrl: 'LM-2/kick.m4a', label: 'Kick · bloom', sampler: { triggerSnap: 0.32, fineSemi: 0 } },
-  { pad: 1, relUrl: 'LM-2/snare-m.m4a', label: 'Sn · back', sampler: { triggerSnap: 0.24 } },
-  { pad: 2, relUrl: 'LM-2/clap.m4a', label: 'Clap soft', sampler: { ...CLAP_HIT, triggerSnap: 0.3 } },
+  { pad: 0, localFile: 'trap-kit/kick/rack-kick.wav', label: 'Dry kick', sampler: { ...RNB_DRY_KICK, triggerSnap: 0.46, maxPlaySec: 0.38 } },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: RNB_TIGHT_SNARE },
+  { pad: 2, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: RNB_SNAP_LAYER },
   { pad: 3, relUrl: '808-mini/hhclosed-1.m4a', label: 'CH silk' },
   { pad: 4, relUrl: '808-mini/hhopen-1.m4a', label: 'OH air' },
   { pad: 5, relUrl: 'LM-2/tom-h.m4a', label: 'Tom H' },
@@ -256,29 +325,19 @@ const KIT_RNB_VELVET_BLOOM: readonly BeatLabProducerPadDef[] = [
   { pad: 11, relUrl: 'LM-2/ride.m4a', label: 'Ride wash' },
   { pad: 12, relUrl: 'TR-808/conga-mid/mc00.m4a', label: 'Conga' },
   { pad: 13, relUrl: 'LM-2/cowbell.m4a', label: 'Cow' },
-  { pad: 14, relUrl: 'LM-2/snare-h.m4a', label: 'Sn · ghost', sampler: { triggerSnap: 0.18 } },
-  {
-    pad: 15,
-    relUrl: 'TR-808/kick/bd0050.m4a',
-    label: '808 glue · low',
-    sampler: { triggerSnap: 0.38, fineSemi: -3, lpHz: 4800 },
-  },
+  { pad: 14, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Sn layer', sampler: RNB_SNAP_LAYER },
+  { pad: 15, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Sn layer', sampler: RNB_SNAP_LAYER },
 ];
 
-/** R&B Neo Stack — CR-8000 body + LM-2 pocket; airy for neo-soul / modern R&B patterns. */
+/** R&B Neo Stack — tight trap snare/clap + CR/LM silk. No sub. */
 const KIT_RNB_NEO_STACK: readonly BeatLabProducerPadDef[] = [
-  {
-    pad: 0,
-    relUrl: 'Roland-CR-8000/kick.m4a',
-    label: 'Box · round',
-    sampler: { triggerSnap: 0.34, fineSemi: -1, lpHz: 5800 },
-  },
-  { pad: 1, relUrl: 'LM-2/snare-h.m4a', label: 'Sn · float', sampler: { triggerSnap: 0.19 } },
-  { pad: 2, relUrl: 'LM-2/clap.m4a', label: 'Clap', sampler: CLAP_HIT },
+  { pad: 0, localFile: 'trap-kit/kick/heavy-kick-lv1.wav', label: 'Fat kick', sampler: RNB_DRY_KICK },
+  { pad: 1, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: RNB_TIGHT_SNARE },
+  { pad: 2, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Snap snare', sampler: RNB_SNAP_LAYER },
   { pad: 3, relUrl: 'Roland-CR-8000/hihat-closed.m4a', label: 'CH tick' },
   { pad: 4, relUrl: 'LM-2/hhopen.m4a', label: 'OH lift' },
   { pad: 5, relUrl: 'LM-2/tom-m.m4a', label: 'Tom M' },
-  { pad: 6, relUrl: 'LM-2/kick.m4a', label: 'LM layer', sampler: { triggerSnap: 0.3, fineSemi: -1 } },
+  { pad: 6, relUrl: 'Roland-CR-8000/kick.m4a', label: 'Box layer', sampler: { triggerSnap: 0.34, fineSemi: -1, lpHz: 5800 } },
   { pad: 7, relUrl: 'LM-2/tambourine.m4a', label: 'Shaker ring', sampler: { triggerSnap: 0.17 } },
   { pad: 8, relUrl: 'LM-2/cabasa.m4a', label: 'Cabasa' },
   { pad: 9, relUrl: 'Roland-CR-8000/clave.m4a', label: 'Clave' },
@@ -286,13 +345,8 @@ const KIT_RNB_NEO_STACK: readonly BeatLabProducerPadDef[] = [
   { pad: 11, relUrl: 'LM-2/ride.m4a', label: 'Ride' },
   { pad: 12, relUrl: 'TR-808/conga-low/lc00.m4a', label: 'Conga low' },
   { pad: 13, relUrl: 'LM-2/cowbell.m4a', label: 'Cow' },
-  { pad: 14, relUrl: 'LM-2/snare-m.m4a', label: 'Sn rim-ish', sampler: { triggerSnap: 0.25 } },
-  {
-    pad: 15,
-    relUrl: 'TR-808/kick/bd0050.m4a',
-    label: 'Sub pillow',
-    sampler: { triggerSnap: 0.4, fineSemi: -4, lpHz: 4200 },
-  },
+  { pad: 14, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Sn layer', sampler: RNB_SNAP_LAYER },
+  { pad: 15, localFile: 'trap-kit/snare/trapaholic-snare.wav', label: 'Sn layer', sampler: RNB_SNAP_LAYER },
 ];
 
 /** House drive — LM-2 four-on-pocket + crisp 808 hats (club / house patterns). */
@@ -382,9 +436,9 @@ const KIT_TRAP_ANALOG_ROOM: readonly BeatLabProducerPadDef[] = [
 
 /** Club Pocket — LM-2 bounce + 808 sub. */
 const KIT_CLUB_POCKET: readonly BeatLabProducerPadDef[] = [
-  { pad: 0, relUrl: 'LM-2/kick.m4a', label: 'Kick · Pocket', sampler: LOUD_KICK },
-  { pad: 1, relUrl: 'LM-2/snare-m.m4a', label: 'Snare', sampler: PUNCH_SNARE },
-  { pad: 2, relUrl: 'LM-2/clap.m4a', label: 'Clap' },
+  { pad: 0, relUrl: 'LM-2/kick.m4a', label: 'Club kick', sampler: HEAVY_KICK },
+  { pad: 1, relUrl: 'LM-2/snare-m.m4a', label: 'Snap snare', sampler: { triggerSnap: 0.42, maxPlaySec: 0.22 } },
+  { pad: 2, relUrl: 'LM-2/clap.m4a', label: 'Clap', sampler: CLAP_HIT },
   { pad: 3, relUrl: 'LM-2/hhclosed.m4a', label: 'CH' },
   { pad: 4, relUrl: 'LM-2/hhopen.m4a', label: 'OH' },
   { pad: 5, relUrl: 'LM-2/tom-h.m4a', label: 'Tom H' },
@@ -540,6 +594,64 @@ const KIT_MUD_FLOOR: readonly BeatLabProducerPadDef[] = [
   { pad: 15, relUrl: 'TR-808/kick/bd0075.m4a', label: '808 SUB', sampler: LONG_808_SUB },
 ];
 
+/**
+ * Up Tempo 808 — electro/booty-bass era (80s–90s Miami bass).
+ * Pure Roland TR-808: syncopated click kick, clap backbeat, cowbell, 808 body lane — not house 4×4.
+ */
+const MIAMI_808_KICK: Partial<PadSamplerPlaybackOpts> = {
+  triggerSnap: 0.46,
+  fineSemi: 0,
+  hpHz: 48,
+  lpHz: 5200,
+  maxPlaySec: 0.38,
+};
+const MIAMI_808_BODY: Partial<PadSamplerPlaybackOpts> = {
+  triggerSnap: 0.12,
+  fineSemi: -4,
+  trim0: 0,
+  trim1: 0.92,
+  lpHz: 3400,
+  maxPlaySec: 0.55,
+};
+const MIAMI_808_SUB: Partial<PadSamplerPlaybackOpts> = {
+  triggerSnap: 0.1,
+  fineSemi: -6,
+  trim0: 0,
+  trim1: 1,
+  lpHz: 2600,
+  maxPlaySec: 0.72,
+};
+
+/** Tight snap snare — short 808 pop, no loose tail (old-school Miami backbeat). */
+const MIAMI_808_SNARE: Partial<PadSamplerPlaybackOpts> = {
+  triggerSnap: 0.58,
+  fineSemi: 0,
+  hpHz: 300,
+  lpHz: 10200,
+  trim0: 0,
+  trim1: 0.76,
+  maxPlaySec: 0.16,
+};
+
+const KIT_MIAMI_BASS808: readonly BeatLabProducerPadDef[] = [
+  { pad: 0, relUrl: 'TR-808/kick/bd0050.m4a', label: '808 punch', sampler: MIAMI_808_KICK },
+  { pad: 1, relUrl: '808-mini/snare-3.m4a', label: 'Snap snare', sampler: MIAMI_808_SNARE },
+  { pad: 2, relUrl: 'TR-808/clap/cp.m4a', label: '808 clap', sampler: { triggerSnap: 0.38, maxPlaySec: 0.2 } },
+  { pad: 3, relUrl: 'TR-808/hihat-close/ch.m4a', label: 'CH' },
+  { pad: 4, relUrl: 'TR-808/hihat-open/oh00.m4a', label: 'OH' },
+  { pad: 5, relUrl: 'TR-808/tom-hi/ht00.m4a', label: 'Tom H' },
+  { pad: 6, relUrl: 'TR-808/kick/bd0010.m4a', label: '808 body', sampler: MIAMI_808_BODY },
+  { pad: 7, relUrl: 'TR-808/cowbell/cb.m4a', label: 'Bell', sampler: { triggerSnap: 0.28, maxPlaySec: 0.18 } },
+  { pad: 8, relUrl: 'TR-808/conga-mid/mc00.m4a', label: 'Conga' },
+  { pad: 9, relUrl: 'TR-808/rimshot/rs.m4a', label: 'Rim', sampler: { triggerSnap: 0.22, maxPlaySec: 0.16 } },
+  { pad: 10, relUrl: 'TR-808/cymbal/cy0050.m4a', label: 'Cym' },
+  { pad: 11, relUrl: 'TR-808/maraca/ma.m4a', label: 'Shake' },
+  { pad: 12, relUrl: 'TR-808/conga-low/lc00.m4a', label: 'Conga L' },
+  { pad: 13, relUrl: 'TR-808/cowbell/cb.m4a', label: 'Cow', sampler: { triggerSnap: 0.26, maxPlaySec: 0.16 } },
+  { pad: 14, relUrl: 'TR-808/rimshot/rs.m4a', label: 'Rim 2', sampler: { triggerSnap: 0.22, maxPlaySec: 0.14 } },
+  { pad: 15, relUrl: 'TR-808/kick/bd0075.m4a', label: '808 SUB', sampler: MIAMI_808_SUB },
+];
+
 const KITS: readonly BeatLabProducerKitMeta[] = [
   {
     id: 'trapDarkVault',
@@ -562,19 +674,19 @@ const KITS: readonly BeatLabProducerKitMeta[] = [
   {
     id: 'smoothRnb',
     title: 'R&B · Smooth Pocket',
-    tribute: 'Soft knock + ghosts — Pocket Session crew (R&B pattern pair).',
+    tribute: 'Dry fat kick + tight trap snare/clap — Pocket Session crew. No sub.',
     pads: KIT_SMOOTH_RNB,
   },
   {
     id: 'rnbVelvetBloom',
     title: 'R&B · Velvet Bloom',
-    tribute: 'Silk hats + pocket kick — Velvet Bloom crew.',
+    tribute: 'Silk hats + rack kick, tight trap snare, electronic clap. No sub.',
     pads: KIT_RNB_VELVET_BLOOM,
   },
   {
     id: 'rnbNeoStack',
     title: 'R&B · Neo Stack',
-    tribute: 'Neo-soul body + shaker air — Neon Stack Sessions.',
+    tribute: 'Neo-soul silk + tight trap snare, electronic handclap. No sub.',
     pads: KIT_RNB_NEO_STACK,
   },
   {
@@ -655,6 +767,16 @@ const KITS: readonly BeatLabProducerKitMeta[] = [
     tribute: 'Thanks, Floor Kings — muddy box kick + 808 floor.',
     pads: KIT_MUD_FLOOR,
   },
+  {
+    id: 'miamiBass808',
+    title: 'Up Tempo · 808',
+    tribute: '80s–90s booty bass — TR-808 clap, cowbell, sync kick, trunk sub.',
+    pads: KIT_MIAMI_BASS808,
+  },
+  ...BEAT_LAB_STREET_TRAP_KIT_METAS,
+  ...BEAT_LAB_MODERN_RNB_KIT_METAS,
+  BEAT_LAB_CINEMATIC_HITS_KIT_META,
+  BEAT_LAB_ORCHESTRA_HITS_KIT_META,
 ];
 
 export const BEAT_LAB_PRODUCER_KITS = KITS;
@@ -668,11 +790,17 @@ export type LoadedBeatLabProducerPad = {
   buffer: AudioBuffer;
   label: string;
   sampler: PadSamplerPlaybackOpts;
+  rootMidi?: number;
+  chromatic?: boolean;
 };
 
 async function fetchAndDecode(url: string, ctx: BaseAudioContext): Promise<AudioBuffer> {
   const resp = await fetch(url, { cache: 'force-cache' });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const mime = resp.headers.get('content-type') ?? '';
+  if (mime.includes('text/html')) {
+    throw new Error(`Not audio (got HTML) for ${url}`);
+  }
   const bytes = await resp.arrayBuffer();
   return await ctx.decodeAudioData(bytes.slice(0));
 }
@@ -687,7 +815,15 @@ function mergeSamplerOpts(partial?: Partial<PadSamplerPlaybackOpts>): PadSampler
     trim1: partial.trim1 ?? base.trim1,
     fineSemi: partial.fineSemi ?? base.fineSemi,
     triggerSnap: partial.triggerSnap ?? base.triggerSnap,
+    maxPlaySec: partial.maxPlaySec ?? base.maxPlaySec,
+    padLevel: partial.padLevel ?? base.padLevel,
   };
+}
+
+function producerKitCacheKey(id: BeatLabProducerKitId): string {
+  if (id === 'orchestraHits') return `orchestraHits@v${BEAT_LAB_ORCHESTRA_HITS_KIT_REV}`;
+  if (id === 'cinematicHits') return `cinematicHits@v${BEAT_LAB_CINEMATIC_HITS_KIT_REV}`;
+  return id;
 }
 
 type ProducerKitCacheEntry = {
@@ -696,7 +832,7 @@ type ProducerKitCacheEntry = {
   readyPromise: Promise<LoadedBeatLabProducerPad[]>;
 };
 
-const producerKitCache = new Map<BeatLabProducerKitId, ProducerKitCacheEntry>();
+const producerKitCache = new Map<string, ProducerKitCacheEntry>();
 
 async function fetchProducerKitPadsUncached(
   id: BeatLabProducerKitId,
@@ -714,6 +850,8 @@ async function fetchProducerKitPadsUncached(
           buffer,
           label: def.label,
           sampler: mergeSamplerOpts(def.sampler),
+          rootMidi: def.rootMidi,
+          chromatic: def.chromatic,
         });
       } catch {
         /* skip failed pad */
@@ -725,17 +863,18 @@ async function fetchProducerKitPadsUncached(
 }
 
 function startLoadProducerKit(id: BeatLabProducerKitId, ctx: BaseAudioContext): ProducerKitCacheEntry {
+  const cacheKey = producerKitCacheKey(id);
   const entry: ProducerKitCacheEntry = {
     state: 'loading',
     pads: [],
     readyPromise: Promise.resolve([]),
   };
-  producerKitCache.set(id, entry);
+  producerKitCache.set(cacheKey, entry);
   entry.readyPromise = (async () => {
     const pads = await fetchProducerKitPadsUncached(id, ctx);
     entry.pads = pads;
     entry.state = pads.length > 0 ? 'ready' : 'failed';
-    if (entry.state === 'failed') producerKitCache.delete(id);
+    if (entry.state === 'failed') producerKitCache.delete(cacheKey);
     return pads;
   })();
   return entry;
@@ -746,7 +885,8 @@ export function ensureBeatLabProducerKitLoaded(
   id: BeatLabProducerKitId,
   ctx: BaseAudioContext,
 ): Promise<LoadedBeatLabProducerPad[]> {
-  const cached = producerKitCache.get(id);
+  const cacheKey = producerKitCacheKey(id);
+  const cached = producerKitCache.get(cacheKey);
   if (cached) {
     if (cached.state === 'ready') return Promise.resolve(cached.pads);
     return cached.readyPromise;

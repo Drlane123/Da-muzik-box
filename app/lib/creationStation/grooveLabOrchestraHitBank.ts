@@ -1,6 +1,6 @@
 /**
  * Groove Lab — Orchestra hit sample bank (CH 36 / ORCH lane).
- * One-shot WAV hits from /samples/orchestra-hits/manifest.json — native pitch playback.
+ * One-shot WAV hits from /samples/orchestra-hits/manifest.json — pitch-shifted to roll MIDI at playback.
  */
 import { resolveGrooveLabAudioDest } from '@/app/lib/creationStation/grooveLabAudio';
 import type { GrooveLabLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadVoices';
@@ -8,6 +8,13 @@ import type { GrooveLabLeadSoundId } from '@/app/lib/creationStation/grooveLabLe
 const MANIFEST_URL = '/samples/orchestra-hits/manifest.json';
 
 export type OrchestraHitId = string;
+
+export type OrchestraHitPlaybackFilter = {
+  type: BiquadFilterType;
+  frequency: number;
+  q?: number;
+  gainDb?: number;
+};
 
 export type OrchestraHitDef = {
   id: OrchestraHitId;
@@ -17,7 +24,54 @@ export type OrchestraHitDef = {
   nativePitch: boolean;
   playbackGain: number;
   fallbackSynth: GrooveLabLeadSoundId;
+  /** SE2 instrument picker subgroup (Cinematic Hits, Tight Strings, …). */
+  pickerSubgroup?: string;
+  /** Optional playback EQ — same WAV, filtered character (e.g. Cinematic Impact variants). */
+  playbackFilter?: readonly OrchestraHitPlaybackFilter[];
 };
+
+const CINE_IMPACT_URL = '/samples/orchestra-hits/trap-cinematic-hit.wav';
+
+const CINE_IMPACT_BASE = {
+  url: CINE_IMPACT_URL,
+  rootMidi: 48,
+  nativePitch: true,
+  playbackGain: 1.4,
+  fallbackSynth: 'orchHit_cine' as GrooveLabLeadSoundId,
+};
+
+/** User-facing names — no hardware trademarks. */
+export const ORCHESTRA_HIT_DISPLAY: Record<
+  string,
+  { label: string; pickerSubgroup: string }
+> = {
+  orchHit_cine: { label: 'Cinematic Impact', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_cineDark: { label: 'Cinematic Impact (Dark)', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_cineSub: { label: 'Cinematic Impact (Sub)', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_cineBright: { label: 'Cinematic Impact (Bright)', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_cineFiltered: { label: 'Cinematic Impact (Filtered)', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_brass: { label: 'Symphony Hit', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_proteus: { label: 'Brass Impact', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_jv2080: { label: 'Big Brass Hit', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_sc88: { label: 'Classic Orch Hit', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_strings: { label: 'Tight Low String Stab', pickerSubgroup: 'Tight Strings' },
+  orchHit_pizz: { label: 'Pizzicato Stab', pickerSubgroup: 'Tight Strings' },
+  orchHit_pizzChord: { label: 'Pizz Chord', pickerSubgroup: 'Tight Strings' },
+  orchHit_trapBrass: { label: 'Brass Stab', pickerSubgroup: 'Brass Stabs' },
+  orchHit_tg500: { label: 'Sharp Brass Stab', pickerSubgroup: 'Brass Stabs' },
+  orchHit_timpHard: { label: 'Perc Hard', pickerSubgroup: 'Perc & Crashes' },
+  orchHit_timpSmack: { label: 'Perc Smack', pickerSubgroup: 'Perc & Crashes' },
+  orchHit_timpHop: { label: 'Perc Hop', pickerSubgroup: 'Perc & Crashes' },
+  orchHit_choir: { label: 'Choir Stab', pickerSubgroup: 'Cinematic Hits' },
+  orchHit_cym: { label: 'Orch Crash', pickerSubgroup: 'Perc & Crashes' },
+  orchHit_cymSym: { label: 'Symphony Crash', pickerSubgroup: 'Perc & Crashes' },
+};
+
+function withOrchestraHitDisplay(def: OrchestraHitDef): OrchestraHitDef {
+  const meta = ORCHESTRA_HIT_DISPLAY[def.id];
+  if (!meta) return def;
+  return { ...def, label: meta.label, pickerSubgroup: meta.pickerSubgroup };
+}
 
 type ManifestFile = {
   version: number;
@@ -25,7 +79,42 @@ type ManifestFile = {
 };
 
 /** Baked catalog — works offline if manifest fetch fails. */
-export const BAKED_ORCHESTRA_HIT_MANIFEST: readonly OrchestraHitDef[] = [
+const BAKED_ORCHESTRA_HIT_MANIFEST_RAW: readonly OrchestraHitDef[] = [
+  { id: 'orchHit_cine', label: 'Cine', ...CINE_IMPACT_BASE },
+  {
+    id: 'orchHit_cineDark',
+    label: 'Cine Dark',
+    ...CINE_IMPACT_BASE,
+    playbackGain: 1.42,
+    playbackFilter: [{ type: 'lowpass', frequency: 1050, q: 0.85 }],
+  },
+  {
+    id: 'orchHit_cineSub',
+    label: 'Cine Sub',
+    ...CINE_IMPACT_BASE,
+    playbackGain: 1.48,
+    playbackFilter: [
+      { type: 'lowshelf', frequency: 95, gainDb: 5.5 },
+      { type: 'lowpass', frequency: 880, q: 0.72 },
+    ],
+  },
+  {
+    id: 'orchHit_cineBright',
+    label: 'Cine Bright',
+    ...CINE_IMPACT_BASE,
+    playbackGain: 1.36,
+    playbackFilter: [
+      { type: 'highpass', frequency: 340, q: 0.62 },
+      { type: 'highshelf', frequency: 4200, gainDb: 3.2 },
+    ],
+  },
+  {
+    id: 'orchHit_cineFiltered',
+    label: 'Cine Filtered',
+    ...CINE_IMPACT_BASE,
+    playbackGain: 1.38,
+    playbackFilter: [{ type: 'bandpass', frequency: 820, q: 1.55 }],
+  },
   { id: 'orchHit_brass', label: 'K2000', url: '/samples/orchestra-hits/k2000-symphony-hit.wav', rootMidi: 48, nativePitch: true, playbackGain: 1.4, fallbackSynth: 'orchHit_brass' },
   { id: 'orchHit_proteus', label: 'Proteus', url: '/samples/orchestra-hits/proteus-brass-hit.wav', rootMidi: 48, nativePitch: true, playbackGain: 1.38, fallbackSynth: 'orchHit_brass' },
   { id: 'orchHit_jv2080', label: 'JV2080', url: '/samples/orchestra-hits/jv2080-symphony-hit.wav', rootMidi: 48, nativePitch: true, playbackGain: 1.35, fallbackSynth: 'orchHit_brass' },
@@ -41,8 +130,10 @@ export const BAKED_ORCHESTRA_HIT_MANIFEST: readonly OrchestraHitDef[] = [
   { id: 'orchHit_choir', label: 'Choir', url: '/samples/orchestra-hits/choir-stab.wav', rootMidi: 60, nativePitch: true, playbackGain: 1.25, fallbackSynth: 'orchHit_choir' },
   { id: 'orchHit_cym', label: 'Crash', url: '/samples/orchestra-hits/trap-orchestra-crash.wav', rootMidi: 48, nativePitch: true, playbackGain: 1.3, fallbackSynth: 'orchHit_cym' },
   { id: 'orchHit_cymSym', label: 'Sym Cr', url: '/samples/orchestra-hits/trap-symphony-crash.wav', rootMidi: 48, nativePitch: true, playbackGain: 1.3, fallbackSynth: 'orchHit_cym' },
-  { id: 'orchHit_cine', label: 'Cine', url: '/samples/orchestra-hits/trap-cinematic-hit.wav', rootMidi: 48, nativePitch: true, playbackGain: 1.4, fallbackSynth: 'orchHit_cine' },
 ];
+
+export const BAKED_ORCHESTRA_HIT_MANIFEST: readonly OrchestraHitDef[] =
+  BAKED_ORCHESTRA_HIT_MANIFEST_RAW.map((d) => withOrchestraHitDisplay(d));
 
 let manifestPromise: Promise<OrchestraHitDef[]> | null = null;
 let manifestCache: OrchestraHitDef[] = BAKED_ORCHESTRA_HIT_MANIFEST.map((d) => ({ ...d }));
@@ -82,7 +173,7 @@ export async function loadOrchestraHitManifest(): Promise<OrchestraHitDef[]> {
       if (!resp.ok) throw new Error(`manifest ${resp.status}`);
       const data = (await resp.json()) as ManifestFile;
       if (Array.isArray(data.hits) && data.hits.length > 0) {
-        manifestCache = data.hits;
+        manifestCache = data.hits.map((h) => withOrchestraHitDisplay(h));
       }
     } catch {
       /* keep baked manifestCache */
@@ -97,11 +188,12 @@ export async function loadOrchestraHitBuffer(
   def: OrchestraHitDef,
 ): Promise<AudioBuffer | null> {
   pinOrchestraHitBufferCache(ctx);
-  const cached = bufferCache.get(def.id);
+  const cacheKey = def.url;
+  const cached = bufferCache.get(cacheKey);
   if (cached === 'failed') return null;
   if (cached) return cached;
 
-  const existing = loadingMap.get(def.id);
+  const existing = loadingMap.get(cacheKey);
   if (existing) return existing;
 
   const p = (async (): Promise<AudioBuffer | null> => {
@@ -110,16 +202,16 @@ export async function loadOrchestraHitBuffer(
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const ab = await resp.arrayBuffer();
       const buf = await ctx.decodeAudioData(ab);
-      bufferCache.set(def.id, buf);
+      bufferCache.set(cacheKey, buf);
       return buf;
     } catch {
-      bufferCache.set(def.id, 'failed');
+      bufferCache.set(cacheKey, 'failed');
       return null;
     } finally {
-      loadingMap.delete(def.id);
+      loadingMap.delete(cacheKey);
     }
   })();
-  loadingMap.set(def.id, p);
+  loadingMap.set(cacheKey, p);
   return p;
 }
 
@@ -137,8 +229,32 @@ export async function ensureOrchestraHitBuffer(
 
 export function orchestraHitBufferReady(hitId: OrchestraHitId, ctx?: BaseAudioContext): boolean {
   if (ctx) pinOrchestraHitBufferCache(ctx);
-  const cached = bufferCache.get(hitId);
+  const def = getOrchestraHitDef(hitId);
+  if (!def) return false;
+  const cached = bufferCache.get(def.url);
   return cached != null && cached !== 'failed';
+}
+
+function connectOrchestraHitPlaybackChain(
+  ctx: AudioContext,
+  src: AudioBufferSourceNode,
+  dest: AudioNode,
+  filters: readonly OrchestraHitPlaybackFilter[] | undefined,
+  t0: number,
+): void {
+  let node: AudioNode = src;
+  if (filters?.length) {
+    for (const f of filters) {
+      const bq = ctx.createBiquadFilter();
+      bq.type = f.type;
+      bq.frequency.setValueAtTime(f.frequency, t0);
+      if (f.q != null) bq.Q.setValueAtTime(f.q, t0);
+      if (f.gainDb != null) bq.gain.setValueAtTime(f.gainDb, t0);
+      node.connect(bq);
+      node = bq;
+    }
+  }
+  node.connect(dest);
 }
 
 export type PlayOrchestraHitSampleOpts = {
@@ -159,7 +275,7 @@ export function playOrchestraHitSample(
   opts?: PlayOrchestraHitSampleOpts,
 ): boolean {
   pinOrchestraHitBufferCache(ctx);
-  const buf = bufferCache.get(def.id);
+  const buf = bufferCache.get(def.url);
   if (!buf || buf === 'failed') return false;
 
   const now = ctx.currentTime;
@@ -183,7 +299,7 @@ export function playOrchestraHitSample(
   if (!native && opts?.targetMidi != null) {
     src.detune.value = (opts.targetMidi - def.rootMidi) * 100;
   }
-  src.connect(gainNode);
+  connectOrchestraHitPlaybackChain(ctx, src, gainNode, def.playbackFilter, startAt);
   gainNode.connect(out);
   src.start(startAt);
   src.stop(startAt + buf.duration + 0.05);

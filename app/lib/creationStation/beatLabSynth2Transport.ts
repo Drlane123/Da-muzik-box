@@ -1,6 +1,6 @@
 /**
- * NEW SYNTH — standalone transport (Studio Editor 2 mirror).
- * Piano-roll metronome + MIDI only — no drum grid, no shared Beat Lab playline.
+ * NEW SYNTH — MIDI + metronome scheduling only (playhead WAAPI lives in `beatLabSynth2PlaylineWapi.ts`).
+ * Beat Lab screen owns one SE2-mirror transport; this module is the synth2 deck refill path.
  */
 
 import type { MutableRefObject } from 'react';
@@ -12,6 +12,7 @@ import {
 } from '@/app/lib/creationStation/beatLabAutomation';
 import { beatLabNoteMidi } from '@/app/lib/creationStation/beatLabMelodicSynth';
 import {
+  BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS,
   BEAT_LAB_PIANO_TRANSPORT_ONSET_LEAD_SEC,
   beatLabMelodicSlotIndex,
   scheduleBeatLabMelodicNote,
@@ -31,20 +32,7 @@ import {
   beatLabSynth2IsHarmonyLane,
 } from '@/app/lib/creationStation/beatLabSynthV2LaneRoles';
 import { beatLabSynth2PianoRollInstrumentGain } from '@/app/lib/creationStation/beatLabSynthV2PianoBank';
-import { beatLabSynthWapiPianoColW } from '@/app/lib/creationStation/beatLabChordPianoRollAdapter';
-import {
-  CREATION_PLAYLINE_WAPI_SEG_IDLE,
-  kickCreationPlaylineWapiPlaying,
-  launchCreationPlaylineWapi,
-  type CreationPlaylineWapiRefs,
-  type CreationPlaylineWapiSegState,
-} from '@/app/lib/creationStation/creationPlaylineWapi';
-import {
-  beatLabAnimationTickBeats,
-  beatLabAudioNow,
-  BEAT_LAB_LOOKAHEAD_INTERVAL_MS,
-  SE2_AUDIO_START_FLOOR_SEC,
-} from '@/app/lib/creationStation/beatLabSe2TransportEngine';
+import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/creationStation/beatLabSe2TransportEngine';
 import {
   refillCreationMetronome,
   refillCreationTransportLookahead,
@@ -53,18 +41,7 @@ import {
   type CreationTransportClockRefs,
   type CreationTransportRefillOpts,
 } from '@/app/lib/creationStation/creationTransportSystem';
-import {
-  creationPlaylineWapiCompositorMs,
-  resolveCreationDrumPlaylineAnim,
-} from '@/app/lib/creationStation/creationPlaylineWapi';
-import { BEAT_LAB_MELODIC_DEFAULT_INSTRUMENTS } from '@/app/lib/creationStation/beatLabMelodicSoundfont';
 import type { BeatLabImportedChordRail } from '@/app/lib/creationStation/chordBuilderBeatLabImport';
-
-export {
-  BEAT_LAB_LOOKAHEAD_INTERVAL_MS,
-  beatLabAudioNow,
-  SE2_AUDIO_START_FLOOR_SEC,
-};
 
 export type BeatLabSynth2TransportClock = {
   runningRef: MutableRefObject<boolean>;
@@ -106,104 +83,6 @@ export type BeatLabSynth2TransportData = {
   bpmRef: MutableRefObject<number>;
   measuresPerBar: number;
 };
-
-export type BeatLabSynth2PlaylineRefs = CreationPlaylineWapiRefs;
-
-export function createBeatLabSynth2PlaylineRefs(): BeatLabSynth2PlaylineRefs {
-  return {
-    drumAnimRef: { current: null },
-    pianoAnimRef: { current: null },
-    drumQuantGlowAnimRef: { current: null },
-    wapiSegStateRef: { current: { ...CREATION_PLAYLINE_WAPI_SEG_IDLE } },
-    wapiBpmRef: { current: 120 },
-    wapiLoopCycleSeenRef: { current: -1 },
-    wapiPrevPhaseMsRef: { current: -1 },
-  };
-}
-
-/** SE2 `launchWapiAnims` — NEW SYNTH piano roll playhead only. */
-export function launchBeatLabSynth2PlaylineWapi(
-  playlineRefs: BeatLabSynth2PlaylineRefs,
-  playheadEl: HTMLElement | null,
-  opts: {
-    beatNow: number;
-    play: boolean;
-    bpm: number;
-    subdiv: number;
-    patternCols: number;
-    patternColsBeats: number;
-    colWidth: number;
-    loopOn: boolean;
-    loopStartBeat: number;
-    loopEndBeat: number;
-    beatsPerBar: number;
-    colsPerBar: number;
-  },
-): void {
-  const pcw = beatLabSynthWapiPianoColW(opts.subdiv, opts.beatsPerBar, opts.colsPerBar);
-  launchCreationPlaylineWapi(playlineRefs, {
-    drumEl: null,
-    pianoEl: playheadEl,
-    drumQuantGlowEl: null,
-    beatNow: opts.beatNow,
-    play: opts.play,
-    bpm: opts.bpm,
-    subdiv: opts.subdiv,
-    pcols: opts.patternCols,
-    drumColW: Math.max(1, opts.colWidth),
-    pianoColW: pcw,
-    loopOn: opts.loopOn,
-    loopStartBeat: opts.loopStartBeat,
-    loopEndBeat: opts.loopEndBeat,
-    playMode: 'single',
-    totalBeats: Math.max(1e-9, opts.patternColsBeats),
-    audioStartLeadSec: SE2_AUDIO_START_FLOOR_SEC,
-    immediateCompositorStart: opts.play,
-  });
-  if (opts.play) kickCreationPlaylineWapiPlaying(playlineRefs);
-}
-
-export function beatLabSynth2AnimationTick(
-  clock: BeatLabSynth2TransportClock,
-  playlineRefs: BeatLabSynth2PlaylineRefs,
-  playheadEl: HTMLElement | null,
-  ctx: AudioContext | null,
-  geom: {
-    totalBeats: number;
-    loopOn: boolean;
-    loopStartBeat: number;
-    loopEndBeat: number;
-  },
-): { b: number; bDisplay: number } {
-  const wapiAnim = clock.runningRef.current
-    ? resolveCreationDrumPlaylineAnim(playlineRefs.pianoAnimRef, playheadEl)
-    : null;
-  if (clock.runningRef.current && wapiAnim?.playState === 'paused') {
-    kickCreationPlaylineWapiPlaying(playlineRefs);
-  }
-  const animMs = creationPlaylineWapiCompositorMs(wapiAnim);
-  const seg: CreationPlaylineWapiSegState =
-    playlineRefs.wapiSegStateRef?.current ?? CREATION_PLAYLINE_WAPI_SEG_IDLE;
-  const wapiBpm = playlineRefs.wapiBpmRef?.current ?? clock.bpmRef.current;
-  return beatLabAnimationTickBeats({
-    running: clock.runningRef.current,
-    ctx: ctx && ctx.state !== 'closed' ? ctx : null,
-    anchors: {
-      schedAnchorTimeRef: clock.schedAnchorTimeRef,
-      schedAnchorPerfRef: clock.schedAnchorPerfRef,
-    },
-    sessionStart: clock.sessionStartRef.current,
-    originBeat: clock.originBeatRef.current,
-    bpm: clock.bpmRef.current,
-    totalBeats: geom.totalBeats,
-    loopOn: geom.loopOn,
-    loopStartBeat: geom.loopStartBeat,
-    loopEndBeat: geom.loopEndBeat,
-    animMs,
-    seg,
-    wapiBpm,
-  });
-}
 
 export function fireBeatLabSynth2MidiRollStep(
   k: number,

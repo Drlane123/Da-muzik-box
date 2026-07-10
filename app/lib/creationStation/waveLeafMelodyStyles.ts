@@ -28,6 +28,52 @@ export type WaveLeafMelodyGenreDef = {
 
 export const WAVE_LEAF_MELODY_GENRES: WaveLeafMelodyGenreDef[] = [
   {
+    id: 'mellodo',
+    label: 'Vibe',
+    styles: [
+      {
+        id: 'mellodo-silk',
+        label: 'Silk Transit',
+        part: 'melody',
+        complexity: 0.52,
+        phraseGrid: true,
+        rate: '1/8',
+        chordFit: 0.88,
+        movement: 0.42,
+      },
+      {
+        id: 'mellodo-chorus',
+        label: 'Chorus Lift',
+        part: 'melody',
+        complexity: 0.58,
+        phraseGrid: true,
+        rate: '1/8',
+        chordFit: 0.84,
+        movement: 0.55,
+      },
+      {
+        id: 'mellodo-flute',
+        label: 'Breath Lead',
+        part: 'melody',
+        complexity: 0.48,
+        phraseGrid: true,
+        rate: '1/4',
+        chordFit: 0.9,
+        movement: 0.38,
+      },
+      {
+        id: 'mellodo-analog',
+        label: 'Analog Glide',
+        part: 'melody',
+        complexity: 0.56,
+        phraseGrid: true,
+        rate: '1/8',
+        chordFit: 0.82,
+        movement: 0.5,
+      },
+    ],
+  },
+  {
     id: 'rnb',
     label: 'R&B',
     styles: [
@@ -95,15 +141,34 @@ export const WAVE_LEAF_MELODY_GENRES: WaveLeafMelodyGenreDef[] = [
     ],
   },
   {
+    id: 'reggae',
+    label: 'Reggae',
+    styles: [
+      { id: 'reggae-skank', label: 'Skank Line', part: 'riff', complexity: 0.52, phraseGrid: true, rate: '1/8', chordFit: 0.62, movement: 0.58 },
+      { id: 'reggae-offbeat', label: 'Offbeat Hook', part: 'melody', complexity: 0.48, phraseGrid: true, rate: '1/8', chordFit: 0.7, movement: 0.45 },
+      { id: 'reggae-dub', label: 'Dub Glide', part: 'melody', complexity: 0.44, phraseGrid: false, rate: '1/4', chordFit: 0.78, movement: 0.38 },
+      { id: 'reggae-island', label: 'Island Arp', part: 'arp', complexity: 0.55, phraseGrid: false, rate: '1/16', chordFit: 0.65, movement: 0.52 },
+    ],
+  },
+  {
+    id: 'soul',
+    label: 'Soul / Gospel',
+    styles: [
+      { id: 'soul-cry', label: 'Soul Cry', part: 'melody', complexity: 0.56, phraseGrid: true, rate: '1/8', chordFit: 0.72, movement: 0.5 },
+      { id: 'soul-run', label: 'Gospel Run', part: 'riff', complexity: 0.68, phraseGrid: true, rate: '1/16', chordFit: 0.58, movement: 0.72 },
+    ],
+  },
+  {
     id: 'free',
     label: 'Free',
     styles: [
-      { id: 'free-custom', label: 'Custom', part: 'melody', complexity: 0.55, phraseGrid: true, rate: '1/8', chordFit: 0.75, movement: 0.55 },
+      { id: 'free-custom', label: 'Custom', part: 'melody', complexity: 0.55, phraseGrid: true, rate: '1/8', chordFit: 0.55, movement: 0.65 },
+      { id: 'free-wander', label: 'Free Wander', part: 'melody', complexity: 0.62, phraseGrid: true, rate: '1/8', chordFit: 0.45, movement: 0.78 },
     ],
   },
 ];
 
-export const WAVE_LEAF_DEFAULT_STYLE_ID = 'hh-pluck';
+export const WAVE_LEAF_DEFAULT_STYLE_ID = 'mellodo-silk';
 
 export function waveLeafMelodyStyleById(id: string): WaveLeafMelodyStyleDef {
   for (const g of WAVE_LEAF_MELODY_GENRES) {

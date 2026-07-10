@@ -19,6 +19,15 @@
 
 import type { MutableRefObject } from 'react';
 
+import {
+  beatLabAdvanceSampleDrumQuarter,
+  beatLabGridSampleFromBeat,
+  beatLabGridTimeFromBeat,
+  beatLabGridTimeFromSample,
+  beatLabSampleScheduleFloorSec,
+  beatLabSamplesPerBeat,
+  type BeatLabSampleLoopBoundary,
+} from '@/app/lib/creationStation/beatLabSampleAccurateDrumClock';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
 
 export { SE2_AUDIO_START_FLOOR_SEC };
@@ -32,16 +41,27 @@ export const CREATION_METRO_NODE_EPS_SEC = 1e-5;
 /** SE2 `LOOP_METRO_CHAIN_FLOOR_SEC` — tighter chain after loop wrap refill (no session reanchor). */
 export const CREATION_LOOP_CHAIN_FLOOR_SEC = 0.002;
 
+export type CreationTransportSampleDrumOpts = {
+  sampleRate: number;
+  nextStepSampleRef: MutableRefObject<number>;
+  loopBoundary: BeatLabSampleLoopBoundary;
+};
+
 export type CreationTransportRefillOpts = {
   loopContinuation?: boolean;
   /** @deprecated Always silent fast-forward; kept for call-site compatibility. */
   skipOverdueCatchUp?: boolean;
+  /** Beat Lab drum grid — integer sample grid + phase-compensated loop wrap. */
+  sampleDrum?: CreationTransportSampleDrumOpts;
 };
 
 export const CREATION_MAX_SCHEDULE_PER_CALL = 256;
 
-/** Max overdue quarters emitted per refill before fast-forward (avoids huge bursts). */
-export const CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL = 16;
+/** Max lateness (in beats) before a quarter is fast-forwarded instead of burst-scheduled at `now`. */
+const CREATION_CATCHUP_MAX_LATE_BEATS = 0.125;
+
+/** Max overdue quarters considered per refill (each must be only slightly late — see lateness gate). */
+export const CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL = 4;
 
 export interface CreationTransportClockRefs {
   nextStepBeatRef: MutableRefObject<number>;
@@ -123,9 +143,14 @@ function alignCreationTransportStepClock(
   ctSnap: number,
   spb: number,
   refs: CreationTransportClockRefs,
+  sampleDrum?: CreationTransportSampleDrumOpts,
+  loopContinuation = false,
 ): { k: number; tGrid: number } {
   const sessionStart = refs.sessionStartRef.current;
   const origin = refs.originBeatRef.current;
+  const bpm = 60 / Math.max(1e-9, spb);
+  const sampleRate = sampleDrum?.sampleRate ?? 0;
+  const useSamples = sampleDrum != null && sampleRate > 0;
 
   if (sessionStart <= 0) {
     const k = Math.ceil(Math.max(0, origin) - 1e-8);
@@ -137,10 +162,48 @@ function alignCreationTransportStepClock(
   let k = refs.nextStepBeatRef.current;
   let tGrid = refs.nextStepTimeRef.current;
 
+  const gridTimeForK = (beatIndex: number): number =>
+    useSamples
+      ? beatLabGridTimeFromSample(
+          beatLabGridSampleFromBeat(sessionStart, origin, beatIndex, bpm, sampleRate),
+          sampleRate,
+        )
+      : sessionStart + (beatIndex - origin) * spb;
+
   if (!Number.isFinite(tGrid) || tGrid <= 0) {
     k = kAudio;
-    tGrid = sessionStart + (k - origin) * spb;
+    tGrid = gridTimeForK(k);
+    if (useSamples && sampleDrum) {
+      sampleDrum.nextStepSampleRef.current = beatLabGridSampleFromBeat(
+        sessionStart,
+        origin,
+        k,
+        bpm,
+        sampleRate,
+      );
+    }
     return { k, tGrid };
+  }
+
+  const expectedTGrid = gridTimeForK(k);
+  const driftThreshold = useSamples
+    ? beatLabSamplesPerBeat(bpm, sampleRate) * 0.02 / sampleRate
+    : spb * 0.02;
+  /*
+   * Loop splice / seek re-seeds `sessionStart` + `originBeat` but can leave a stale absolute
+   * `nextStepTime` from the prior session — drums then sit silent until that old timestamp.
+   */
+  if (Math.abs(tGrid - expectedTGrid) > driftThreshold) {
+    tGrid = expectedTGrid;
+    if (useSamples && sampleDrum) {
+      sampleDrum.nextStepSampleRef.current = beatLabGridSampleFromBeat(
+        sessionStart,
+        origin,
+        k,
+        bpm,
+        sampleRate,
+      );
+    }
   }
 
   const maxAheadBeats = Math.ceil(CREATION_SCHEDULE_AHEAD_SEC / spb) + 4;
@@ -150,10 +213,56 @@ function alignCreationTransportStepClock(
    */
   if (k > kAudio + maxAheadBeats || tGrid > ctSnap + CREATION_SCHEDULE_AHEAD_SEC + spb * 2) {
     k = kAudio;
-    tGrid = sessionStart + (k - origin) * spb;
+    tGrid = gridTimeForK(k);
+    refs.lastScheduledQuarterRef.current = k - 1;
+    if (useSamples && sampleDrum) {
+      sampleDrum.nextStepSampleRef.current = beatLabGridSampleFromBeat(
+        sessionStart,
+        origin,
+        k,
+        bpm,
+        sampleRate,
+      );
+    }
+  } else if (
+    loopContinuation &&
+    k > kAudio + 1 &&
+    tGrid > ctSnap + spb * 0.125
+  ) {
+    /** Loop wrap only — stale lap index after session re-anchor; never snap during normal lookahead. */
+    k = kAudio;
+    tGrid = gridTimeForK(k);
+    refs.lastScheduledQuarterRef.current = k - 1;
+    if (useSamples && sampleDrum) {
+      sampleDrum.nextStepSampleRef.current = beatLabGridSampleFromBeat(
+        sessionStart,
+        origin,
+        k,
+        bpm,
+        sampleRate,
+      );
+    }
   } else if (tGrid < ctSnap - spb * 0.125) {
     /** Lagging grid time — keep `k`, re-derive `tGrid` so refill can emit catch-up hits. */
-    tGrid = sessionStart + (k - origin) * spb;
+    tGrid = gridTimeForK(k);
+    if (useSamples && sampleDrum) {
+      sampleDrum.nextStepSampleRef.current = beatLabGridSampleFromBeat(
+        sessionStart,
+        origin,
+        k,
+        bpm,
+        sampleRate,
+      );
+    }
+  } else if (useSamples && sampleDrum) {
+    sampleDrum.nextStepSampleRef.current = beatLabGridSampleFromBeat(
+      sessionStart,
+      origin,
+      k,
+      bpm,
+      sampleRate,
+    );
+    tGrid = beatLabGridTimeFromSample(sampleDrum.nextStepSampleRef.current, sampleRate);
   }
 
   return { k, tGrid };
@@ -173,35 +282,70 @@ export function refillCreationTransportLookahead(
 ): void {
   if (!isRunning()) return;
 
+  const sampleDrum = opts?.sampleDrum;
+  const sampleRate = sampleDrum?.sampleRate ?? 0;
+  const useSamples = sampleDrum != null && sampleRate > 0;
+  const bpm = 60 / Math.max(1e-9, spb);
+
   const horizon = ctSnap + CREATION_SCHEDULE_AHEAD_SEC;
   const chainFloor = opts?.loopContinuation ? CREATION_LOOP_CHAIN_FLOOR_SEC : SE2_AUDIO_START_FLOOR_SEC;
-  let chain = ctSnap + chainFloor;
-  let { k, tGrid } = alignCreationTransportStepClock(ctSnap, spb, refs);
+  let chain = useSamples
+    ? beatLabSampleScheduleFloorSec(ctSnap, sampleRate, chainFloor)
+    : ctSnap + chainFloor;
+  let { k, tGrid } = alignCreationTransportStepClock(
+    ctSnap,
+    spb,
+    refs,
+    sampleDrum,
+    opts?.loopContinuation === true,
+  );
 
-  const scheduleFloor = ctSnap + chainFloor;
+  const scheduleFloor = useSamples
+    ? beatLabSampleScheduleFloorSec(ctSnap, sampleRate, chainFloor)
+    : ctSnap + chainFloor;
   const sessionStart = refs.sessionStartRef.current;
   const origin = refs.originBeatRef.current;
   let n = 0;
   let catchUpQuarters = 0;
+
+  const advanceQuarter = (): void => {
+    if (useSamples && sampleDrum) {
+      const next = beatLabAdvanceSampleDrumQuarter(k, sessionStart, origin, bpm, sampleRate);
+      k = next.k;
+      tGrid = next.tGrid;
+      sampleDrum.nextStepSampleRef.current = next.nextStepSample;
+      return;
+    }
+    k += 1;
+    tGrid = sessionStart + (k - origin) * spb;
+  };
+  /** Metro uses tighter chain on loop wrap; drums still catch up the live quarter (SE2 `refillMetronome` pattern). */
+  const skipCatchUp = opts?.skipOverdueCatchUp === true;
   /**
    * Strict `<` for beat-0 at `sessionStart` (`<=` skipped beat-0 → silence then burst).
-   * In-session steps before `scheduleFloor` are scheduled here so pad hits are not silently dropped.
    */
-  while (tGrid < scheduleFloor && catchUpQuarters < CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL) {
+  while (
+    !skipCatchUp &&
+    tGrid < scheduleFloor &&
+    catchUpQuarters < CREATION_MAX_CATCHUP_QUARTERS_PER_REFILL
+  ) {
     if (sessionStart > 0 && tGrid >= sessionStart - 1e-6) {
-      const t0 = Math.max(tGrid, chain);
+      const latenessBeats = (ctSnap - tGrid) / Math.max(1e-9, spb);
+      if (latenessBeats > CREATION_CATCHUP_MAX_LATE_BEATS) {
+        advanceQuarter();
+        continue;
+      }
+      const catchFloor = useSamples ? scheduleFloor : ctSnap + chainFloor;
+      const t0 = Math.max(tGrid, catchFloor);
       if (!fireStep(k, t0, ctx)) break;
-      chain = t0 + CREATION_METRO_NODE_EPS_SEC;
       refs.lastScheduledQuarterRef.current = k;
       catchUpQuarters += 1;
       n += 1;
     }
-    k += 1;
-    tGrid = sessionStart + (k - origin) * spb;
+    advanceQuarter();
   }
-  while (tGrid < scheduleFloor) {
-    k += 1;
-    tGrid = sessionStart + (k - origin) * spb;
+  while (!skipCatchUp && tGrid < scheduleFloor) {
+    advanceQuarter();
   }
 
   while (n < CREATION_MAX_SCHEDULE_PER_CALL) {
@@ -210,8 +354,7 @@ export function refillCreationTransportLookahead(
     if (!fireStep(k, t0, ctx)) break;
     chain = t0 + CREATION_METRO_NODE_EPS_SEC;
     refs.lastScheduledQuarterRef.current = k;
-    k += 1;
-    tGrid = sessionStart + (k - origin) * spb;
+    advanceQuarter();
     n += 1;
   }
   refs.nextStepBeatRef.current = k;
@@ -221,6 +364,33 @@ export function refillCreationTransportLookahead(
 /**
  * SE2 `refillMetronome` — dedicated quarter click queue (not tied to drum `fireStep`).
  */
+function beatLabMetroLoopActive(boundary?: BeatLabSampleLoopBoundary): boolean {
+  return (
+    boundary?.loopOn === true &&
+    boundary.loopEndBeat > boundary.loopStartBeat
+  );
+}
+
+function beatLabMetroGridTime(
+  k: number,
+  sessionStart: number,
+  origin: number,
+  spb: number,
+  sampleDrum?: CreationTransportSampleDrumOpts,
+): number {
+  if (sampleDrum && sampleDrum.sampleRate > 0) {
+    const bpm = 60 / Math.max(1e-9, spb);
+    return beatLabGridTimeFromBeat(
+      sessionStart,
+      origin,
+      k,
+      bpm,
+      sampleDrum.sampleRate,
+    );
+  }
+  return sessionStart + (k - origin) * spb;
+}
+
 export function refillCreationMetronome(
   ctx: AudioContext,
   ctSnap: number,
@@ -234,24 +404,36 @@ export function refillCreationMetronome(
 ): void {
   if (!isRunning() || !isMetroOn()) return;
 
+  const sampleDrum = opts?.sampleDrum;
+  const sampleRate = sampleDrum?.sampleRate ?? 0;
+  const useSamples = sampleDrum != null && sampleRate > 0;
+  const loopActive = beatLabMetroLoopActive(sampleDrum?.loopBoundary);
+
   const origin = refs.originBeatRef.current;
   const sessionStart = refs.sessionStartRef.current;
   const horizon = ctSnap + CREATION_SCHEDULE_AHEAD_SEC;
   const tb = Math.max(0, totalBeats);
   const chainFloor = opts?.loopContinuation ? CREATION_LOOP_CHAIN_FLOOR_SEC : SE2_AUDIO_START_FLOOR_SEC;
-  let chain = ctSnap + chainFloor;
+  let chain = useSamples
+    ? beatLabSampleScheduleFloorSec(ctSnap, sampleRate, chainFloor)
+    : ctSnap + chainFloor;
   let n = 0;
 
-  while (refs.nextMetroKRef.current <= tb) {
-    const tNextQuarter = sessionStart + (refs.nextMetroKRef.current + 1 - origin) * spb;
+  const gridTime = (k: number): number =>
+    beatLabMetroGridTime(k, sessionStart, origin, spb, sampleDrum);
+
+  /** Looping patterns repeat — do not stop metro at `totalBeats` (that silenced lap 2+). */
+  while (loopActive || refs.nextMetroKRef.current <= tb) {
+    const tNextQuarter = gridTime(refs.nextMetroKRef.current + 1);
     if (tNextQuarter > ctSnap) break;
     refs.nextMetroKRef.current += 1;
+    if (!loopActive && refs.nextMetroKRef.current > tb) break;
   }
 
   while (n < CREATION_MAX_METRO_SCHEDULE_PER_CALL) {
     const k = refs.nextMetroKRef.current;
-    if (k > tb) break;
-    const tGrid = sessionStart + (k - origin) * spb;
+    if (!loopActive && k > tb) break;
+    const tGrid = gridTime(k);
     if (tGrid >= horizon) break;
     const t0 = Math.max(tGrid, chain);
     try {

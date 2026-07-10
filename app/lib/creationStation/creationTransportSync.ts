@@ -3,11 +3,13 @@
  * Playhead / HUD / grid all use this one function so they cannot disagree.
  */
 
+import { isPianoRollTransportRunning } from '@/app/lib/pianoRoll/pianoRollTransportSync';
+
 /** @deprecated Oscillator clicks; kept for any stale imports. Buffer clicks use {@link CREATION_METRO_VOLUME}. */
 export const CREATION_METRO_CLICK_ATTACK_SEC = 0.002;
 
-/** Same level as Studio Editor 2 `METRO_VOLUME`. */
-export const CREATION_METRO_VOLUME = 0.7;
+/** Same level as Studio Editor 2 `METRO_VOLUME` — playback click gain (not count-in). */
+export const CREATION_METRO_VOLUME = 0.22;
 
 /** Sine × exponential decay — same generator as SE2 `createMusioClickBuffer`. */
 export function createCreationMetronomeClickBuffer(
@@ -150,8 +152,52 @@ export function beatAtSessionTime(
   return Math.max(0, b);
 }
 
+function grooveLabHoldsSharedAudioGraph(): boolean {
+  return isGrooveLabTransportRunning() || isGrooveLabScreenActive();
+}
+
+function beatPadsHoldsSharedAudioGraph(): boolean {
+  return isBeatPadsTransportRunning() || isBeatPadsScreenActive();
+}
+
+export function setGenoUltraArpPreviewRunning(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicGenoUltraArpRunning?: boolean }).__daMusicGenoUltraArpRunning =
+    running;
+}
+
+export function isGenoUltraArpPreviewRunning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicGenoUltraArpRunning?: boolean }).__daMusicGenoUltraArpRunning ===
+    true
+  );
+}
+
+/** Geno Ultra docked panel open — keep SE2 preview AudioContext alive. */
+export function setGenoUltraSynthPanelActive(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicGenoUltraSynthPanelOpen?: boolean }).__daMusicGenoUltraSynthPanelOpen =
+    active;
+}
+
+export function isGenoUltraSynthPanelActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicGenoUltraSynthPanelOpen?: boolean })
+      .__daMusicGenoUltraSynthPanelOpen === true
+  );
+}
+
 export function shouldHoldSharedAudioGraphForCreationModules(): boolean {
-  return isCreationBeatLabTransportRunning() || grooveLabHoldsSharedAudioGraph();
+  return (
+    isCreationBeatLabTransportRunning() ||
+    beatPadsHoldsSharedAudioGraph() ||
+    grooveLabHoldsSharedAudioGraph() ||
+    isPianoRollTransportRunning() ||
+    isGenoUltraArpPreviewRunning() ||
+    isGenoUltraSynthPanelActive()
+  );
 }
 
 /** Beat Lab local transport is playing — master `pause`/`stop` must not suspend the shared graph. */
@@ -167,6 +213,38 @@ export function isCreationBeatLabTransportRunning(): boolean {
   return (
     (window as unknown as { __daMusicCreationBeatLabRunning?: boolean })
       .__daMusicCreationBeatLabRunning === true
+  );
+}
+
+/** Beat Pads overlay local loop — master pause/stop must not suspend the shared graph. */
+export function setBeatPadsTransportRunning(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  (
+    window as unknown as { __daMusicBeatPadsTransportRunning?: boolean }
+  ).__daMusicBeatPadsTransportRunning = running;
+}
+
+export function isBeatPadsTransportRunning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicBeatPadsTransportRunning?: boolean })
+      .__daMusicBeatPadsTransportRunning === true
+  );
+}
+
+/** Beat Pads overlay open — keep shared AudioContext alive for pad preview + loop transport. */
+export function setBeatPadsScreenActive(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  (
+    window as unknown as { __daMusicBeatPadsScreenActive?: boolean }
+  ).__daMusicBeatPadsScreenActive = active;
+}
+
+export function isBeatPadsScreenActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicBeatPadsScreenActive?: boolean })
+      .__daMusicBeatPadsScreenActive === true
   );
 }
 
@@ -198,10 +276,6 @@ export function isGrooveLabScreenActive(): boolean {
     (window as unknown as { __daMusicGrooveLabScreenActive?: boolean }).__daMusicGrooveLabScreenActive ===
     true
   );
-}
-
-function grooveLabHoldsSharedAudioGraph(): boolean {
-  return isGrooveLabTransportRunning() || isGrooveLabScreenActive();
 }
 
 /**

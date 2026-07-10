@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 
-import { Mic, Upload, Play, Pause, SkipBack, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, Check } from 'lucide-react';
+import { HelpCircle, Mic, Upload, Play, Pause, SkipBack, RefreshCw, Download, ChevronUp, ChevronDown, AlertCircle, Check } from 'lucide-react';
 
 import { useMasterClock } from '@/app/context/MasterClockContext';
 
@@ -22,6 +22,12 @@ import {
   type PitchEvent,
   type MidiNote
 } from '@/app/lib/pitchDetection';
+import { MELODY_MIDI_HELP_INTRO_STORAGE } from '@/app/lib/vocalLab/vocalLabInstructions';
+import {
+  VocalLabHelpProvider,
+  VocalLabHelpTip,
+  useVocalLabHelpContext,
+} from '@/app/components/vocalLab/VocalLabHelpHub';
 
 
 const PPQ = 960;
@@ -330,6 +336,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
   }, []);
 
   return (
+    <VocalLabHelpProvider autoIntro introTab="melody-midi" introStorageKey={MELODY_MIDI_HELP_INTRO_STORAGE}>
     <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
@@ -343,7 +350,10 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
             <Mic size={16} />
           </div>
           <div>
-            <h2 className="text-sm font-bold">Melody-to-MIDI Transcription</h2>
+            <h2 className="text-sm font-bold inline-flex items-center gap-1.5">
+              Melody-to-MIDI Transcription
+              <VocalLabHelpTip tab="melody-midi" title="Melody-to-MIDI transcription" />
+            </h2>
             <p className="text-xs" style={{ color: '#555' }}>
               {state.midiNotes.length > 0 ? `${state.midiNotes.length} notes · ${bpm} BPM` : 'Capture or upload audio'}
             </p>
@@ -351,6 +361,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
         </div>
 
         <div className="flex gap-2 items-center">
+          <MelodyMidiHowToBtn />
           {state.midiNotes.length > 0 && (
             <button onClick={() => setShowExportModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
               style={{ background: 'linear-gradient(135deg, #ff6b35, #D500F9)', color: '#000', cursor: 'pointer' }}>
@@ -364,7 +375,10 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
         {/* Section 1: Input */}
         <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-          <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ff6b35' }}>Audio Input</span>
+          <span className="text-xs font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#ff6b35' }}>
+            Audio Input
+            <VocalLabHelpTip tab="melody-midi" title="Record or upload audio" />
+          </span>
           
           <div className="flex gap-2">
             <button onClick={state.isRecording ? stopRecording : startRecording}
@@ -417,7 +431,10 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
         {/* Section 2: Transcription Controls */}
         {state.pitchEvents.length > 0 && (
           <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-            <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>Transcription Options</span>
+            <span className="text-xs font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#00E5FF' }}>
+              Transcription Options
+              <VocalLabHelpTip tab="melody-midi" title="Transpose, quantize & transcribe" />
+            </span>
 
             {/* Transposition */}
             <div className="flex flex-col gap-2">
@@ -517,8 +534,9 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
         {state.pitchEvents.length > 0 && (
           <div className="flex flex-col gap-2" style={{ marginTop: 12 }}>
             <div className="rounded-xl p-4 pb-2" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-              <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a78bfa' }}>
+              <span className="text-xs font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#a78bfa' }}>
                 Piano Roll - Detected Pitch Notes + Manual Editing
+                <VocalLabHelpTip tab="melody-midi" title="Edit transcribed MIDI" />
               </span>
               <p className="text-10px mt-2" style={{ color: '#666' }}>
                 Click to add notes • Click on notes to delete • Ctrl+Scroll to zoom • Scroll to pan
@@ -639,5 +657,20 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
         </div>
       )}
     </div>
+    </VocalLabHelpProvider>
+  );
+}
+
+function MelodyMidiHowToBtn() {
+  const { openHelp } = useVocalLabHelpContext();
+  return (
+    <button
+      type="button"
+      onClick={() => openHelp('melody-midi')}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
+      style={{ background: '#1a1018', color: '#f472b6', border: '1px solid #f472b655', cursor: 'pointer' }}
+    >
+      <HelpCircle size={11} /> HOW TO
+    </button>
   );
 }

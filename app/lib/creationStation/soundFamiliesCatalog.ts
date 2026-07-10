@@ -8,10 +8,17 @@ import {
 } from '@/app/lib/padSampleStorage';
 import { CREATION_PAD_NAMES } from '@/app/lib/sessionChannelTracks';
 
+import {
+  buildOrchestraHitsSoundFamily,
+  orchestraHitsFamilySamplerOpts,
+  ORCHESTRA_HITS_SOUND_FAMILY_ID,
+} from '@/app/lib/creationStation/soundFamilyOrchestraHits';
+
 import bundledCatalogJson from '../../../public/samples/sound-families/catalog.json';
 
 const CATALOG_URL = '/samples/sound-families/catalog.json';
 const SAMPLE_BASE = '/samples/sound-families/';
+const SAMPLES_ROOT_BASE = '/samples/';
 
 export const BUILTIN_SOUND_FAMILIES_TITLE = 'Built-in Trap Kit';
 export const BUILTIN_SOUND_FAMILIES_SUBTITLE = '808s · claps · kicks · hats — always in the app';
@@ -43,13 +50,25 @@ const BUNDLED_CATALOG = bundledCatalogJson as SoundFamiliesCatalog;
 let cachedCatalog: SoundFamiliesCatalog | null = null;
 let catalogPromise: Promise<SoundFamiliesCatalog | null> | null = null;
 
+function appendOrchestraHitsFamily(data: SoundFamiliesCatalog): SoundFamiliesCatalog {
+  const orch = buildOrchestraHitsSoundFamily();
+  const families = data.families.filter((f) => f.id !== ORCHESTRA_HITS_SOUND_FAMILY_ID);
+  return { ...data, families: [...families, orch] };
+}
+
 function normalizeCatalog(data: SoundFamiliesCatalog | null): SoundFamiliesCatalog | null {
   if (!data?.families?.length) return null;
-  return {
+  return appendOrchestraHitsFamily({
     ...data,
     title: BUILTIN_SOUND_FAMILIES_TITLE,
     subtitle: BUILTIN_SOUND_FAMILIES_SUBTITLE,
-  };
+  });
+}
+
+/** Call after catalog-shaping changes so the next fetch rebuilds. */
+export function invalidateSoundFamiliesCatalogCache(): void {
+  cachedCatalog = null;
+  catalogPromise = null;
 }
 
 export async function fetchSoundFamiliesCatalog(): Promise<SoundFamiliesCatalog | null> {
@@ -77,7 +96,11 @@ export async function fetchSoundFamiliesCatalog(): Promise<SoundFamiliesCatalog 
 }
 
 export function soundFamilySampleUrl(relFile: string): string {
-  return `${SAMPLE_BASE}${relFile.replace(/^\//, '')}`;
+  const norm = relFile.replace(/^\//, '').replace(/\\/g, '/');
+  if (norm.startsWith('orchestra-hits/')) {
+    return `${SAMPLES_ROOT_BASE}${norm}`;
+  }
+  return `${SAMPLE_BASE}${norm}`;
 }
 
 export function familyInstrumentLabel(pad: number, sampleTitle: string): string {
@@ -86,8 +109,15 @@ export function familyInstrumentLabel(pad: number, sampleTitle: string): string 
   return `${lane} — ${short}`;
 }
 
-export function samplerOptsForFamily(familyId: string, pad: number): PadSamplerPlaybackOpts {
+export function samplerOptsForFamily(
+  familyId: string,
+  pad: number,
+  relFile?: string,
+): PadSamplerPlaybackOpts {
   const d = defaultPadSamplerPlaybackOpts();
+  if (familyId === ORCHESTRA_HITS_SOUND_FAMILY_ID && relFile) {
+    return orchestraHitsFamilySamplerOpts(relFile);
+  }
   if (familyId === '808-sub' || pad === 15) {
     return { ...d, triggerSnap: 0.48, fineSemi: -5, lpHz: 2800, trim0: 0, trim1: 1 };
   }

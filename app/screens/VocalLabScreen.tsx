@@ -1,8 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
-import { Mic2, FileAudio, Send } from 'lucide-react';
-
-import VocalCapturePanel from './vocal-lab/VocalCapturePanel';
+import { HelpCircle, Mic2, FileAudio, Send } from 'lucide-react';
 
 import NeuralHumPanel from './vocal-lab/NeuralHumPanel';
 
@@ -13,96 +11,55 @@ import RVCSingingConverterPanel from './vocal-lab/RVCSingingConverterPanel';
 import EnhancementSuite from './vocal-lab/EnhancementSuite';
 
 import VocalTracksPanel from './vocal-lab/VocalTracksPanel';
+import type { PendingNeuralHumStudioImport } from '@/app/lib/vocalLab/neuralHumStudioExport';
+import type { PendingNeuralHumCreationImport } from '@/app/lib/vocalLab/neuralHumCreationExport';
+import {
+  downloadVocalLabMp3,
+  downloadVocalLabWav,
+  vocalLabBlobIsMp3,
+} from '@/app/lib/vocalLab/vocalLabAudioDownload';
+import { VOCAL_LAB_HELP_INTRO_STORAGE } from '@/app/lib/vocalLab/vocalLabInstructions';
+import {
+  VocalLabHelpProvider,
+  VocalLabHelpTip,
+  useVocalLabHelpContext,
+} from '@/app/components/vocalLab/VocalLabHelpHub';
 
 
 interface VocalLabScreenProps {
   /** Second arg: optional audio blob when sending recorded/uploaded audio to Studio Editor. */
   onExport: (dest: string, audioBlob?: Blob) => void;
+  /** Neural Hum melody → Studio Editor 2 (MIDI + optional render WAV). */
+  onNeuralHumToStudio?: (payload: PendingNeuralHumStudioImport) => void;
+  /** Neural Hum melody → Groove Lab or Beat Lab NEW SYNTH. */
+  onNeuralHumToCreation?: (payload: PendingNeuralHumCreationImport) => void;
 }
 
 
-export default function VocalLabScreen({ onExport }: VocalLabScreenProps) {
-  const [isRecording, setIsRecording] = useState(false);
+export default function VocalLabScreen({
+  onExport,
+  onNeuralHumToStudio,
+  onNeuralHumToCreation,
+}: VocalLabScreenProps) {
   const [hasAudio, setHasAudio] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [captureBlob, setCaptureBlob] = useState<Blob | null>(null);
   const recordedBlobRef = useRef<Blob | null>(null);
 
-  async function startRecord() {
-    if (isRecording) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const chunks: BlobPart[] = [];
-      let mediaRecorder: MediaRecorder;
-      try {
-        mediaRecorder = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
-          : new MediaRecorder(stream);
-      } catch {
-        mediaRecorder = new MediaRecorder(stream);
-      }
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-      mediaRecorder.onstop = () => {
-        const type = mediaRecorder.mimeType || 'audio/webm';
-        const blob = new Blob(chunks, { type });
-        recordedBlobRef.current = blob;
-        setHasAudio(blob.size > 0);
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-        mediaRecorderRef.current = null;
-      };
-      mediaRecorder.start(100);
-      setIsRecording(true);
-      setHasAudio(false);
-      setRecordingTime(0);
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
-    } catch (err) {
-      console.error('Vocal Capture mic error:', err);
-      alert('Microphone access is required to record. Allow the mic for this site (or use https / localhost).');
-    }
-  }
+  const handleCaptureBlobChange = useCallback((blob: Blob | null) => {
+    recordedBlobRef.current = blob;
+    setCaptureBlob(blob);
+    setHasAudio(Boolean(blob && blob.size > 0));
+  }, []);
 
-  function stopRecord() {
-    if (!mediaRecorderRef.current || !isRecording) return;
-    mediaRecorderRef.current.stop();
-    setIsRecording(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  }
+  const exportAudioBlob = useCallback((): Blob | undefined => {
+    const blob = recordedBlobRef.current;
+    return blob && blob.size > 0 ? blob : undefined;
+  }, []);
 
-  function handleUpload(file: File) {
-    recordedBlobRef.current = file;
-    setHasAudio(true);
-    setIsRecording(false);
-  }
-
-  function handleDelete() {
-    recordedBlobRef.current = null;
-    setHasAudio(false);
-    setIsPlaying(false);
-    setRecordingTime(0);
-  }
-
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      mediaRecorderRef.current?.stop();
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    },
-    [],
-  );
+  const canExportMp3 = Boolean(captureBlob && vocalLabBlobIsMp3(captureBlob));
 
   return (
+    <VocalLabHelpProvider autoIntro introTab="hum-capture" introStorageKey={VOCAL_LAB_HELP_INTRO_STORAGE}>
     <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}>
       {/* Header */}
       <div
@@ -114,27 +71,25 @@ export default function VocalLabScreen({ onExport }: VocalLabScreenProps) {
             <Mic2 size={16} />
           </div>
           <div>
-            <h2 className="text-sm font-bold" style={{ color: '#fff' }}>AI Vocal Lab & Neural Transformation</h2>
-            <p className="text-xs" style={{ color: '#555' }}>Record, transform, and enhance vocals with AI</p>
+            <h2 className="text-sm font-bold inline-flex items-center gap-1.5" style={{ color: '#fff' }}>
+              AI Vocal Lab & Neural Transformation
+              <VocalLabHelpTip tab="overview" title="AI Vocal Lab quick start" />
+            </h2>
+            <p className="text-xs" style={{ color: '#555' }}>Hum-to-MIDI · voice tools · enhancement</p>
           </div>
-          {/* Neural engine badge */}
           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full ml-2" style={{ background: '#0a1a0a', border: '1px solid #00ff8844' }}>
             <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#00ff88' }} />
             <span className="text-xs" style={{ color: '#00ff88', fontSize: 10 }}>Neural Engine Active</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <VocalLabHowToBtn />
           <button
-            onClick={() =>
-              onExport(
-                'studio-editor',
-                recordedBlobRef.current && recordedBlobRef.current.size > 0 ? recordedBlobRef.current : undefined,
-              )
-            }
+            onClick={() => onExport('studio-editor-2', exportAudioBlob())}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
             style={{ background: '#1a1a2a', color: '#00E5FF', border: '1px solid #00E5FF55' }}
           >
-            <Send size={11} /> Studio Editor
+            <Send size={11} /> Studio Editor 2
           </button>
           <button
             onClick={() => onExport('master-arranger')}
@@ -146,102 +101,110 @@ export default function VocalLabScreen({ onExport }: VocalLabScreenProps) {
         </div>
       </div>
 
-      {/* Main content — scrollable */}
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 min-h-0">
 
-        {/* Row 1: Neural Hum (Left) + RVC Singing Voice Converter (Right) */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          
-          {/* Left Column: Neural Hum-to-Instrument */}
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-            <NeuralHumPanel hasAudio={hasAudio} />
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl p-4 flex flex-col gap-3 min-w-0" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+            <NeuralHumPanel
+              onCaptureBlobChange={handleCaptureBlobChange}
+              onNeuralHumToStudio={onNeuralHumToStudio}
+              onNeuralHumToCreation={onNeuralHumToCreation}
+            />
           </div>
 
-          {/* Right Column: RVC Singing Voice Converter */}
           <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
             <RVCSingingConverterPanel />
           </div>
         </div>
 
-        {/* Row 2: AI Voice Processing Stack */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          
-          {/* Left: AI Voice Swap */}
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-            <VoiceSwapPanel hasAudio={hasAudio} />
-          </div>
-
-          {/* Right: Vocal Capture */}
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-            <VocalCapturePanel
-              hasAudio={hasAudio}
-              isRecording={isRecording}
-              isPlaying={isPlaying}
-              recordingTime={recordingTime}
-              onStartRecord={startRecord}
-              onStopRecord={stopRecord}
-              onPlayPause={() => setIsPlaying(p => !p)}
-              onDelete={handleDelete}
-              onUpload={handleUpload}
-            />
-          </div>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <VoiceSwapPanel audioBlob={captureBlob} />
         </div>
 
-        {/* Row 2: Enhancement Suite */}
         <div className="rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
-          <EnhancementSuite />
+          <EnhancementSuite audioBlob={captureBlob} />
         </div>
 
-        {/* Row 3: Vocal Tracks */}
         <div className="rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
           <VocalTracksPanel />
         </div>
 
-        {/* Export row */}
         <div
-          className="flex items-center gap-3 p-4 rounded-xl"
+          className="flex flex-wrap items-center gap-3 p-4 rounded-xl"
           style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}
         >
           <span className="text-xs font-bold uppercase tracking-widest mr-2" style={{ color: '#555' }}>Export</span>
-          {[
-            { label: 'WAV', color: '#00ff88' },
-            { label: 'MP3', color: '#00ff88' },
-          ].map(({ label, color }) => (
-            <button
-              key={label}
-              disabled={!hasAudio}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all"
-              style={{
-                background: hasAudio ? `${color}18` : '#111',
-                color: hasAudio ? color : '#333',
-                border: `1px solid ${hasAudio ? `${color}44` : '#222'}`,
-                cursor: hasAudio ? 'pointer' : 'not-allowed',
-              }}
-            >
-              <FileAudio size={11} /> {label}
-            </button>
-          ))}
           <button
-            onClick={() => onExport('creation-station')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
-            style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}
+            disabled={!hasAudio}
+            onClick={() => {
+              const blob = exportAudioBlob();
+              if (blob) void downloadVocalLabWav(blob);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all"
+            style={{
+              background: hasAudio ? '#00ff8818' : '#111',
+              color: hasAudio ? '#00ff88' : '#333',
+              border: `1px solid ${hasAudio ? '#00ff8844' : '#222'}`,
+              cursor: hasAudio ? 'pointer' : 'not-allowed',
+            }}
           >
-            <Send size={11} /> To Creation Station
+            <FileAudio size={11} /> WAV
           </button>
           <button
-            onClick={() =>
-              onExport(
-                'studio-editor',
-                recordedBlobRef.current && recordedBlobRef.current.size > 0 ? recordedBlobRef.current : undefined,
-              )
-            }
+            disabled={!canExportMp3}
+            onClick={() => {
+              const blob = exportAudioBlob();
+              if (blob) downloadVocalLabMp3(blob);
+            }}
+            title={canExportMp3 ? 'Download MP3' : 'Import an MP3 file to enable MP3 download'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all"
+            style={{
+              background: canExportMp3 ? '#00ff8818' : '#111',
+              color: canExportMp3 ? '#00ff88' : '#333',
+              border: `1px solid ${canExportMp3 ? '#00ff8844' : '#222'}`,
+              cursor: canExportMp3 ? 'pointer' : 'not-allowed',
+            }}
+          >
+            <FileAudio size={11} /> MP3
+          </button>
+          <button
+            onClick={() => onExport('studio-editor-2', exportAudioBlob())}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
             style={{ background: '#1a1a2a', color: '#00E5FF', border: '1px solid #00E5FF44' }}
           >
-            <Send size={11} /> To Studio Editor
+            <Send size={11} /> To Studio Editor 2
+          </button>
+          <button
+            onClick={() => onExport('groove-lab', exportAudioBlob())}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
+            style={{ background: '#1a1a1a', color: '#7cf4c6', border: '1px solid #7cf4c644' }}
+          >
+            <Send size={11} /> To Groove Lab
+          </button>
+          <button
+            onClick={() => onExport('new-synth', exportAudioBlob())}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
+            style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}
+          >
+            <Send size={11} /> To NEW SYNTH
           </button>
         </div>
       </div>
     </div>
+    </VocalLabHelpProvider>
+  );
+}
+
+function VocalLabHowToBtn() {
+  const { openHelp } = useVocalLabHelpContext();
+  return (
+    <button
+      type="button"
+      onClick={() => openHelp('overview')}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
+      style={{ background: '#1a1018', color: '#f472b6', border: '1px solid #f472b655', cursor: 'pointer' }}
+    >
+      <HelpCircle size={11} /> HOW TO
+    </button>
   );
 }

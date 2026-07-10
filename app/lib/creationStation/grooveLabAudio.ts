@@ -3,7 +3,13 @@ import {
   CHORD_BASS_SEQ_CHANNEL_COUNT,
 } from '@/app/lib/creationStation/chordBassSequencerSession';
 import { getSharedAudioOutput } from '@/app/lib/creationStation/sharedAudioOutput';
-import { grooveLabChannelVolumeGain } from '@/app/lib/creationStation/grooveLabChannelMeters';
+import {
+  applyGrooveLabChannelFxNodes,
+  createGrooveLabChannelFxNodes,
+  readGrooveLabChannelFx,
+  type GrooveLabChannelFxNodes,
+} from '@/app/lib/creationStation/grooveLabChannelFx';
+import { grooveLabChannelFaderGain } from '@/app/lib/creationStation/grooveLabChannelMeters';
 
 /** Lead time after unlock — schedule inside the play callback, not before resume. */
 export const GROOVE_LAB_AUDIO_LEAD_SEC = 0.02;
@@ -14,6 +20,9 @@ type GrooveLabAudioGlobals = {
 
 type ChannelBusEntry = {
   bus: GainNode;
+  /** BPM chop gate — Groove Lead rhythmic stutter (default open). */
+  chopGate: GainNode;
+  fx: GrooveLabChannelFxNodes;
   limiter: DynamicsCompressorNode;
   postTrim: GainNode;
   pan: StereoPannerNode;
@@ -45,6 +54,9 @@ export function resolveGrooveLabChannelDest(
   let entry = perCtx.get(chId);
   if (!entry) {
     const bus = ctx.createGain();
+    const chopGate = ctx.createGain();
+    chopGate.gain.value = 1;
+    const fx = createGrooveLabChannelFxNodes(ctx);
     const limiter = ctx.createDynamicsCompressor();
     limiter.threshold.value = -12;
     limiter.knee.value = 12;
@@ -55,8 +67,10 @@ export function resolveGrooveLabChannelDest(
     postTrim.gain.value = 1;
     const pan = ctx.createStereoPanner();
     const master = getSharedAudioOutput(ctx);
-    bus.connect(limiter).connect(postTrim).connect(pan).connect(master);
-    entry = { bus, limiter, postTrim, pan, masterSink: master };
+    bus.connect(chopGate);
+    chopGate.connect(fx.highpass);
+    fx.compMakeup.connect(limiter).connect(postTrim).connect(pan).connect(master);
+    entry = { bus, chopGate, fx, limiter, postTrim, pan, masterSink: master };
     perCtx.set(chId, entry);
   } else {
     const master = getSharedAudioOutput(ctx);
@@ -75,7 +89,7 @@ export function resolveGrooveLabChannelDest(
     }
   }
   const t = ctx.currentTime;
-  const gain = grooveLabChannelVolumeGain(chId, channelVolumes);
+  const gain = grooveLabChannelFaderGain(chId, channelVolumes);
   const panSigned = Math.max(
     -1,
     Math.min(
@@ -88,10 +102,18 @@ export function resolveGrooveLabChannelDest(
     entry.bus.gain.setValueAtTime(gain, t);
     entry.pan.pan.cancelScheduledValues(t);
     entry.pan.pan.setValueAtTime(panSigned, t);
+    applyGrooveLabChannelFxNodes(ctx, entry.fx, readGrooveLabChannelFx(chId));
   } catch {
     /* non-fatal */
   }
   return entry.bus;
+}
+
+/** Rhythmic chop insert on a mixer channel strip (after fader, before FX). */
+export function grooveLabChannelChopGate(ctx: AudioContext, chId: number): GainNode | null {
+  if (ctx.state === 'closed') return null;
+  resolveGrooveLabChannelDest(ctx, chId);
+  return channelBusByCtx.get(ctx)?.get(chId)?.chopGate ?? null;
 }
 
 /** Push all CH 33–48 fader/pan values to live channel buses (call when knobs move). */
@@ -103,6 +125,24 @@ export function applyGrooveLabChannelVolumes(
   for (let i = 0; i < CHORD_BASS_SEQ_CHANNEL_COUNT; i += 1) {
     const chId = CHORD_BASS_SEQ_CHANNEL_BASE + i;
     resolveGrooveLabChannelDest(ctx, chId, channelVolumes);
+  }
+}
+
+/** Immediate silence on every Groove mixer strip — transport STOP must cut ~3s lookahead. */
+export function muteAllGrooveLabChannelBuses(ctx: AudioContext, when?: number): void {
+  if (ctx.state === 'closed') return;
+  const t = when ?? ctx.currentTime;
+  const perCtx = channelBusByCtx.get(ctx);
+  if (!perCtx) return;
+  for (const entry of perCtx.values()) {
+    try {
+      entry.bus.gain.cancelScheduledValues(t);
+      entry.bus.gain.setValueAtTime(0, t);
+      entry.chopGate.gain.cancelScheduledValues(t);
+      entry.chopGate.gain.setValueAtTime(0, t);
+    } catch {
+      /* closed ctx */
+    }
   }
 }
 
@@ -276,8 +316,10 @@ export function getOrCreateGrooveLabPlaybackBus(ctx: AudioContext): GainNode {
   return bus;
 }
 
-/** @deprecated No-op */
-export function silenceGrooveLabPlayback(_ctx: AudioContext): void {}
+/** Cut all Groove channel strips immediately (transport STOP / PAUSE). */
+export function silenceGrooveLabPlayback(ctx: AudioContext): void {
+  muteAllGrooveLabChannelBuses(ctx);
+}
 
 /** @deprecated No-op */
 export function armGrooveLabPlayback(_ctx: AudioContext): void {}

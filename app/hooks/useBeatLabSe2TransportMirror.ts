@@ -39,14 +39,16 @@ export function useBeatLabSe2TransportMirror(
     refillRef,
     onFrameRef,
     onAudioContextRebuiltRef,
+    stopMasterMetronomeLoop,
   } = options;
 
-  /** SE2 `useEffect([running])` — compositor read + HUD via `onFrameRef`. */
+  /** SE2 `useEffect([running])` — compositor read + HUD via `onFrameRef`.
+   *  rAF stays armed while the screen is active so Play does not wait for React `isPlaying`. */
   useEffect(() => {
-    if (!isScreenActive || !isPlaying) return;
+    if (!isScreenActive) return;
     let transportRaf = 0;
     const transportFrame = () => {
-      transportRaf = 0;
+      transportRaf = requestAnimationFrame(transportFrame);
       if (!runningRef.current) return;
       try {
         const ctx = resolveBeatLabAudioContext(ctxRef, getOrCreateAudioContext);
@@ -65,7 +67,6 @@ export function useBeatLabSe2TransportMirror(
       } catch {
         /* */
       }
-      if (runningRef.current) transportRaf = requestAnimationFrame(transportFrame);
     };
     transportRaf = requestAnimationFrame(transportFrame);
     return () => {
@@ -73,7 +74,6 @@ export function useBeatLabSe2TransportMirror(
     };
   }, [
     isScreenActive,
-    isPlaying,
     ctxRef,
     runningRef,
     getOrCreateAudioContext,
@@ -89,14 +89,10 @@ export function useBeatLabSe2TransportMirror(
   useEffect(() => {
     if (!isScreenActive) {
       lastScheduledQuarterRef.current = Number.NEGATIVE_INFINITY;
-      setCreationBeatLabTransportRunning(false);
       return;
     }
     const tick = () => {
-      if (!runningRef.current || sessionStartRef.current <= 0) {
-        setCreationBeatLabTransportRunning(false);
-        return;
-      }
+      if (!runningRef.current || sessionStartRef.current <= 0) return;
       const prevCtx = ctxRef.current;
       const ctx = resolveBeatLabAudioContext(ctxRef, getOrCreateAudioContext);
       if (ctx.state === 'closed') return;
@@ -124,12 +120,11 @@ export function useBeatLabSe2TransportMirror(
       }
       refillRef.current(ctx, t);
     };
-    if (isPlaying) tick();
+    tick();
     const id = window.setInterval(tick, BEAT_LAB_LOOKAHEAD_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [
     isScreenActive,
-    isPlaying,
     ctxRef,
     runningRef,
     sessionStartRef,
@@ -140,5 +135,6 @@ export function useBeatLabSe2TransportMirror(
     perfSessionStartMsRef,
     schedAnchorTimeRef,
     schedAnchorPerfRef,
+    stopMasterMetronomeLoop,
   ]);
 }

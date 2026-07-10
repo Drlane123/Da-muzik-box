@@ -1,0 +1,35 @@
+WHY CURSOR BLOCKS YOUR SOURCE ZIP
+==================================
+
+It is NOT blocking the zip file on E:\.
+Cursor locks FILES INSIDE your project while it is open.
+
+What happened (2026-06-14 backup at 2:08 PM):
+  tar ran for ~40 minutes, reached 2 GB, then failed with:
+
+  "Couldn't open ./.cursor/workspace-data/terminals/235686.txt: Permission denied"
+
+That file is Cursor's own terminal log for the backup command.
+Cursor keeps it open. tar cannot read it. tar stops. Zip never finishes.
+
+Same problem can happen with:
+  - .cursor/workspace-data/terminals/*.txt
+  - .cursor/workspace-data/agent-transcripts/
+  - any file Cursor is actively writing to
+
+FIX (already applied in scripts/pack-source-zip.ps1):
+  Backup now SKIPS .cursor/workspace-data (Cursor temp data, not source code).
+  Your app code, .git, rules, scripts are still included.
+
+BEST WAY TO RUN BACKUP:
+  1. Double-click SAVE-SOURCE-NOW.bat from FILE EXPLORER (not Cursor terminal)
+  2. Wait 20-40 minutes until .zip appears on E:\
+  3. Do not open the .part file while saving
+
+WORKING BACKUP YOU CAN USE NOW:
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-13_1550.zip (2.19 GB, opens fine)
+
+FAILED PARTIAL (do not use):
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1408.FAILED-part-do-not-use
+
+Updated: 2026-06-14

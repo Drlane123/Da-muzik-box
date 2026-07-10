@@ -4,7 +4,7 @@
  */
 import type { GrooveComposerColumn, GrooveComposerHarmony } from '@/app/lib/creationStation/grooveLabComposerTypes';
 import { GROOVE_LAB_CHORD_HARMONY_MIDI_MIN } from '@/app/lib/creationStation/grooveLabPitch';
-import type { GrooveRollHit } from '@/app/lib/creationStation/grooveLabRoll';
+import { grooveLabBarDownbeatSlotsFromChordHits, type GrooveRollHit } from '@/app/lib/creationStation/grooveLabRoll';
 import {
   WAVE_LEAF_MIDI_MAX,
   WAVE_LEAF_MIDI_MIN,
@@ -214,11 +214,21 @@ function snapHitToStack(
   prev: number | null,
   lastChordSlot: number,
   prevStackPcs: Set<number>,
+  gentle?: boolean,
 ): { midi: number; lastChordSlot: number; prevStackPcs: Set<number> } {
   const col = waveLeafHarmonyColumnAtSlot(harmony, h.slot);
   const stack = waveLeafGreenStackMidisAtSlot(chordHits, h.slot, col);
   const activeSlot = waveLeafActiveChordSlot(chordHits, h.slot);
   const chordChanged = activeSlot >= 0 && activeSlot !== lastChordSlot;
+
+  if (gentle) {
+    const midi = waveLeafSnapMidiToStack(h.midi, stack, prev);
+    if (chordChanged) {
+      return { midi, lastChordSlot: activeSlot, prevStackPcs: waveLeafStackPitchClasses(stack) };
+    }
+    return { midi, lastChordSlot, prevStackPcs };
+  }
+
   const forbidPcs = chordChanged ? new Set(prevStackPcs) : undefined;
   const colIdx = waveLeafChordColumnSlots(chordHits).indexOf(activeSlot);
   const anchor =
@@ -242,6 +252,7 @@ export function lockWaveLeafLaneToGreenStack(
   hits: readonly GrooveRollHit[],
   chordHits: readonly GrooveRollHit[],
   harmony: GrooveComposerHarmony,
+  opts?: { gentle?: boolean },
 ): GrooveRollHit[] {
   const sorted = [...hits].sort((a, b) => a.slot - b.slot || a.midi - b.midi);
   let prev: number | null = null;
@@ -250,7 +261,7 @@ export function lockWaveLeafLaneToGreenStack(
   const out: GrooveRollHit[] = [];
 
   for (const h of sorted) {
-    const snap = snapHitToStack(h, chordHits, harmony, prev, lastChordSlot, prevStackPcs);
+    const snap = snapHitToStack(h, chordHits, harmony, prev, lastChordSlot, prevStackPcs, opts?.gentle);
     prev = snap.midi;
     lastChordSlot = snap.lastChordSlot;
     prevStackPcs = snap.prevStackPcs;
@@ -261,15 +272,14 @@ export function lockWaveLeafLaneToGreenStack(
 }
 
 /**
- * Each green chord column gets an early lead note on a complementary stack tone
- * (fixes “falls off” on chord 3+ when phrase rhythm skips a change).
+ * Each bar gets one lead anchor on a complementary stack tone (bar downbeat only).
  */
 export function waveLeafComplimentEveryChordColumn(
   hits: readonly GrooveRollHit[],
   chordHits: readonly GrooveRollHit[],
   harmony: GrooveComposerHarmony,
 ): GrooveRollHit[] {
-  const chordSlots = waveLeafChordColumnSlots(chordHits);
+  const chordSlots = grooveLabBarDownbeatSlotsFromChordHits(chordHits);
   if (chordSlots.length === 0) return [...hits];
 
   const sorted = [...hits].sort((a, b) => a.slot - b.slot || a.midi - b.midi);

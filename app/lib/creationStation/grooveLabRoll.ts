@@ -72,6 +72,96 @@ export function grooveLabBarDownbeatSlot(slot: number): number {
   return Math.floor(s / GROOVE_LAB_SLOTS_PER_BAR) * GROOVE_LAB_SLOTS_PER_BAR;
 }
 
+/** True when hits land on multiple beats in a bar (rhythm edit / 1+3 / 2+4) — skip bar collapse. */
+export function grooveLabChordHitsUseRhythmSlots(hits: readonly GrooveRollHit[]): boolean {
+  const slotsByBar = new Map<number, Set<number>>();
+  for (const h of hits) {
+    if (!grooveLabIsChordStackMidi(h.midi)) continue;
+    const bar = Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR);
+    const barEnd = (bar + 1) * GROOVE_LAB_SLOTS_PER_BAR;
+    if (h.slot + h.sustainSlots < barEnd - 1) return true;
+    const set = slotsByBar.get(bar) ?? new Set<number>();
+    set.add(h.slot);
+    slotsByBar.set(bar, set);
+  }
+  for (const slots of slotsByBar.values()) {
+    if (slots.size > 1) return true;
+    for (const slot of slots) {
+      if (slot % GROOVE_LAB_SLOTS_PER_BAR !== 0) return true;
+    }
+  }
+  return false;
+}
+
+/** Same slot+midi — keep the shorter rhythm block (not a legacy full-bar smear). */
+function dedupeGrooveLabHitsPreferShorterSustain(hits: readonly GrooveRollHit[]): GrooveRollHit[] {
+  const byKey = new Map<string, GrooveRollHit>();
+  for (const h of hits) {
+    const key = `${h.slot}:${h.midi}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, h);
+      continue;
+    }
+    if (h.sustainSlots < prev.sustainSlots) {
+      byKey.set(key, h);
+    } else if (h.sustainSlots === prev.sustainSlots && (h.vel ?? 0) > (prev.vel ?? 0)) {
+      byKey.set(key, h);
+    }
+  }
+  return [...byKey.values()];
+}
+
+/** Cap bar-1 downbeat smears when the same bar already has off-beat rhythm hits. */
+export function grooveLabStripBarDownbeatSmearHits(hits: readonly GrooveRollHit[]): GrooveRollHit[] {
+  const beatSlots = GROOVE_LAB_SLOTS_PER_BAR / 4;
+  const slotsByBar = new Map<number, Set<number>>();
+  for (const h of hits) {
+    if (!grooveLabIsChordStackMidi(h.midi)) continue;
+    const bar = Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR);
+    const set = slotsByBar.get(bar) ?? new Set<number>();
+    set.add(h.slot);
+    slotsByBar.set(bar, set);
+  }
+  return hits.map((h) => {
+    if (!grooveLabIsChordStackMidi(h.midi)) return h;
+    const bar = Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR);
+    const barSlots = slotsByBar.get(bar);
+    if (!barSlots || barSlots.size < 2) return h;
+    const downbeat = bar * GROOVE_LAB_SLOTS_PER_BAR;
+    const hasOffbeat = [...barSlots].some((s) => s !== downbeat);
+    if (!hasOffbeat || h.slot !== downbeat) return h;
+    if (h.sustainSlots <= beatSlots) return h;
+    return { ...h, sustainSlots: beatSlots };
+  });
+}
+
+/** Shorten sustain so split chord hits read as separate quarter-note blocks. */
+export function grooveLabTrimChordRhythmHitSustain(hits: readonly GrooveRollHit[]): GrooveRollHit[] {
+  if (!grooveLabChordHitsUseRhythmSlots(hits)) {
+    return hits.map((h) => ({ ...h }));
+  }
+  const beatSlots = GROOVE_LAB_SLOTS_PER_BAR / 4;
+  const out = hits.map((h) => ({ ...h }));
+  const chordIdx = out
+    .map((h, i) => ({ h, i }))
+    .filter(({ h }) => grooveLabIsChordStackMidi(h.midi))
+    .sort((a, b) => a.h.slot - b.h.slot || a.h.midi - b.h.midi);
+  for (let k = 0; k < chordIdx.length; k++) {
+    const { h, i } = chordIdx[k]!;
+    const bar = Math.floor(h.slot / GROOVE_LAB_SLOTS_PER_BAR);
+    let cap = beatSlots;
+    for (let j = k + 1; j < chordIdx.length; j++) {
+      const other = chordIdx[j]!.h;
+      if (Math.floor(other.slot / GROOVE_LAB_SLOTS_PER_BAR) !== bar) break;
+      cap = Math.min(cap, Math.max(1, other.slot - h.slot));
+      break;
+    }
+    out[i]!.sustainSlots = Math.max(1, Math.min(out[i]!.sustainSlots, cap));
+  }
+  return out;
+}
+
 /** One stacked chord per bar on the downbeat — no strum columns or spread. */
 export function collapseGrooveChordHitsToBarDownbeats(
   hits: readonly GrooveRollHit[],
@@ -177,6 +267,57 @@ export function grooveLabSlotInBar(slot: number): number {
   return ((Math.max(0, slot) % GROOVE_LAB_SLOTS_PER_BAR) + GROOVE_LAB_SLOTS_PER_BAR) % GROOVE_LAB_SLOTS_PER_BAR;
 }
 
+/** One bar-line slot per bar with green chords — ignores rhythm-edit re-triggers (1+3, 2+4). */
+export function grooveLabBarDownbeatSlotsFromChordHits(chordHits: readonly GrooveRollHit[]): number[] {
+  const seen = new Set<number>();
+  const out: number[] = [];
+  for (const h of chordHits) {
+    if (!grooveLabIsChordStackMidi(h.midi)) continue;
+    const bar = grooveLabBarIndexForSlot(h.slot);
+    if (seen.has(bar)) continue;
+    seen.add(bar);
+    out.push(bar * GROOVE_LAB_SLOTS_PER_BAR);
+  }
+  return out.sort((a, b) => a - b);
+}
+
+/**
+ * Groove lead / guitar — one attack per bar on the downbeat (not chord rhythm columns).
+ */
+export function grooveLabCollapseHitsToBarDownbeats(
+  hits: readonly GrooveRollHit[],
+  barCount: number,
+): GrooveRollHit[] {
+  const maxSlot = grooveLabTotalSlots(barCount);
+  const byBar = new Map<number, GrooveRollHit[]>();
+  for (const h of hits) {
+    if (h.slot >= maxSlot) continue;
+    const bar = grooveLabBarIndexForSlot(h.slot);
+    const list = byBar.get(bar) ?? [];
+    list.push(h);
+    byBar.set(bar, list);
+  }
+  const out: GrooveRollHit[] = [];
+  for (let bar = 0; bar < barCount; bar += 1) {
+    const list = byBar.get(bar);
+    if (!list || list.length === 0) continue;
+    let pick = list[0]!;
+    for (const h of list) {
+      if ((h.vel ?? 0) > (pick.vel ?? 0)) pick = h;
+      else if ((h.vel ?? 0) === (pick.vel ?? 0) && h.sustainSlots > pick.sustainSlots) pick = h;
+    }
+    const downbeat = bar * GROOVE_LAB_SLOTS_PER_BAR;
+    const nextDownbeat = Math.min(maxSlot, (bar + 1) * GROOVE_LAB_SLOTS_PER_BAR);
+    out.push({
+      slot: downbeat,
+      midi: pick.midi,
+      sustainSlots: Math.max(GROOVE_LAB_SLOTS_PER_BAR / 4, nextDownbeat - downbeat - 1),
+      vel: pick.vel,
+    });
+  }
+  return out;
+}
+
 const GROOVE_LAB_MIN_MIDI = cbPianoNoteNameToMidi('C1');
 const GROOVE_LAB_MAX_MIDI = cbPianoNoteNameToMidi('C6');
 
@@ -236,19 +377,23 @@ export function sanitizeGrooveLabMelodyChannelHits(
   return grooveLabDedupeMelodyHitsBySlot(sanitizeGrooveLabHits(lane, barCount));
 }
 
-/** Green chord channel — drop sub-C1 junk; snap stacks to bar downbeats (roll display / import). */
+/** Green chord channel — drop sub-C1 junk; optional bar-downbeat collapse for legacy import. */
 export function sanitizeGrooveLabChordChannelHits(
   hits: GrooveRollHit[],
   barCount: number,
+  opts?: { preserveRhythmSlots?: boolean },
 ): GrooveRollHit[] {
-  return collapseGrooveChordHitsToBarDownbeats(
-    sanitizeGrooveLabHits(
-      grooveLabRepitchChordHitsToRnBRange(
-        hits.filter((h) => grooveLabIsChordStackMidi(h.midi)),
-      ),
-      barCount,
-    ),
+  const repitched = grooveLabRepitchChordHitsToRnBRange(
+    hits.filter((h) => grooveLabIsChordStackMidi(h.midi)),
   );
+  const lane = sanitizeGrooveLabHits(repitched, barCount);
+  const preserve = opts?.preserveRhythmSlots ?? grooveLabChordHitsUseRhythmSlots(lane);
+  if (preserve) {
+    const deduped = dedupeGrooveLabHitsPreferShorterSustain(lane);
+    const trimmed = grooveLabTrimChordRhythmHitSustain(deduped);
+    return grooveLabStripBarDownbeatSmearHits(trimmed);
+  }
+  return collapseGrooveChordHitsToBarDownbeats(lane);
 }
 
 /** Guitar channel — G3–A4 mono lane. */
@@ -492,6 +637,67 @@ export function grooveLabChordAttackColumns(
   }));
 }
 
+/**
+ * Lead / guitar / arp lock — one chord anchor per bar on the bar line (downbeat).
+ * Rhythm re-triggers (1+3, 2+4) stay on the CHORD roll but do not add lock columns.
+ */
+export function grooveLabChordBarFirstAttackColumns(
+  chordHits: readonly GrooveRollHit[],
+  opts: {
+    keyRoot: number;
+    mode: ChordMode;
+    referenceMidi?: number;
+    quantize?: GrooveLabQuantize;
+  },
+): { slot: number; rootMidi: number }[] {
+  const stacks = grooveLabChordAttackStacks(chordHits, { quantize: opts.quantize });
+  const byBar = new Map<number, { slot: number; midis: number[] }>();
+  for (const stack of stacks) {
+    const bar = grooveLabBarIndexForSlot(stack.slot);
+    const prev = byBar.get(bar);
+    if (!prev || stack.slot < prev.slot) {
+      byBar.set(bar, { slot: stack.slot, midis: stack.midis });
+    }
+  }
+  const ref = opts.referenceMidi ?? GROOVE_LAB_ROOT_MIDI;
+  return [...byBar.values()]
+    .sort((a, b) => a.slot - b.slot)
+    .map((g) => ({
+      slot: grooveLabBarDownbeatSlot(g.slot),
+      rootMidi:
+        opts.keyRoot != null && opts.mode != null
+          ? grooveLabInferBassRootFromChordMidis(g.midis, opts.keyRoot, opts.mode, ref)
+          : grooveLabClampBassRootMidi(Math.min(...g.midis), ref),
+    }));
+}
+
+/** Green stacks for lead phrase lock — one bar-line anchor per bar (harmony from earliest attack in bar). */
+export function grooveLabChordHitsForBarLeadLock(
+  chordHits: readonly GrooveRollHit[],
+  opts?: { quantize?: GrooveLabQuantize },
+): GrooveRollHit[] {
+  const stacks = grooveLabChordAttackStacks(chordHits, opts);
+  const byBar = new Map<number, (typeof stacks)[number]>();
+  for (const stack of stacks) {
+    const bar = grooveLabBarIndexForSlot(stack.slot);
+    const prev = byBar.get(bar);
+    if (!prev || stack.slot < prev.slot) byBar.set(bar, stack);
+  }
+  const out: GrooveRollHit[] = [];
+  for (const stack of [...byBar.values()].sort((a, b) => a.slot - b.slot)) {
+    const downbeat = grooveLabBarDownbeatSlot(stack.slot);
+    for (const midi of stack.midis) {
+      out.push({
+        slot: downbeat,
+        midi,
+        sustainSlots: stack.sustainSlots,
+        vel: stack.vel,
+      });
+    }
+  }
+  return out;
+}
+
 /** Green stacks grouped for transport — one block chord per attack at the leftmost slot. */
 export function grooveLabChordAttackStacks(
   chordHits: readonly GrooveRollHit[],
@@ -499,7 +705,7 @@ export function grooveLabChordAttackStacks(
 ): { slot: number; midis: number[]; sustainSlots: number; vel: number }[] {
   const strumGap = Math.max(
     4,
-    grooveLabSlotsPerCell(opts.quantize ?? GROOVE_LAB_QUANTIZE_DEFAULT) * 2,
+    grooveLabSlotsPerCell(opts?.quantize ?? GROOVE_LAB_QUANTIZE_DEFAULT) * 2,
   );
   const green = chordHits
     .filter((h) => grooveLabIsChordStackMidi(h.midi))

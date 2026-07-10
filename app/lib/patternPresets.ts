@@ -21,9 +21,38 @@
  */
 
 import { BEATLAB_EXPANDED_DRUM_PRESETS } from '@/app/lib/patternPresetsBeatLabExpandedDrums';
+import { BEAT_LAB_AFRO_REGGAE_MIAMI_PATTERNS } from '@/app/lib/creationStation/beatLabAfroReggaeMiamiPatterns';
 import { BEAT_LAB_FLAGSHIP_DRUM_PATTERNS } from '@/app/lib/creationStation/beatLabFlagshipPatternPresets';
 import { BEAT_LAB_SIGNATURE_TRAP_PATTERNS } from '@/app/lib/creationStation/beatLabSignatureTrapPatterns';
+import { BEAT_LAB_STREET_TRAP_PATTERNS } from '@/app/lib/creationStation/beatLabStreetTrapPatterns';
+import { BEAT_LAB_MODERN_RNB_PATTERNS } from '@/app/lib/creationStation/beatLabModernRnbPatterns';
+import { BEAT_LAB_PLATINUM_URBAN_PATTERNS } from '@/app/lib/creationStation/beatLabPlatinumUrbanPatterns';
 import { beatLabTrapTransportBpmFromProducer } from '@/app/lib/creationStation/beatLabTrapTempo';
+import {
+  trap808FollowKick,
+  trap808OneThree,
+  trapCoreClassic,
+  trapCoreFinisher,
+  trapCoreHalfTime,
+  trapCoreMetro,
+  trapHatsEightThenRoll,
+  trapHatsRollEnd,
+  trapHatsSteadyThenRoll,
+  trapHatsTwoStep,
+  trapKickBarRush,
+  trapKickLean,
+  trapBaseFormat808Minimal,
+  trapKickSlide,
+  trapKickSouth,
+  trapKickSparse,
+  trapKickSyncopated,
+  trapOh24,
+  trapOhGroove,
+  trapRimOff,
+  trapSnare24,
+  trapSnareBarPush,
+  trapSnareHalfTime,
+} from '@/app/lib/creationStation/beatLabTrapPatternGrid';
 
 const R = 8;   // rows
 const S = 16;  // steps per bar
@@ -63,8 +92,14 @@ const GENRE_DEFAULT_BPM: Readonly<Record<string, number>> = {
   'Lo-Fi': 80,
   Jazz: 120,
   Latin: 98,
+  Afro: 105,
+  Reggae: 92,
+  'Up Tempo': 135,
   Country: 112,
   Any: 120,
+  'Platinum Trap': 140,
+  'Platinum R&B': 90,
+  'Platinum Pop': 110,
 };
 
 /** Hand-tuned tempo per drum preset (matches groove feel — half-time patterns use slower BPM). */
@@ -72,7 +107,7 @@ const DRUM_PRESET_BPM: Readonly<Record<string, number>> = {
   'trap-1': 140, 'trap-2': 145, 'trap-3': 72, 'trap-4': 138, 'trap-5': 142,
   'trap-6': 144, 'trap-7': 150, 'trap-8': 74, 'trap-9': 136, 'trap-10': 148,
   'trap-11': 142, 'trap-12': 146, 'trap-13': 140, 'trap-14': 138, 'trap-15': 144,
-  'trap-16': 152, 'trap-17': 134,
+  'trap-16': 152, 'trap-17': 74,
   'boombap-1': 90, 'boombap-2': 88, 'boombap-3': 92,
   'drill-1': 142, 'drill-2': 140, 'drill-3': 138,
   'house-1': 124, 'house-2': 122, 'house-3': 126,
@@ -91,7 +126,7 @@ const DRUM_PRESET_BPM: Readonly<Record<string, number>> = {
   'country-1': 112,
   'trap-flag-dark-vault': 140, 'trap-flag-atl-slab': 142, 'trap-flag-trunk808': 145,
   'rnb-flag-smooth': 88, 'rnb-flag-velvet': 90, 'rnb-flag-neo': 94,
-  'dance-flag-house': 124, 'dance-flag-club': 126, 'dance-flag-lift': 128,
+  'dance-flag-house': 124, 'dance-flag-club': 90, 'dance-flag-lift': 128,
 };
 
 /** Resolve producer-grid / authored tempo (before trap half-time conversion). */
@@ -107,7 +142,10 @@ export function getPatternPresetProducerGridBpm(preset: PatternPreset): number {
 /** Resolve and clamp the tempo Beat Lab transport uses when loading a preset. */
 export function getPatternPresetBpm(preset: PatternPreset): number {
   const producer = getPatternPresetProducerGridBpm(preset);
-  if (preset.genre === 'Trap' && preset.role === 'drums') {
+  if (
+    preset.role === 'drums' &&
+    (preset.genre === 'Trap' || preset.genre === 'Platinum Trap')
+  ) {
     return beatLabTrapTransportBpmFromProducer(producer);
   }
   return producer;
@@ -122,189 +160,173 @@ const DRUM_PRESETS: PatternPreset[] = [
   // ══ TRAP ══════════════════════════════════════════════════════════════════
   {
     id: 'trap-1', name: 'Trap 808 Classic', genre: 'Trap', role: 'drums',
-    desc: 'Kick 1 & 2.5, 808 clap on 2 & 4, 16th-note hats, open hat on the &',
-    pattern: grid([
-      [0,0],[0,6],[0,10],[0,14],           // Kick
-      [2,4],[2,12],                         // Clap
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],  // Hat 16ths
-      [3,6],[3,7],[3,8],[3,9],[3,10],[3,11],
-      [3,12],[3,13],[3,14],[3,15],
-      [4,6],[4,14],                         // Open hat on & of 2 & 4
-    ]),
+    desc: 'Canonical trap — sparse kick, snap 2 & 4, 8ths→roll hats, OH groove',
+    pattern: grid(trapCoreClassic()),
   },
   {
     id: 'trap-2', name: 'Trap Skippy 808', genre: 'Trap', role: 'drums',
-    desc: 'Double-kick roll at bar end, triplet clap, hat rolls on 15 & 16',
+    desc: 'Bar-end kick rush, snare push ghost, steady→burst hats',
     pattern: grid([
-      [0,0],[0,8],[0,13],[0,15],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
+      ...trapKickSparse(),
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsEightThenRoll(),
       [4,10],[4,14],
+      ...trap808OneThree(),
     ]),
   },
   {
     id: 'trap-3', name: 'Trap Half-Time', genre: 'Trap', role: 'drums',
-    desc: 'Half-time: clap only on beat 3, rolling kick, busy hi-hat with open accent',
-    pattern: grid([
-      [0,0],[0,5],[0,9],[0,14],
-      [2,8],                                // Half-time clap on beat 3 only
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],
-      [3,6],[3,7],[3,8],[3,9],[3,10],[3,11],
-      [3,12],[3,13],[3,14],[3,15],
-      [4,7],[4,15],
-    ]),
+    desc: 'Half-time trap — snare beat 3, lean kick, rolling hats into bar 4',
+    pattern: grid(trapCoreHalfTime()),
   },
   {
     id: 'trap-4', name: 'Trap Dark Roll', genre: 'Trap', role: 'drums',
-    desc: 'Dark trap: sparse kick, snare chop on 2.5, hat 32nds at phrase end',
+    desc: 'Dark pocket — sparse kick, snap 2 & 4, steady→roll hats, OH lift',
     pattern: grid([
-      [0,0],[0,11],[0,14],
-      [1,4],[1,7],[1,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
-      [4,6],[4,14],
+      ...trapKickSparse(),
+      ...trapSnare24(),
+      ...trapHatsSteadyThenRoll(),
+      ...trapOh24(),
+      ...trap808OneThree(),
     ]),
   },
   {
     id: 'trap-5', name: 'Trap Drill Hybrid', genre: 'Trap', role: 'drums',
-    desc: 'Trap/drill crossover: sliding kick, double clap, open hat stabs',
+    desc: 'Trap/drill — slide kick, snap 2 & 4, steady→roll, open stabs',
     pattern: grid([
-      [0,0],[0,3],[0,8],[0,11],[0,15],
-      [2,4],[2,12],[2,13],
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
-      [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
+      ...trapKickSlide(),
+      ...trapSnare24(),
+      ...trapHatsSteadyThenRoll(),
       [4,7],[4,11],[4,15],
     ]),
   },
   {
     id: 'trap-6', name: 'Trap 808 Bounce', genre: 'Trap', role: 'drums',
-    desc: 'Bouncy 808: kick syncopation, clap on 2 & 4, 8th hats with open lifts',
+    desc: 'Southern bounce — sync kick, snap 2 & 4, two-step hats, OH groove',
     pattern: grid([
-      [0,0],[0,7],[0,10],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
-      [4,6],[4,14],
+      ...trapKickSouth(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      ...trapOhGroove(),
+      ...trap808FollowKick(trapKickSouth()),
     ]),
   },
   {
     id: 'trap-7', name: 'Trap Stutter Hats', genre: 'Trap', role: 'drums',
-    desc: 'Straight clap, stutter hat roll late-bar, rim taps on the &',
+    desc: 'Metro bounce — sync kick, snare bar-push, steady→roll, rim &s',
     pattern: grid([
-      [0,0],[0,6],[0,11],[0,15],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
-      [4,10],[4,14],
-      [7,6],[7,14],
+      ...trapCoreMetro(),
+      ...trapRimOff(),
     ]),
   },
   {
     id: 'trap-8', name: 'Trap Half-Time Bounce', genre: 'Trap', role: 'drums',
-    desc: 'Half-time clap on beat 3, punchy kicks, fast hats with open accents',
+    desc: 'Half-time bounce — snare beat 3, sync kick, 8ths→roll, OH lift',
     pattern: grid([
-      [0,0],[0,3],[0,6],[0,10],[0,14],
-      [2,8],
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
-      [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
+      [0,0],[0,3],[0,10],[0,14],
+      ...trapSnareHalfTime(),
+      ...trapHatsEightThenRoll(),
       [4,7],[4,15],
+      ...trap808OneThree(),
     ]),
   },
   {
     id: 'trap-9', name: 'Trap Sparse + Fill', genre: 'Trap', role: 'drums',
-    desc: 'Sparse pocket kicks, clap 2 & 4, hat fill on beat 4',
+    desc: 'Sparse trunk — sync kick, snap 2 & 4, two-step + roll, OH on 4',
     pattern: grid([
-      [0,0],[0,9],[0,11],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
+      ...trapKickSyncopated(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
       [4,14],
+      ...trap808FollowKick(trapKickSyncopated()),
     ]),
   },
   {
     id: 'trap-10', name: 'Trap Rolling Kicks', genre: 'Trap', role: 'drums',
-    desc: 'Kick rolls around beats 2–3, clap on 2 & 4, hats run 16ths',
+    desc: 'Kick sync into 3 + bar rush, snap 2 & 4, hat burst finish',
     pattern: grid([
-      [0,0],[0,5],[0,6],[0,8],[0,10],[0,11],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
-      [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
-      [4,6],[4,14],
+      [0,0],[0,10],[0,11],
+      ...trapKickBarRush(),
+      ...trapSnare24(),
+      ...trapHatsSteadyThenRoll(),
+      ...trapOh24(),
+      ...trap808OneThree(),
     ]),
   },
   {
     id: 'trap-11', name: 'Trap Rim Groove', genre: 'Trap', role: 'drums',
-    desc: 'Rim on the off-beats, clap on 2 & 4, syncopated kick and open hat',
+    desc: 'Sync kick, snap 2 & 4, two-step hats, rim on offbeats',
     pattern: grid([
-      [0,0],[0,6],[0,10],[0,13],[0,15],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
-      [4,10],[4,14],
-      [7,2],[7,6],[7,10],[7,14],
+      ...trapKickSyncopated(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      ...trapOh24(),
+      ...trapRimOff(),
+      ...trap808OneThree(),
     ]),
   },
   {
     id: 'trap-12', name: 'Trap Cut-Time Snare', genre: 'Trap', role: 'drums',
-    desc: 'Snare chop into clap hits, kick on 1 with late pickups, hat chugs',
+    desc: 'Lean kick pickups, snap 2 & 4, steady→roll hats, snare push',
     pattern: grid([
-      [0,0],[0,7],[0,11],[0,14],
-      [1,7],[1,15],
-      [2,4],[2,12],
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
-      [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
-      [4,6],[4,14],
+      ...trapKickLean(),
+      ...trapSnare24(),
+      ...trapSnareBarPush(),
+      ...trapHatsSteadyThenRoll(),
+      ...trapOh24(),
+      ...trap808FollowKick(trapKickLean()),
     ]),
   },
   {
     id: 'trap-13', name: 'Trap Open Hat Swings', genre: 'Trap', role: 'drums',
-    desc: 'Open hats push the groove, clap 2 & 4, kicks dance around beat 3',
+    desc: 'Open hats on every &, sync kick, two-step + roll hats',
     pattern: grid([
-      [0,0],[0,6],[0,9],[0,11],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
-      [4,2],[4,6],[4,10],[4,14],
+      ...trapKickSyncopated(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      ...trapHatsRollEnd(),
+      ...trapOhGroove(),
+      ...trap808FollowKick(trapKickSyncopated()),
     ]),
   },
   {
     id: 'trap-14', name: 'Trap Triplet Illusion', genre: 'Trap', role: 'drums',
-    desc: 'Triplet-feel illusion: kicks at 0-5-11, clap 2 & 4, hats dense late-bar',
+    desc: 'Triplet-lean hat fill, sparse kick, snap 2 & 4, rim accent',
     pattern: grid([
-      [0,0],[0,5],[0,11],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
+      ...trapKickSparse(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
+      [3,9],[3,10],[3,11],[3,13],[3,14],[3,15],
       [4,10],[4,14],
       [7,11],
+      ...trap808OneThree(),
     ]),
   },
   {
     id: 'trap-15', name: 'Trap Perc + Tom', genre: 'Trap', role: 'drums',
-    desc: 'Perc pockets with tom accents, clap 2 & 4, hats 8ths',
+    desc: 'Metro pocket — sync kick, snap 2 & 4, two-step hats, tom accent',
     pattern: grid([
-      [0,0],[0,6],[0,10],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
+      ...trapKickSouth(),
+      ...trapSnare24(),
+      ...trapHatsTwoStep(),
       [4,14],
       [5,11],
-      [6,3],
+      ...trap808FollowKick(trapKickSouth()),
       [7,6],[7,10],
     ]),
   },
   {
     id: 'trap-16', name: 'Trap Late Clap Push', genre: 'Trap', role: 'drums',
-    desc: 'Clap slightly pushed with doubles, strong kick on 1 and bar-end, hats run 16ths',
-    pattern: grid([
-      [0,0],[0,8],[0,14],[0,15],
-      [2,4],[2,12],[2,13],
-      [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
-      [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
-      [4,6],[4,14],
-    ]),
+    desc: 'Snare bar-push ghost, kick doubles at bar end, hat finisher',
+    pattern: grid(trapCoreFinisher()),
   },
   {
     id: 'trap-17', name: 'Trap Minimal + Hats', genre: 'Trap', role: 'drums',
-    desc: 'Minimal kick + clap, hats carry with late roll, open hat on the & of 4',
-    pattern: grid([
-      [0,0],[0,10],[0,14],
-      [2,4],[2,12],
-      [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
-      [4,14],
-    ]),
+    desc: 'Base trap @ 74 — sparse 808 kick, snare+clap 2 & 4, two-step hats → roll',
+    pattern: grid(trapBaseFormat808Minimal()),
   },
 
   // ══ BOOM BAP ══════════════════════════════════════════════════════════════
@@ -346,7 +368,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'UK drill: triplet-feel kicks, clap on 2 & 4, 16th hats with open accents',
     pattern: grid([
       [0,0],[0,5],[0,8],[0,11],[0,14],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,10],[4,14],
@@ -357,7 +379,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: '3+3+2 kick feel, rim shot ghost, open hat stabs, clap on 2 & 4',
     pattern: grid([
       [0,0],[0,3],[0,8],[0,11],[0,13],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,7],[4,15],
@@ -369,7 +391,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Sparse drill: only 2 claps, aggressive kick slides, dark open hat',
     pattern: grid([
       [0,0],[0,6],[0,11],[0,14],[0,15],
-      [2,8],
+      [1,8],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,5],[4,13],
@@ -382,7 +404,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: '4-on-the-floor kick, clap on 2 & 4, 8th hats, open hat on every &',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,2],[4,6],[4,10],[4,14],
     ]),
@@ -392,7 +414,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Deep house: 4x4 kick, clap 2 & 4, ride pattern with open accents',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,6],[4,14],
       [7,3],[7,11],
@@ -403,7 +425,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Tech house: 4x4 with conga accent, 16th hats, punchy open hits',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,2],[4,6],[4,10],[4,14],
@@ -509,7 +531,7 @@ const DRUM_PRESETS: PatternPreset[] = [
   },
   {
     id: 'rnb-8', name: 'R&B Half-Time Chill', genre: 'R&B', role: 'drums',
-    desc: 'Half-time snare on beat 3, deep kicks, hats steady with a late lift',
+    desc: 'Slow half-time — funk sync kick, snare & clap lock on beat 3, silk hats',
     pattern: grid([
       [0,0],[0,6],[0,10],[0,14],
       [1,8],
@@ -520,21 +542,20 @@ const DRUM_PRESETS: PatternPreset[] = [
   },
   {
     id: 'rnb-9', name: 'R&B Clap Layer', genre: 'R&B', role: 'drums',
-    desc: 'Snare 2 & 4 with clap layer, kick syncopation, hats 8ths, open on & of 4',
+    desc: '90s pocket — funk sync kick, snare & clap solid on 2 & 4, 8th hats',
     pattern: grid([
-      [0,0],[0,7],[0,11],[0,14],
+      [0,0],[0,3],[0,6],[0,9],[0,11],[0,14],
       [1,4],[1,12],
-      [2,4],[2,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,14],
     ]),
   },
   {
     id: 'rnb-10', name: 'R&B Shaker Flow', genre: 'R&B', role: 'drums',
-    desc: 'Shaker-like hats, crisp snare, kick on 1 with late pickups, rim on the &',
+    desc: 'Shaker hats — Teddy Riley kick pocket, snare & clap lock on the &s',
     pattern: grid([
-      [0,0],[0,6],[0,9],[0,11],
-      [1,4],[1,12],
+      [0,0],[0,6],[0,9],[0,11],[0,14],
+      [1,2],[1,10],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,6],
       [7,6],[7,14],
@@ -542,9 +563,9 @@ const DRUM_PRESETS: PatternPreset[] = [
   },
   {
     id: 'rnb-11', name: 'R&B Neo-Soul Push', genre: 'R&B', role: 'drums',
-    desc: 'Neo-soul push: syncopated kick, cross-stick rim, open hat on & of 2',
+    desc: 'Neo-soul push — sync funk kick, snare & clap lock on 2 & 4, open on & of 2',
     pattern: grid([
-      [0,0],[0,7],[0,10],[0,13],
+      [0,0],[0,3],[0,7],[0,10],[0,14],
       [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,6],
@@ -553,30 +574,29 @@ const DRUM_PRESETS: PatternPreset[] = [
   },
   {
     id: 'rnb-12', name: 'R&B Club Step', genre: 'R&B', role: 'drums',
-    desc: 'Club R&B: stronger kick, clap+snare on 2 & 4, hats steady, open on beat 3',
+    desc: 'Club R&B — punchy funk kick, snare & clap lock on 2 & 4, steady hats',
     pattern: grid([
-      [0,0],[0,6],[0,8],[0,14],
+      [0,0],[0,3],[0,6],[0,8],[0,11],[0,14],
       [1,4],[1,12],
-      [2,4],[2,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,8],
     ]),
   },
   {
     id: 'rnb-13', name: 'R&B Minimal Pocket', genre: 'R&B', role: 'drums',
-    desc: 'Minimal R&B pocket: kick 1 and late-3, snare 2 & 4, hats sparse',
+    desc: 'Minimal 90s pocket — sparse funk kick, snare & clap lock on 2 & 4',
     pattern: grid([
-      [0,0],[0,11],
+      [0,0],[0,6],[0,11],[0,14],
       [1,4],[1,12],
       [3,2],[3,6],[3,10],[3,14],
     ]),
   },
   {
     id: 'rnb-14', name: 'R&B Snare Drag', genre: 'R&B', role: 'drums',
-    desc: 'Snare drag into 2 & 4, kick syncopation, hats run 16ths for energy',
+    desc: 'Energetic 90s pocket — funk sync kick, solid snare & clap on 2 & 4, rolling hats',
     pattern: grid([
-      [0,0],[0,7],[0,10],[0,14],
-      [1,3],[1,4],[1,11],[1,12],
+      [0,0],[0,3],[0,6],[0,9],[0,14],
+      [1,4],[1,12],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,6],[4,14],
@@ -584,13 +604,13 @@ const DRUM_PRESETS: PatternPreset[] = [
   },
   {
     id: 'rnb-15', name: 'R&B Late Night Bounce', genre: 'R&B', role: 'drums',
-    desc: 'Late-night bounce: kick on 1 with off-beat pickups, snare 2 & 4, open hats on the &',
+    desc: 'Late-night bounce — funk sync kick, snare & clap lock on the &s, open hat air',
     pattern: grid([
-      [0,0],[0,5],[0,9],[0,14],
-      [1,4],[1,12],
+      [0,0],[0,3],[0,6],[0,9],[0,11],[0,14],
+      [1,2],[1,10],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,6],[4,14],
-      [7,11],
+      [7,4],[7,12],
     ]),
   },
 
@@ -706,7 +726,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Pop-dance: syncopated kick, clap layer, open hat on the &',
     pattern: grid([
       [0,0],[0,6],[0,10],[0,14],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,2],[4,10],
     ]),
@@ -716,7 +736,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Festival EDM: 4x4 kick, 16th hats, crash accents, clap on 2 & 4',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,0],[4,8],
@@ -739,7 +759,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Electro-pop: 4x4 kick, clap on 2 & 4, off-beat open hat, rim pushes',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,2],[4,6],[4,10],[4,14],
       [7,6],[7,14],
@@ -750,7 +770,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Big-room: 4x4 kick, build hats into bar-end roll, crash accents',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,13],[3,14],[3,15],
       [4,0],[4,8],[4,14],
     ]),
@@ -760,7 +780,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Groovy kick: extra syncopation, clap 2 & 4, hats 8ths, open on the &',
     pattern: grid([
       [0,0],[0,6],[0,8],[0,10],[0,14],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,2],[4,10],
     ]),
@@ -770,7 +790,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Techy dance: 4x4 kick, 16th hats, open hats on & of 2 and 4',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],
       [3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,6],[4,14],
@@ -781,7 +801,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Funky dance: kick anchors, clap 2 & 4, offbeat hats, rim on 3-and',
     pattern: grid([
       [0,0],[0,4],[0,9],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,2],[3,6],[3,10],[3,14],
       [4,6],[4,14],
       [7,10],
@@ -803,7 +823,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Euro-pop: 4x4 kick, clap 2 & 4, hats 8ths, open hat on beat 3',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],
       [4,8],
       [7,14],
@@ -814,7 +834,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Build into drop: kick 4x4, clap 2 & 4, hat ramp (more density after beat 3)',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,0],[3,2],[3,4],[3,6],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],
       [4,6],[4,14],
     ]),
@@ -835,7 +855,7 @@ const DRUM_PRESETS: PatternPreset[] = [
     desc: 'Minimal club: kick on 1-2-3-4, clap 2 & 4, hats sparse, open on & of 4',
     pattern: grid([
       [0,0],[0,4],[0,8],[0,12],
-      [2,4],[2,12],
+      [1,4],[1,12],
       [3,2],[3,6],[3,10],[3,14],
       [4,14],
     ]),
@@ -860,9 +880,13 @@ const BEATLAB_EXPANDED_DRUMS_AS_PATTERN: PatternPreset[] = BEATLAB_EXPANDED_DRUM
   role: 'drums' as const,
 }));
 
-/** Core + signature trap + flagship kit pairs + Beat Lab expansions — single drum list for Pattern Bank. */
+/** Core + signature trap + afro/reggae/miami + flagship kit pairs + Beat Lab expansions. */
 const ALL_DRUM_PATTERN_SRC: PatternPreset[] = [
+  ...BEAT_LAB_STREET_TRAP_PATTERNS,
+  ...BEAT_LAB_MODERN_RNB_PATTERNS,
   ...BEAT_LAB_SIGNATURE_TRAP_PATTERNS,
+  ...BEAT_LAB_PLATINUM_URBAN_PATTERNS,
+  ...BEAT_LAB_AFRO_REGGAE_MIAMI_PATTERNS,
   ...BEAT_LAB_FLAGSHIP_DRUM_PATTERNS,
   ...DRUM_PRESETS,
   ...BEATLAB_EXPANDED_DRUMS_AS_PATTERN,

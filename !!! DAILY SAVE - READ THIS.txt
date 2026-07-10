@@ -1,0 +1,31 @@
+DAILY SAVE — END OF EACH SESSION
+================================
+
+WHAT TO DOUBLE-CLICK (pick one — same thing):
+
+  E:\!!! DAILY SAVE APP NOW.bat          ← on E: drive (easiest to find)
+
+  OR inside your project folder:
+
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE\SAVE-APP-NOW.bat
+
+HOW TO FIND IT IN FILE EXPLORER
+  1. Open File Explorer
+  2. Click "This PC"
+  3. Open drive E:
+  4. Double-click:  !!! DAILY SAVE APP NOW.bat
+
+  (Or open folder Da-Music-Box-v4-SOURCE-COMPLETE and double-click SAVE-APP-NOW.bat)
+
+IMPORTANT
+  - Double-click the .bat file — do NOT type it in Cursor chat
+  - Run from File Explorer (or double-click in Cursor's file list on the left)
+  - Wait for "BACKUP COMPLETE" (~2 minutes)
+  - New zip appears on E:\ as Da-Music-Box-SOURCE-APP_*.zip
+
+FULL BACKUP (all 3 zips — once a week or at a milestone):
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE\SAVE-SOURCE-NOW.bat
+  Put all 3 zips in one dated folder when done.
+
+YOUR BACKUP FROM TODAY (all 3 parts):
+  E:\Da Music Box SOURCE BACKUP 2026-06-18 5-40 pm (all 3 zips here)

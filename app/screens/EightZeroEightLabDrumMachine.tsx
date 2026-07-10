@@ -45,6 +45,7 @@ import {
   setCreationPlaylineTransformStatic,
 } from '@/app/lib/creationStation/creationPlaylineWapi';
 import { snap808LabLoopBars } from '@/app/lib/creationStation/lab808ChordRoots';
+import { Lab808HelpTip } from '@/app/components/creation/Lab808HelpHub';
 import {
   CB_PIANO_BG,
   CB_PIANO_MINT,
@@ -826,7 +827,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
       },
       transportStop: () => {
         labMpcPauseRequestedRef.current = false;
-        if (labMpcTransportRef.current === 'paused') {
+        if (labMpcTransportRef.current !== 'stopped') {
           syncLabMpcFullStop();
         }
         setLabMpcTransport('stopped');
@@ -1591,7 +1592,10 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
               lineHeight: 1.35,
             }}
           >
-            <span style={{ color: CB_PIANO_MINT }}>Drum step roll</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ color: CB_PIANO_MINT }}>Drum step roll</span>
+              <Lab808HelpTip tab="drums" title="Drum kits step grid help" />
+            </span>
             {loadState === 'loading' ? (
               <span style={{ color: '#fcd34d' }} key={mpcKitUiTick}>
                 {' '}
@@ -1777,7 +1781,8 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
             Clear
           </button>
           {onDrumExportMidi || onDrumExportWav || onDrumExportToPad ? (
-            <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <div style={{ marginLeft: 'auto', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Lab808HelpTip tab="export" title="Save & send 808 help" />
               <GrooveLabExportStrip
                 toolbarInline
                 showExportLabel

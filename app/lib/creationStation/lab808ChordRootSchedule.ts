@@ -162,7 +162,7 @@ export function primeLab808GrooveCycleCatchup(opts: {
   const cycleNow = Math.max(0, Math.floor((now - sessionStart + 1e-6) / loopSec));
   const chainFloor = SE2_AUDIO_START_FLOOR_SEC;
   const minWhen = now + chainFloor;
-  const window = opts.catchAheadSec ?? 0.45;
+  const window = opts.catchAheadSec ?? 0.75;
   let chain = minWhen;
 
   for (let i = 0; i < opts.lockedRoots.length; i += 1) {

@@ -20,6 +20,13 @@ export const LAB808_TRANSPORT_MIRROR_EVENT = 'da-808-transport-mirror';
 /** Groove Lab PLAY → 808 Lab when 808 pad-deck PLAY → Groove Lab is linked. */
 export const GROOVE_LAB_TRANSPORT_MIRROR_EVENT = 'da-groove-lab-transport-mirror';
 
+/** Creation Station shortcuts — local Groove Lab transport (not Beat Lab). */
+export const GROOVE_LAB_LOCAL_TRANSPORT_EVENT = 'da-groove-lab-local-transport';
+
+export type GrooveLabLocalTransportDetail = {
+  action: Lab808TransportMirrorAction;
+};
+
 export type Lab808TransportMirrorDetail = {
   action: Lab808TransportMirrorAction;
   target: Lab808TransportMirrorTarget;
@@ -151,6 +158,16 @@ export function dispatchGrooveLabTransportMirror(action: Lab808TransportMirrorAc
   if (typeof window === 'undefined' || !shouldMirror808FromGrooveLab()) return;
   window.dispatchEvent(
     new CustomEvent<GrooveLabTransportMirrorDetail>(GROOVE_LAB_TRANSPORT_MIRROR_EVENT, {
+      detail: { action },
+    }),
+  );
+}
+
+/** Groove Lab tab transport + Creation Station shortcuts while Groove is active. */
+export function dispatchGrooveLabLocalTransport(action: Lab808TransportMirrorAction): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(
+    new CustomEvent<GrooveLabLocalTransportDetail>(GROOVE_LAB_LOCAL_TRANSPORT_EVENT, {
       detail: { action },
     }),
   );

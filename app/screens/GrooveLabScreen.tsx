@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   GROOVE_LAB_CHORD_MIX_GAIN,
   grooveLabChordStripVoiceMix,
+  grooveLabWaveLeafBankOutputGain,
 } from '@/app/lib/creationStation/grooveLabLayers';
 import { GrooveLabBeatLabPadPicker } from '@/app/components/creation/GrooveLabBeatLabPadPicker';
 import { OrchidPerformancePanel } from '@/app/components/creation/OrchidPerformancePanel';
@@ -11,9 +12,11 @@ import { grooveLabLayerScopeForChannel } from '@/app/lib/creationStation/grooveL
 import { clampGrooveLabBpm } from '@/app/lib/creationStation/grooveLabTempo';
 import {
   dispatchGrooveLabTransportMirror,
+  GROOVE_LAB_LOCAL_TRANSPORT_EVENT,
   LAB808_SYNC_CHANGED_EVENT,
   LAB808_TRANSPORT_MIRROR_EVENT,
   readLab808TransportMirror,
+  type GrooveLabLocalTransportDetail,
   type Lab808TransportMirrorDetail,
 } from '@/app/lib/creationStation/lab808Sync';
 import {
@@ -22,6 +25,7 @@ import {
 } from '@/app/lib/creationStation/creationSessionLink';
 import type { GrooveGuitarPackRollBuild } from '@/app/lib/creationStation/grooveLabGuitarPackLibrary';
 import {
+  progressionStepsNeedRhythmExpand,
   progressionStepsToGrooveHits,
   type GrooveProgressionStep,
   type GrooveStagedProgression,
@@ -29,6 +33,8 @@ import {
 import { orchidVoiceAuditionLabel } from '@/app/lib/creationStation/grooveLabProgressionPreview';
 import { useMasterClock } from '@/app/context/MasterClockContext';
 import { useGrooveLabProgressionAudition } from '@/app/hooks/useGrooveLabProgressionAudition';
+import { useMidiInputRoute } from '@/app/hooks/useMidiInputRoute';
+import { MIDI_INPUT_ROUTES } from '@/app/lib/midi/midiInputBus';
 import { useGrooveLabOrchid } from '@/app/hooks/useGrooveLabOrchid';
 import { useGrooveLabTransport } from '@/app/hooks/useGrooveLabTransport';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
@@ -69,10 +75,19 @@ import {
   type GrooveLabAnyLeadSoundId,
 } from '@/app/lib/creationStation/grooveLabLeadSounds';
 import {
+  GROOVE_LAB_CHANNEL_MS_CHANGED,
+  repairGrooveLabLayerMuteSolo,
+} from '@/app/lib/creationStation/grooveLabChannelMuteSolo';
+import {
+  grooveLabChannelTransportOpen,
   grooveLabChannelVolumeGain,
   grooveLabMeterPeakFromVelocity,
   scheduleGrooveLabMeterPulseAt,
 } from '@/app/lib/creationStation/grooveLabChannelMeters';
+import {
+  GROOVE_LAB_DEFAULT_CHANNEL_VOL,
+  grooveLabChannelsNeedingVolumeRepair,
+} from '@/app/lib/studio/se2MixerFaderScale';
 import { grooveLabGlobalColToSlot, grooveLabSlotToGlobalCol } from '@/app/lib/creationStation/grooveLabGrid';
 import { notifyLab808ChordSourcesChanged } from '@/app/lib/creationStation/lab808ChordLockSources';
 import {
@@ -129,9 +144,14 @@ import {
   auditionGrooveLabOrchestraHit,
   scheduleGrooveLabOrchestraTransportHit,
 } from '@/app/lib/creationStation/grooveLabOrchestraHitAudition';
-import { buildOrchestraHitRoll } from '@/app/lib/creationStation/grooveLabOrchestraHitRoll';
+import { buildOrchestraHitRoll, grooveLabOrchestraHitRollMidiFromRoot } from '@/app/lib/creationStation/grooveLabOrchestraHitRoll';
 import type { OrchestraHitId } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
-import { haltWaveLeafVoices, playWaveLeafNote } from '@/app/lib/creationStation/waveLeafEngine';
+import {
+  NEURAL_HUM_CREATION_IMPORT_EVENT,
+  takeNeuralHumCreationImport,
+  timedNotesToGrooveMelodyHits,
+} from '@/app/lib/vocalLab/neuralHumCreationExport';
+import { bypassWaveLeafLeadChopGate } from '@/app/lib/creationStation/waveLeafLeadChop';
 import {
   waveLeafIsLeadMidi,
   waveLeafPrepareRollHits,
@@ -164,6 +184,7 @@ import {
   renderGrooveChordHitsToWav,
   type GrooveChordExportOpts,
 } from '@/app/lib/creationStation/grooveLabChordExport';
+import { GrooveLabHelpProvider, GrooveLabHelpTip } from '@/app/components/creation/GrooveLabHelpHub';
 
 const KEY_LABELS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
@@ -270,13 +291,13 @@ function readStoredGrooveLayerRouting() {
 }
 
 function readStoredGrooveMetronome(): boolean {
-  if (typeof window === 'undefined') return true;
+  if (typeof window === 'undefined') return false;
   try {
     const v = window.localStorage.getItem(GROOVE_METRONOME_KEY);
-    if (v == null) return true;
+    if (v == null) return false;
     return v !== '0';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -394,10 +415,13 @@ export default function GrooveLabScreen({
     window.addEventListener(LAB808_SYNC_CHANGED_EVENT, bump);
     return () => window.removeEventListener(LAB808_SYNC_CHANGED_EVENT, bump);
   }, []);
-  /** Session Link Sync: Beat Lab play/pause/stop while user stays on Beat Lab (hidden mount). */
+  /** Hidden Session Link mount on Beat Lab — transport + chords, no Groove metronome on pads. */
   const sessionBeatLabPlayMirror = embedded && sessionPlayLinked;
   const grooveTransportActive =
-    isScreenActive || companion808Lab || mirror808PlayToGroove || sessionBeatLabPlayMirror;
+    isScreenActive ||
+    companion808Lab ||
+    mirror808PlayToGroove ||
+    sessionBeatLabPlayMirror;
   const bpm = onBpmChange ? clampGrooveLabBpm(bpmProp) : localBpm;
   const setBpm = useCallback(
     (next: number) => {
@@ -419,6 +443,8 @@ export default function GrooveLabScreen({
   const [quantize, setQuantize] = useState<GrooveLabQuantize>(GROOVE_LAB_QUANTIZE_DEFAULT);
   const [localMetronomeEnabled, setLocalMetronomeEnabled] = useState(readStoredGrooveMetronome);
   const metronomeEnabled = metronomeEnabledProp ?? localMetronomeEnabled;
+  /** Hidden Beat Lab play mirror follows transport; Beat Lab grid owns the one audible MET. */
+  const grooveMetronomeAudible = metronomeEnabled && isScreenActive;
   const setMetronomeEnabled = useCallback(
     (next: boolean | ((prev: boolean) => boolean)) => {
       const resolved = typeof next === 'function' ? next(metronomeEnabled) : next;
@@ -452,7 +478,7 @@ export default function GrooveLabScreen({
   } | null>(null);
   const [localChannelVolumes, setLocalChannelVolumes] = useState<Record<number, number>>(() => {
     const out: Record<number, number> = {};
-    for (const ch of grooveLabChannelIds()) out[ch] = 80;
+    for (const ch of grooveLabChannelIds()) out[ch] = GROOVE_LAB_DEFAULT_CHANNEL_VOL;
     return out;
   });
   const channelVolumes = channelVolumesProp ?? localChannelVolumes;
@@ -467,18 +493,57 @@ export default function GrooveLabScreen({
     [setChannelVolumeProp],
   );
 
-  /** Live CH 33–48 faders — update strip bus gain immediately (not only on next note). */
+  /** Embed mini-faders used to refresh bus gain on every lane; seed unity + apply from popup mixer only. */
+  const seededGrooveVolumesRef = useRef(false);
   useEffect(() => {
-    if (!isScreenActive) return;
-    let ctx: AudioContext | null = null;
+    if (!grooveTransportActive && !isScreenActive) return;
     try {
-      ctx = resolveAudioContext();
+      const migrationKey = 'groove-lab-audio-repair-v2';
+      if (typeof window !== 'undefined' && !window.localStorage.getItem(migrationKey)) {
+        repairGrooveLabLayerMuteSolo([chordChannel, melodyChannel, guitarChannel, sampleChannel]);
+        window.localStorage.setItem(migrationKey, '1');
+      }
     } catch {
+      /* private mode */
+    }
+    const needingRepair = grooveLabChannelsNeedingVolumeRepair(channelVolumes, channels);
+    if (Object.keys(needingRepair).length === 0) {
+      seededGrooveVolumesRef.current = true;
       return;
     }
-    if (!ctx || ctx.state === 'closed') return;
-    applyGrooveLabChannelVolumes(ctx, channelVolumes);
-  }, [channelVolumes, isScreenActive, resolveAudioContext]);
+    for (const [chKey, vol] of Object.entries(needingRepair)) {
+      setChannelVolume(Number(chKey), vol);
+    }
+    seededGrooveVolumesRef.current = true;
+  }, [
+    channelVolumes,
+    channels,
+    chordChannel,
+    melodyChannel,
+    guitarChannel,
+    sampleChannel,
+    grooveTransportActive,
+    isScreenActive,
+    setChannelVolume,
+  ]);
+
+  /** Live CH 33–48 faders — update strip bus gain immediately (not only on next note). */
+  useEffect(() => {
+    if (!grooveTransportActive && !isScreenActive) return;
+    const pushBusGains = () => {
+      let ctx: AudioContext | null = null;
+      try {
+        ctx = resolveAudioContext();
+      } catch {
+        return;
+      }
+      if (!ctx || ctx.state === 'closed') return;
+      applyGrooveLabChannelVolumes(ctx, channelVolumes);
+    };
+    pushBusGains();
+    window.addEventListener(GROOVE_LAB_CHANNEL_MS_CHANGED, pushBusGains);
+    return () => window.removeEventListener(GROOVE_LAB_CHANNEL_MS_CHANGED, pushBusGains);
+  }, [channelVolumes, grooveTransportActive, isScreenActive, resolveAudioContext]);
 
   useEffect(() => {
     setNotesByChannel((prev) => {
@@ -808,11 +873,16 @@ export default function GrooveLabScreen({
 
   const handleMelodyComposerHits = useCallback(
     (next: GrooveRollHit[], loopBars?: GrooveLabBarCount) => {
-      setWaveLeafHits(next);
-      if (loopBars != null && loopBars > barCount) handleBarCountChange(loopBars);
+      const storeBars =
+        loopBars != null ? normalizeGrooveBarCount(Math.max(barCount, loopBars)) : barCount;
+      if (loopBars != null && loopBars > barCount) handleBarCountChange(storeBars);
+      setNotesByChannel((prev) => ({
+        ...prev,
+        [melodyChannel]: waveLeafStoreRollEdits(next, storeBars, { expanded: rollExpanded }),
+      }));
       setSelectedEditChannel(melodyChannel);
     },
-    [setWaveLeafHits, barCount, handleBarCountChange, melodyChannel],
+    [barCount, handleBarCountChange, melodyChannel, rollExpanded],
   );
 
   const orchid = useGrooveLabOrchid({
@@ -930,10 +1000,16 @@ export default function GrooveLabScreen({
       void (async () => {
         const ctx = await ensureGrooveLabAudioReady(resolveAudioContext);
         if (!ctx) return;
-        auditionGrooveLabOrchestraHit(ctx, id, sampleChannel, channelVolumes);
+        auditionGrooveLabOrchestraHit(
+          ctx,
+          id,
+          sampleChannel,
+          channelVolumes,
+          grooveLabOrchestraHitRollMidiFromRoot(orchid.bassRootMidi),
+        );
       })();
     },
-    [sampleChannel, handleChannelSoundChange, resolveAudioContext, channelVolumes],
+    [sampleChannel, handleChannelSoundChange, resolveAudioContext, channelVolumes, orchid.bassRootMidi],
   );
 
   const melodyGenColumnCount = useMemo(
@@ -978,9 +1054,10 @@ export default function GrooveLabScreen({
       if (hits.length === 0) return;
       haltWaveLeafVoices();
       const wl = readWaveLeafSynthSettings();
-      const outGain = readWaveLeafOutputGain();
+      const outGain = grooveLabWaveLeafBankOutputGain(readWaveLeafOutputGain());
       const sorted = [...hits].sort((a, b) => a.slot - b.slot);
       runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+        bypassWaveLeafLeadChopGate(ctx, melodyChannel);
         const dest = resolveGrooveLabChannelDest(ctx, melodyChannel, channelVolumes);
         const spb = 60 / Math.max(40, bpm);
         let t = when;
@@ -1021,17 +1098,21 @@ export default function GrooveLabScreen({
           snapshotWaveLeafHits(waveLeafRollHits),
         ]);
       }
-      setWaveLeafHits(hits);
+      const storeBars = normalizeGrooveBarCount(Math.max(barCount, loopBars));
+      if (loopBars > barCount) handleBarCountChange(storeBars);
+      setNotesByChannel((prev) => ({
+        ...prev,
+        [melodyChannel]: waveLeafStoreRollEdits(hits, storeBars, { expanded: rollExpanded }),
+      }));
       setSelectedEditChannel(melodyChannel);
-      if (loopBars > barCount) handleBarCountChange(loopBars as GrooveLabBarCount);
       previewWaveLeafHitsNow(hits);
     },
     [
       waveLeafRollHits,
       snapshotWaveLeafHits,
-      setWaveLeafHits,
       melodyChannel,
       barCount,
+      rollExpanded,
       handleBarCountChange,
       previewWaveLeafHitsNow,
     ],
@@ -1052,13 +1133,13 @@ export default function GrooveLabScreen({
 
   const transportChordsMuted = useMemo(
     () =>
-      grooveLabChannelVolumeGain(chordChannel, channelVolumes) <= 0.001 ||
+      !grooveLabChannelTransportOpen(chordChannel, channelVolumes) ||
       grooveLabTransportChordsMuted(orchid.orchidLinkedChordsMuted, rollHits),
     [chordChannel, channelVolumes, orchid.orchidLinkedChordsMuted, rollHits],
   );
 
   const transportLeadMuted = useMemo(
-    () => grooveLabChannelVolumeGain(melodyChannel, channelVolumes) <= 0.001,
+    () => !grooveLabChannelTransportOpen(melodyChannel, channelVolumes),
     [melodyChannel, channelVolumes],
   );
 
@@ -1259,8 +1340,15 @@ export default function GrooveLabScreen({
     [hitsFromTimelineSteps, sendChordHitsToNewSynth],
   );
 
+  const suppress808OutboundMirrorRef = useRef(false);
+  const suppressBeatLabOutboundMirrorRef = useRef(false);
+  /** Blocks inbound mirror play from restarting Groove right after user Stop. */
+  const grooveUserStopRef = useRef(false);
+
   const grooveTransport = useGrooveLabTransport({
     getAudioContext: resolveAudioContext,
+    skip808OutboundMirrorRef: suppress808OutboundMirrorRef,
+    skipBeatLabOutboundMirrorRef: suppressBeatLabOutboundMirrorRef,
     isScreenActive: grooveTransportActive,
     bpm,
     barCount,
@@ -1279,7 +1367,7 @@ export default function GrooveLabScreen({
     bassMuted: true,
     leadMuted: transportLeadMuted,
     perfMode: orchid.orchidPerfMode,
-    metronomeEnabled,
+    metronomeEnabled: grooveMetronomeAudible,
     chordChannel,
     melodyChannel,
     guitarChannel,
@@ -1293,38 +1381,12 @@ export default function GrooveLabScreen({
     rollScrollRef,
   });
 
-  /** Beat Lab PLAY link → Groove Lab transport (Session Link Sync; works on Beat Lab tab via hidden mount). */
+  /** Beat Lab PLAY link → Groove Lab transport (Session Link Sync — visible or hidden mount). */
   useEffect(() => {
-    if (!sessionBeatLabPlayMirror && !isScreenActive) return;
     if (!sessionPlayLinked) return;
     const onBeatLabMirror = (ev: Event) => {
       const detail = (ev as CustomEvent<CreationBeatlabPlayMirrorDetail>).detail;
       if (!detail || detail.target !== 'groove-lab') return;
-      try {
-        resumeGrooveLabAudioContext(resolveAudioContext());
-      } catch {
-        /* ignore */
-      }
-      if (detail.action === 'play') {
-        if (!grooveTransport.playing) grooveTransport.togglePlayPause();
-      } else if (detail.action === 'pause') {
-        if (grooveTransport.playing) grooveTransport.pause();
-      } else if (detail.action === 'stop') {
-        grooveTransport.stop();
-      }
-    };
-    window.addEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
-    return () => window.removeEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
-  }, [sessionPlayLinked, sessionBeatLabPlayMirror, isScreenActive, grooveTransport, resolveAudioContext]);
-
-  const suppress808OutboundMirrorRef = useRef(false);
-
-  /** 808 Lab PLAY → Groove Lab mirror (808 pad-deck sync strip). */
-  useEffect(() => {
-    const on808Mirror = (ev: Event) => {
-      const detail = (ev as CustomEvent<Lab808TransportMirrorDetail>).detail;
-      if (!detail || detail.target !== 'groove-lab') return;
-      suppress808OutboundMirrorRef.current = true;
       try {
         try {
           resumeGrooveLabAudioContext(resolveAudioContext());
@@ -1332,16 +1394,50 @@ export default function GrooveLabScreen({
           /* ignore */
         }
         if (detail.action === 'play') {
-          if (!grooveTransport.playing) grooveTransport.togglePlayPause();
+          if (grooveUserStopRef.current || grooveTransport.playing) return;
+          suppressBeatLabOutboundMirrorRef.current = true;
+          grooveTransport.togglePlayPause();
         } else if (detail.action === 'pause') {
-          if (grooveTransport.playing) grooveTransport.pause();
+          if (!grooveTransport.playing) return;
+          suppressBeatLabOutboundMirrorRef.current = true;
+          grooveTransport.pause();
         } else if (detail.action === 'stop') {
+          suppressBeatLabOutboundMirrorRef.current = true;
           grooveTransport.stop();
         }
       } finally {
-        queueMicrotask(() => {
-          suppress808OutboundMirrorRef.current = false;
-        });
+        /* suppress cleared in useGrooveLabTransport when echo skip is consumed */
+      }
+    };
+    window.addEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
+    return () => window.removeEventListener(CREATION_BEATLAB_PLAY_MIRROR_EVENT, onBeatLabMirror);
+  }, [sessionPlayLinked, grooveTransport, resolveAudioContext]);
+
+  /** 808 Lab PLAY → Groove Lab mirror (808 pad-deck sync strip). */
+  useEffect(() => {
+    const on808Mirror = (ev: Event) => {
+      const detail = (ev as CustomEvent<Lab808TransportMirrorDetail>).detail;
+      if (!detail || detail.target !== 'groove-lab') return;
+      try {
+        try {
+          resumeGrooveLabAudioContext(resolveAudioContext());
+        } catch {
+          /* ignore */
+        }
+        if (detail.action === 'play') {
+          if (grooveUserStopRef.current || grooveTransport.playing) return;
+          suppress808OutboundMirrorRef.current = true;
+          grooveTransport.togglePlayPause();
+        } else if (detail.action === 'pause') {
+          if (!grooveTransport.playing) return;
+          suppress808OutboundMirrorRef.current = true;
+          grooveTransport.pause();
+        } else if (detail.action === 'stop') {
+          suppress808OutboundMirrorRef.current = true;
+          grooveTransport.stop();
+        }
+      } finally {
+        /* suppress cleared in useGrooveLabTransport when echo skip is consumed */
       }
     };
     window.addEventListener(LAB808_TRANSPORT_MIRROR_EVENT, on808Mirror);
@@ -1361,30 +1457,6 @@ export default function GrooveLabScreen({
     },
     [],
   );
-
-  /** Groove Lab PLAY → 808 Lab (Session Link Sync and/or 808 pad-deck PLAY → Groove Lab). */
-  const prevGrooveTransportRef = useRef(grooveTransport.transportState);
-  useEffect(() => {
-    if (!isScreenActive) return;
-    if (!session808PlayLinked && !mirror808PlayToGroove) return;
-    if (suppress808OutboundMirrorRef.current) {
-      prevGrooveTransportRef.current = grooveTransport.transportState;
-      return;
-    }
-    const prev = prevGrooveTransportRef.current;
-    const next = grooveTransport.transportState;
-    prevGrooveTransportRef.current = next;
-    if (prev === next) return;
-    if (next === 'playing') mirrorGrooveTransportTo808('play');
-    else if (next === 'paused') mirrorGrooveTransportTo808('pause');
-    else if (next === 'stopped') mirrorGrooveTransportTo808('stop');
-  }, [
-    grooveTransport.transportState,
-    mirror808PlayToGroove,
-    session808PlayLinked,
-    isScreenActive,
-    mirrorGrooveTransportTo808,
-  ]);
 
   const activeGlobalCol = useMemo(() => {
     if (grooveTransport.playing) return undefined;
@@ -1573,7 +1645,7 @@ export default function GrooveLabScreen({
             velocity01: 0.9,
             orchestraChannel: sampleChannel,
             channelVolumes,
-            fallbackMidi: midi,
+            targetMidi: midi,
           });
         });
         return;
@@ -1588,6 +1660,7 @@ export default function GrooveLabScreen({
         if (!waveLeafIsLeadMidi(midi)) return;
         const wl = readWaveLeafSynthSettings();
         runWithGrooveLabAudio(resolveAudioContext, (ctx, when) => {
+          bypassWaveLeafLeadChopGate(ctx, melodyChannel);
           const dest = resolveGrooveLabChannelDest(ctx, melodyChannel, channelVolumes);
           playWaveLeafNote(ctx, midi, when, {
             preset: wl.preset,
@@ -1597,7 +1670,7 @@ export default function GrooveLabScreen({
             drive: wl.drive,
             vibratoDepthCents: wl.vibratoDepthCents,
             bpm,
-            outputGain: readWaveLeafOutputGain(),
+            outputGain: grooveLabWaveLeafBankOutputGain(readWaveLeafOutputGain()),
             destination: dest,
             melodyChannel,
             channelVolumes,
@@ -1664,6 +1737,14 @@ export default function GrooveLabScreen({
     ],
   );
 
+  useMidiInputRoute(MIDI_INPUT_ROUTES.grooveLab, {
+    enabled: isScreenActive !== false,
+    onNoteOn: (e) => {
+      if (e.channel === 9) return;
+      handlePreviewPitch(e.note);
+    },
+  });
+
   const handleSelectEditChannel = useCallback((ch: number) => {
     setSelectedEditChannel(ch);
   }, []);
@@ -1695,12 +1776,17 @@ export default function GrooveLabScreen({
       setBarCount(staged.barCount);
       setNotesByChannel((prev) => {
         const next: Record<number, GrooveRollHit[]> = {};
+        const preserveRhythm =
+          progressionStepsNeedRhythmExpand(staged.steps) ||
+          staged.steps.some((s) => (s.barBeats?.length ?? 0) > 0 && s.beats <= 1.001);
         for (const ch of channels) {
           const clipped = clipGrooveHitsToBarCount(prev[ch] ?? [], staged.barCount);
           const stripped = grooveLabStripMelodyHits(grooveLabStripSubRootHits(clipped));
           next[ch] =
             ch === chordCh
-              ? sanitizeGrooveLabChordChannelHits(staged.chordHits, staged.barCount)
+              ? sanitizeGrooveLabChordChannelHits(staged.chordHits, staged.barCount, {
+                  preserveRhythmSlots: preserveRhythm,
+                })
               : sanitizeGrooveLabHits(stripped, staged.barCount);
         }
         return next;
@@ -1741,6 +1827,7 @@ export default function GrooveLabScreen({
   });
 
   const stopAllGrooveLabPlayback = useCallback(() => {
+    grooveUserStopRef.current = true;
     progressionAudition.stopPlayback();
     haltWaveLeafVoices();
     grooveTransport.stop();
@@ -1785,6 +1872,7 @@ export default function GrooveLabScreen({
   );
 
   const handleTransportPlayPause = useCallback(() => {
+    grooveUserStopRef.current = false;
     try {
       resumeGrooveLabAudioContext(resolveAudioContext());
     } catch {
@@ -1795,9 +1883,40 @@ export default function GrooveLabScreen({
       restoreChordSequencerTransportVoices();
       restoreGrooveLabTransportGuitarBus();
       restoreGrooveLabTransportMelodyBus();
+      try {
+        const ctx = resolveAudioContext();
+        if (ctx && ctx.state !== 'closed') {
+          applyGrooveLabChannelVolumes(ctx, channelVolumes);
+        }
+      } catch {
+        /* ctx not unlocked yet */
+      }
     }
     grooveTransport.togglePlayPause();
-  }, [grooveTransport, progressionAudition, resolveAudioContext]);
+  }, [grooveTransport, progressionAudition, resolveAudioContext, channelVolumes]);
+
+  /** Creation Station keyboard shortcuts while Groove transport is mounted. */
+  useEffect(() => {
+    if (!grooveTransportActive) return;
+    const onLocalTransport = (ev: Event) => {
+      const detail = (ev as CustomEvent<GrooveLabLocalTransportDetail>).detail;
+      if (!detail) return;
+      if (detail.action === 'play') {
+        if (!grooveTransport.playing) handleTransportPlayPause();
+      } else if (detail.action === 'pause') {
+        if (grooveTransport.playing) grooveTransport.pause();
+      } else if (detail.action === 'stop') {
+        stopAllGrooveLabPlayback();
+      }
+    };
+    window.addEventListener(GROOVE_LAB_LOCAL_TRANSPORT_EVENT, onLocalTransport);
+    return () => window.removeEventListener(GROOVE_LAB_LOCAL_TRANSPORT_EVENT, onLocalTransport);
+  }, [
+    grooveTransportActive,
+    grooveTransport,
+    handleTransportPlayPause,
+    stopAllGrooveLabPlayback,
+  ]);
 
   const stopAllRef = useRef(stopAllGrooveLabPlayback);
   stopAllRef.current = stopAllGrooveLabPlayback;
@@ -2001,7 +2120,64 @@ export default function GrooveLabScreen({
     ],
   );
 
+  useEffect(() => {
+    const applyNeuralHumMelody = () => {
+      const payload = takeNeuralHumCreationImport('groove-lab');
+      if (!payload || payload.notes.length === 0) return;
+      const { hits, barCount: bars, bpm: importBpm } = timedNotesToGrooveMelodyHits(
+        payload.notes,
+        payload.bpm,
+        {
+          quantize: payload.quantize ?? quantize,
+          barCount,
+          transposeSemis: payload.transposeSemis ?? 0,
+        },
+      );
+      if (hits.length === 0) {
+        flashMidiImport('No melody notes could be placed on the Groove roll.');
+        return;
+      }
+      const melCh = grooveLabPickMelodyChannel(melodyChannel);
+      setMelodyChannel(melCh);
+      setSelectedEditChannel(melCh);
+      setBpm(importBpm);
+      setBarCount(bars);
+      const prepared = waveLeafPrepareRollHits(hits, bars);
+      setNotesByChannel((prev) => {
+        const next: Record<number, GrooveRollHit[]> = {};
+        for (const ch of channels) {
+          next[ch] = sanitizeGrooveLabHits(
+            grooveLabStripMelodyHits(
+              grooveLabStripSubRootHits(clipGrooveHitsToBarCount(prev[ch] ?? [], bars)),
+            ),
+            bars,
+          );
+        }
+        next[melCh] = waveLeafStoreRollEdits(prepared, bars, { expanded: rollExpanded });
+        return next;
+      });
+      grooveTransport.rewind();
+      orchid.setEditSlot(0);
+      flashMidiImport(
+        `✓ Neural Hum → melody · ${hits.length} notes · ${importBpm} BPM`,
+      );
+    };
+    window.addEventListener(NEURAL_HUM_CREATION_IMPORT_EVENT, applyNeuralHumMelody);
+    applyNeuralHumMelody();
+    return () => window.removeEventListener(NEURAL_HUM_CREATION_IMPORT_EVENT, applyNeuralHumMelody);
+  }, [
+    barCount,
+    channels,
+    flashMidiImport,
+    grooveTransport,
+    melodyChannel,
+    orchid.setEditSlot,
+    quantize,
+    rollExpanded,
+  ]);
+
   return (
+    <GrooveLabHelpProvider autoIntro>
     <div
       style={{
         display: 'flex',
@@ -2026,8 +2202,9 @@ export default function GrooveLabScreen({
           minWidth: 0,
         }}
       >
-        <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', color: '#f0f0f0' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', color: '#f0f0f0' }}>
           GROOVE <span style={{ color: '#7cf4c6' }}>LAB</span>
+          <GrooveLabHelpTip tab="overview" title="Groove Lab quick start" />
         </span>
         <span style={{ fontSize: 9, color: '#86efac', fontWeight: 800 }}>
           CHORD {chordBassSeqChannelLabel(chordChannel)}
@@ -2058,8 +2235,9 @@ export default function GrooveLabScreen({
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontSize: 10, fontWeight: 900, color: '#a7f3d0', letterSpacing: 0.4 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 900, color: '#a7f3d0', letterSpacing: 0.4 }}>
             GROOVE <span style={{ color: '#22c55e' }}>STUDIO</span>
+            <GrooveLabHelpTip tab="chords" title="Groove Studio & chord strip" />
           </span>
           <span style={{ fontSize: 8, color: '#4b5563', fontWeight: 700 }}>KEY</span>
           {KEY_LABELS.map((k, i) => (
@@ -2134,7 +2312,7 @@ export default function GrooveLabScreen({
           onProgressionPreviewStep={progressionAudition.previewStep}
           onProgressionPlay={progressionAudition.playProgressionOnce}
           onProgressionLoop={progressionAudition.playProgressionLoop}
-          onProgressionStopAudition={stopAllGrooveLabPlayback}
+          onProgressionStopAudition={progressionAudition.stopPlayback}
           onProgressionDropChords={dropProgressionChordsOnly}
           onPreview={previewGrooveChordOnly}
           showSubKeypad={false}
@@ -2247,6 +2425,11 @@ export default function GrooveLabScreen({
           rollHasChordsForExport={rollChordHitsForExport.length > 0}
           rollHasNotesForExport={rollHits.length > 0}
           padExportEnabled={Boolean(onExportChordWavToPad)}
+          vocalBox={{
+            bpm,
+            melodyHits: waveLeafRollHits,
+            getAudioContext: resolveAudioContext,
+          }}
         />
       </div>
 
@@ -2356,5 +2539,6 @@ export default function GrooveLabScreen({
         onCancel={() => setPadExportRequest(null)}
       />
     </div>
+    </GrooveLabHelpProvider>
   );
 }

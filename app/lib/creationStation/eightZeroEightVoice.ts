@@ -67,23 +67,25 @@ export interface EightZeroEightPlayExt {
   subOscOnly?: boolean;
   /** High-pass / low-pass (Beat Lab pad FX rules). */
   filterFx?: Lab808FilterFx;
+  /** Optional output node (SE2 mixer strip). Default: shared creation/groove bus. */
+  destination?: AudioNode;
 }
 
 /**
- * Trap 808 kicks: punch + hold in kick register (Zaytoven / Migos / Metro lane).
+ * Trap 808 kicks: punch + hold in kick register.
  * Not SUB_808 tails — higher sweep, shorter decay than sub presets, still sustains on the grid.
  */
 export const TRAP_HOLD_808_PRESETS = {
-  zayKnock: { label: 'Zaytoven knock', sweepStartHz: 205, sweepMs: 24, bodyDecaySec: 0.44, subLevel: 0.72, clickLevel: 0.3 },
-  zayHoldThump: { label: 'Zay hold thump', sweepStartHz: 188, sweepMs: 28, bodyDecaySec: 0.5, subLevel: 0.76, clickLevel: 0.24 },
-  migosLean: { label: 'Migos lean 808', sweepStartHz: 195, sweepMs: 26, bodyDecaySec: 0.42, subLevel: 0.7, clickLevel: 0.28 },
-  metroPunchHold: { label: 'Metro punch hold', sweepStartHz: 228, sweepMs: 19, bodyDecaySec: 0.36, subLevel: 0.66, clickLevel: 0.36 },
-  southsideKnock: { label: 'Southside knock', sweepStartHz: 212, sweepMs: 22, bodyDecaySec: 0.4, subLevel: 0.68, clickLevel: 0.32 },
-  atlTrapHold: { label: 'ATL trap hold', sweepStartHz: 178, sweepMs: 30, bodyDecaySec: 0.48, subLevel: 0.74, clickLevel: 0.22 },
-  londonOnDeck: { label: 'London on deck', sweepStartHz: 220, sweepMs: 21, bodyDecaySec: 0.38, subLevel: 0.65, clickLevel: 0.34 },
-  flTrapThump: { label: 'FL trap thump', sweepStartHz: 192, sweepMs: 27, bodyDecaySec: 0.45, subLevel: 0.71, clickLevel: 0.26 },
-  dirtySouthHold: { label: 'Dirty south hold', sweepStartHz: 168, sweepMs: 31, bodyDecaySec: 0.52, subLevel: 0.78, clickLevel: 0.2 },
-  scTrunkKnock: { label: 'SC trunk knock', sweepStartHz: 185, sweepMs: 25, bodyDecaySec: 0.46, subLevel: 0.73, clickLevel: 0.27 },
+  zayKnock: { label: 'T knock', sweepStartHz: 205, sweepMs: 24, bodyDecaySec: 0.44, subLevel: 0.72, clickLevel: 0.3 },
+  zayHoldThump: { label: 'T hold thump', sweepStartHz: 188, sweepMs: 28, bodyDecaySec: 0.5, subLevel: 0.76, clickLevel: 0.24 },
+  migosLean: { label: 'M lean 808', sweepStartHz: 195, sweepMs: 26, bodyDecaySec: 0.42, subLevel: 0.7, clickLevel: 0.28 },
+  metroPunchHold: { label: 'M punch hold', sweepStartHz: 228, sweepMs: 19, bodyDecaySec: 0.36, subLevel: 0.66, clickLevel: 0.36 },
+  southsideKnock: { label: 'S knock', sweepStartHz: 212, sweepMs: 22, bodyDecaySec: 0.4, subLevel: 0.68, clickLevel: 0.32 },
+  atlTrapHold: { label: 'A trap hold', sweepStartHz: 178, sweepMs: 30, bodyDecaySec: 0.48, subLevel: 0.74, clickLevel: 0.22 },
+  londonOnDeck: { label: 'L on deck', sweepStartHz: 220, sweepMs: 21, bodyDecaySec: 0.38, subLevel: 0.65, clickLevel: 0.34 },
+  flTrapThump: { label: 'F trap thump', sweepStartHz: 192, sweepMs: 27, bodyDecaySec: 0.45, subLevel: 0.71, clickLevel: 0.26 },
+  dirtySouthHold: { label: 'D south hold', sweepStartHz: 168, sweepMs: 31, bodyDecaySec: 0.52, subLevel: 0.78, clickLevel: 0.2 },
+  scTrunkKnock: { label: 'C trunk knock', sweepStartHz: 185, sweepMs: 25, bodyDecaySec: 0.46, subLevel: 0.73, clickLevel: 0.27 },
   painHold808: { label: 'Pain hold 808', sweepStartHz: 200, sweepMs: 26, bodyDecaySec: 0.43, subLevel: 0.69, clickLevel: 0.29 },
   rackKnockHold: { label: 'Rack knock hold', sweepStartHz: 235, sweepMs: 18, bodyDecaySec: 0.35, subLevel: 0.64, clickLevel: 0.38 },
   nightShiftHold: { label: 'Night shift hold', sweepStartHz: 175, sweepMs: 32, bodyDecaySec: 0.49, subLevel: 0.75, clickLevel: 0.21 },
@@ -427,7 +429,7 @@ export const EIGHT_ZERO_EIGHT_PRESETS = {
   clubThump: { label: 'Club thump', sweepStartHz: 190, sweepMs: 24, bodyDecaySec: 0.34, subLevel: 0.72, clickLevel: 0.28 },
   twoStepBump: { label: '2-step bump', sweepStartHz: 175, sweepMs: 30, bodyDecaySec: 0.4, subLevel: 0.76, clickLevel: 0.24 },
   zayBump: { label: 'Zay bump', sweepStartHz: 165, sweepMs: 30, bodyDecaySec: 0.44, subLevel: 0.8, clickLevel: 0.2 },
-  miamiSub: { label: 'Miami sub', sweepStartHz: 155, sweepMs: 32, bodyDecaySec: 0.46, subLevel: 0.84, clickLevel: 0.16 },
+  miamiSub: { label: 'Up tempo sub', sweepStartHz: 155, sweepMs: 32, bodyDecaySec: 0.46, subLevel: 0.84, clickLevel: 0.16 },
   hump: { label: 'Hump', sweepStartHz: 185, sweepMs: 26, bodyDecaySec: 0.37, subLevel: 0.73, clickLevel: 0.27 },
   slapBack: { label: 'Slap back', sweepStartHz: 230, sweepMs: 20, bodyDecaySec: 0.3, subLevel: 0.66, clickLevel: 0.34 },
   rubberBand: { label: 'Rubber band', sweepStartHz: 170, sweepMs: 30, bodyDecaySec: 0.42, subLevel: 0.78, clickLevel: 0.22 },
@@ -596,9 +598,10 @@ export function playEightZeroEight(
   }
 
   const kickBus = kickMap ? ctx.createGain() : null;
+  const sharedDest = ext?.destination ?? resolveGrooveLabAudioDest(ctx);
   if (kickBus) {
     kickBus.gain.value = 1;
-    kickBus.connect(resolveGrooveLabAudioDest(ctx));
+    kickBus.connect(sharedDest);
   }
 
   const master = ctx.createGain();
@@ -612,7 +615,7 @@ export function playEightZeroEight(
   } else {
     master.gain.exponentialRampToValueAtTime(0.0001, tEnd);
   }
-  const outDest = kickBus ?? resolveGrooveLabAudioDest(ctx);
+  const outDest = kickBus ?? sharedDest;
 
   const stoppable: AudioScheduledSourceNode[] = [];
 

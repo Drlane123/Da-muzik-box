@@ -1,0 +1,35 @@
+WHY THE BACKUP KEEPS STARTING OVER
+==================================
+
+Three things were causing restarts:
+
+1. OLD SCRIPT DELETED THE ZIP FIRST
+   Every run deleted the zip file before tar finished packing.
+   If Cursor timed out or you ran it again in the same minute, it wiped
+   partial progress and started from zero.
+
+2. CURSOR TIMES OUT LONG PACKS
+   This project is large (~20-40 minutes to zip). Cursor kills commands
+   after about 10 minutes. Running save from inside Cursor often fails
+   and looks like it "started over."
+
+3. C: DRIVE FULL
+   Cursor uses C: for temp files. When C: is full, commands fail mid-run.
+
+FIXED NOW
+---------
+- Writes to a .part file first; only renames when done
+- Lock file stops duplicate runs
+- Skips if a finished zip for this minute already exists
+
+WHAT TO DO (one time, outside Cursor)
+-------------------------------------
+1. Open File Explorer -> E:\Da-Music-Box-v4-SOURCE-COMPLETE
+2. Double-click SAVE-SOURCE-NOW.bat ONCE
+3. Wait until the window shows "Saved:" and file count (do not close early)
+4. Do NOT click again or run from Cursor while it is working
+
+If a backup is already running, you will see a lock message — wait for it.
+
+Existing backup from earlier:
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1715.zip

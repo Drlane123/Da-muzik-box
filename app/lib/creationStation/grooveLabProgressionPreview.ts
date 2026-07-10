@@ -19,7 +19,32 @@ export type ProgressionAuditionOpts = {
   perfMode: OrchidPerformanceMode;
   /** 0–1; defaults to full Orchid mix level for previews. */
   volume?: number;
+  /** When set, snap genres (reggae / afro / garage) use shorter staccato holds — no long ring. */
+  genreId?: string;
 };
+
+/** How much of each step length the chord rings (lower = drier / less “reverb wash”). */
+function progressionAuditionSustainRatio(genreId?: string): number {
+  if (!genreId) return 0.92;
+  if (genreId === 'reggae' || genreId === 'afrobeat' || genreId === 'uk-garage' || genreId === 'trap') {
+    return 0.36;
+  }
+  if (genreId === 'funk' || genreId === 'hiphop') return 0.48;
+  if (genreId === 'house' || genreId === 'disco' || genreId === 'dance') return 0.68;
+  if (genreId === 'rnb' || genreId === 'rnb-90s' || genreId === 'rnb-true' || genreId === 'ballad-80s') {
+    return 0.88;
+  }
+  return 0.75;
+}
+
+function auditionSustainSec(stepBeats: number, secPerBeat: number, genreId?: string): number {
+  const ratio = progressionAuditionSustainRatio(genreId);
+  const raw = stepBeats * secPerBeat * ratio;
+  if (genreId === 'reggae' || genreId === 'afrobeat' || genreId === 'uk-garage' || genreId === 'trap') {
+    return Math.min(0.38, Math.max(0.12, raw));
+  }
+  return Math.max(0.2, raw);
+}
 
 export function chordMidisForStepLabel(label: string): number[] | null {
   const parsed = parseChordSymbolToken(label);
@@ -65,7 +90,7 @@ export function scheduleProgressionAudition(
     const midis = chordMidisForStepLabel(step.label);
     if (midis?.length) {
       const when = startTime + beat * secPerBeat;
-      const sustainSec = Math.max(0.2, step.beats * secPerBeat * 0.92);
+      const sustainSec = auditionSustainSec(step.beats, secPerBeat, opts.genreId);
       scheduleOrchidChord(ctx, midis, when, sustainSec, opts.chordVoice, vol, {
         mode: opts.perfMode,
         bpm: opts.bpm,
@@ -85,7 +110,7 @@ export function scheduleSingleStepAudition(
   const midis = chordMidisForStepLabel(step.label);
   if (!midis?.length) return;
   const secPerBeat = 60 / Math.max(40, opts.bpm);
-  const sustainSec = Math.max(0.35, step.beats * secPerBeat * 0.85);
+  const sustainSec = auditionSustainSec(step.beats, secPerBeat, opts.genreId);
   const vol = (opts.volume ?? 0.9) * GROOVE_LAB_CHORD_MIX_GAIN;
   scheduleOrchidChord(ctx, midis, startTime, sustainSec, opts.chordVoice, vol, {
     mode: opts.perfMode,

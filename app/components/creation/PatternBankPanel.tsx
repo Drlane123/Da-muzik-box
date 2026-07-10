@@ -3,14 +3,16 @@
  * Each genre opens an upward-fixed menu (scroll inside) so the footer stays short.
  */
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, forwardRef, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
-  BEAT_LAB_PATTERN_BANKS,
   countBeatLabDrumPresets,
   getBeatLabDrumPresets,
+  getBeatLabPatternBanksForSlot,
+  BEAT_LAB_USER_SAVES_BANK_ID,
   type BeatLabPatternBankId,
+  type BeatLabPatternSlotId,
 } from '@/app/lib/creationStation/beatLabPatternBank';
 import { getPatternPresetBpm, getPatternPresetProducerGridBpm, type PatternPreset } from '@/app/lib/patternPresets';
 import { isBeatLabSignatureTrapPattern } from '@/app/lib/creationStation/beatLabSignatureTrapPatterns';
@@ -36,6 +38,7 @@ function GenrePatternMenuPortal({
   onPick,
   disabled,
   loadedPresetId,
+  comfortable = false,
 }: {
   open: boolean;
   presets: PatternPreset[];
@@ -44,6 +47,7 @@ function GenrePatternMenuPortal({
   onPick: (p: PatternPreset) => void;
   disabled: boolean;
   loadedPresetId?: string | null;
+  comfortable?: boolean;
 }) {
   const [geom, setGeom] = useState<MenuGeom | null>(null);
 
@@ -167,13 +171,13 @@ function GenrePatternMenuPortal({
               gap: 6,
               width: '100%',
               textAlign: 'left',
-              padding: '8px 10px',
+              padding: comfortable ? '10px 12px' : '8px 10px',
               border: 'none',
               borderBottom: '1px solid rgba(255,255,255,0.06)',
               boxShadow: isLoaded ? `inset 3px 0 0 ${MINT}` : undefined,
               background: isLoaded ? 'rgba(124, 244, 198, 0.14)' : 'transparent',
               color: '#e8e8f0',
-              fontSize: 11,
+              fontSize: comfortable ? 13 : 11,
               fontWeight: 700,
               cursor: disabled ? 'not-allowed' : 'pointer',
               opacity: disabled ? 0.45 : 1,
@@ -215,20 +219,324 @@ function GenrePatternMenuPortal({
   );
 }
 
-export function PatternBankPanel({
-  onLoadPreset,
-  disabled = false,
-  loadedBankId = null,
-  loadedPresetId = null,
+type UserSavedPatternRow = { id: string; name: string; hasKit: boolean };
+
+function UserSavedPatternMenuPortal({
+  open,
+  triggerEl,
+  onClose,
+  disabled,
+  savedPatterns,
+  loadedSavedPatternId,
+  onLoadSavedPattern,
+  onRenameSavedPattern,
+  onDeleteSavedPattern,
+  comfortable = false,
 }: {
+  open: boolean;
+  triggerEl: HTMLElement | null;
+  onClose: () => void;
+  disabled: boolean;
+  savedPatterns: UserSavedPatternRow[];
+  loadedSavedPatternId?: string | null;
+  onLoadSavedPattern?: (id: string) => void;
+  onRenameSavedPattern?: (id: string, name: string) => void;
+  onDeleteSavedPattern?: (id: string) => void;
+  comfortable?: boolean;
+}) {
+  const [geom, setGeom] = useState<MenuGeom | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+
+  useLayoutEffect(() => {
+    if (!open || !triggerEl || typeof window === 'undefined') {
+      setGeom(null);
+      return;
+    }
+    const gap = 4;
+    const margin = 8;
+    const desiredMax = Math.min(320, Math.floor(window.innerHeight * 0.55));
+    const r = triggerEl.getBoundingClientRect();
+    const spaceAbove = r.top - margin - gap;
+
+    if (spaceAbove >= 120) {
+      const maxHeight = Math.min(desiredMax, spaceAbove);
+      const top = r.top - maxHeight - gap;
+      const width = Math.max(240, Math.max(r.width, 220));
+      const maxLeft = window.innerWidth - width - margin;
+      const left = Math.max(margin, Math.min(r.left, maxLeft));
+      setGeom({
+        left,
+        top: Math.max(margin, top),
+        width,
+        maxHeight: Math.min(maxHeight, r.top - Math.max(margin, top) - gap),
+      });
+      return;
+    }
+
+    const spaceBelow = window.innerHeight - r.bottom - margin - gap;
+    const maxHeight = Math.min(desiredMax, Math.max(120, spaceBelow));
+    const width = Math.max(240, Math.max(r.width, 220));
+    const maxLeft = window.innerWidth - width - margin;
+    const left = Math.max(margin, Math.min(r.left, maxLeft));
+    setGeom({ left, top: r.bottom + gap, width, maxHeight });
+  }, [open, triggerEl]);
+
+  useEffect(() => {
+    if (!open) {
+      setRenameId(null);
+      return;
+    }
+    const onOutside = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (triggerEl?.contains(t)) return;
+      const menus = document.querySelectorAll('[data-beatlab-user-pattern-menu="1"]');
+      for (const m of menus) {
+        if (m.contains(t)) return;
+      }
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    const raf = requestAnimationFrame(() => {
+      document.addEventListener('click', onOutside, true);
+    });
+    window.addEventListener('resize', onClose);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener('click', onOutside, true);
+      window.removeEventListener('resize', onClose);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open, triggerEl, onClose]);
+
+  if (!open || !geom || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      data-beatlab-user-pattern-menu="1"
+      role="listbox"
+      aria-label="My saved patterns"
+      style={{
+        position: 'fixed',
+        zIndex: 99999,
+        left: geom.left,
+        top: geom.top,
+        width: geom.width,
+        maxHeight: geom.maxHeight,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        borderRadius: 6,
+        border: `1px solid ${MINT_DIM}`,
+        background: 'rgba(8,10,14,0.98)',
+        boxShadow: '0 -8px 28px rgba(0,0,0,0.55)',
+        padding: '6px 0',
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {savedPatterns.length === 0 ? (
+        <div style={{ padding: 12, fontSize: 11, color: '#6a6a78' }}>
+          No saved patterns yet — use Save in the header above.
+        </div>
+      ) : (
+        savedPatterns.map((sp) => {
+          const isLoaded = loadedSavedPatternId != null && loadedSavedPatternId === sp.id;
+          const renaming = renameId === sp.id;
+          return (
+            <div
+              key={sp.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: comfortable ? '6px 10px' : '4px 8px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                background: isLoaded ? 'rgba(124, 244, 198, 0.1)' : 'transparent',
+              }}
+            >
+              {renaming ? (
+                <input
+                  type="text"
+                  value={renameDraft}
+                  autoFocus
+                  maxLength={48}
+                  onChange={(e) => setRenameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (renameDraft.trim()) onRenameSavedPattern?.(sp.id, renameDraft);
+                      setRenameId(null);
+                    }
+                    if (e.key === 'Escape') setRenameId(null);
+                  }}
+                  onBlur={() => {
+                    if (renameDraft.trim()) onRenameSavedPattern?.(sp.id, renameDraft);
+                    setRenameId(null);
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: '3px 6px',
+                    borderRadius: 3,
+                    border: '1px solid #2a2a32',
+                    background: '#1a1a24',
+                    color: '#e8e8f0',
+                    fontSize: comfortable ? 12 : 10,
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  role="option"
+                  aria-selected={isLoaded}
+                  title={sp.hasKit ? 'Load pattern + kit' : 'Load pattern'}
+                  onClick={() => {
+                    if (disabled) return;
+                    onLoadSavedPattern?.(sp.id);
+                    onClose();
+                  }}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    textAlign: 'left',
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    color: '#e8e8f0',
+                    fontSize: comfortable ? 12 : 11,
+                    fontWeight: 700,
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    opacity: disabled ? 0.45 : 1,
+                  }}
+                >
+                  {sp.name}
+                  {sp.hasKit ? (
+                    <span style={{ marginLeft: 4, fontSize: 9, color: MINT, fontWeight: 800 }}>+ kit</span>
+                  ) : null}
+                  {isLoaded ? (
+                    <span style={{ marginLeft: 6, fontSize: 9, color: MINT, fontWeight: 900 }}>· active</span>
+                  ) : null}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={disabled || renaming}
+                title="Rename"
+                onClick={() => {
+                  setRenameId(sp.id);
+                  setRenameDraft(sp.name);
+                }}
+                style={{
+                  flexShrink: 0,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  border: '1px solid #2a2a32',
+                  background: '#1a1a24',
+                  color: '#9ca3af',
+                  fontSize: 8,
+                  fontWeight: 800,
+                  cursor: disabled || renaming ? 'not-allowed' : 'pointer',
+                  opacity: disabled || renaming ? 0.4 : 1,
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                disabled={disabled}
+                title="Delete saved pattern"
+                onClick={() => onDeleteSavedPattern?.(sp.id)}
+                style={{
+                  flexShrink: 0,
+                  padding: '2px 6px',
+                  borderRadius: 3,
+                  border: '1px solid #633',
+                  background: '#1a1014',
+                  color: '#f6a9a9',
+                  fontSize: 8,
+                  fontWeight: 800,
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.4 : 1,
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          );
+        })
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+export type PatternBankPanelHandle = {
+  scrollChips: (direction: -1 | 1) => void;
+};
+
+type PatternBankPanelProps = {
   onLoadPreset: (preset: PatternPreset) => void;
   disabled?: boolean;
+  /** A = Trap/R&B/Up Tempo… · B = Afro/Reggae/House */
+  patternSlot?: BeatLabPatternSlotId;
   /** Highlights the genre chip (Trap, R&B, …) for the last Pattern Bank load. */
   loadedBankId?: BeatLabPatternBankId | null;
   /** Highlights the row when the menu is open. */
   loadedPresetId?: string | null;
-}) {
+  savedPatterns?: UserSavedPatternRow[];
+  /** Open My saves menu after a new pattern is saved. */
+  openUserSavesOnMount?: boolean;
+  onLoadSavedPattern?: (id: string) => void;
+  onRenameSavedPattern?: (id: string, name: string) => void;
+  onDeleteSavedPattern?: (id: string) => void;
+  /** Larger type for Beat Pads sidebar (footer stays compact). */
+  comfortable?: boolean;
+  /** Single row + side scroll (Beat Pads Pattern Bank sidebar). */
+  horizontalScroll?: boolean;
+};
+
+export const PatternBankPanel = forwardRef<PatternBankPanelHandle, PatternBankPanelProps>(
+  function PatternBankPanel(
+    {
+      onLoadPreset,
+      disabled = false,
+      patternSlot = 'A',
+      loadedBankId = null,
+      loadedPresetId = null,
+      savedPatterns = [],
+      openUserSavesOnMount = false,
+      onLoadSavedPattern,
+      onRenameSavedPattern,
+      onDeleteSavedPattern,
+      comfortable = false,
+      horizontalScroll = false,
+    },
+    ref,
+  ) {
   const [openId, setOpenId] = useState<BeatLabPatternBankId | null>(null);
+  const [userSavesOpen, setUserSavesOpen] = useState(false);
+  const userSavesTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const chipScrollRef = useRef<HTMLDivElement | null>(null);
+  const banks = getBeatLabPatternBanksForSlot(patternSlot);
+  const userSaveCount = savedPatterns.length;
+
+  useEffect(() => {
+    setOpenId(null);
+    setUserSavesOpen(false);
+  }, [patternSlot]);
+
+  useEffect(() => {
+    if (!openUserSavesOnMount || userSaveCount === 0) return;
+    setOpenId(null);
+    setUserSavesOpen(true);
+  }, [openUserSavesOnMount, userSaveCount]);
+
   const triggersRef = useRef<Partial<Record<BeatLabPatternBankId, HTMLButtonElement | null>>>(
     {},
   );
@@ -243,11 +551,19 @@ export function PatternBankPanel({
   const activeTrigger = openId ? triggersRef.current[openId] ?? null : null;
   const openPresets = openId ? getBeatLabDrumPresets(openId) : [];
 
+  const scrollChips = useCallback((direction: -1 | 1) => {
+    const el = chipScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: direction * 108, behavior: 'smooth' });
+  }, []);
+
+  useImperativeHandle(ref, () => ({ scrollChips }), [scrollChips]);
+
   const chipButtonStyle = (
     isOpen: boolean,
     isLoaded: boolean,
   ): CSSProperties => ({
-    padding: '5px 10px',
+    padding: horizontalScroll ? '4px 9px' : comfortable ? '7px 12px' : '5px 10px',
     borderRadius: 5,
     border: `1px solid ${isOpen ? MINT : isLoaded ? 'rgba(124, 244, 198, 0.85)' : MINT_DIM}`,
     boxShadow: isLoaded
@@ -255,32 +571,55 @@ export function PatternBankPanel({
       : undefined,
     background: isOpen ? MINT_BG : isLoaded ? 'rgba(124, 244, 198, 0.08)' : 'rgba(255,255,255,0.04)',
     color: isOpen || isLoaded ? MINT : '#c8cad4',
-    fontSize: 10,
+    fontSize: horizontalScroll ? 10 : comfortable ? 12 : 10,
     fontWeight: 900,
     letterSpacing: 0.3,
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.45 : 1,
-    flex: '1 1 0',
-    minWidth: 76,
+    flex: horizontalScroll ? '0 0 auto' : '1 1 0',
+    minWidth: horizontalScroll ? 72 : comfortable ? 84 : 76,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 6,
   });
 
+  const chipRowStyle: CSSProperties = horizontalScroll
+    ? {
+        display: 'flex',
+        flexWrap: 'nowrap',
+        gap: 5,
+        alignItems: 'flex-start',
+        minWidth: 0,
+        overflowX: 'auto',
+        overflowY: 'hidden',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 1,
+      }
+    : {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        alignItems: 'flex-start',
+        flex: '1 1 auto',
+        minWidth: 0,
+      };
+
+  const chipWrapStyle = (horizontalScroll: boolean): CSSProperties =>
+    horizontalScroll
+      ? { display: 'flex', flexDirection: 'column', gap: 2, flex: '0 0 auto' }
+      : { display: 'flex', flexDirection: 'column', gap: 2, flex: '1 1 0', minWidth: 76 };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: horizontalScroll ? 4 : 6 }}>
       <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 6,
-          alignItems: 'flex-start',
-          flex: '1 1 auto',
-          minWidth: 0,
-        }}
+        ref={horizontalScroll ? chipScrollRef : undefined}
+        className={horizontalScroll ? 'beat-pads-pattern-bank-scroll' : undefined}
+        style={chipRowStyle}
       >
-        {BEAT_LAB_PATTERN_BANKS.map((b) => {
+        {banks.map((b) => {
           const n = countBeatLabDrumPresets(b.id);
           const isOpen = openId === b.id;
           const isLoadedBank = loadedBankId != null && loadedBankId === b.id;
@@ -288,13 +627,7 @@ export function PatternBankPanel({
           return (
             <div
               key={b.id}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                flex: '1 1 0',
-                minWidth: 76,
-              }}
+              style={chipWrapStyle(horizontalScroll)}
             >
               <button
                 ref={(el) => setTriggerRef(b.id, el)}
@@ -302,6 +635,7 @@ export function PatternBankPanel({
                 disabled={disabled}
                 onClick={() => {
                   if (disabled) return;
+                  setUserSavesOpen(false);
                   setOpenId((prev) => (prev === b.id ? null : b.id));
                 }}
                 style={{
@@ -313,14 +647,14 @@ export function PatternBankPanel({
               >
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {b.label}{' '}
-                  <span style={{ fontWeight: 800, fontSize: 9, opacity: 0.75 }}>({n})</span>
+                  <span style={{ fontWeight: 800, fontSize: comfortable ? 11 : 9, opacity: 0.75 }}>({n})</span>
                 </span>
                 <span style={{ opacity: 0.85 }}>{isOpen ? '▴' : '▾'}</span>
               </button>
-              {b.id === 'trap' ? (
+              {b.id === 'trap' && !comfortable && !horizontalScroll ? (
                 <span
                   style={{
-                    fontSize: 7,
+                    fontSize: comfortable ? 10 : 7,
                     fontWeight: 800,
                     color: '#6a6a78',
                     letterSpacing: 0.35,
@@ -334,17 +668,68 @@ export function PatternBankPanel({
             </div>
           );
         })}
+        <div style={chipWrapStyle(horizontalScroll)}>
+          <button
+            ref={userSavesTriggerRef}
+            type="button"
+            disabled={disabled}
+            onClick={() => {
+              if (disabled) return;
+              setOpenId(null);
+              setUserSavesOpen((prev) => !prev);
+            }}
+            style={{
+              ...chipButtonStyle(
+                userSavesOpen,
+                loadedBankId != null && loadedBankId === BEAT_LAB_USER_SAVES_BANK_ID,
+              ),
+              border: `1px solid ${
+                userSavesOpen
+                  ? MINT
+                  : loadedBankId === BEAT_LAB_USER_SAVES_BANK_ID
+                    ? 'rgba(124, 244, 198, 0.85)'
+                    : MINT_DIM
+              }`,
+              width: '100%',
+              flex: 'none',
+            }}
+          >
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              My saves{' '}
+              <span style={{ fontWeight: 800, fontSize: comfortable ? 11 : 9, opacity: 0.75 }}>
+                ({userSaveCount})
+              </span>
+            </span>
+            <span style={{ opacity: 0.85 }}>{userSavesOpen ? '▴' : '▾'}</span>
+          </button>
+        </div>
       </div>
 
       <GenrePatternMenuPortal
-        open={openId != null}
+        open={openId != null && openId !== BEAT_LAB_USER_SAVES_BANK_ID}
         presets={openPresets}
         triggerEl={activeTrigger}
         disabled={disabled}
         onClose={() => setOpenId(null)}
         onPick={onLoadPreset}
-        loadedPresetId={loadedPresetId}
+        loadedPresetId={loadedBankId === BEAT_LAB_USER_SAVES_BANK_ID ? null : loadedPresetId}
+        comfortable={comfortable}
+      />
+      <UserSavedPatternMenuPortal
+        open={userSavesOpen}
+        triggerEl={userSavesTriggerRef.current}
+        disabled={disabled}
+        savedPatterns={savedPatterns}
+        loadedSavedPatternId={
+          loadedBankId === BEAT_LAB_USER_SAVES_BANK_ID ? loadedPresetId : null
+        }
+        onLoadSavedPattern={onLoadSavedPattern}
+        onRenameSavedPattern={onRenameSavedPattern}
+        onDeleteSavedPattern={onDeleteSavedPattern}
+        comfortable={comfortable}
+        onClose={() => setUserSavesOpen(false)}
       />
     </div>
   );
-}
+},
+);

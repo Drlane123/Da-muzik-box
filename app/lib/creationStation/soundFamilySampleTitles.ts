@@ -16,10 +16,18 @@ const FAMILY_PREFIX: Record<string, string> = {
   extra: 'Extra',
   vox: 'Vox',
   tag: 'Tag',
+  'orchestra-hits': 'Orch',
 };
 
 /** Neutral numbered label shown in Sound Families (e.g. "808 001"). */
-export function soundFamilySampleDisplayTitle(familyId: string, index: number): string {
+export function soundFamilySampleDisplayTitle(
+  familyId: string,
+  index: number,
+  sampleTitle?: string,
+): string {
+  if (familyId === 'orchestra-hits' && sampleTitle?.trim()) {
+    return sampleTitle.trim();
+  }
   const prefix = FAMILY_PREFIX[familyId] ?? 'Sound';
   return `${prefix} ${String(index + 1).padStart(3, '0')}`;
 }

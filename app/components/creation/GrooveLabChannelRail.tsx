@@ -2,7 +2,14 @@
  * Groove Lab — CH 33–48 mixer rail (Studio One / Beat Lab style).
  * Click a channel to select it and open its piano roll; assign CHORD / GUITAR / LEAD bank.
  */
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { GrooveLabChannelFxButton } from '@/app/components/creation/GrooveLabChannelFxButton';
+import { GrooveLabChannelMuteSoloRow } from '@/app/components/creation/GrooveLabChannelMuteSoloRow';
+import {
+  GrooveLabChannelStereoVu,
+  useGrooveLabChannelMeterPaint,
+} from '@/app/components/creation/GrooveLabChannelStereoVu';
+import { GROOVE_LAB_CHANNEL_MS_CHANGED } from '@/app/lib/creationStation/grooveLabChannelMuteSolo';
 import {
   CHORD_BASS_SEQ_CHANNEL_BASE,
   CHORD_BASS_SEQ_CHANNEL_COUNT,
@@ -11,16 +18,12 @@ import {
   grooveLabLayerRoleForChannel,
   type GrooveLabLayerRole,
 } from '@/app/lib/creationStation/grooveLabChannelConfig';
-import { getGrooveLabChannelMeterLevel } from '@/app/lib/creationStation/grooveLabChannelMeters';
 import {
   grooveLabChannelRoleLabel,
   grooveLabLayerScopeForChannel,
   GROOVE_LAB_LAYER_SCOPE_META,
 } from '@/app/lib/creationStation/grooveLabPianoRollLayers';
-import {
-  GrooveStyleTCapVolumeFader,
-  GrooveStyleTCapVolumeFaderStyles,
-} from '@/app/components/creation/GrooveStyleTCapVolumeFader';
+import { GrooveLabHelpTip } from '@/app/components/creation/GrooveLabHelpHub';
 
 /** First bank — CH 33–40 (8 lanes). */
 export const GROOVE_LAB_CHANNELS_33_40: readonly number[] = Array.from(
@@ -68,8 +71,6 @@ export type GrooveLabChannelRailProps = {
   sampleChannel?: number;
   onAssignLayerRole: (ch: number, role: GrooveLabLayerRole) => void;
   noteCountByChannel?: Record<number, number>;
-  channelVolumes?: Record<number, number>;
-  setChannelVolume?: (chId: number, volume: number) => void;
   /** Subset of lanes; default = all CH 33–48. */
   channels?: readonly number[];
   /** Compact row under chord-strip PLAY — no rail chrome (does not resize panels). */
@@ -94,71 +95,6 @@ function stripAccent(
   return '#86efac';
 }
 
-function vuBarHeightPct(linear: number): number {
-  const v = Math.max(0, Math.min(1, linear));
-  if (v <= 1e-7) return 0;
-  return Math.min(100, Math.round(Math.pow(v, 0.42) * 100));
-}
-
-function meterFillGradient(levelLinear: number): string {
-  const lv = Math.max(1e-6, levelLinear);
-  const db = 20 * Math.log10(lv);
-  if (db < 0) {
-    return 'linear-gradient(to top, #00c853 0%, #00c853 100%)';
-  }
-  if (db < 3) {
-    return 'linear-gradient(to top, #00c853 0%, #00c853 90%, #ffb020 100%)';
-  }
-  return 'linear-gradient(to top, #00c853 0%, #00c853 84%, #ff9f1a 94%, #ff3b3b 100%)';
-}
-
-/** Stereo VU bars — heights painted from {@link getGrooveLabChannelMeterLevel} each frame. */
-function GrooveLabEmbedStereoVu({ ch, accent }: { ch: number; accent: string }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 3,
-        height: '100%',
-        flexShrink: 0,
-      }}
-      aria-label={`Channel ${ch} stereo meter`}
-    >
-      {(['L', 'R'] as const).map((side) => (
-        <div
-          key={side}
-          style={{
-            position: 'relative',
-            width: 4,
-            height: '100%',
-            minHeight: 26,
-            overflow: 'hidden',
-            borderRadius: 2,
-            background: 'linear-gradient(180deg, #0d0d14 0%, #07070f 100%)',
-            boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.06), inset 0 0 6px rgba(0,0,0,0.85)`,
-          }}
-        >
-          <div
-            data-groove-embed-meter=""
-            data-ch={String(ch)}
-            data-side={side}
-            style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '0%',
-              background: meterFillGradient(0.5),
-              boxShadow: `0 0 4px ${accent}44`,
-            }}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function GrooveLabChannelRail({
   selectedChannel,
   onSelectChannel,
@@ -168,19 +104,24 @@ export function GrooveLabChannelRail({
   sampleChannel,
   onAssignLayerRole,
   noteCountByChannel = {},
-  channelVolumes,
-  setChannelVolume,
   channels: channelsProp,
   embed = false,
 }: GrooveLabChannelRailProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const embedMeterRootRef = useRef<HTMLDivElement>(null);
+  const [msTick, setMsTick] = useState(0);
   const channelIds =
     channelsProp ??
     Array.from(
       { length: CHORD_BASS_SEQ_CHANNEL_COUNT },
       (_, i) => CHORD_BASS_SEQ_CHANNEL_BASE + i,
     );
+
+  useEffect(() => {
+    const bump = () => setMsTick((n) => n + 1);
+    window.addEventListener(GROOVE_LAB_CHANNEL_MS_CHANGED, bump);
+    return () => window.removeEventListener(GROOVE_LAB_CHANNEL_MS_CHANGED, bump);
+  }, []);
 
   useEffect(() => {
     if (!embed) return;
@@ -190,28 +131,7 @@ export function GrooveLabChannelRail({
     lane?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   }, [embed, selectedChannel]);
 
-  useEffect(() => {
-    if (!embed) return;
-    let raf = 0;
-    const paintMeters = () => {
-      const root = embedMeterRootRef.current;
-      if (root) {
-        root.querySelectorAll<HTMLElement>('[data-groove-embed-meter]').forEach((el) => {
-          const ch = Number(el.dataset.ch);
-          const side = el.dataset.side;
-          if (!Number.isFinite(ch)) return;
-          const row = getGrooveLabChannelMeterLevel(ch);
-          const linear = side === 'L' ? row.l : row.r;
-          const pct = vuBarHeightPct(linear);
-          el.style.height = `${pct}%`;
-          el.style.background = meterFillGradient(Math.max(1e-6, linear));
-        });
-      }
-      raf = requestAnimationFrame(paintMeters);
-    };
-    raf = requestAnimationFrame(paintMeters);
-    return () => cancelAnimationFrame(raf);
-  }, [embed]);
+  useGrooveLabChannelMeterPaint(embedMeterRootRef, embed);
 
   const buttons = (
     <div
@@ -229,7 +149,13 @@ export function GrooveLabChannelRail({
       {channelIds.map((ch) => {
         const selected = ch === selectedChannel;
         const accent = stripAccent(ch, chordChannel, melodyChannel, guitarChannel, sampleChannel);
-        const role = grooveLabChannelRoleLabel(ch, chordChannel, melodyChannel, guitarChannel);
+        const role = grooveLabChannelRoleLabel(
+          ch,
+          chordChannel,
+          melodyChannel,
+          guitarChannel,
+          sampleChannel,
+        );
         const layerRole = grooveLabLayerRoleForChannel(
           ch,
           chordChannel,
@@ -258,6 +184,12 @@ export function GrooveLabChannelRail({
                 : `CH ${ch} · ${role} · ${register} — open piano roll`
             }
             onClick={() => onSelectChannel(ch)}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              const target = e.target as HTMLElement;
+              if (target.closest('button, select, option, [data-groove-no-select]')) return;
+              onSelectChannel(ch);
+            }}
             style={{
               width: embed ? EMBED_STRIP_W_PX : 72,
               flex: embed ? `0 0 ${EMBED_STRIP_W_PX}px` : '0 0 auto',
@@ -272,13 +204,22 @@ export function GrooveLabChannelRail({
               borderRadius: 5,
               border: selected
                 ? `2px solid ${accent}`
-                : '1px solid rgba(134, 239, 172, 0.2)',
+                : scope
+                  ? `1px solid ${accent}44`
+                  : '1px solid rgba(134, 239, 172, 0.2)',
               background: selected
-                ? `linear-gradient(180deg, ${accent}18 0%, #060806 100%)`
-                : 'linear-gradient(180deg, #0a120c 0%, #060806 100%)',
+                ? `linear-gradient(180deg, ${accent}38 0%, ${accent}16 45%, #060806 100%)`
+                : scope
+                  ? `linear-gradient(180deg, ${accent}0c 0%, #060806 100%)`
+                  : 'linear-gradient(180deg, #0a120c 0%, #060806 100%)',
               cursor: 'pointer',
-              boxShadow: selected ? `0 0 8px ${accent}33` : 'none',
+              boxShadow: selected
+                ? `0 0 16px ${accent}66, inset 0 0 14px ${accent}22`
+                : scope
+                  ? `0 0 4px ${accent}18`
+                  : 'none',
               boxSizing: 'border-box',
+              transition: 'border-color 0.08s, box-shadow 0.08s, background 0.08s',
             }}
           >
             <div
@@ -292,36 +233,37 @@ export function GrooveLabChannelRail({
                 paddingBottom: embed ? 2 : 0,
               }}
             >
-              <span
-                style={{
-                  fontSize: embed ? 11 : 13,
-                  fontWeight: 900,
-                  color: selected ? accent : '#c8d0dc',
-                  fontFamily: 'monospace',
-                  lineHeight: 1.1,
-                }}
-              >
-                {ch}
-              </span>
+              <GrooveLabChannelMuteSoloRow
+                ch={ch}
+                accent={selected ? accent : scope ? accent : '#8a9aa4'}
+                chFontSize={embed ? 11 : 13}
+                msTick={msTick}
+                onPointerDown={(e) => e.stopPropagation()}
+              />
               <span
                 style={{
                   fontSize: embed ? 8 : 7,
                   fontWeight: 800,
-                  color: selected ? accent : '#8a9aa4',
+                  color: selected ? accent : scope ? `${accent}cc` : '#8a9aa4',
                   letterSpacing: 0.15,
                   marginTop: 2,
                   whiteSpace: 'nowrap',
+                  textShadow: selected ? `0 0 8px ${accent}55` : undefined,
                 }}
               >
                 {role}
               </span>
               {embed ? (
                 <select
+                  data-groove-no-select=""
                   aria-label={`CH ${ch} layer`}
                   value={layerRole}
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => e.stopPropagation()}
-                  onChange={(e) => onAssignLayerRole(ch, e.target.value as GrooveLabLayerRole)}
+                  onChange={(e) => {
+                    onAssignLayerRole(ch, e.target.value as GrooveLabLayerRole);
+                    onSelectChannel(ch);
+                  }}
                   style={{
                     ...embedLayerSelectStyle,
                     marginTop: 2,
@@ -342,25 +284,38 @@ export function GrooveLabChannelRail({
               <div
                 style={{
                   flex: 1,
-                  minHeight: 26,
+                  minHeight: 24,
                   width: '100%',
                   display: 'flex',
-                  alignItems: 'flex-end',
-                  justifyContent: 'center',
-                  gap: 6,
+                  flexDirection: 'column',
+                  alignItems: 'stretch',
+                  justifyContent: 'flex-end',
+                  gap: 2,
                   marginTop: 1,
-                  marginBottom: 1,
+                  marginBottom: 0,
+                  cursor: 'pointer',
                 }}
               >
-                <GrooveLabEmbedStereoVu ch={ch} accent={accent} />
-                {setChannelVolume ? (
-                  <GrooveStyleTCapVolumeFader
-                    channelId={ch}
-                    volume={channelVolumes?.[ch] ?? 80}
+                <div
+                  style={{
+                    flex: 1,
+                    minHeight: 18,
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    justifyContent: 'center',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <GrooveLabChannelStereoVu ch={ch} accent={accent} size="embed" />
+                </div>
+                <div data-groove-no-select="">
+                  <GrooveLabChannelFxButton
+                    ch={ch}
+                    channelLabel={`CH ${ch} · ${role}`}
                     accent={accent}
-                    onVolumeChange={(v) => setChannelVolume(ch, v)}
+                    variant="embed"
                   />
-                ) : null}
+                </div>
               </div>
             ) : null}
             {!embed && noteCount > 0 ? (
@@ -397,7 +352,6 @@ export function GrooveLabChannelRail({
           marginBottom: 0,
         }}
       >
-        <GrooveStyleTCapVolumeFaderStyles />
         <div
           ref={embedMeterRootRef}
           style={{
@@ -470,8 +424,9 @@ export function GrooveLabChannelRail({
           flexWrap: 'wrap',
         }}
       >
-        <span style={{ fontSize: 8, fontWeight: 900, color: '#6b7280', letterSpacing: 0.4 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 8, fontWeight: 900, color: '#6b7280', letterSpacing: 0.4 }}>
           CHANNELS
+          <GrooveLabHelpTip tab="channels" title="CH 33–48 channel strips" />
         </span>
         <span style={{ fontSize: 8, color: '#4b5563', fontWeight: 700 }}>
           CH 33–48 · click to edit piano roll

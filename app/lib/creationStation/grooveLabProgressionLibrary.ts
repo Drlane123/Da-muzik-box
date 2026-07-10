@@ -6,6 +6,7 @@
 import type { ChordMode, ChordSymbol } from '@/app/lib/creationStation/chordBuilder';
 import {
   GENRES,
+  MODE_FAMILY,
   chordSymbolToMidi,
   chordSymbolToName,
   coerceChordSymbolForMode,
@@ -16,8 +17,16 @@ import {
 } from '@/app/lib/creationStation/chordBuilder';
 import { parseChordSymbolToken } from '@/app/lib/creationStation/chordProgressionParse';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
-import { newProgressionStepId } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
 import {
+  GROOVE_PROGRESSION_BEATS_PER_BAR,
+  newProgressionStepId,
+} from '@/app/lib/creationStation/grooveLabProgressionBuilder';
+import {
+  buildGenrePackStepLabels,
+  rhythmForGenrePack,
+} from '@/app/lib/creationStation/grooveLabProgressionRhythm';
+import {
+  getGenreTempoProfile,
   resolveProgressionBpm,
   type ResolvedProgressionTempo,
 } from '@/app/lib/creationStation/genreTempoProfiles';
@@ -31,6 +40,7 @@ export type GrooveProgressionPresetEntry = {
   genreLabel: string;
   progressionId: string;
   label: string;
+  mode: ChordMode;
   steps: { label: string; beats: number; rest?: boolean }[];
 };
 
@@ -47,17 +57,22 @@ export function buildGrooveProgressionPresetCatalog(keyRoot = 0): GrooveProgress
   for (const genre of GENRES) {
     for (const prog of genre.progressions) {
       const mode = (prog.mode ?? genre.mode) as ChordMode;
-      const steps = prog.chords.map((sym) => {
+      const rhythm = rhythmForGenrePack(genre.id);
+      const labels = prog.chords.map((sym) => {
         const coerced = coerceChordSymbolForMode(sym, mode, genre.mode);
-        const label = chordSymbolToName(coerced, keyRoot, mode);
-        return { label, beats: 1 };
+        return chordSymbolToName(coerced, keyRoot, mode);
       });
+      const steps = buildGenrePackStepLabels(labels, genre.id).map((label) => ({
+        label,
+        beats: rhythm.stepBeats,
+      }));
       out.push({
         id: `${genre.id}::${prog.id}`,
         genreId: genre.id,
         genreLabel: genre.label,
         progressionId: prog.id,
         label: `${genre.label} · ${prog.name}`,
+        mode,
         steps,
       });
     }
@@ -151,6 +166,27 @@ export const GROOVE_CHORD_PALETTE: { title: string; chords: string[] }[] = [
     title: 'Horror icons · hold (4 bars)',
     chords: ['Am', 'Dm', 'G', 'F', 'E', 'E7', 'Ab', 'Bb', 'Bdim', 'C'],
   },
+  {
+    title: 'Afrobeats / Afropop',
+    chords: [
+      'Am7', 'Dm7', 'Em7', 'Gm7', 'Am9', 'Dm9', 'D7', 'G7', 'Fmaj7', 'Cmaj7',
+      'C', 'F', 'G', 'Am', 'Bbmaj7', 'Ebmaj7', 'C7', 'F7', 'Em7', 'Bm7b5',
+    ],
+  },
+  {
+    title: 'UK Garage · 2-step · reggae',
+    chords: [
+      'Am7', 'Fmaj7', 'G7', 'Em7', 'Dm7', 'Bbmaj7', 'C7', 'Cm7', 'Abmaj7', 'Eb7',
+      'Fm7', 'Gm7', 'Asus4', 'E7', 'Am', 'Dm', 'G', 'Cmaj7', 'Bbm7', 'F7',
+    ],
+  },
+  {
+    title: 'Reggae · dub · dancehall',
+    chords: [
+      'Am', 'Dm', 'G', 'C', 'F', 'Em', 'Am7', 'Dm7', 'G7', 'C7',
+      'Fmaj7', 'Bbmaj7', 'Ebmaj7', 'Abmaj7', 'E7', 'B7', 'Gm', 'Cm', 'Fm', 'Bbm',
+    ],
+  },
 ];
 
 export type Groove8BarSongKind = 'full8' | 'full4' | 'loop4x2';
@@ -167,7 +203,10 @@ export type Groove8BarSongCategory =
   | 'scifi'
   | 'phrygian'
   | 'horror-icon'
-  | 'tb-edition';
+  | 'tb-edition'
+  | 'afrobeat'
+  | 'uk-garage'
+  | 'reggae';
 
 export type Groove8BarSongPreset = {
   id: string;
@@ -194,6 +233,9 @@ const SONG_BANK_CATEGORY_GENRE: Record<Groove8BarSongCategory, string> = {
   phrygian: 'dance',
   'horror-icon': 'blues',
   general: 'pop',
+  afrobeat: 'afrobeat',
+  'uk-garage': 'uk-garage',
+  reggae: 'reggae',
 };
 
 function genreIdFor8BarSongPreset(preset: Groove8BarSongPreset): string {
@@ -203,6 +245,9 @@ function genreIdFor8BarSongPreset(preset: Groove8BarSongPreset): string {
   if (/\b(k-pop|kpop|k-ballad)\b/.test(label)) return 'dance';
   if (/\b(horror|phrygian|evil|halloween|jason|alien)\b/.test(label)) return 'blues';
   if (/\b(dance|club|90s dance|2000s)\b/.test(label)) return 'dance';
+  if (/\b(afro|afrobeats|afropop|highlife|makosa|naija|amapiano)\b/.test(label)) return 'afrobeat';
+  if (/\b(garage|2-step|2step|ukg|speed garage|reggae snap|reggae count)\b/.test(label)) return 'uk-garage';
+  if (/\b(reggae|one drop|dub snap|dancehall)\b/.test(label)) return 'reggae';
   if (/\b(soul|stax|shoals|southern)\b/.test(label)) return 'rnb-70s80s';
   if (/\b(r&b|rnb|neo|ballad|quiet storm|slow jam)\b/.test(label)) return 'rnb-90s';
   if (/\b(rock|arena|power)\b/.test(label)) return 'rock';
@@ -212,12 +257,15 @@ function genreIdFor8BarSongPreset(preset: Groove8BarSongPreset): string {
 /** BPM + note for an 8-bar song-bank preset (every bank entry resolves a tempo). */
 export function resolve8BarSongPresetTempo(preset: Groove8BarSongPreset): ResolvedProgressionTempo {
   const genreId = genreIdFor8BarSongPreset(preset);
-  const resolved = resolveProgressionBpm(genreId, { progressionName: preset.label });
-  if (preset.bpm == null) return resolved;
-  return {
-    ...resolved,
-    bpm: clampGrooveLabBpm(preset.bpm),
-  };
+  const profile = getGenreTempoProfile(genreId);
+  if (preset.bpm != null) {
+    return {
+      bpm: clampGrooveLabBpm(preset.bpm),
+      note: profile.note,
+      profile,
+    };
+  }
+  return resolveProgressionBpm(genreId, { progressionName: preset.label });
 }
 
 export function bpmFor8BarSongPreset(preset: Groove8BarSongPreset): number {
@@ -227,6 +275,350 @@ export function bpmFor8BarSongPreset(preset: Groove8BarSongPreset): number {
 export function format8BarSongPresetLabel(preset: Groove8BarSongPreset): string {
   return `${preset.label} · ${bpmFor8BarSongPreset(preset)} BPM`;
 }
+
+/** Afrobeats / Afropop — 8-bar phrases (highlife, makosa, m7 vamps, Dorian, Naija pop). */
+export const GROOVE_8BAR_SONG_BANK_AFROBEAT: Groove8BarSongPreset[] = [
+  {
+    id: 'afro-makosa-8',
+    label: 'Makosa · I–IV–V highlife',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 102,
+    chords: ['C', 'F', 'G', 'C', 'F', 'G', 'C', 'G'],
+  },
+  {
+    id: 'afro-highlife-8',
+    label: 'Highlife · I–IV–V–IV turn',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 98,
+    chords: ['C', 'F', 'G', 'F', 'C', 'F', 'G', 'F'],
+  },
+  {
+    id: 'afro-donjazzy-8',
+    label: 'Producer · I–ii–V–IV walk',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 104,
+    chords: ['C', 'Dm', 'G', 'F', 'Am', 'Dm', 'G', 'F'],
+  },
+  {
+    id: 'afro-naija-8',
+    label: 'Naija pop · I–IV–vi–V',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['C', 'F', 'Am', 'G', 'Dm', 'F', 'Am', 'G'],
+  },
+  {
+    id: 'afro-sensitive-8',
+    label: 'Afropop · vi–IV–I–V (6543)',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 96,
+    chords: ['Am', 'F', 'C', 'G', 'Am', 'F', 'C', 'G'],
+  },
+  {
+    id: 'afro-6525-8',
+    label: '6525 · vi–V–ii–V',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['Am', 'G', 'Dm', 'G', 'Am', 'G', 'F', 'G'],
+  },
+  {
+    id: 'afro-653-8',
+    label: '653 · vi–V–IV lift',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 98,
+    chords: ['Am', 'G', 'F', 'Am', 'G', 'F', 'E7', 'Am'],
+  },
+  {
+    id: 'afro-vamp-8',
+    label: 'Classic vamp · Am7–Dm7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['Am7', 'Dm7', 'Am7', 'Dm7', 'Fmaj7', 'G7', 'Am7', 'Dm7'],
+  },
+  {
+    id: 'afro-dorian-8',
+    label: 'Dorian groove · Am7–D7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 102,
+    chords: ['Am7', 'D7', 'Am7', 'D7', 'Fmaj7', 'G7', 'Am7', 'D7'],
+  },
+  {
+    id: 'afro-neo-8',
+    label: 'Neo afro soul · Am7–Fmaj7–G7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['Am7', 'Fmaj7', 'G7', 'Am7', 'Fmaj7', 'G7', 'Am7', 'Dm7'],
+  },
+  {
+    id: 'afro-uplift-8',
+    label: 'Afropop uplift · Cmaj7–F–G–Am',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 108,
+    chords: ['Cmaj7', 'F', 'G', 'Am', 'Cmaj7', 'F', 'G', 'Am'],
+  },
+  {
+    id: 'afro-twochord-8',
+    label: 'Two-chord · Dm7–C7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['Dm7', 'C7', 'Dm7', 'C7', 'Bbmaj7', 'C7', 'Dm7', 'G7'],
+  },
+  {
+    id: 'afro-amapiano-8',
+    label: 'Amapiano jazz · Dm7–Bb–Em7b5–A7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 108,
+    chords: ['Dm7', 'Bbmaj7', 'Em7b5', 'A7', 'Dm7', 'Bbmaj7', 'Em7b5', 'A7'],
+  },
+  {
+    id: 'afro-gm-8',
+    label: 'Gm pocket · Gm7–Cm7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 104,
+    chords: ['Gm7', 'Cm7', 'Gm7', 'Cm7', 'Ebmaj7', 'F7', 'Gm7', 'Cm7'],
+  },
+  {
+    id: 'afro-em-8',
+    label: 'Em groove · Em7–Am7–D7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['Em7', 'Am7', 'D7', 'Em7', 'Am7', 'B7', 'Em7', 'Am7'],
+  },
+  {
+    id: 'afro-maj7-8',
+    label: 'Highlife maj7 · Cmaj7–Fmaj7–G7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 96,
+    chords: ['Cmaj7', 'Fmaj7', 'G7', 'Cmaj7', 'Am7', 'Dm7', 'G7', 'Cmaj7'],
+  },
+  {
+    id: 'afro-gospel-8',
+    label: 'Afro gospel · I–IV–I–V',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['C', 'F', 'C', 'G', 'Am', 'F', 'C', 'G'],
+  },
+  {
+    id: 'afro-modal-8',
+    label: 'Modal lift · Am7–G7–Fmaj7–E7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 98,
+    chords: ['Am7', 'G7', 'Fmaj7', 'E7', 'Am7', 'Dm7', 'G7', 'Cmaj7'],
+  },
+  {
+    id: 'afro-wizkid-8',
+    label: 'Afropop lane · Fmaj7–Em7–Am7–Dm7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 102,
+    chords: ['Fmaj7', 'Em7', 'Am7', 'Dm7', 'G7', 'Cmaj7', 'Fmaj7', 'G7'],
+  },
+  {
+    id: 'afro-fireboy-8',
+    label: 'Minor afropop · Dm7–Bb–F–C7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 102,
+    chords: ['Dm7', 'Bbmaj7', 'Fmaj7', 'C7', 'Dm7', 'Gm7', 'A7', 'Dm7'],
+  },
+  {
+    id: 'afro-bounce-8',
+    label: 'Club bounce · Am7–Fmaj7–G7–Em7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 108,
+    chords: ['Am7', 'Fmaj7', 'G7', 'Em7', 'Am7', 'Dm7', 'G7', 'Am7'],
+  },
+  {
+    id: 'afro-burna-8',
+    label: 'Dorian colors · Am7–D7–G7–Cmaj7',
+    kind: 'full8',
+    category: 'afrobeat',
+    bpm: 100,
+    chords: ['Am7', 'D7', 'G7', 'Cmaj7', 'Fmaj7', 'Dm7', 'E7', 'Am7'],
+  },
+];
+
+/** UK garage / 2-step / reggae snap — 8 bars with doubled chord holds (2 bars each). */
+export const GROOVE_8BAR_SONG_BANK_UK_GARAGE: Groove8BarSongPreset[] = [
+  {
+    id: 'ukg-classic-double-8',
+    label: '2-step classic · Am7–Fmaj7–G7–Em7 (×2 bars)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 132,
+    chords: ['Am7', 'Am7', 'Fmaj7', 'Fmaj7', 'G7', 'G7', 'Em7', 'Em7'],
+  },
+  {
+    id: 'ukg-am-f-double-8',
+    label: 'MJ Cole lane · Am7–Fmaj7 pad (doubled)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 130,
+    chords: ['Am7', 'Am7', 'Fmaj7', 'Fmaj7', 'Am7', 'Am7', 'Fmaj7', 'Fmaj7'],
+  },
+  {
+    id: 'ukg-soul-double-8',
+    label: 'Soul garage · Am7–Fmaj7–Cmaj7–G7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 134,
+    chords: ['Am7', 'Am7', 'Fmaj7', 'Fmaj7', 'Cmaj7', 'Cmaj7', 'G7', 'G7'],
+  },
+  {
+    id: 'ukg-vi-iv-double-8',
+    label: 'vi–IV borrow · Am7–Fmaj7–C–G (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 132,
+    chords: ['Am7', 'Am7', 'Fmaj7', 'Fmaj7', 'C', 'C', 'G', 'G'],
+  },
+  {
+    id: 'ukg-speed-double-8',
+    label: 'Speed garage · Am–G–F–E (×2 bars)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 138,
+    chords: ['Am', 'Am', 'G', 'G', 'F', 'F', 'E', 'E'],
+  },
+  {
+    id: 'ukg-turn-double-8',
+    label: '2-step turn · Am7–G7–Fmaj7–E7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 133,
+    chords: ['Am7', 'Am7', 'G7', 'G7', 'Fmaj7', 'Fmaj7', 'E7', 'E7'],
+  },
+  {
+    id: 'ukg-dm-bb-double-8',
+    label: 'Bb garage · Dm7–Bbmaj7–C7–Fmaj7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 132,
+    chords: ['Dm7', 'Dm7', 'Bbmaj7', 'Bbmaj7', 'C7', 'C7', 'Fmaj7', 'Fmaj7'],
+  },
+  {
+    id: 'ukg-cm-ab-double-8',
+    label: 'Cm shuffle · Cm7–Abmaj7–Bb7–Ebmaj7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 130,
+    chords: ['Cm7', 'Cm7', 'Abmaj7', 'Abmaj7', 'Bb7', 'Bb7', 'Ebmaj7', 'Ebmaj7'],
+  },
+  {
+    id: 'ukg-fm-db-double-8',
+    label: 'Fm late night · Fm7–Dbmaj7–Eb7–Abmaj7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 128,
+    chords: ['Fm7', 'Fm7', 'Dbmaj7', 'Dbmaj7', 'Eb7', 'Eb7', 'Abmaj7', 'Abmaj7'],
+  },
+  {
+    id: 'ukg-gm-eb-double-8',
+    label: 'Gm 2-step · Gm7–Ebmaj7–F7–Bbmaj7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 132,
+    chords: ['Gm7', 'Gm7', 'Ebmaj7', 'Ebmaj7', 'F7', 'F7', 'Bbmaj7', 'Bbmaj7'],
+  },
+  {
+    id: 'ukg-em-double-8',
+    label: 'Em garage · Em7–Cmaj7–D7–Em7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 134,
+    chords: ['Em7', 'Em7', 'Cmaj7', 'Cmaj7', 'D7', 'D7', 'Em7', 'Em7'],
+  },
+  {
+    id: 'ukg-bm-double-8',
+    label: 'Dark UKG · Bm7–Gmaj7–A7–F#m7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 136,
+    chords: ['Bm7', 'Bm7', 'Gmaj7', 'Gmaj7', 'A7', 'A7', 'F#m7', 'F#m7'],
+  },
+  {
+    id: 'ukg-dark-ab-double-8',
+    label: 'Dark pad · Am7–Abmaj7–G7–Fmaj7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 135,
+    chords: ['Am7', 'Am7', 'Abmaj7', 'Abmaj7', 'G7', 'G7', 'Fmaj7', 'Fmaj7'],
+  },
+  {
+    id: 'ukg-reggae-one-drop-8',
+    label: 'Roots one drop · Am–Dm–G–Am (×2 · 88 BPM)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 88,
+    chords: ['Am', 'Am', 'Dm', 'Dm', 'G', 'G', 'Am', 'Am'],
+  },
+  {
+    id: 'ukg-reggae-skank-8',
+    label: 'Reggae skank · C–F–G–C (×2 · 92 BPM)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 92,
+    chords: ['C', 'C', 'F', 'F', 'G', 'G', 'C', 'C'],
+  },
+  {
+    id: 'ukg-reggae-minor-8',
+    label: 'Reggae minor · Am7–Em7–Dm7–Am7 (×2 · 94 BPM)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 94,
+    chords: ['Am7', 'Am7', 'Em7', 'Em7', 'Dm7', 'Dm7', 'Am7', 'Am7'],
+  },
+  {
+    id: 'ukg-reggae-dub-8',
+    label: 'Dub snap · Dm7–Bbmaj7–A7–Dm7 (×2 · 100 BPM)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 100,
+    chords: ['Dm7', 'Dm7', 'Bbmaj7', 'Bbmaj7', 'A7', 'A7', 'Dm7', 'Dm7'],
+  },
+  {
+    id: 'ukg-am-dm-g-double-8',
+    label: 'Reggae count snap · Am–Dm–G–F (×2 · 102 BPM)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 102,
+    chords: ['Am', 'Am', 'Dm', 'Dm', 'G', 'G', 'F', 'F'],
+  },
+  {
+    id: 'ukg-two-chord-double-8',
+    label: 'Minimal 2-step · Am7–Fmaj7 only (×4 each)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 132,
+    chords: ['Am7', 'Am7', 'Am7', 'Am7', 'Fmaj7', 'Fmaj7', 'Fmaj7', 'Fmaj7'],
+  },
+  {
+    id: 'ukg-snap-stab-8',
+    label: 'Snap stabs · Am7–G–F–E7 (×2)',
+    kind: 'full8',
+    category: 'uk-garage',
+    bpm: 134,
+    chords: ['Am7', 'Am7', 'G', 'G', 'F', 'F', 'E7', 'E7'],
+  },
+];
 
 /** R&B & soul — full 8-bar phrases (70s · 80s · 90s maj7 / min7 colors). */
 export const GROOVE_8BAR_SONG_BANK_RNB: Groove8BarSongPreset[] = [
@@ -1255,6 +1647,8 @@ export const GROOVE_8BAR_SONG_BANK_FULL: Groove8BarSongPreset[] = [
   ...GROOVE_8BAR_SONG_BANK_SOUTHERN_SOUL,
   ...GROOVE_8BAR_SONG_BANK_LOFI,
   ...GROOVE_8BAR_SONG_BANK_DANCE_90S,
+  ...GROOVE_8BAR_SONG_BANK_AFROBEAT,
+  ...GROOVE_8BAR_SONG_BANK_UK_GARAGE,
   ...GROOVE_8BAR_SONG_BANK_HORROR,
   ...GROOVE_8BAR_SONG_BANK_SCIFI,
   ...GROOVE_8BAR_SONG_BANK_GENERAL,
@@ -1388,6 +1782,11 @@ export const GROOVE_8BAR_SONG_BANK_SECTIONS: ReadonlyArray<{
   { label: 'Southern soul — Stax · Shoals (8 chords)', banks: GROOVE_8BAR_SONG_BANK_SOUTHERN_SOUL },
   { label: 'Lo-fi / jazz-hop (8 chords)', banks: GROOVE_8BAR_SONG_BANK_LOFI },
   { label: '90s / 2000s dance (8 chords)', banks: GROOVE_8BAR_SONG_BANK_DANCE_90S },
+  { label: 'Afrobeats / Afropop (8 chords)', banks: GROOVE_8BAR_SONG_BANK_AFROBEAT },
+  {
+    label: 'UK Garage · 2-step · reggae snap (8 chords · doubled)',
+    banks: GROOVE_8BAR_SONG_BANK_UK_GARAGE,
+  },
   { label: 'Horror cinema (8 chords)', banks: GROOVE_8BAR_SONG_BANK_HORROR },
   { label: 'Sci-fi cinema (8 chords)', banks: GROOVE_8BAR_SONG_BANK_SCIFI },
   {
@@ -1406,17 +1805,16 @@ export const DEFAULT_GROOVE_8BAR_SONG_ID = GROOVE_8BAR_SONG_BANK_FULL[0]?.id ?? 
 
 export type EightBarSketchSlot = { label: string; rest: boolean };
 
-/** Load a song-bank preset — one chord per bar, no tiling. */
+/** Load a song-bank preset — one chord per bar; short 4-chord banks tile across 8 bars. */
 export function songBankToEightBarSketch(
   chords: readonly string[],
   barCount = 8,
 ): EightBarSketchSlot[] {
-  const out = Array.from({ length: barCount }, () => ({ label: '', rest: false }));
   const playable = chords.map((l) => l.trim()).filter(Boolean);
-  for (let i = 0; i < Math.min(barCount, playable.length); i++) {
-    out[i] = { label: playable[i]!, rest: false };
+  if (playable.length === 0) {
+    return Array.from({ length: barCount }, () => ({ label: '', rest: false }));
   }
-  return out;
+  return chordLabelsToEightBarSketch(playable, barCount);
 }
 
 /** Tile a short loop across exactly eight bars (fills 4-chord packs to full phrase). */
@@ -1482,6 +1880,13 @@ export function suggestNextChordLabels(
 ): GrooveNextChordSuggestion[] {
   const genre = getGenre(opts.genreId) ?? GENRES[0]!;
   const topK = opts.topK ?? 10;
+  const wantFamily = MODE_FAMILY[opts.mode];
+  const progressions = genre.progressions.filter((p) => {
+    const pm = (p.mode ?? genre.mode) as ChordMode;
+    return MODE_FAMILY[pm] === wantFamily;
+  });
+  const genreForSuggest: typeof genre =
+    progressions.length > 0 ? { ...genre, progressions } : genre;
   const played = steps.filter((s) => !s.rest && s.label.trim());
   const last = played.length > 0 ? played[played.length - 1]! : null;
   const lastRoman = last
@@ -1490,8 +1895,9 @@ export function suggestNextChordLabels(
 
   if (!lastRoman) {
     const startCounts: Record<string, number> = {};
-    for (const prog of genre.progressions) {
-      const first = coerceChordSymbolForMode(prog.chords[0]!, genre.mode, genre.mode);
+    for (const prog of genreForSuggest.progressions) {
+      const progMode = (prog.mode ?? genre.mode) as ChordMode;
+      const first = coerceChordSymbolForMode(prog.chords[0]!, progMode, genre.mode);
       startCounts[first] = (startCounts[first] ?? 0) + 1;
     }
     const total = Object.values(startCounts).reduce((a, b) => a + b, 0) || 1;
@@ -1505,7 +1911,7 @@ export function suggestNextChordLabels(
       }));
   }
 
-  const likely = suggestLikelyNextChords(lastRoman, genre, topK);
+  const likely = suggestLikelyNextChords(lastRoman, genreForSuggest, topK);
   const weights = likely.map((l) => l.weight);
   const maxW = Math.max(...weights, 1);
   const minW = Math.min(...weights, 0);
@@ -1525,11 +1931,15 @@ export function suggestNextChordLabels(
 }
 
 export function defaultGenrePackForMode(mode: ChordMode): string {
-  if (mode === 'minor') return 'hiphop';
+  if (mode === 'minor') return 'rnb-true';
   return 'rnb-true';
 }
 
 /** BPM that matches a catalog preset (`genreId::progressionId`). */
+export function loopLabelFromProgressionCatalogEntry(label: string): string {
+  return label.replace(/^[^·]+·\s*/, '');
+}
+
 export function bpmForProgressionPreset(
   presetId: GrooveProgressionPackId,
   keyRoot = 0,
@@ -1537,11 +1947,24 @@ export function bpmForProgressionPreset(
   const cat = buildGrooveProgressionPresetCatalog(keyRoot);
   const entry = cat.find((p) => p.id === presetId);
   if (!entry) return resolveProgressionBpm('pop').bpm;
-  const loopLabel = entry.label.replace(/^[^·]+·\s*/, '');
+  const loopLabel = loopLabelFromProgressionCatalogEntry(entry.label);
   return resolveProgressionBpm(entry.genreId, {
     progressionId: entry.progressionId,
     progressionName: loopLabel,
   }).bpm;
+}
+
+/** Genre-pack loop picker — shows curated BPM beside the progression name. */
+export function formatProgressionCatalogLabel(
+  entry: GrooveProgressionPresetEntry,
+  keyRoot = 0,
+): string {
+  const loopLabel = loopLabelFromProgressionCatalogEntry(entry.label);
+  const bpm = resolveProgressionBpm(entry.genreId, {
+    progressionId: entry.progressionId,
+    progressionName: loopLabel,
+  }).bpm;
+  return `${loopLabel} · ${bpm} BPM`;
 }
 
 export function bpmForGenrePack(genreId: string): number {

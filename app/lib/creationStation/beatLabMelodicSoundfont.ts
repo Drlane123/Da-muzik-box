@@ -293,13 +293,18 @@ export function haltBeatLabMelodicTransportNotes(): void {
       /* */
     }
   }
-  /** Cut any voices already handed to Web Audio (scheduler.stop() does not touch these). */
-  for (const inst of instrumentReady.values()) {
-    try {
-      inst.stop();
-    } catch {
-      /* */
-    }
+  /** Release active voices — defer full bank sweep so Stop/Play buttons feel instant. */
+  const ready = [...instrumentReady.values()];
+  if (ready.length > 0) {
+    queueMicrotask(() => {
+      for (const inst of ready) {
+        try {
+          inst.stop();
+        } catch {
+          /* */
+        }
+      }
+    });
   }
 }
 

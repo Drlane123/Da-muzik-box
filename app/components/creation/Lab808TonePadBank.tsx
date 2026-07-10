@@ -20,6 +20,7 @@ import {
   lab808TonePadRangeLabel,
 } from '@/app/lib/creationStation/lab808TonePads';
 import { Lab808MuteSoloButtons } from '@/app/components/creation/Lab808MuteSoloButtons';
+import { Lab808HelpTip } from '@/app/components/creation/Lab808HelpHub';
 const PAD_CELL_MIN_H = 52;
 const PAD_GRID_GAP = 5;
 
@@ -212,7 +213,10 @@ export function Lab808TonePadBank({
     >
       <GrooveStyleTCapVolumeFaderStyles />
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-        <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: '0.12em', color: '#71717a' }}>808 KEYS</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10, fontWeight: 900, letterSpacing: '0.12em', color: '#71717a' }}>
+          808 KEYS
+          <Lab808HelpTip tab="pads" title="808 Kick / Bass pads help" />
+        </span>
         <button type="button" onClick={() => onSoundLaneChange('kick')} style={laneBtn('kick')}>
           Kick
         </button>
@@ -471,6 +475,7 @@ export function Lab808TonePadBank({
               <br />
               LOCK
             </span>
+            <Lab808HelpTip tab="chord-lock" title="Chord lock & generate roots" />
             <span
               style={{
                 fontSize: 8,

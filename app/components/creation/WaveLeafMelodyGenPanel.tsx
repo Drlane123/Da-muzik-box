@@ -34,6 +34,8 @@ export type WaveLeafMelodyGenPanelProps = {
   onGenerated: (hits: GrooveRollHit[], loopBars: number) => void;
   canUndo?: boolean;
   onUndo?: () => void;
+  /** SE2 Groove Lead — flowing transitional lines (no downbeat collapse). */
+  fullPhrase?: boolean;
 };
 
 const SLOT_H = 52;
@@ -51,6 +53,7 @@ export function WaveLeafMelodyGenPanel({
   onGenerated,
   canUndo = false,
   onUndo,
+  fullPhrase = false,
 }: WaveLeafMelodyGenPanelProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -112,6 +115,7 @@ export function WaveLeafMelodyGenPanel({
         complexity,
         bpm,
         bassRootMidi,
+        fullPhrase,
       });
       if (chordColumns === 0) {
         setStatus('Add green chord stacks (CH 34 roll) first');
@@ -143,6 +147,7 @@ export function WaveLeafMelodyGenPanel({
       complexity,
       bpm,
       bassRootMidi,
+      fullPhrase,
       onGenerated,
       genre.label,
     ],

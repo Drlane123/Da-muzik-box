@@ -19,20 +19,26 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 import {
-  Mic2, Music, Layers, Radio,
-  FolderOpen, AlignLeft, Piano, Download, GripVertical,
-  ChevronLeft, ChevronRight, ChevronDown, Sparkles,
+  Mic2, Music, Layers, Radio, Sparkles,
+  FolderOpen, Sliders, Download, GripVertical,
+  ChevronLeft, ChevronRight, ChevronDown,
 } from 'lucide-react';
 
 import {
   CREATION_SUB_SCREENS_NAV,
   type CreationSubScreenId,
 } from '@/app/lib/creationStation/creationSubScreens';
+import {
+  VOCAL_LAB_SUB_SCREENS,
+  isVocalLabScreen,
+  type VocalLabSubScreenId,
+} from '@/app/lib/vocalLab/vocalLabSubScreens';
 
 
 export type ScreenId =
   | 'vocal-lab'
   | 'ai-song'
+  | 'ai-music-match'
   | 'ai-pattern'
   | 'melody-transcription'
   | 'harmony-match'
@@ -41,7 +47,6 @@ export type ScreenId =
   | 'studio-editor-2'
   | 'my-projects'
   | 'master-arranger'
-  | 'piano-roll'
   | 'export';
 
 interface NavItem {
@@ -54,12 +59,20 @@ interface NavItem {
 
 
 const NAV_SIDEBAR_COLLAPSED_KEY = 'navModulesCollapsed';
+/** Bump when adding sidebar modules — triggers merge of new DEFAULT_ITEMS into saved order. */
+const NAV_ITEM_ORDER_VERSION = 3;
+const NAV_ITEM_ORDER_VERSION_KEY = 'navItemOrderVersion';
+
+/** Top-level nav only — Melody-to-MIDI and Harmony live under AI Vocal Lab sub-nav. */
+const VOCAL_LAB_NESTED_SCREEN_IDS = new Set<ScreenId>(['melody-transcription', 'harmony-match']);
+
+/** Retired modules — stripped from saved nav order (e.g. standalone Piano Roll → use Studio Editor 2). */
+const RETIRED_MODULE_SCREEN_IDS = new Set<string>(['piano-roll']);
 
 const DEFAULT_ITEMS: NavItem[] = [
   { id: 'vocal-lab',       label: 'AI Vocal Lab',       icon: <Mic2 size={15} />,       badge: 'NEW' },
   { id: 'ai-song',         label: 'AI Song Generator',  icon: <Music size={15} /> },
-  { id: 'melody-transcription', label: 'Melody-to-MIDI', icon: <Mic2 size={15} />, badge: 'NEW' },
-  { id: 'harmony-match', label: 'Harmony Match', icon: <Sparkles size={15} />, badge: 'NEW' },
+  { id: 'ai-music-match',  label: 'AI Music Match',     icon: <Sparkles size={15} />, badge: 'NEW' },
   { id: 'creation-station',label: 'Creation Station',   icon: <Layers size={15} /> },
   {
     id: 'studio-editor-2',
@@ -68,11 +81,51 @@ const DEFAULT_ITEMS: NavItem[] = [
     badge: 'β',
   },
   { id: 'my-projects',     label: 'My Projects',        icon: <FolderOpen size={15} /> },
-  { id: 'master-arranger', label: 'Master Arranger',    icon: <AlignLeft size={15} /> },
-  { id: 'piano-roll',      label: 'Piano Roll',         icon: <Piano size={15} /> },
+  { id: 'master-arranger', label: 'Mastering Bay',      icon: <Sliders size={15} /> },
   { id: 'export',          label: 'Export / Playback',  icon: <Download size={15} /> },
 ];
 
+function mergeNavItemsWithDefaults(savedIds: string[]): NavItem[] {
+  const itemMap = new Map(DEFAULT_ITEMS.map((item) => [item.id, item]));
+  const reordered = savedIds
+    .map((id) => itemMap.get(id as ScreenId))
+    .filter((item): item is NavItem => item !== undefined)
+    .filter((item) => !VOCAL_LAB_NESTED_SCREEN_IDS.has(item.id));
+  const seen = new Set(reordered.map((i) => i.id));
+  for (const def of DEFAULT_ITEMS) {
+    if (seen.has(def.id)) continue;
+    const afterAiSong = def.id === 'ai-music-match' ? reordered.findIndex((i) => i.id === 'ai-song') : -1;
+    if (afterAiSong >= 0) {
+      reordered.splice(afterAiSong + 1, 0, def);
+    } else {
+      reordered.push(def);
+    }
+    seen.add(def.id);
+  }
+  return reordered.length > 0 ? reordered : DEFAULT_ITEMS;
+}
+
+function loadNavItemsFromStorage(): NavItem[] {
+  if (typeof window === 'undefined') return DEFAULT_ITEMS;
+  try {
+    const version = Number(localStorage.getItem(NAV_ITEM_ORDER_VERSION_KEY) ?? '0');
+    const saved = localStorage.getItem('navItemOrder');
+    if (saved && version >= NAV_ITEM_ORDER_VERSION) {
+      const savedIds = (JSON.parse(saved) as string[]).filter((id) => !RETIRED_MODULE_SCREEN_IDS.has(id));
+      return mergeNavItemsWithDefaults(savedIds);
+    }
+    if (saved) {
+      const savedIds = (JSON.parse(saved) as string[]).filter((id) => !RETIRED_MODULE_SCREEN_IDS.has(id));
+      const merged = mergeNavItemsWithDefaults(savedIds);
+      localStorage.setItem(NAV_ITEM_ORDER_VERSION_KEY, String(NAV_ITEM_ORDER_VERSION));
+      localStorage.setItem('navItemOrder', JSON.stringify(merged.map((i) => i.id)));
+      return merged;
+    }
+  } catch {
+    /* fall through */
+  }
+  return DEFAULT_ITEMS;
+}
 
 interface SortableItemProps {
   item: NavItem;
@@ -104,13 +157,13 @@ function SortableItem({ item, isActive, isGrouped, onClick }: SortableItemProps)
       )}
       <button
         onClick={onClick}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all group relative active:scale-95 active:opacity-70"
+        className="w-full flex items-center gap-1.5 px-2 py-2 rounded-lg text-left transition-all group relative active:scale-95 active:opacity-70"
         style={{
           background: isActive ? 'rgba(213,0,249,0.15)' : 'transparent',
           color: isActive ? '#D500F9' : '#888',
           border: '1px solid',
           borderColor: isActive ? 'rgba(213,0,249,0.3)' : 'transparent',
-          paddingLeft: isGrouped ? 14 : undefined,
+          paddingLeft: isGrouped ? 12 : undefined,
         }}
       >
         {/* Drag handle */}
@@ -146,6 +199,8 @@ interface NavigationSidebarProps {
   onScreenChange: (id: ScreenId) => void;
   activeCreationSubScreen?: CreationSubScreenId;
   onCreationSubScreenChange?: (sub: CreationSubScreenId) => void;
+  activeVocalLabSubScreen?: VocalLabSubScreenId;
+  onVocalLabSubScreenChange?: (sub: VocalLabSubScreenId) => void;
 }
 
 interface CreationStationNavGroupProps {
@@ -157,6 +212,135 @@ interface CreationStationNavGroupProps {
   activeSubScreen: CreationSubScreenId;
   onSelectSub: (sub: CreationSubScreenId) => void;
   onSelectModule: () => void;
+}
+
+interface VocalLabNavGroupProps {
+  item: NavItem;
+  isActive: boolean;
+  isGrouped: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  activeSubScreen: VocalLabSubScreenId;
+  onSelectSub: (sub: VocalLabSubScreenId) => void;
+  onSelectModule: () => void;
+}
+
+function VocalLabNavGroup({
+  item,
+  isActive,
+  isGrouped,
+  expanded,
+  onToggleExpand,
+  activeSubScreen,
+  onSelectSub,
+  onSelectModule,
+}: VocalLabNavGroupProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      {isGrouped && (
+        <div
+          className="absolute left-0 top-0 bottom-0 w-0.5 rounded-full"
+          style={{ background: '#D500F9' }}
+        />
+      )}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onSelectModule}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onSelectModule();
+          }
+        }}
+        className="w-full flex items-center gap-1.5 px-2 py-2 rounded-lg text-left transition-all group relative active:scale-95 active:opacity-70 cursor-pointer"
+        style={{
+          background: isActive ? 'rgba(213,0,249,0.15)' : 'transparent',
+          color: isActive ? '#D500F9' : '#888',
+          border: '1px solid',
+          borderColor: isActive ? 'rgba(213,0,249,0.3)' : 'transparent',
+          paddingLeft: isGrouped ? 12 : undefined,
+        }}
+      >
+        <span
+          {...attributes}
+          {...listeners}
+          className="opacity-0 group-hover:opacity-40 cursor-grab active:cursor-grabbing shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical size={12} />
+        </span>
+        <span className="shrink-0" style={{ color: isActive ? '#D500F9' : '#666' }}>
+          {item.icon}
+        </span>
+        <span className="text-xs font-medium truncate flex-1 min-w-0">{item.label}</span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleExpand();
+          }}
+          className="shrink-0 flex items-center justify-center rounded ml-auto"
+          style={{
+            width: 22,
+            height: 22,
+            border: 'none',
+            background: 'transparent',
+            color: isActive ? '#D500F9' : '#666',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          title={expanded ? 'Collapse Vocal Lab tools' : 'Expand Vocal Lab tools'}
+          aria-expanded={expanded}
+        >
+          <ChevronDown
+            size={14}
+            style={{
+              transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+              transition: 'transform 0.15s ease',
+            }}
+          />
+        </button>
+      </div>
+      {expanded && (
+        <div className="flex flex-col gap-0.5 pl-1 pr-0 pb-1" style={{ marginLeft: 8 }}>
+          {VOCAL_LAB_SUB_SCREENS.map((sub) => {
+            const subActive = isActive && activeSubScreen === sub.id;
+            return (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => onSelectSub(sub.id)}
+                className="w-full text-left rounded-md transition-all active:scale-[0.98]"
+                style={{
+                  padding: '5px 6px 5px 18px',
+                  fontSize: 10,
+                  fontWeight: subActive ? 700 : 500,
+                  color: subActive ? '#f472b6' : '#6a6a78',
+                  background: subActive ? 'rgba(244, 114, 182, 0.10)' : 'transparent',
+                  border: '1px solid',
+                  borderColor: subActive ? 'rgba(244, 114, 182, 0.28)' : 'transparent',
+                }}
+                title={sub.label}
+              >
+                {sub.shortLabel}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CreationStationNavGroup({
@@ -197,13 +381,13 @@ function CreationStationNavGroup({
             onSelectModule();
           }
         }}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all group relative active:scale-95 active:opacity-70 cursor-pointer"
+        className="w-full flex items-center gap-1.5 px-2 py-2 rounded-lg text-left transition-all group relative active:scale-95 active:opacity-70 cursor-pointer"
         style={{
           background: isActive ? 'rgba(213,0,249,0.15)' : 'transparent',
           color: isActive ? '#D500F9' : '#888',
           border: '1px solid',
           borderColor: isActive ? 'rgba(213,0,249,0.3)' : 'transparent',
-          paddingLeft: isGrouped ? 14 : undefined,
+          paddingLeft: isGrouped ? 12 : undefined,
         }}
       >
         <span
@@ -217,7 +401,7 @@ function CreationStationNavGroup({
         <span className="shrink-0" style={{ color: isActive ? '#D500F9' : '#666' }}>
           {item.icon}
         </span>
-        <span className="text-xs font-medium truncate flex-1">{item.label}</span>
+        <span className="text-xs font-medium truncate flex-1 min-w-0">{item.label}</span>
         <button
           type="button"
           onClick={(e) => {
@@ -246,7 +430,7 @@ function CreationStationNavGroup({
         </button>
       </div>
       {expanded && (
-        <div className="flex flex-col gap-0.5 pl-2 pr-0 pb-1" style={{ marginLeft: 10 }}>
+        <div className="flex flex-col gap-0.5 pl-1 pr-0 pb-1" style={{ marginLeft: 8 }}>
           {CREATION_SUB_SCREENS_NAV.map((sub) => {
             const subActive = isActive && activeSubScreen === sub.id;
             return (
@@ -256,7 +440,7 @@ function CreationStationNavGroup({
                 onClick={() => onSelectSub(sub.id)}
                 className="w-full text-left rounded-md transition-all active:scale-[0.98]"
                 style={{
-                  padding: '5px 10px 5px 22px',
+                  padding: '5px 6px 5px 18px',
                   fontSize: 10,
                   fontWeight: subActive ? 700 : 500,
                   color: subActive ? '#7cf4c6' : '#6a6a78',
@@ -282,6 +466,8 @@ export default function NavigationSidebar({
   onScreenChange,
   activeCreationSubScreen = 'beat-lab',
   onCreationSubScreenChange,
+  activeVocalLabSubScreen = 'vocal-lab',
+  onVocalLabSubScreenChange,
 }: NavigationSidebarProps) {
   const [modulesCollapsed, setModulesCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -300,44 +486,40 @@ export default function NavigationSidebar({
     }
   }, [modulesCollapsed]);
 
-  const [items, setItems] = useState<NavItem[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('navItemOrder');
-      if (saved) {
-        try {
-          const savedIds = JSON.parse(saved) as ScreenId[];
-          const itemMap = new Map(DEFAULT_ITEMS.map(item => [item.id, item]));
-          const reordered = savedIds
-            .map(id => itemMap.get(id))
-            .filter((item): item is NavItem => item !== undefined);
-          /** Saved order predates new modules — append any `DEFAULT_ITEMS` not in the file (e.g. Studio Editor 2). */
-          const seen = new Set(reordered.map((i) => i.id));
-          const missingFromSave = DEFAULT_ITEMS.filter((i) => !seen.has(i.id));
-          const merged = [...reordered, ...missingFromSave];
-          return merged.length > 0 ? merged : DEFAULT_ITEMS;
-        } catch {
-          return DEFAULT_ITEMS;
-        }
-      }
-    }
-    return DEFAULT_ITEMS;
-  });
+  const [items, setItems] = useState<NavItem[]>(() => loadNavItemsFromStorage());
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('navItemOrder', JSON.stringify(items.map(i => i.id)));
+      localStorage.setItem(NAV_ITEM_ORDER_VERSION_KEY, String(NAV_ITEM_ORDER_VERSION));
     }
   }, [items]);
 
+  /** Drop legacy top-level Melody/Harmony and retired modules — keep the user's module order intact. */
+  useEffect(() => {
+    setItems((prev) => {
+      const filtered = prev.filter(
+        (i) => !VOCAL_LAB_NESTED_SCREEN_IDS.has(i.id) && !RETIRED_MODULE_SCREEN_IDS.has(i.id),
+      );
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, []);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const [creationExpanded, setCreationExpanded] = useState(
-    () => activeScreen === 'creation-station',
-  );
+  const [creationExpanded, setCreationExpanded] = useState(true);
+  /** Vocal Lab sub-nav starts expanded so Melody-to-MIDI / Harmony are visible without an extra click. */
+  const [vocalLabExpanded, setVocalLabExpanded] = useState(true);
 
   useEffect(() => {
     if (activeScreen === 'creation-station') {
       setCreationExpanded(true);
+    }
+  }, [activeScreen]);
+
+  useEffect(() => {
+    if (isVocalLabScreen(activeScreen)) {
+      setVocalLabExpanded(true);
     }
   }, [activeScreen]);
 
@@ -372,9 +554,9 @@ export default function NavigationSidebar({
     <aside
       className="flex flex-col shrink-0 overflow-y-auto overflow-x-hidden"
       style={{
-        width: modulesCollapsed ? 44 : 188,
-        paddingLeft: modulesCollapsed ? 6 : 8,
-        paddingRight: modulesCollapsed ? 6 : 8,
+        width: modulesCollapsed ? 44 : 168,
+        paddingLeft: modulesCollapsed ? 6 : 5,
+        paddingRight: modulesCollapsed ? 6 : 6,
         paddingTop: 12,
         paddingBottom: 12,
         gap: modulesCollapsed ? 8 : 4,
@@ -431,7 +613,26 @@ export default function NavigationSidebar({
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
               {items.map((item) =>
-                item.id === 'creation-station' && onCreationSubScreenChange ? (
+                item.id === 'vocal-lab' ? (
+                  <VocalLabNavGroup
+                    key={item.id}
+                    item={item}
+                    isActive={isVocalLabScreen(activeScreen)}
+                    isGrouped={!!item.groupId}
+                    expanded={vocalLabExpanded}
+                    onToggleExpand={() => setVocalLabExpanded((v) => !v)}
+                    activeSubScreen={activeVocalLabSubScreen}
+                    onSelectSub={(sub) => {
+                      onVocalLabSubScreenChange?.(sub);
+                      onScreenChange(sub);
+                    }}
+                    onSelectModule={() => {
+                      onScreenChange(activeVocalLabSubScreen);
+                      onVocalLabSubScreenChange?.(activeVocalLabSubScreen);
+                      setVocalLabExpanded(true);
+                    }}
+                  />
+                ) : item.id === 'creation-station' && onCreationSubScreenChange ? (
                   <CreationStationNavGroup
                     key={item.id}
                     item={item}

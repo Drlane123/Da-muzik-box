@@ -2,16 +2,42 @@
  * Groove Lab–style faders: thin track line + lit T-cap (no round browser thumb).
  * Vertical = volume · Horizontal = pan / param sliders.
  */
-import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent, type SyntheticEvent } from 'react';
+import {
+  mixerFaderFillHeight,
+  mixerFaderKnobBottom,
+} from '@/app/lib/studio/se2MixerFaderScale';
 
 export const T_CAP_VOL_FADER_CLASS = 't-cap-vol-fader';
 export const T_CAP_PAN_FADER_CLASS = 't-cap-pan-fader';
+export const GROOVE_MIXER_FADER_RANGE_CLASS = 'groove-mixer-fader-range';
 
 const T_CAP_VOL_KNOB_W = 20;
 const T_CAP_VOL_KNOB_H = 8;
 const T_CAP_PAN_KNOB_W = 10;
 const T_CAP_PAN_KNOB_H = 24;
 const T_CAP_PAN_TRACK_H = 6;
+
+/** SE2-style travel insets — scaled for narrow Groove/Beat Lab strips (0…100, not MIDI 127). */
+const GL_FADER_INSET_TOP_PX = 6;
+const GL_FADER_INSET_BOTTOM_PX = 8;
+const GL_FADER_INSET_SUM_PX = GL_FADER_INSET_TOP_PX + GL_FADER_INSET_BOTTOM_PX;
+const GL_FADER_KNOB_H_COMPACT_PX = 14;
+const GL_FADER_KNOB_H_STD_PX = 18;
+const GL_FADER_ARROW_REF_COMPACT_PX = 10;
+const GL_FADER_ARROW_REF_STD_PX = 13;
+
+function grooveFaderKnobBottom(vol100: number, arrowRefPx: number): string {
+  const t = Math.max(0, Math.min(1, vol100 / 100));
+  const pct = t * 100;
+  return `calc(${GL_FADER_INSET_BOTTOM_PX - arrowRefPx}px + ${pct.toFixed(5)}% - ${(t * GL_FADER_INSET_SUM_PX).toFixed(5)}px)`;
+}
+
+function grooveFaderFillHeight(vol100: number): string {
+  const t = Math.max(0, Math.min(1, vol100 / 100));
+  const pct = t * 100;
+  return `calc(${pct.toFixed(5)}% - ${(t * GL_FADER_INSET_SUM_PX).toFixed(5)}px)`;
+}
 
 function clampParam(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
@@ -51,38 +77,46 @@ function tCapGripCapStyle(
 export function GrooveStyleTCapVolumeFaderStyles() {
   return (
     <style>{`
-      .${T_CAP_VOL_FADER_CLASS} input[type='range'] {
+      .${T_CAP_VOL_FADER_CLASS} {
+        touch-action: none;
+        user-select: none;
+      }
+      .${T_CAP_VOL_FADER_CLASS}[data-fader-drag='1'] {
+        cursor: grabbing;
+      }
+      .${T_CAP_VOL_FADER_CLASS}[data-fader-drag='0'] {
+        cursor: grab;
+      }
+      .${GROOVE_MIXER_FADER_RANGE_CLASS} {
         -webkit-appearance: none;
         appearance: none;
         background: transparent;
       }
-      .${T_CAP_VOL_FADER_CLASS} input[type='range']::-webkit-slider-runnable-track {
+      .${GROOVE_MIXER_FADER_RANGE_CLASS}::-webkit-slider-runnable-track {
         background: transparent;
         border: none;
       }
-      .${T_CAP_VOL_FADER_CLASS} input[type='range']::-webkit-slider-thumb {
+      .${GROOVE_MIXER_FADER_RANGE_CLASS}::-webkit-slider-thumb {
         -webkit-appearance: none;
         appearance: none;
-        width: 22px;
-        height: 28px;
+        width: 48px;
+        height: 32px;
         border: none;
-        border-radius: 0;
         background: transparent;
         box-shadow: none;
-        cursor: ns-resize;
+        cursor: default;
       }
-      .${T_CAP_VOL_FADER_CLASS} input[type='range']::-moz-range-track {
+      .${GROOVE_MIXER_FADER_RANGE_CLASS}::-moz-range-track {
         background: transparent;
         border: none;
       }
-      .${T_CAP_VOL_FADER_CLASS} input[type='range']::-moz-range-thumb {
-        width: 22px;
-        height: 28px;
+      .${GROOVE_MIXER_FADER_RANGE_CLASS}::-moz-range-thumb {
+        width: 48px;
+        height: 32px;
         border: none;
-        border-radius: 0;
         background: transparent;
         box-shadow: none;
-        cursor: ns-resize;
+        cursor: default;
       }
       .${T_CAP_PAN_FADER_CLASS} input[type='range'] {
         -webkit-appearance: none;
@@ -131,6 +165,11 @@ export type GrooveStyleTCapVolumeFaderProps = {
   className?: string;
   onClick?: (e: SyntheticEvent) => void;
   onPointerDown?: (e: SyntheticEvent) => void;
+  onDragChange?: (dragging: boolean) => void;
+  /** Fader top stop (100 = percent embed · 127 = SE2 dB law). */
+  volumeMax?: number;
+  /** Compact numeric readout above the capsule (embed rail). Popup mixer uses its own row below. */
+  showReadout?: boolean;
 };
 
 export function GrooveStyleTCapVolumeFader({
@@ -143,106 +182,252 @@ export function GrooveStyleTCapVolumeFader({
   className,
   onClick,
   onPointerDown,
+  onDragChange,
+  volumeMax = 100,
+  showReadout = false,
 }: GrooveStyleTCapVolumeFaderProps) {
-  const vol = Math.max(0, Math.min(100, Math.round(volume)));
-  const pct = vol / 100;
+  const maxVol = Math.max(1, Math.round(volumeMax));
+  const useSe2Travel = maxVol === 127;
+  const vol = Math.max(0, Math.min(maxVol, Math.round(volume)));
   const stopBubble = (e: SyntheticEvent) => e.stopPropagation();
-  const trackInset = 2;
-  const trackSpan = `calc(100% - ${trackInset * 2}px)`;
   const shellRef = useRef<HTMLDivElement>(null);
-  const [travelPx, setTravelPx] = useState(36);
+  const dragRef = useRef<{ pointerId: number; startY: number; startVol: number } | null>(null);
+  const lastEmitRef = useRef(vol);
+  const onVolumeChangeRef = useRef(onVolumeChange);
+  onVolumeChangeRef.current = onVolumeChange;
+  const [dragging, setDragging] = useState(false);
+  const [liveVol, setLiveVol] = useState(vol);
+  const shellW = typeof style?.width === 'number' ? style.width : 18;
+  const compact = shellW <= 20;
+  const knobW = compact ? 18 : 22;
+  const knobH = compact ? GL_FADER_KNOB_H_COMPACT_PX : GL_FADER_KNOB_H_STD_PX;
+  const arrowRef = compact ? GL_FADER_ARROW_REF_COMPACT_PX : GL_FADER_ARROW_REF_STD_PX;
+  const railLeft = '50%';
+  const displayVol = dragging ? liveVol : vol;
+
+  const displayKnobBottom = useSe2Travel
+    ? mixerFaderKnobBottom(displayVol)
+    : grooveFaderKnobBottom(displayVol, arrowRef);
+  const displayFillHeight = useSe2Travel
+    ? mixerFaderFillHeight(displayVol)
+    : grooveFaderFillHeight(displayVol);
 
   useEffect(() => {
+    if (!dragging) {
+      setLiveVol(vol);
+      lastEmitRef.current = vol;
+    }
+  }, [vol, dragging]);
+
+  const trackTravelPx = useCallback(() => {
     const el = shellRef.current;
-    if (!el) return;
-    const measure = () => {
-      const h = el.clientHeight - trackInset * 2;
-      setTravelPx(Math.max(24, h));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    if (!el) return 72;
+    return Math.max(28, el.clientHeight - GL_FADER_INSET_TOP_PX - GL_FADER_INSET_BOTTOM_PX);
   }, []);
+
+  useEffect(() => {
+    onDragChange?.(dragging);
+  }, [dragging, onDragChange]);
+
+  const emitVolume = useCallback((clientY: number, fine: boolean) => {
+    const travel = trackTravelPx();
+    const pxPerUnit = Math.max(0.35, travel / maxVol);
+    const fineMul = fine ? 0.2 : 1;
+    const drag = dragRef.current;
+    if (!drag) return;
+    const next = Math.max(
+      0,
+      Math.min(maxVol, Math.round(drag.startVol + ((drag.startY - clientY) / pxPerUnit) * fineMul)),
+    );
+    setLiveVol(next);
+    if (next !== lastEmitRef.current) {
+      lastEmitRef.current = next;
+      onVolumeChangeRef.current(next);
+    }
+  }, [trackTravelPx, maxVol]);
+
+  const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onPointerDown?.(e);
+    if (e.button !== 0) return;
+    dragRef.current = { pointerId: e.pointerId, startY: e.clientY, startVol: vol };
+    lastEmitRef.current = vol;
+    setLiveVol(vol);
+    setDragging(true);
+    shellRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  useEffect(() => {
+    if (!dragging) return undefined;
+    const onMove = (e: globalThis.PointerEvent) => {
+      if (!dragRef.current || dragRef.current.pointerId !== e.pointerId) return;
+      e.preventDefault();
+      emitVolume(e.clientY, e.shiftKey);
+    };
+    const onUp = (e: globalThis.PointerEvent) => {
+      if (!dragRef.current || dragRef.current.pointerId !== e.pointerId) return;
+      dragRef.current = null;
+      setDragging(false);
+      try {
+        shellRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* already released */
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [dragging, emitVolume]);
+
+  const gripY = compact ? [4, 7, 10] : [5, 9, 13];
 
   return (
     <div
       ref={shellRef}
       className={[T_CAP_VOL_FADER_CLASS, className].filter(Boolean).join(' ')}
+      data-fader-drag={dragging ? '1' : '0'}
+      role="slider"
+      aria-label={ariaLabel ?? `Channel ${channelId} volume`}
+      aria-valuemin={0}
+      aria-valuemax={maxVol}
+      aria-valuenow={displayVol}
+      tabIndex={0}
+      title={`CH ${channelId}: ${displayVol}`}
       onClick={onClick ?? stopBubble}
-      onPointerDown={onPointerDown ?? stopBubble}
+      onPointerDown={handlePointerDown}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          onVolumeChange(Math.min(maxVol, vol + (e.shiftKey ? 1 : 5)));
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          onVolumeChange(Math.max(0, vol - (e.shiftKey ? 1 : 5)));
+        }
+      }}
       style={{
         position: 'relative',
         width: 18,
         height: '100%',
         minHeight: 40,
         flexShrink: 0,
-        overflow: 'hidden',
+        overflow: 'visible',
         contain: 'layout paint',
+        paddingLeft: 10,
+        paddingRight: 10,
+        marginLeft: -10,
+        marginRight: -10,
+        boxSizing: 'content-box',
         ...style,
       }}
     >
+      {/* Rail groove — SE2 dark inset channel */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          left: '50%',
-          top: trackInset,
-          bottom: trackInset,
-          width: 1,
+          width: 3,
+          top: GL_FADER_INSET_TOP_PX,
+          bottom: GL_FADER_INSET_BOTTOM_PX,
+          left: railLeft,
           transform: 'translateX(-50%)',
-          background: 'rgba(210, 220, 230, 0.72)',
-          boxShadow: '0 0 0 0.5px rgba(0,0,0,0.45)',
+          background: '#0a0a12',
+          borderRadius: 2,
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,1), inset 0 0 0 1px rgba(0,0,0,0.5)',
           pointerEvents: 'none',
         }}
       />
+      {/* Level fill — accent strip from bottom to knob arrow */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          left: '50%',
-          bottom: trackInset,
-          width: 1,
-          height: `calc(${trackSpan} * ${pct})`,
+          width: 3,
+          bottom: GL_FADER_INSET_BOTTOM_PX,
+          left: railLeft,
           transform: 'translateX(-50%)',
-          background: `${accent}88`,
+          height: displayFillHeight,
+          background: accent,
+          opacity: 0.72,
+          borderRadius: 2,
+          transition: dragging ? 'none' : 'height 0.04s',
           pointerEvents: 'none',
         }}
       />
+      {/* Capsule knob + level arrow — SE2 face, scaled to strip width */}
       <div
         aria-hidden
+        className="absolute pointer-events-none"
         style={{
-          position: 'absolute',
-          left: '50%',
-          bottom: `calc(${trackInset}px + ${trackSpan} * ${pct})`,
-          transform: 'translate(-50%, 50%)',
-          ...tCapGripCapStyle(accent, 'horizontal', T_CAP_VOL_KNOB_W, T_CAP_VOL_KNOB_H),
-        }}
-      />
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={vol}
-        aria-label={ariaLabel ?? `Channel ${channelId} volume`}
-        onChange={(e) => onVolumeChange(Number(e.target.value))}
-        onClick={stopBubble}
-        onPointerDown={stopBubble}
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          width: travelPx,
-          height: 28,
-          margin: 0,
-          padding: 0,
-          transform: 'translate(-50%, -50%) rotate(-90deg)',
-          background: 'transparent',
-          cursor: 'ns-resize',
+          width: knobW,
+          height: knobH,
+          bottom: displayKnobBottom,
+          left: railLeft,
+          transform: 'translateX(-50%)',
           zIndex: 2,
+          borderRadius: compact ? 3 : 4,
+          background:
+            'linear-gradient(180deg, #dcdce8 0%, #aaaabc 40%, #8888a0 70%, #606072 100%)',
+          boxShadow:
+            '0 2px 5px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1px 0 rgba(0,0,0,0.3)',
+          transition: dragging ? 'none' : 'bottom 0.04s',
         }}
-      />
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: compact ? -5 : -6,
+            top: 2,
+            width: 0,
+            height: 0,
+            borderTop: `${compact ? 2 : 3}px solid transparent`,
+            borderBottom: `${compact ? 2 : 3}px solid transparent`,
+            borderRight: `${compact ? 5 : 6}px solid ${accent}`,
+            filter: dragging ? `drop-shadow(0 0 6px ${accent}cc) drop-shadow(0 0 3px ${accent}88)` : undefined,
+          }}
+        />
+        {gripY.map((y) => (
+          <div
+            key={y}
+            style={{
+              position: 'absolute',
+              left: compact ? 4 : 5,
+              right: compact ? 4 : 5,
+              top: y,
+              height: 1,
+              background: 'rgba(0,0,0,0.35)',
+              borderRadius: 1,
+            }}
+          />
+        ))}
+      </div>
+      {showReadout ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 1,
+            transform: 'translateX(-50%)',
+            fontSize: 7,
+            fontWeight: 900,
+            fontFamily: 'ui-monospace, SF Mono, monospace',
+            color: dragging ? accent : '#9aacbc',
+            textShadow: dragging ? `0 0 6px ${accent}66` : undefined,
+            lineHeight: 1,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            zIndex: 4,
+          }}
+        >
+          {displayVol}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -261,7 +446,14 @@ export type GrooveStyleTCapParamVerticalFaderProps = {
   className?: string;
 };
 
-/** Generic vertical param fader — same T-cap as mixer volume strips. */
+function snapParamStep(v: number, min: number, max: number, step: number): number {
+  const c = clampParam(v, min, max);
+  if (!(step > 0)) return c;
+  const snapped = Math.round((c - min) / step) * step + min;
+  return clampParam(snapped, min, max);
+}
+
+/** Generic vertical param fader — SE2 mixer rail + capsule (pointer drag only, no native thumb). */
 export function GrooveStyleTCapParamVerticalFader({
   min,
   max,
@@ -275,41 +467,140 @@ export function GrooveStyleTCapParamVerticalFader({
   style,
   className,
 }: GrooveStyleTCapParamVerticalFaderProps) {
-  const clamped = clampParam(value, min, max);
-  const pct = paramPct(clamped, min, max);
+  const clamped = snapParamStep(value, min, max, step);
   const stopBubble = (e: SyntheticEvent) => e.stopPropagation();
-  const trackInset = 2;
-  const trackSpan = `calc(100% - ${trackInset * 2}px)`;
   const shellRef = useRef<HTMLDivElement>(null);
-  const [travelPx, setTravelPx] = useState(Math.max(24, height - trackInset * 2));
+  const dragRef = useRef<{ pointerId: number; startY: number; startVal: number } | null>(null);
+  const lastEmitRef = useRef(clamped);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const [dragging, setDragging] = useState(false);
+  const [liveVal, setLiveVal] = useState(clamped);
+
+  const displayVal = dragging ? liveVal : clamped;
+  const displayVol100 = paramPct(displayVal, min, max) * 100;
+  const knobW = 18;
+  const knobH = GL_FADER_KNOB_H_COMPACT_PX;
+  const arrowRef = GL_FADER_ARROW_REF_COMPACT_PX;
+  const railLeft = '50%';
+  const displayKnobBottom = grooveFaderKnobBottom(displayVol100, arrowRef);
+  const displayFillHeight = grooveFaderFillHeight(displayVol100);
+  const gripY = [4, 7, 10];
 
   useEffect(() => {
+    if (!dragging) {
+      setLiveVal(clamped);
+      lastEmitRef.current = clamped;
+    }
+  }, [clamped, dragging]);
+
+  const trackTravelPx = useCallback(() => {
     const el = shellRef.current;
-    if (!el) return;
-    const measure = () => {
-      const h = el.clientHeight - trackInset * 2;
-      setTravelPx(Math.max(24, h));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+    if (!el) return 72;
+    return Math.max(28, el.clientHeight - GL_FADER_INSET_TOP_PX - GL_FADER_INSET_BOTTOM_PX);
   }, []);
+
+  const emitValue = useCallback(
+    (clientY: number, fine: boolean) => {
+      const travel = trackTravelPx();
+      const span = Math.max(1e-6, max - min);
+      const pxPerUnit = Math.max(0.35, travel / span);
+      const fineMul = fine ? 0.2 : 1;
+      const drag = dragRef.current;
+      if (!drag) return;
+      const next = snapParamStep(
+        drag.startVal + ((drag.startY - clientY) / pxPerUnit) * fineMul,
+        min,
+        max,
+        step,
+      );
+      setLiveVal(next);
+      if (next !== lastEmitRef.current) {
+        lastEmitRef.current = next;
+        onChangeRef.current(next);
+      }
+    },
+    [trackTravelPx, min, max, step],
+  );
+
+  const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    dragRef.current = { pointerId: e.pointerId, startY: e.clientY, startVal: clamped };
+    lastEmitRef.current = clamped;
+    setLiveVal(clamped);
+    setDragging(true);
+    shellRef.current?.setPointerCapture(e.pointerId);
+  };
+
+  useEffect(() => {
+    if (!dragging) return undefined;
+    const onMove = (e: globalThis.PointerEvent) => {
+      if (!dragRef.current || dragRef.current.pointerId !== e.pointerId) return;
+      e.preventDefault();
+      emitValue(e.clientY, e.shiftKey);
+    };
+    const onUp = (e: globalThis.PointerEvent) => {
+      if (!dragRef.current || dragRef.current.pointerId !== e.pointerId) return;
+      dragRef.current = null;
+      setDragging(false);
+      try {
+        shellRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        /* */
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [dragging, emitValue]);
 
   return (
     <div
       ref={shellRef}
       className={[T_CAP_VOL_FADER_CLASS, className].filter(Boolean).join(' ')}
+      data-fader-drag={dragging ? '1' : '0'}
+      role="slider"
+      aria-label={ariaLabel}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={displayVal}
+      aria-disabled={disabled}
+      tabIndex={disabled ? -1 : 0}
       onClick={stopBubble}
-      onPointerDown={stopBubble}
+      onPointerDown={handlePointerDown}
+      onKeyDown={(e) => {
+        if (disabled) return;
+        const delta = step > 0 ? step : (max - min) / 100;
+        if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          onChange(snapParamStep(clamped + delta * (e.shiftKey ? 1 : 4), min, max, step));
+        } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
+          e.preventDefault();
+          onChange(snapParamStep(clamped - delta * (e.shiftKey ? 1 : 4), min, max, step));
+        }
+      }}
       style={{
         position: 'relative',
         width: 22,
         height,
         flexShrink: 0,
-        overflow: 'hidden',
+        overflow: 'visible',
         contain: 'layout paint',
         opacity: disabled ? 0.45 : 1,
+        cursor: disabled ? 'not-allowed' : dragging ? 'grabbing' : 'grab',
+        paddingLeft: 8,
+        paddingRight: 8,
+        marginLeft: -8,
+        marginRight: -8,
+        boxSizing: 'content-box',
         ...style,
       }}
     >
@@ -317,13 +608,14 @@ export function GrooveStyleTCapParamVerticalFader({
         aria-hidden
         style={{
           position: 'absolute',
-          left: '50%',
-          top: trackInset,
-          bottom: trackInset,
-          width: 1,
+          width: 3,
+          top: GL_FADER_INSET_TOP_PX,
+          bottom: GL_FADER_INSET_BOTTOM_PX,
+          left: railLeft,
           transform: 'translateX(-50%)',
-          background: 'rgba(210, 220, 230, 0.72)',
-          boxShadow: '0 0 0 0.5px rgba(0,0,0,0.45)',
+          background: '#0a0a12',
+          borderRadius: 2,
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,1), inset 0 0 0 1px rgba(0,0,0,0.5)',
           pointerEvents: 'none',
         }}
       />
@@ -331,50 +623,63 @@ export function GrooveStyleTCapParamVerticalFader({
         aria-hidden
         style={{
           position: 'absolute',
-          left: '50%',
-          bottom: trackInset,
-          width: 1,
-          height: `calc(${trackSpan} * ${pct})`,
+          width: 3,
+          bottom: GL_FADER_INSET_BOTTOM_PX,
+          left: railLeft,
           transform: 'translateX(-50%)',
-          background: `${accent}88`,
+          height: displayFillHeight,
+          background: accent,
+          opacity: 0.72,
+          borderRadius: 2,
+          transition: dragging ? 'none' : 'height 0.04s',
           pointerEvents: 'none',
         }}
       />
       <div
         aria-hidden
+        className="absolute pointer-events-none"
         style={{
-          position: 'absolute',
-          left: '50%',
-          bottom: `calc(${trackInset}px + ${trackSpan} * ${pct})`,
-          transform: 'translate(-50%, 50%)',
-          ...tCapGripCapStyle(accent, 'horizontal', T_CAP_VOL_KNOB_W, T_CAP_VOL_KNOB_H),
-        }}
-      />
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={clamped}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        onChange={(e) => onChange(Number(e.target.value))}
-        onClick={stopBubble}
-        onPointerDown={stopBubble}
-        style={{
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          width: travelPx,
-          height: 28,
-          margin: 0,
-          padding: 0,
-          transform: 'translate(-50%, -50%) rotate(-90deg)',
-          background: 'transparent',
-          cursor: disabled ? 'not-allowed' : 'ns-resize',
+          width: knobW,
+          height: knobH,
+          bottom: displayKnobBottom,
+          left: railLeft,
+          transform: 'translateX(-50%)',
           zIndex: 2,
+          borderRadius: 3,
+          background: 'linear-gradient(180deg, #dcdce8 0%, #aaaabc 40%, #8888a0 70%, #606072 100%)',
+          boxShadow:
+            '0 2px 5px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1px 0 rgba(0,0,0,0.3)',
+          transition: dragging ? 'none' : 'bottom 0.04s',
         }}
-      />
+      >
+        <div
+          style={{
+            position: 'absolute',
+            left: -5,
+            top: 2,
+            width: 0,
+            height: 0,
+            borderTop: '2px solid transparent',
+            borderBottom: '2px solid transparent',
+            borderRight: `5px solid ${accent}`,
+            filter: dragging ? `drop-shadow(0 0 6px ${accent}cc)` : undefined,
+          }}
+        />
+        {gripY.map((y) => (
+          <div
+            key={y}
+            style={{
+              position: 'absolute',
+              left: 4,
+              right: 4,
+              top: y,
+              height: 1,
+              background: 'rgba(0,0,0,0.35)',
+              borderRadius: 1,
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -388,6 +693,8 @@ export type GrooveStyleTCapParamHorizontalFaderProps = {
   onChange: (v: number) => void;
   ariaLabel?: string;
   disabled?: boolean;
+  /** FX suite tube control — narrower cap + track. */
+  compact?: boolean;
   style?: CSSProperties;
   className?: string;
 };
@@ -402,14 +709,19 @@ export function GrooveStyleTCapParamHorizontalFader({
   onChange,
   ariaLabel,
   disabled = false,
+  compact = false,
   style,
   className,
 }: GrooveStyleTCapParamHorizontalFaderProps) {
   const clamped = clampParam(value, min, max);
   const pct = paramPct(clamped, min, max);
   const stopBubble = (e: SyntheticEvent) => e.stopPropagation();
-  const trackInset = 4;
+  const trackInset = compact ? 3 : 4;
   const trackSpan = `calc(100% - ${trackInset * 2}px)`;
+  const knobW = compact ? 7 : T_CAP_PAN_KNOB_W;
+  const knobH = compact ? 13 : T_CAP_PAN_KNOB_H;
+  const trackH = compact ? 4 : T_CAP_PAN_TRACK_H;
+  const shellH = compact ? 18 : 30;
   const shellRef = useRef<HTMLDivElement>(null);
   const [travelPx, setTravelPx] = useState(48);
 
@@ -435,7 +747,7 @@ export function GrooveStyleTCapParamHorizontalFader({
       style={{
         position: 'relative',
         width: '100%',
-        height: 30,
+        height: shellH,
         flexShrink: 0,
         overflow: 'visible',
         contain: 'layout paint',
@@ -450,7 +762,7 @@ export function GrooveStyleTCapParamHorizontalFader({
           left: trackInset,
           right: trackInset,
           top: '50%',
-          height: T_CAP_PAN_TRACK_H,
+          height: trackH,
           transform: 'translateY(-50%)',
           borderRadius: 2,
           background: [
@@ -484,11 +796,12 @@ export function GrooveStyleTCapParamHorizontalFader({
           top: '50%',
           transform: 'translate(-50%, -50%)',
           zIndex: 1,
-          ...tCapGripCapStyle(accent, 'vertical', T_CAP_PAN_KNOB_W, T_CAP_PAN_KNOB_H),
+          ...tCapGripCapStyle(accent, 'vertical', knobW, knobH),
         }}
       />
       <input
         type="range"
+        className={GROOVE_MIXER_FADER_RANGE_CLASS}
         min={min}
         max={max}
         step={step}
@@ -503,13 +816,15 @@ export function GrooveStyleTCapParamHorizontalFader({
           left: '50%',
           top: '50%',
           width: travelPx,
-          height: 28,
+          height: compact ? 18 : 28,
           margin: 0,
           padding: 0,
           transform: 'translate(-50%, -50%)',
           background: 'transparent',
           cursor: disabled ? 'not-allowed' : 'ew-resize',
           zIndex: 2,
+          WebkitAppearance: 'none',
+          appearance: 'none',
         }}
       />
     </div>

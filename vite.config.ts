@@ -36,6 +36,16 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: false,
+    /** Don't block index.html while the whole dependency graph pre-compiles on connect. */
+    preTransformRequests: false,
+    /** `.cache` holds drum kits / ONNX / downloads — never watch it or dev hangs on Windows. */
+    watch: {
+      ignored: ['**/.cache/**', '**/.vite-cache/**', '**/dist/**'],
+    },
+    /** Warm HTML only — pre-warming main.tsx blocks HTTP until the whole app graph compiles. */
+    warmup: {
+      clientFiles: [],
+    },
   },
   preview: {
     host: true,

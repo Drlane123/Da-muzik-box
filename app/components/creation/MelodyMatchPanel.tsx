@@ -2,10 +2,11 @@
  * Voice → Chords: compact hum / upload / live voice-MIDI → progression MATCH.
  */
 
-import { useRef } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Mic, Radio, Upload, Wand2 } from 'lucide-react';
 
 import type { MelodyProgressionCandidate } from '@/app/lib/creationStation/melodyToChordProgression';
+import { ChordBuilderHelpTip } from '@/app/components/creation/ChordBuilderHelpHub';
 
 const MINT = '#7cf4c6';
 const MINT_DIM = 'rgba(124, 244, 198, 0.35)';
@@ -46,6 +47,7 @@ export function MelodyMatchPanel({
   voiceMidiLiveNote,
   voiceMidiCaptureCount,
   onToggleVoiceMidiLive,
+  helpTip,
 }: {
   isRecording: boolean;
   isBusy: boolean;
@@ -59,6 +61,8 @@ export function MelodyMatchPanel({
   voiceMidiLiveNote: string | null;
   voiceMidiCaptureCount: number;
   onToggleVoiceMidiLive: () => void;
+  /** Override default Chord Builder help tip (e.g. Vocal Lab Harmony Match). */
+  helpTip?: ReactNode;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const anyCapture = isRecording || voiceMidiLive;
@@ -78,8 +82,9 @@ export function MelodyMatchPanel({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 9, fontWeight: 900, color: MINT, letterSpacing: 0.8, flexShrink: 0 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 900, color: MINT, letterSpacing: 0.8, flexShrink: 0 }}>
           VOICE→CHORDS
+          {helpTip ?? <ChordBuilderHelpTip tab="melody" title="Melody Match — hum to chords" />}
         </span>
         <button
           type="button"

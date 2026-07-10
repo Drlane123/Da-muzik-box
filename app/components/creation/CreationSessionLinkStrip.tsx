@@ -41,6 +41,10 @@ export type CreationSessionLinkStripProps = {
   linkState: CreationSessionLinkState;
   onToggleBpmLink: (moduleId: CreationSessionLinkModuleId) => void;
   onTogglePlayLink: (moduleId: CreationSessionLinkModuleId) => void;
+  /** Groove Lab tab — optional PLAY → Beat Lab mirror (reverse of Sync). */
+  grooveBeatlabMirror?: boolean;
+  onToggleGrooveBeatlabMirror?: () => void;
+  showGrooveBeatlabMirror?: boolean;
   compact?: boolean;
   disabled?: boolean;
 };
@@ -50,6 +54,9 @@ export function CreationSessionLinkStrip({
   linkState,
   onToggleBpmLink,
   onTogglePlayLink,
+  grooveBeatlabMirror = false,
+  onToggleGrooveBeatlabMirror,
+  showGrooveBeatlabMirror = false,
   disabled = false,
 }: CreationSessionLinkStripProps) {
   return (
@@ -178,6 +185,21 @@ export function CreationSessionLinkStrip({
               >
                 Sync
               </button>
+              {id === 'groove-lab' && showGrooveBeatlabMirror && onToggleGrooveBeatlabMirror && (
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={onToggleGrooveBeatlabMirror}
+                  style={miniToggleStyle(grooveBeatlabMirror, 'play')}
+                  title={
+                    grooveBeatlabMirror
+                      ? 'Groove Lab transport also starts Beat Lab — click to work in Groove only'
+                      : 'Groove Lab only — click to also trigger Beat Lab on play, pause, and stop'
+                  }
+                >
+                  BeatLab
+                </button>
+              )}
             </div>
           );
         })}

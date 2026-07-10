@@ -1,3 +1,7 @@
+import {
+  grooveLabGuitarBankVoiceMix,
+  grooveLabLeadBankVoiceMix,
+} from '@/app/lib/creationStation/grooveLabLayers';
 import { grooveLabClampGuitarMidi, grooveLabClampMelodyMidi } from '@/app/lib/creationStation/grooveLabPitch';
 import {
   GROOVE_LAB_LEAD_PRESETS,
@@ -18,8 +22,11 @@ import {
   type GuitarLickId,
 } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
 import { grooveLabGuitarLickPlayOpts } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
-import { GROOVE_LAB_MELODY_MONO_GROUP } from '@/app/lib/creationStation/grooveLabLeadMono';
-import { truncateGrooveLabLeadMonoGroup } from '@/app/lib/creationStation/grooveLabLeadMono';
+import {
+  GROOVE_LAB_GUITAR_MONO_GROUP,
+  GROOVE_LAB_MELODY_MONO_GROUP,
+  truncateGrooveLabLeadMonoGroup,
+} from '@/app/lib/creationStation/grooveLabLeadMono';
 
 /** Synth preset IDs + dynamic sample lick IDs. */
 export type GrooveLabAnyLeadSoundId = GrooveLabLeadSoundId | GuitarLickId;
@@ -307,6 +314,12 @@ export function playGrooveLabLeadSound(
   opts?: PlayGrooveLabLeadSoundOpts,
 ): boolean {
   if (ctx.state === 'closed') return false;
+  const group = leadMonoGroupKey(opts);
+  const bankMix =
+    group === GROOVE_LAB_GUITAR_MONO_GROUP
+      ? grooveLabGuitarBankVoiceMix()
+      : grooveLabLeadBankVoiceMix();
+  velocity01 = Math.max(0.05, Math.min(1, velocity01 * bankMix));
   let sustainSec = Math.max(0.08, (holdBeats * 60) / Math.max(40, bpm));
   if (opts?.transportClean && opts?.maxSustainSec == null) {
     sustainSec = Math.min(sustainSec, 0.16);
@@ -316,7 +329,6 @@ export function playGrooveLabLeadSound(
   }
   const leadMidi =
     opts?.pitchRegister === 'guitar' ? grooveLabClampGuitarMidi(midi) : grooveLabClampMelodyMidi(midi);
-  const group = leadMonoGroupKey(opts);
   const whenChoke = Math.max(when, ctx.currentTime + 0.001);
 
   if (isGuitarLickSampleId(soundId)) {

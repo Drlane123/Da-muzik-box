@@ -73,6 +73,10 @@ export type WaveLeafPlayOpts = {
   monophonic?: boolean;
   /** Tight grid playback with block chords — short glide + fast attack (not panel preview). */
   transportChordSnap?: boolean;
+  /** Per-lane mono choke group (SE2 multi Groove Lead tracks). */
+  monoGroup?: string;
+  /** Override preset amp attack for soft flute puff (seconds). */
+  ampAttackSec?: number;
 };
 
 export function haltWaveLeafVoices(): void {
@@ -111,9 +115,10 @@ export function playWaveLeafNote(
   const bpm = Math.max(40, opts.bpm ?? 100);
   let sustainSec = (holdBeats * 60) / bpm;
 
+  const monoGroup = opts.monoGroup?.trim() || MONO_GROUP;
   if (opts.monophonic !== false) {
-    truncateWaveLeafMono(ctx, t0, MONO_GROUP);
-    truncateGrooveLabGuitarLickMonoGroup(t0, MONO_GROUP);
+    truncateWaveLeafMono(ctx, t0, monoGroup);
+    truncateGrooveLabGuitarLickMonoGroup(t0, monoGroup);
   }
 
   const melodyCh = opts.melodyChannel;
@@ -134,7 +139,7 @@ export function playWaveLeafNote(
     if (def) {
       const played = playGuitarLickSample(ctx, def, m, t0, vel * warmth, sustainSec, {
         monophonic: opts.monophonic,
-        monoGroup: MONO_GROUP,
+        monoGroup,
         outputNode: dest,
         transportClean: snap,
         wahAmount: preset.sampleWah ?? 0,
@@ -192,7 +197,7 @@ export function playWaveLeafNote(
     amp.gain.linearRampToValueAtTime(s, t0 + Math.min(d, 0.04));
     amp.gain.setTargetAtTime(0.0001, t0 + sustainSec, r);
   } else {
-    const a = preset.ampAttack;
+    const a = opts.ampAttackSec ?? preset.ampAttack;
     amp.gain.setValueAtTime(0, t0);
     amp.gain.linearRampToValueAtTime(peak, t0 + a);
     amp.gain.linearRampToValueAtTime(s, t0 + a + d);
@@ -245,7 +250,7 @@ export function playWaveLeafNote(
 
   lastMidi = m;
 
-  registerWaveLeafMonoStop(ctx, MONO_GROUP, (stopAt) => {
+  registerWaveLeafMonoStop(ctx, monoGroup, (stopAt) => {
     const t = Math.max(stopAt, ctx.currentTime);
     try {
       amp.gain.cancelScheduledValues(t);

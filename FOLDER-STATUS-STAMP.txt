@@ -1,29 +1,16 @@
-Da Music Box v4 — folder status stamp
-=====================================
+Da Music Box v4 — SOURCE (E: drive primary)
+Updated: 2026-06-14
+Path: E:\Da-Music-Box-v4-SOURCE-COMPLETE
 
-Stamped (local): 2026-05-26 01:30:59
-Machine: DELL / Windows
+Latest backup zip: E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-14_1715.zip
+Stamp: SAVE-STAMP-2026-06-14_1715.txt
 
-Project folder:
-  c:\Users\DELL\Desktop\DaMusicBox_\Da-Music-Box-v4-SOURCE-COMPLETE
+Quick backup: double-click SAVE-SOURCE-NOW.bat or RUN-BACKUP-NOW.bat
 
-Scan result at stamp time:
-  NOT EMPTY — 35 top-level items found
-  app\screens\GrooveLabScreen.tsx — present
-  package.json — present
-  243 files under app\
+COMPLETE CODES backup: E:\Da-Music-Box-v4-SOURCE-COMPLETE-CODES_2026-06-10_1257.zip (4073 files, ~852 MB, includes .git)
+Working complete codes: E:\DaMusicBox-WORKING-source-COMPLETE-CODES.zip
 
-WRONG FOLDER (actually empty on disk):
-  C:\Users\DELL\Desktop\dmb extra files\Da Music Box
-  Do not open that path in Cursor — use this folder instead.
+Standard backup: E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-10_1246.zip (2244 files, ~408 MB)
+Working standard: E:\DaMusicBox-WORKING-source.zip
 
-If File Explorer shows this folder as empty:
-  1. Confirm the path above (not a different or new empty folder).
-  2. View → Show → Hidden items ( .git and .cursor are hidden ).
-  3. Restore from backup zip on Desktop\DaMusicBox_\ (see BACKUP-STAMP below).
-
-Latest full source backup zips (parent folder):
-  Da-Music-Box-v4-SOURCE-COMPLETE_2026-05-24_night.zip
-  Da-Music-Box-v4-SOURCE-COMPLETE_2026-05-26_0120.zip
-
-After unzip: run  bun install   then  bun run dev
+Open workspace: Da-Music-Box-v4.code-workspace

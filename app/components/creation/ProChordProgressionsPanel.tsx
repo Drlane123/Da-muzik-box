@@ -13,6 +13,7 @@ import {
   CHORD_VOICING_OPTIONS,
   type ChordVoicingSize,
 } from '@/app/lib/creationStation/chordVoicing';
+import { ChordBuilderHelpTip } from '@/app/components/creation/ChordBuilderHelpHub';
 
 export interface ProChordProgressionsPanelProps {
   keyRoot: number;
@@ -118,6 +119,9 @@ export function ProChordProgressionsPanel({
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: embedded ? 0 : 6 }}>
         <span
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
             fontSize: 10,
             fontWeight: 900,
             color: t.accent,
@@ -126,6 +130,9 @@ export function ProChordProgressionsPanel({
           }}
         >
           {variant === 'builder' ? '✨ PROFESSIONAL CHORD PROGRESSIONS' : 'PROFESSIONAL CHORD PROGRESSIONS'}
+          {variant === 'builder' ? (
+            <ChordBuilderHelpTip tab="progressions" title="Hit-song progression library" />
+          ) : null}
         </span>
         <span style={{ fontSize: 8, fontWeight: 600, color: t.muted }}>
           tap to load · edit on the roll

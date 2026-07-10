@@ -24,6 +24,7 @@ import {
 } from '@/app/lib/creationStation/lab808PadColors';
 import { lab808BtnGhost, lab808Select } from '@/app/lib/creationStation/lab808UiTheme';
 import { Lab808MuteSoloButtons } from '@/app/components/creation/Lab808MuteSoloButtons';
+import { Lab808HelpTip } from '@/app/components/creation/Lab808HelpHub';
 
 const PAD_CELL_MIN_H = 56;
 const PAD_GRID_GAP = 6;
@@ -159,6 +160,9 @@ export function Lab808PadBank({
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
         <span
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 5,
             fontSize: 11,
             fontWeight: 900,
             letterSpacing: '0.14em',
@@ -167,6 +171,7 @@ export function Lab808PadBank({
           }}
         >
           16 PADS
+          <Lab808HelpTip tab="pads" title="Drum kit pads help" />
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: '1 1 auto', minWidth: 0 }}>
           <button type="button" aria-label="Previous kit" onClick={() => goKitDelta(-1)} style={lab808BtnGhost}>

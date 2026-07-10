@@ -109,6 +109,13 @@ import {
   isGrooveLabTransportRunning,
   shouldHoldSharedAudioGraphForCreationModules,
 } from '@/app/lib/creationStation/creationTransportSync';
+import { isPianoRollTransportRunning } from '@/app/lib/pianoRoll/pianoRollTransportSync';
+import { dispatchMidiBytes, setMidiInputFallback } from '@/app/lib/midi/midiInputBus';
+import {
+  isInputPortReceiveEnabled,
+  listSendEnabledOutputIds,
+} from '@/app/lib/midi/midiDevices';
+import { buildAudioContextOptions } from '@/app/lib/audioDeviceInfo';
 
 export const PPQ = 960 as const;
 
@@ -962,6 +969,8 @@ export function MasterClockProvider({
    */
   const originBeatFloatRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioSampleRateRef = useRef(settings.audioSampleRate);
+  const audioLatencyHintRef = useRef(settings.audioLatencyHint);
   const sampleRate = audioCtxRef.current?.sampleRate ?? DEFAULT_SR;
   const masterGainRef = useRef<GainNode | null>(null);
   /** Metronome + count-in clicks → master. Replaced on each MET start so old scheduled oscillators stay disconnected from master. */
@@ -975,6 +984,7 @@ export function MasterClockProvider({
   // Sentinel -1 means "not started". 0 is a valid AudioContext start time.
   const playStartTimeRef = useRef(-1);
   const midiOutputRef = useRef<MIDIOutput | null>(null);
+  const midiSendOutputsRef = useRef<MIDIOutput[]>([]);
   const midiAccessRef = useRef<MIDIAccess | null>(null);
   /** Pitched notes from MIDI input: key "ch:note" → release/stop function */
   const midiInputVoicesRef = useRef(new Map<string, () => void>());
@@ -1052,7 +1062,22 @@ export function MasterClockProvider({
     masterOutputLinearRef.current = masterOutputLinear;
     const g = masterGainRef.current;
     if (g && g.context.state !== 'closed') {
-      g.gain.value = Math.max(0, Math.min(1, masterOutputLinear));
+      const target = Math.max(0, Math.min(1, masterOutputLinear));
+      const now = g.context.currentTime;
+      if (
+        isCreationBeatLabTransportRunning() ||
+        isGrooveLabTransportRunning() ||
+        isPianoRollTransportRunning()
+      ) {
+        try {
+          g.gain.cancelScheduledValues(now);
+          g.gain.setValueAtTime(target, now);
+        } catch {
+          g.gain.value = target;
+        }
+      } else {
+        g.gain.value = target;
+      }
     }
   }, [masterOutputLinear]);
 
@@ -1060,12 +1085,21 @@ export function MasterClockProvider({
     setMasterOutputLinearState(Math.max(0, Math.min(1, v)));
   }, []);
 
+  useEffect(() => {
+    audioSampleRateRef.current = settings.audioSampleRate;
+    audioLatencyHintRef.current = settings.audioLatencyHint;
+  }, [settings.audioSampleRate, settings.audioLatencyHint]);
+
   /** Replace closed/suspended-stale refs — a closed AudioContext is truthy but unusable (silent engine). */
   const getOrCreateAudioContext = useCallback((): AudioContext => {
     let ctx = audioCtxRef.current;
     if (!ctx || ctx.state === 'closed') {
-      ctx = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
+      const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+      const opts = buildAudioContextOptions(
+        audioSampleRateRef.current,
+        audioLatencyHintRef.current,
+      );
+      ctx = new Ctor(opts);
       audioCtxRef.current = ctx;
       masterGainRef.current = null;
       metronomeBusGainRef.current = null;
@@ -1135,7 +1169,7 @@ export function MasterClockProvider({
    */
   const attachNewMetronomeBus = useCallback(() => {
     /** Beat Lab schedules buffer clicks on the metro bus — swapping it mid-take mutes them until refill. */
-    if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) return;
+    if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning() || isPianoRollTransportRunning()) return;
     const ctx = getOrCreateAudioContext();
     if (ctx.state === 'closed') return;
     const master = masterGainRef.current;
@@ -1198,7 +1232,8 @@ export function MasterClockProvider({
               if (
                 metronomeRef.current &&
                 !isCreationBeatLabTransportRunning() &&
-                !isGrooveLabTransportRunning()
+                !isGrooveLabTransportRunning() &&
+                !isPianoRollTransportRunning()
               ) {
                 stopMetronomeLoop();
                 startMetronomeLoop(bpmRef.current);
@@ -1243,7 +1278,8 @@ export function MasterClockProvider({
         studioPerfPlaybackActive &&
         isRunningRef.current &&
         !isCreationBeatLabTransportRunning() &&
-        !isGrooveLabTransportRunning()
+        !isGrooveLabTransportRunning() &&
+        !isPianoRollTransportRunning()
       ) {
         return;
       }
@@ -1288,7 +1324,7 @@ export function MasterClockProvider({
     ): boolean => {
       try {
         /** Beat Lab / Groove Lab own buffer-click lookahead — never stack oscillator clicks. */
-        if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) {
+        if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning() || isPianoRollTransportRunning()) {
           return false;
         }
         const ctx = getOrCreateAudioContext();
@@ -1334,8 +1370,8 @@ export function MasterClockProvider({
         metronomeLastClickTimeRef.current = tSafe;
         // Soft attack + decay — no DynamicsCompressor (avoids LF pumping / noise floor).
         gain.gain.setValueAtTime(0.0001, tSafe);
-        gain.gain.exponentialRampToValueAtTime(0.38, tSafe + 0.004);
-        gain.gain.linearRampToValueAtTime(0.32, tSafe + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.19, tSafe + 0.004);
+        gain.gain.linearRampToValueAtTime(0.16, tSafe + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.0001, tSafe + clickDuration);
         osc.start(tSafe);
         osc.stop(tSafe + clickDuration);
@@ -1361,7 +1397,7 @@ export function MasterClockProvider({
   const playMetronomeClick = useCallback(
     (isDownbeat: boolean) => {
       if (!metronomeRef.current) return;
-      if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) return;
+      if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning() || isPianoRollTransportRunning()) return;
       const ctx = getOrCreateAudioContext();
       playMetronomeClickAt(ctx.currentTime, isDownbeat);
     },
@@ -1678,42 +1714,55 @@ export function MasterClockProvider({
   );
   const getBeatGlobalFromAudioNowRef = useRef(getBeatGlobalFromAudioNow);
   getBeatGlobalFromAudioNowRef.current = getBeatGlobalFromAudioNow;
-  const sendMidiRealtime = useCallback((status: number, audioTime?: number) => {
-    const out = midiOutputRef.current;
-    if (!out) return;
-    try {
-      if (audioTime === undefined) {
-        out.send([status]);
-        return;
+  const sendMidiBytesToEnabledOutputs = useCallback(
+    (bytes: number[], audioTime?: number) => {
+      const outs = midiSendOutputsRef.current;
+      if (outs.length === 0) return;
+      let when: number | undefined;
+      if (audioTime !== undefined) {
+        const ctx = audioCtxRef.current;
+        if (ctx && ctx.state !== 'closed') {
+          when = Math.max(
+            performance.now(),
+            performance.now() + (audioTime - ctx.currentTime) * 1000,
+          );
+        }
       }
-      const ctx = audioCtxRef.current;
-      if (!ctx || ctx.state === 'closed') {
-        out.send([status]);
-        return;
+      for (const out of outs) {
+        try {
+          if (when === undefined) out.send(bytes);
+          else out.send(bytes, when);
+        } catch (e) {
+          console.debug('MIDI send error:', e);
+        }
       }
-      const perfWhen = performance.now() + (audioTime - ctx.currentTime) * 1000;
-      out.send([status], Math.max(performance.now(), perfWhen));
-    } catch (e) {
-      console.debug('MIDI realtime send error:', e);
-    }
-  }, []);
+    },
+    [],
+  );
+
+  const sendMidiRealtime = useCallback(
+    (status: number, audioTime?: number) => {
+      sendMidiBytesToEnabledOutputs([status], audioTime);
+    },
+    [sendMidiBytesToEnabledOutputs],
+  );
   sendMidiRealtimeRef.current = sendMidiRealtime;
   const sendMidiClock = useCallback(() => {
     if (!midiClockEnabledRef.current) return;
     sendMidiRealtimeRef.current(0xf8);
   }, []);
 
-  const sendMidiSongPositionPointer = useCallback((tick: number) => {
-    const out = midiOutputRef.current;
-    if (!out) return;
-    try {
-      // MIDI SPP units are 16th notes (6 MIDI clocks each).
+  const sendMidiSongPositionPointer = useCallback(
+    (tick: number) => {
       const sixteenth = Math.max(0, Math.floor(tick / (PPQ / 4)));
-      out.send([0xf2, sixteenth & 0x7f, (sixteenth >> 7) & 0x7f]);
-    } catch (e) {
-      console.debug('MIDI SPP send error:', e);
-    }
-  }, []);
+      sendMidiBytesToEnabledOutputs([
+        0xf2,
+        sixteenth & 0x7f,
+        (sixteenth >> 7) & 0x7f,
+      ]);
+    },
+    [sendMidiBytesToEnabledOutputs],
+  );
 
   /**
    * Push transport phase refs using the same monotonic tick rule as the RAF loop.
@@ -1764,7 +1813,8 @@ export function MasterClockProvider({
         !metronomeRef.current ||
         !metronomeActiveRef.current ||
         isCreationBeatLabTransportRunning() ||
-        isGrooveLabTransportRunning()
+        isGrooveLabTransportRunning() ||
+        isPianoRollTransportRunning()
       ) {
         return;
       }
@@ -1872,7 +1922,7 @@ export function MasterClockProvider({
     ) => {
       if (!metronomeRef.current) return;
       /** Beat Lab / Groove Lab own local lookahead MET — never stack master worker clicks. */
-      if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning()) return;
+      if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning() || isPianoRollTransportRunning()) return;
       /* Second start without an anchor: no-op only if worker is alive. Otherwise we must rebuild — e.g.
        * start threw after setting `active`, or the worker died, which used to strand MET with no pulses. */
       if (
@@ -1942,10 +1992,11 @@ export function MasterClockProvider({
           ) {
             return;
           }
-          /** Beat Lab / Groove Lab own buffer-click lookahead — worker must not stack oscillator clicks. */
+          /** Beat Lab / Groove Lab / Piano Roll own buffer-click lookahead — worker must not stack oscillator clicks. */
           if (
             isCreationBeatLabTransportRunning() ||
-            isGrooveLabTransportRunning()
+            isGrooveLabTransportRunning() ||
+            isPianoRollTransportRunning()
           ) {
             return;
           }
@@ -3210,7 +3261,9 @@ export function MasterClockProvider({
   const playDrumSound = useCallback((chId: number, velocity: number, baseTimeSec?: number): (() => void) | void => {
     try {
       const ctx = getOrCreateAudioContext();
+      const isLive = baseTimeSec === undefined;
       const scheduledAhead =
+        !isLive &&
         baseTimeSec != null &&
         Number.isFinite(baseTimeSec) &&
         baseTimeSec > ctx.currentTime + 0.002;
@@ -3228,8 +3281,8 @@ export function MasterClockProvider({
           return;
         }
       }
-      const tRaw = baseTimeSec ?? ctx.currentTime + 0.001;
-      const tStart = Math.max(tRaw, ctx.currentTime + 0.001);
+      const now = ctx.currentTime;
+      const tStart = isLive ? now : Math.max(baseTimeSec ?? now + 0.001, now + 0.001);
       const vol = (velocity / 127) * 0.4;
       const rawPan =
         ((window as any).__daMusicChannelPans?.[chId] ?? 0) / 100;
@@ -3380,7 +3433,8 @@ export function MasterClockProvider({
         studioPerfPlaybackActive &&
         isRunningRef.current &&
         !isCreationBeatLabTransportRunning() &&
-        !isGrooveLabTransportRunning()
+        !isGrooveLabTransportRunning() &&
+        !isPianoRollTransportRunning()
       ) {
         return;
       }
@@ -3443,8 +3497,12 @@ export function MasterClockProvider({
       const panSigned = Math.max(-1, Math.min(1, panRaw / 100));
       const monoPeak = Math.min(1, (safeVelocity / 127) * (vol / 100));
       const ctx = getOrCreateAudioContext();
-      const tPulse =
-        when !== undefined && when > ctx.currentTime + 0.001 ? when : ctx.currentTime + 0.001;
+      const isLive = when === undefined;
+      const tPulse = isLive
+        ? ctx.currentTime
+        : when !== undefined && when > ctx.currentTime + 0.001
+          ? when
+          : ctx.currentTime + 0.001;
       scheduleBeatLabMeterPulseAt(ctx, chId, monoPeak, panSigned, tPulse);
       const pulse = () => publishChannelMeterPulse(chId, monoPeak, panSigned);
       if (when !== undefined && when > ctx.currentTime + 0.02) {
@@ -3519,15 +3577,43 @@ export function MasterClockProvider({
 
   // Web MIDI: outputs (clock) + inputs (hardware / interface keyboards)
   useEffect(() => {
+    setMidiInputFallback({
+      onNoteOn: (e) => {
+        if (e.channel === 9) {
+          const drumCh =
+            MIDI_DRUM_NOTE_TO_CHANNEL[e.note] ?? (e.note % 7) + 1;
+          triggerChannelRef.current(drumCh, e.velocity);
+        } else {
+          startMidiInputNote(e.channel, e.note, e.velocity);
+        }
+      },
+      onNoteOff: (e) => {
+        if (e.channel !== 9) stopMidiInputNote(`${e.channel}:${e.note}`);
+      },
+    });
+
     if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess) {
-      return;
+      return () => {
+        setMidiInputFallback(null);
+      };
     }
 
     let cancelled = false;
-    const refreshFirstOutput = (access: MIDIAccess) => {
-      const outs = access.outputs.values();
-      const first = outs.next();
-      midiOutputRef.current = first.done ? null : first.value;
+    const refreshSendOutputs = (access: MIDIAccess) => {
+      const enabledIds = listSendEnabledOutputIds(access, settings.midiPortRouting);
+      const outs: MIDIOutput[] = [];
+      for (const id of enabledIds) {
+        const out = access.outputs.get(id);
+        if (out) outs.push(out);
+      }
+      if (outs.length === 0) {
+        const first = access.outputs.values().next();
+        if (!first.done && settings.midiPortRouting && Object.keys(settings.midiPortRouting).length === 0) {
+          outs.push(first.value);
+        }
+      }
+      midiSendOutputsRef.current = outs;
+      midiOutputRef.current = outs[0] ?? null;
     };
 
     const wireInputs = (access: MIDIAccess) => {
@@ -3536,37 +3622,23 @@ export function MasterClockProvider({
       }
       if (!settings.midiInputEnabled) return;
 
-      const wantId = settings.midiInputDeviceId;
       const handler = (ev: MIDIMessageEvent) => {
         const data = ev.data;
         if (!data || data.length < 2) return;
-        const status = data[0]!;
-        const cmd = status & 0xf0;
-        const ch = status & 0x0f;
-        const note = data[1] ?? 0;
-        const velRaw = data.length > 2 ? data[2]! : 127;
-        const voiceKey = `${ch}:${note}`;
-
-        if (cmd === 0x90) {
-          const vel = velRaw;
-          if (vel === 0) {
-            if (ch !== 9) stopMidiInputNote(voiceKey);
-            return;
-          }
-          if (ch === 9) {
-            const drumCh =
-              MIDI_DRUM_NOTE_TO_CHANNEL[note] ?? (note % 7) + 1;
-            triggerChannelRef.current(drumCh, vel);
-          } else {
-            startMidiInputNote(ch, note, vel);
-          }
-        } else if (cmd === 0x80) {
-          if (ch !== 9) stopMidiInputNote(voiceKey);
-        }
+        dispatchMidiBytes(data);
       };
 
       for (const input of access.inputs.values()) {
-        if (wantId !== 'all' && input.id !== wantId) continue;
+        if (
+          !isInputPortReceiveEnabled(
+            input.id,
+            settings.midiPortRouting,
+            settings.midiInputEnabled,
+            settings.midiInputDeviceId,
+          )
+        ) {
+          continue;
+        }
         input.onmidimessage = handler;
       }
     };
@@ -3576,9 +3648,9 @@ export function MasterClockProvider({
       .then((access) => {
         if (cancelled) return;
         midiAccessRef.current = access;
-        refreshFirstOutput(access);
+        refreshSendOutputs(access);
         access.onstatechange = () => {
-          refreshFirstOutput(access);
+          refreshSendOutputs(access);
           wireInputs(access);
         };
         wireInputs(access);
@@ -3587,6 +3659,7 @@ export function MasterClockProvider({
 
     return () => {
       cancelled = true;
+      setMidiInputFallback(null);
       const access = midiAccessRef.current;
       if (access) {
         for (const input of access.inputs.values()) {
@@ -3598,6 +3671,7 @@ export function MasterClockProvider({
   }, [
     settings.midiInputEnabled,
     settings.midiInputDeviceId,
+    settings.midiPortRouting,
     startMidiInputNote,
     stopMidiInputNote,
   ]);

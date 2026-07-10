@@ -37,7 +37,7 @@ import type { GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/groove
 import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
 import { GROOVE_LAB_BASS_REFERENCE_MIDI, grooveLabClampGuitarMidi } from '@/app/lib/creationStation/grooveLabPitch';
 import {
-  grooveLabChordAttackColumns,
+  grooveLabChordBarFirstAttackColumns,
   type GrooveLabQuantize,
   type GrooveRollHit,
 } from '@/app/lib/creationStation/grooveLabRoll';
@@ -229,7 +229,7 @@ export function GrooveLabGuitarPackPanel({
   }, [open, onStopAudition, stopGuitarLoop]);
 
   const previewRootMidi = useMemo(() => {
-    const cols = grooveLabChordAttackColumns(chordHits, {
+    const cols = grooveLabChordBarFirstAttackColumns(chordHits, {
       keyRoot,
       mode,
       referenceMidi: bassRootMidi,

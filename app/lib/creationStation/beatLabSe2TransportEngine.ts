@@ -11,6 +11,7 @@ import {
   CREATION_MAX_SCHEDULE_PER_CALL,
   CREATION_METRO_NODE_EPS_SEC,
   CREATION_SCHEDULE_AHEAD_SEC,
+  reanchorNextStepWhileRunning,
   SE2_AUDIO_START_FLOOR_SEC,
 } from '@/app/lib/creationStation/creationTransportSystem';
 import { beatAtSessionTime } from '@/app/lib/creationStation/creationTransportSync';
@@ -18,6 +19,8 @@ import {
   beatFromCreationPlaylineWapiAnim,
   type CreationPlaylineWapiSegState,
 } from '@/app/lib/creationStation/creationPlaylineWapi';
+import type { BeatLabSynth2PlaylineWapiSegState } from '@/app/lib/creationStation/beatLabSynth2PlaylineWapi';
+import { beatLabSynth2PlaylineWapiLoopWrapped } from '@/app/lib/creationStation/beatLabSynth2PlaylineWapi';
 import { smoothSchedNow, updateSchedAnchor } from '@/app/lib/studio/se2TransportClock';
 
 export {
@@ -37,6 +40,26 @@ export const BEAT_LAB_LOOKAHEAD_INTERVAL_MS = 25;
 
 /** Ignore loop-wrap / splice while transport is settling right after Play (beat-lab-se2-transport-lock). */
 export const BEAT_LAB_LOOP_WRAP_IGNORE_MS = 150;
+
+/**
+ * After a compositor cycle bump, WAAPI phase is often a few ms past the downbeat.
+ * Without snapping, `ceil(bVis)` skips quarter 0 and the loop downbeat goes silent.
+ */
+export const BEAT_LAB_LOOP_SPLICE_DOWNBEAT_SNAP_BEATS = 0.125;
+
+/** Scheduling beat at loop splice — snap to loop top when compositor phase is still near downbeat. */
+export function beatLabLoopSpliceSchedBeat(
+  bVis: number,
+  loopStartBeat: number,
+  loopSpanBeats: number,
+): number {
+  const span = Math.max(1e-9, loopSpanBeats);
+  const phase = bVis - loopStartBeat;
+  if (phase >= 0 && phase < BEAT_LAB_LOOP_SPLICE_DOWNBEAT_SNAP_BEATS) {
+    return loopStartBeat;
+  }
+  return bVis;
+}
 
 /** Skip post-`ensureCtx` WAAPI re-seek when compositor is already within this many beats of anchor. */
 export const BEAT_LAB_COMPOSITOR_RESEEK_EPS_BEATS = 0.04;
@@ -100,12 +123,13 @@ export function beatLabAnimationTickBeats(input: BeatLabAnimationTickInputs): {
     const seg = input.seg;
     const loopStart = input.loopStartBeat;
     const loopEnd = input.loopEndBeat;
+    const leEffective = Math.min(loopEnd, tb);
     const seamless =
       seg.seamlessLoop &&
       input.loopOn &&
       seg.active &&
-      loopEnd > loopStart &&
-      loopEnd === seg.loopEndBeat &&
+      leEffective > loopStart &&
+      leEffective === seg.loopEndBeat &&
       loopStart === seg.loopStartBeat;
 
     if (seamless) {
@@ -122,6 +146,7 @@ export function beatLabAnimationTickBeats(input: BeatLabAnimationTickInputs): {
         Math.max(seg.loopStartBeat, seg.loopStartBeat + (tClamped / d) * span),
       );
     } else {
+      /** Open pattern — infinite WAAPI phase maps to 0…totalBeats (matches column wrap in scheduler). */
       const d = Math.max(1e-9, seg.durMs);
       const phaseMs = ((animMs % d) + d) % d;
       b = Math.max(0, Math.min(tb, (phaseMs / d) * tb));
@@ -142,6 +167,17 @@ export function beatLabAnimationTickBeats(input: BeatLabAnimationTickInputs): {
         input.bpm,
         tb,
       );
+      if (seamless) {
+        const span = leEffective - loopStart;
+        if (span > 1e-9) {
+          bDisplay =
+            loopStart +
+            (((bDisplay - loopStart) % span) + span) % span;
+        }
+      } else if (!input.loopOn) {
+        /** Loop brace off — pattern repeats in the scheduler; wrap HUD to pattern span (no audio splice). */
+        bDisplay = ((bDisplay % tb) + tb) % tb;
+      }
     } else {
       bDisplay = b;
     }
@@ -201,23 +237,6 @@ export function beatLabShouldIgnoreLoopWrap(playStartPerfMs: number): boolean {
   return beatLabTransportPlayStartAgeMs(playStartPerfMs) < BEAT_LAB_LOOP_WRAP_IGNORE_MS;
 }
 
-/** Wall time the compositor ran before `ensureCtx()` finished (Play starts WAAPI first). */
-export function beatLabCompositorLeadSec(playStartPerfMs: number, maxSec = 0.2): number {
-  if (playStartPerfMs <= 0) return 0;
-  return Math.min(maxSec, Math.max(0, (performance.now() - playStartPerfMs) / 1000));
-}
-
-/**
- * Backdate `sessionStart` so the audio clock matches the compositor position when the context wakes up.
- * First click still schedules at `max(sessionStart, ctSnap + floor)` — cannot play in the past.
- */
-export function beatLabSessionStartAfterCompositorFirst(
-  tNow: number,
-  compositorLeadSec: number,
-): number {
-  return tNow + SE2_AUDIO_START_FLOOR_SEC - compositorLeadSec;
-}
-
 /** Skip-back / return-to-start — loop brace active → loop start beat, else 0. */
 export function beatLabRewindTargetBeat(loopOn: boolean, loopStartBeat: number): number {
   return loopOn ? Math.max(0, loopStartBeat) : 0;
@@ -230,9 +249,17 @@ export type BeatLabSeamlessLoopSpliceRefs = BeatLabSchedAnchorRefs & {
   cursorBeatRef: MutableRefObject<number>;
   displayBeatRef: MutableRefObject<number>;
   perfSessionStartMsRef: MutableRefObject<number>;
+  /** Keep drum step scheduler aligned after session re-anchor (Beat Lab only). */
+  nextStepBeatRef?: MutableRefObject<number>;
+  nextStepTimeRef?: MutableRefObject<number>;
+  lastScheduledQuarterRef?: MutableRefObject<number>;
 };
 
-/** SE2 seamless-loop cycle bump (~4470–4516). */
+/**
+ * SE2 seamless-loop cycle bump — re-anchor `sessionStart` + solve `originBeat` from compositor
+ * phase (StudioEditor2Screen `animationTick`). Keeping sessionStart continuous drifts the step
+ * grid across repeats and causes an audible skip at the loop downbeat.
+ */
 export function applyBeatLabSeamlessLoopSplice(
   ctx: AudioContext,
   seg: CreationPlaylineWapiSegState,
@@ -244,12 +271,18 @@ export function applyBeatLabSeamlessLoopSplice(
   const d = Math.max(1e-9, seg.durMs);
   const span = seg.loopEndBeat - seg.loopStartBeat;
   const phaseMs = ((animMs % d) + d) % d;
+  /** Match compositor phase — never snap to loop start (that puts audio behind the playhead). */
   const bVis = Math.max(
     seg.loopStartBeat,
     Math.min(seg.loopEndBeat, seg.loopStartBeat + (phaseMs / d) * span),
   );
 
   const tCapture = beatLabAudioNow(ctx);
+  const tSmoothSnap =
+    refs.schedAnchorTimeRef.current > 0
+      ? smoothSchedNow(refs.schedAnchorTimeRef, refs.schedAnchorPerfRef, ctx)
+      : null;
+
   refs.sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
   refs.schedAnchorTimeRef.current = tCapture;
   refs.schedAnchorPerfRef.current = performance.now();
@@ -257,31 +290,397 @@ export function applyBeatLabSeamlessLoopSplice(
     performance.now() + SE2_AUDIO_START_FLOOR_SEC * 1000;
 
   const rate = Math.max(1, bpm) / 60;
-  let bDisplay = bVis;
-  if (refs.schedAnchorTimeRef.current > 0) {
-    const tSmoothSnap = smoothSchedNow(
-      refs.schedAnchorTimeRef,
-      refs.schedAnchorPerfRef,
-      ctx,
-    );
-    refs.originBeatRef.current =
-      bVis - (tSmoothSnap - refs.sessionStartRef.current) * rate;
-    bDisplay = beatAtSessionTime(
-      tSmoothSnap,
-      refs.sessionStartRef.current,
-      refs.originBeatRef.current,
-      bpm,
-    );
+  const sessionStart = refs.sessionStartRef.current;
+  if (tSmoothSnap !== null) {
+    refs.originBeatRef.current = bVis - (tSmoothSnap - sessionStart) * rate;
   } else {
     refs.originBeatRef.current = bVis;
   }
 
   const tb = Math.max(1e-9, totalBeats);
+  const bSched = beatLabLoopSpliceSchedBeat(bVis, seg.loopStartBeat, span);
+  const kNext = Math.max(0, Math.floor(bSched + 1e-8));
   refs.nextMetroKRef.current = beatLabSnapBeatToQuarterGrid(
-    Math.min(tb, Math.max(0, bVis)),
+    Math.min(tb, Math.max(0, bSched)),
     tb,
   );
   refs.cursorBeatRef.current = bVis;
-  refs.displayBeatRef.current = bDisplay;
-  return bDisplay;
+  refs.displayBeatRef.current = bVis;
+
+  const spb = 60 / Math.max(1, bpm);
+  if (refs.nextStepBeatRef && refs.nextStepTimeRef) {
+    refs.nextStepBeatRef.current = kNext;
+    refs.nextStepTimeRef.current =
+      sessionStart + (kNext - refs.originBeatRef.current) * spb;
+    if (refs.lastScheduledQuarterRef) {
+      refs.lastScheduledQuarterRef.current = kNext - 1;
+    }
+  }
+
+  if (tSmoothSnap !== null) {
+    return Math.max(
+      0,
+      Math.min(
+        tb,
+        refs.originBeatRef.current +
+          (tSmoothSnap - sessionStart) * rate,
+      ),
+    );
+  }
+  return bVis;
+}
+
+/** SE2 `animationTick` loop-wrap block (~4452–4584) — seamless cycle bump + discrete wrap. */
+export type BeatLabAnimationTickLoopWrapInput = {
+  ctx: AudioContext | null;
+  animMs: number;
+  wapiPlayState: AnimationPlayState | 'idle';
+  b: number;
+  bDisplay: number;
+  totalBeats: number;
+  bpm: number;
+  loopOn: boolean;
+  loopStartBeat: number;
+  loopEndBeat: number;
+  seg: CreationPlaylineWapiSegState;
+  playStartPerfMs: number;
+  refs: BeatLabSeamlessLoopSpliceRefs & {
+    nextStepBeatRef: MutableRefObject<number>;
+    nextStepTimeRef: MutableRefObject<number>;
+  };
+  wapiLoopCycleSeenRef: MutableRefObject<number>;
+  wapiPrevPhaseMsRef: MutableRefObject<number>;
+  onSeamlessSplice: (ctx: AudioContext, tCapture: number) => void;
+  onDiscreteWrap: (ctx: AudioContext, tCapture: number, loopStart: number) => void;
+  relaunchPlaylineAtLoopStart: (loopStart: number) => void;
+};
+
+export function beatLabAnimationTickLoopWrap(
+  input: BeatLabAnimationTickLoopWrapInput,
+): { b: number; bDisplay: number } {
+  let { b, bDisplay } = input;
+  const {
+    animMs,
+    wapiPlayState,
+    totalBeats: tb,
+    loopOn,
+    loopStartBeat: loopStart,
+    loopEndBeat: loopEnd,
+    seg,
+    ctx,
+  } = input;
+
+  const seamless =
+    seg.seamlessLoop &&
+    loopOn &&
+    seg.active &&
+    Math.min(loopEnd, tb) > loopStart &&
+    Math.min(loopEnd, tb) === seg.loopEndBeat &&
+    loopStart === seg.loopStartBeat;
+
+  if (seamless && wapiPlayState === 'running' && loopOn) {
+    const d = Math.max(1e-9, seg.durMs);
+    const span = seg.loopEndBeat - seg.loopStartBeat;
+    const phaseMs = ((animMs % d) + d) % d;
+    const bVis = Math.max(loopStart, Math.min(loopEnd, loopStart + (phaseMs / d) * span));
+    const prevPh = input.wapiPrevPhaseMsRef.current;
+    const cycle = Math.floor(animMs / d);
+    const cycleBumped = cycle > input.wapiLoopCycleSeenRef.current;
+    const phaseRewind = prevPh >= 0 && phaseMs < prevPh - d * 0.25;
+
+    if (
+      (cycleBumped || phaseRewind) &&
+      !beatLabShouldIgnoreLoopWrap(input.playStartPerfMs)
+    ) {
+      const ctxLoop = ctx;
+      if (ctxLoop && ctxLoop.state !== 'closed') {
+        const tCapture = beatLabAudioNow(ctxLoop);
+        bDisplay = applyBeatLabSeamlessLoopSplice(
+          ctxLoop,
+          seg,
+          animMs,
+          input.bpm,
+          tb,
+          input.refs,
+        );
+        input.onSeamlessSplice(ctxLoop, tCapture);
+      }
+
+      if (ctx && ctx.state === 'running' && input.refs.schedAnchorTimeRef.current > 0) {
+        const tSmoothAfter = smoothSchedNow(
+          input.refs.schedAnchorTimeRef,
+          input.refs.schedAnchorPerfRef,
+          ctx,
+        );
+        bDisplay = Math.max(
+          0,
+          Math.min(
+            tb,
+            input.refs.originBeatRef.current +
+              (tSmoothAfter - input.refs.sessionStartRef.current) * (input.bpm / 60),
+          ),
+        );
+        const spanWrap = loopEnd - loopStart;
+        if (spanWrap > 1e-9) {
+          bDisplay =
+            loopStart +
+            (((bDisplay - loopStart) % spanWrap) + spanWrap) % spanWrap;
+        }
+      } else {
+        bDisplay = bVis;
+      }
+
+      if (phaseRewind && !cycleBumped) {
+        input.wapiLoopCycleSeenRef.current = Math.max(
+          input.wapiLoopCycleSeenRef.current,
+          cycle,
+        );
+      } else {
+        input.wapiLoopCycleSeenRef.current = cycle;
+      }
+    }
+    input.wapiPrevPhaseMsRef.current = phaseMs;
+  }
+
+  const loopBeatEps = 1e-6;
+  const loopEndMsEps = 0.65;
+  const segEnds =
+    seg.active &&
+    loopOn &&
+    loopEnd === seg.loopEndBeat &&
+    animMs >= Math.max(0, seg.durMs - loopEndMsEps);
+  const audioPastLoopEnd = bDisplay >= loopEnd - loopBeatEps;
+  const compositorPastLoopEnd = b >= loopEnd - loopBeatEps || segEnds;
+  const segmentTimedToLoopBar =
+    seg.active && loopOn && loopEnd === seg.loopEndBeat && loopEnd > loopStart;
+  const shouldWrapLoopNow =
+    !seamless &&
+    !(loopOn && seg.seamlessLoop && seg.active) &&
+    loopOn &&
+    loopEnd > loopStart &&
+    (segmentTimedToLoopBar
+      ? audioPastLoopEnd && compositorPastLoopEnd
+      : audioPastLoopEnd || compositorPastLoopEnd);
+
+  if (shouldWrapLoopNow) {
+    const ls = loopStart;
+    input.refs.originBeatRef.current = ls;
+    input.refs.cursorBeatRef.current = ls;
+    input.refs.displayBeatRef.current = ls;
+    input.refs.nextMetroKRef.current = beatLabSnapBeatToQuarterGrid(ls, tb);
+
+    const ctxLoop = ctx;
+    if (ctxLoop && ctxLoop.state !== 'closed') {
+      const tCapture = beatLabAudioNow(ctxLoop);
+      input.refs.sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+      input.refs.schedAnchorTimeRef.current = tCapture;
+      input.refs.schedAnchorPerfRef.current = performance.now();
+      input.refs.perfSessionStartMsRef.current =
+        performance.now() + SE2_AUDIO_START_FLOOR_SEC * 1000;
+      const spb = 60 / Math.max(1, input.bpm);
+      const kNext = Math.max(0, Math.floor(ls + 1e-8));
+      if (input.refs.nextStepBeatRef && input.refs.nextStepTimeRef) {
+        input.refs.nextStepBeatRef.current = kNext;
+        input.refs.nextStepTimeRef.current =
+          input.refs.sessionStartRef.current + (kNext - ls) * spb;
+        if (input.refs.lastScheduledQuarterRef) {
+          input.refs.lastScheduledQuarterRef.current = kNext - 1;
+        }
+      }
+      input.onDiscreteWrap(ctxLoop, tCapture, ls);
+    }
+
+    input.relaunchPlaylineAtLoopStart(ls);
+    b = ls;
+    bDisplay = ls;
+  }
+
+  return { b, bDisplay };
+}
+
+/** Re-anchor audio session when NEW SYNTH infinite WAAPI repeats (Groove Lab mirror). */
+export function applyBeatLabSynth2PatternLoopSplice(
+  ctx: AudioContext,
+  seg: BeatLabSynth2PlaylineWapiSegState,
+  animMs: number,
+  bpm: number,
+  refs: BeatLabSeamlessLoopSpliceRefs,
+): number {
+  const d = Math.max(1e-9, seg.durMs);
+  const tb = Math.max(1e-9, seg.totalBeats);
+  const phaseMs = ((animMs % d) + d) % d;
+  const bVis = Math.max(0, Math.min(tb, (phaseMs / d) * tb));
+
+  const tCapture = beatLabAudioNow(ctx);
+  const tSmoothSnap =
+    refs.schedAnchorTimeRef.current > 0
+      ? smoothSchedNow(refs.schedAnchorTimeRef, refs.schedAnchorPerfRef, ctx)
+      : null;
+
+  refs.sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+  refs.schedAnchorTimeRef.current = tCapture;
+  refs.schedAnchorPerfRef.current = performance.now();
+  refs.perfSessionStartMsRef.current =
+    performance.now() + SE2_AUDIO_START_FLOOR_SEC * 1000;
+
+  const rate = Math.max(1, bpm) / 60;
+  const sessionStart = refs.sessionStartRef.current;
+  if (tSmoothSnap !== null) {
+    refs.originBeatRef.current = bVis - (tSmoothSnap - sessionStart) * rate;
+  } else {
+    refs.originBeatRef.current = bVis;
+  }
+
+  refs.nextMetroKRef.current = beatLabSnapBeatToQuarterGrid(Math.min(tb, Math.max(0, bVis)), tb);
+  refs.cursorBeatRef.current = bVis;
+  refs.displayBeatRef.current = bVis;
+
+  const spb = 60 / Math.max(1, bpm);
+  if (refs.nextStepBeatRef && refs.nextStepTimeRef) {
+    reanchorNextStepWhileRunning(
+      {
+        nextStepBeatRef: refs.nextStepBeatRef,
+        nextStepTimeRef: refs.nextStepTimeRef,
+        sessionStartRef: refs.sessionStartRef,
+        originBeatRef: refs.originBeatRef,
+        lastScheduledQuarterRef:
+          refs.lastScheduledQuarterRef ?? ({ current: Math.ceil(bVis - 1e-8) - 1 } as MutableRefObject<number>),
+      },
+      sessionStart,
+      bVis,
+      spb,
+    );
+    if (refs.lastScheduledQuarterRef) {
+      refs.lastScheduledQuarterRef.current = Math.ceil(bVis - 1e-8) - 1;
+    }
+  }
+
+  if (tSmoothSnap !== null) {
+    return Math.max(
+      0,
+      Math.min(tb, refs.originBeatRef.current + (tSmoothSnap - sessionStart) * rate),
+    );
+  }
+  return bVis;
+}
+
+export type BeatLabSynth2AnimationTickLoopWrapInput = {
+  ctx: AudioContext | null;
+  anim: Animation | null;
+  seg: BeatLabSynth2PlaylineWapiSegState;
+  b: number;
+  bDisplay: number;
+  totalBeats: number;
+  bpm: number;
+  loopOn: boolean;
+  loopStartBeat: number;
+  loopEndBeat: number;
+  playStartPerfMs: number;
+  refs: BeatLabSeamlessLoopSpliceRefs & {
+    nextStepBeatRef: MutableRefObject<number>;
+    nextStepTimeRef: MutableRefObject<number>;
+    lastScheduledQuarterRef: MutableRefObject<number>;
+  };
+  wapiPrevPhaseMsRef: MutableRefObject<number>;
+  wapiLoopCycleSeenRef: MutableRefObject<number>;
+  onPatternCycle: (ctx: AudioContext, tCapture: number) => void;
+  onDiscreteLoopWrap: (ctx: AudioContext, tCapture: number, loopStart: number) => void;
+  seekPlaylineToBeat: (beat: number) => void;
+};
+
+/** NEW SYNTH loop handling — infinite WAAPI cycle + optional loop-brace discrete wrap. */
+export function beatLabSynth2AnimationTickLoopWrap(
+  input: BeatLabSynth2AnimationTickLoopWrapInput,
+): { b: number; bDisplay: number } {
+  let { b, bDisplay } = input;
+  const {
+    anim,
+    seg,
+    ctx,
+    totalBeats: tb,
+    loopOn,
+    loopStartBeat: loopStart,
+    loopEndBeat: loopEnd,
+    playStartPerfMs,
+  } = input;
+
+  if (
+    anim &&
+    anim.playState === 'running' &&
+    beatLabSynth2PlaylineWapiLoopWrapped(anim, input.wapiPrevPhaseMsRef, input.wapiLoopCycleSeenRef) &&
+    !beatLabShouldIgnoreLoopWrap(playStartPerfMs)
+  ) {
+    const ctxLoop = ctx;
+    if (ctxLoop && ctxLoop.state !== 'closed') {
+      const animMs = Number(anim.currentTime ?? 0);
+      const tCapture = beatLabAudioNow(ctxLoop);
+      bDisplay = applyBeatLabSynth2PatternLoopSplice(
+        ctxLoop,
+        seg,
+        animMs,
+        input.bpm,
+        input.refs,
+      );
+      input.onPatternCycle(ctxLoop, tCapture);
+      if (ctxLoop.state === 'running' && input.refs.schedAnchorTimeRef.current > 0) {
+        const tSmoothAfter = smoothSchedNow(
+          input.refs.schedAnchorTimeRef,
+          input.refs.schedAnchorPerfRef,
+          ctxLoop,
+        );
+        bDisplay = Math.max(
+          0,
+          Math.min(
+            tb,
+            input.refs.originBeatRef.current +
+              (tSmoothAfter - input.refs.sessionStartRef.current) * (input.bpm / 60),
+          ),
+        );
+      }
+      const d = Math.max(1e-9, seg.durMs);
+      const phaseMs = ((animMs % d) + d) % d;
+      b = Math.max(0, Math.min(tb, (phaseMs / d) * tb));
+    }
+  }
+
+  const loopBeatEps = 1e-6;
+  const le = Math.min(loopEnd, tb);
+  /** Partial loop brace only — full-pattern repeat uses WAAPI cycle splice above. */
+  if (loopOn && le > loopStart && le < tb - 1e-6 && bDisplay >= le - loopBeatEps) {
+    const ls = loopStart;
+    input.refs.originBeatRef.current = ls;
+    input.refs.cursorBeatRef.current = ls;
+    input.refs.displayBeatRef.current = ls;
+    input.refs.nextMetroKRef.current = beatLabSnapBeatToQuarterGrid(ls, tb);
+
+    const ctxLoop = ctx;
+    if (ctxLoop && ctxLoop.state !== 'closed') {
+      const tCapture = beatLabAudioNow(ctxLoop);
+      input.refs.sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
+      input.refs.schedAnchorTimeRef.current = tCapture;
+      input.refs.schedAnchorPerfRef.current = performance.now();
+      input.refs.perfSessionStartMsRef.current =
+        performance.now() + SE2_AUDIO_START_FLOOR_SEC * 1000;
+      const spb = 60 / Math.max(1, input.bpm);
+      reanchorNextStepWhileRunning(
+        {
+          nextStepBeatRef: input.refs.nextStepBeatRef,
+          nextStepTimeRef: input.refs.nextStepTimeRef,
+          sessionStartRef: input.refs.sessionStartRef,
+          originBeatRef: input.refs.originBeatRef,
+          lastScheduledQuarterRef: input.refs.lastScheduledQuarterRef,
+        },
+        input.refs.sessionStartRef.current,
+        ls,
+        spb,
+      );
+      input.onDiscreteLoopWrap(ctxLoop, tCapture, ls);
+    }
+
+    input.seekPlaylineToBeat(ls);
+    b = ls;
+    bDisplay = ls;
+  }
+
+  return { b, bDisplay };
 }

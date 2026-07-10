@@ -50,6 +50,8 @@ export interface LabMpcPadPlayOpts {
   drive?: number;
   /** Extra gain 0–1.5 on top of velocity scaling. */
   level?: number;
+  /** Optional output node (SE2 mixer strip). Default: `ctx.destination`. */
+  destination?: AudioNode;
 }
 
 export interface LabMpcPadDef {
@@ -1332,7 +1334,7 @@ export function playLabMpcPad(
   }
   const g = ctx.createGain();
   g.gain.setValueAtTime(peak, t);
-  node.connect(g).connect(ctx.destination);
+  node.connect(g).connect(opts?.destination ?? ctx.destination);
   src.start(t);
   src.stop(t + Math.min(2.5, buf.duration + 0.15));
   return true;

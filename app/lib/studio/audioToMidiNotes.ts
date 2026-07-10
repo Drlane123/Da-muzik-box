@@ -10,12 +10,34 @@ export type AudioToMidiNote = {
   velocity: number;
 };
 
-const F_MIN = 65;
-const F_MAX = 1200;
+/** Seconds-based note — BPM-independent (Neural Hum, offline render). */
+export type TimedMonophonicNote = {
+  pitch: number;
+  startSec: number;
+  durationSec: number;
+  velocity: number;
+};
+
+type PitchRun = {
+  pitch: number;
+  startFrame: number;
+  endFrame: number;
+  velocity: number;
+};
+
+const F_MIN = 50;
+const F_MAX = 1600;
 const ANALYSIS_SR = 22050;
 const FRAME = 2048;
-const HOP = 512;
-const MIN_RMS = 0.012;
+const HOP = 256;
+/** Lower = quieter hums still register. */
+const MIN_RMS = 0.0025;
+/** Lower = accept less-perfect pitch tracking. */
+const MIN_PITCH_CLARITY = 0.14;
+/** Vibrato tolerance inside one sung note (~0.65 semitone). Real pitch jumps still split. */
+const PITCH_RUN_TOLERANCE = 0.65;
+/** Bridge brief dropouts inside one sung note (~80 ms at hop 256). */
+const MAX_VOICED_GAP_FRAMES = 5;
 const MAX_ANALYSIS_SEC = 120;
 
 function spbFromBpm(bpm: number): number {
@@ -63,6 +85,10 @@ function autocorrPitchHz(samples: Float32Array, start: number, sr: number): numb
     win[i] = x * hann(i, FRAME);
   }
 
+  let r0 = 0;
+  for (let i = 0; i < FRAME; i++) r0 += win[i]! * win[i]!;
+  if (r0 < 1e-12) return 0;
+
   let bestLag = -1;
   let best = -Infinity;
   for (let lag = lagMin; lag <= lagMax; lag++) {
@@ -75,13 +101,39 @@ function autocorrPitchHz(samples: Float32Array, start: number, sr: number): numb
   }
   if (bestLag < 2 || best <= 0) return 0;
 
-  let n0 = 0;
-  for (let i = 0; i < FRAME - bestLag; i++) n0 += win[i]! * win[i]!;
-  if (n0 < 1e-12) return 0;
+  let rLag = 0;
+  for (let i = 0; i < FRAME - bestLag; i++) rLag += win[i + bestLag]! * win[i + bestLag]!;
+  const clarity = best / Math.sqrt(r0 * rLag + 1e-12);
+  if (clarity < MIN_PITCH_CLARITY) return 0;
+
+  // Prefer fundamental over octave-doubled partial (common on hums / whistles).
+  const doubleLag = bestLag * 2;
+  if (doubleLag <= lagMax) {
+    let doubleSum = 0;
+    for (let i = 0; i < FRAME - doubleLag; i++) doubleSum += win[i]! * win[i + doubleLag]!;
+    if (doubleSum > best * 0.82) {
+      bestLag = doubleLag;
+      best = doubleSum;
+    }
+  }
+
+  const halfLag = Math.round(bestLag / 2);
+  if (halfLag >= lagMin) {
+    let halfSum = 0;
+    for (let i = 0; i < FRAME - halfLag; i++) halfSum += win[i]! * win[i + halfLag]!;
+    if (halfSum > best * 0.9) bestLag = halfLag;
+  }
 
   const f = sr / bestLag;
   if (!Number.isFinite(f) || f < F_MIN || f > F_MAX) return 0;
   return f;
+}
+
+function adaptiveRmsGate(rmses: readonly number[]): number {
+  const voiced = rmses.filter((r) => r > 0.0005).sort((a, b) => a - b);
+  if (voiced.length === 0) return MIN_RMS;
+  const ref = voiced[Math.floor(voiced.length * 0.15)] ?? MIN_RMS;
+  return Math.max(0.0018, Math.min(MIN_RMS, ref * 0.28));
 }
 
 function hzToMidi(f: number): number {
@@ -94,24 +146,21 @@ function median3(a: number, b: number, c: number): number {
   return c;
 }
 
-/**
- * Extract monophonic MIDI-like notes from decoded audio.
- * @param buffer — decoded `AudioBuffer` (any sample rate)
- * @param bpm — project tempo
- */
-export function audioBufferToMonophonicMidiNotes(buffer: AudioBuffer, bpm: number): AudioToMidiNote[] {
-  const spb = spbFromBpm(bpm);
+/** Shared autocorrelation pass — frame indices for timed or beat-quantized output. */
+function extractMonophonicPitchRuns(buffer: AudioBuffer): PitchRun[] {
   const { data, sr } = monoDecimate(buffer);
   const maxSamples = Math.min(data.length, Math.floor(MAX_ANALYSIS_SEC * sr));
   if (maxSamples < FRAME + HOP) return [];
 
-  const pitches: number[] = [];
   const rmses: number[] = [];
   for (let start = 0; start + FRAME <= maxSamples; start += HOP) {
-    const slice = data.subarray(start, start + FRAME);
-    const r = frameRms(slice);
-    rmses.push(r);
-    if (r < MIN_RMS) {
+    rmses.push(frameRms(data.subarray(start, start + FRAME)));
+  }
+
+  const gate = adaptiveRmsGate(rmses);
+  const pitches: number[] = [];
+  for (let i = 0, start = 0; start + FRAME <= maxSamples; start += HOP, i++) {
+    if ((rmses[i] ?? 0) < gate) {
       pitches.push(NaN);
       continue;
     }
@@ -128,62 +177,188 @@ export function audioBufferToMonophonicMidiNotes(buffer: AudioBuffer, bpm: numbe
       smooth.push(NaN);
       continue;
     }
-    if (Number.isFinite(a) && Number.isFinite(c)) smooth.push(median3(a, b, c));
-    else smooth.push(b);
+    // Only smooth steady pitch — preserve fast jumps between notes.
+    if (
+      Number.isFinite(a) &&
+      Number.isFinite(c) &&
+      Math.abs(a - c) < 1.1 &&
+      Math.abs(b - a) < 0.75 &&
+      Math.abs(c - b) < 0.75
+    ) {
+      smooth.push(median3(a, b, c));
+    } else {
+      smooth.push(b);
+    }
   }
 
-  const notes: AudioToMidiNote[] = [];
+  const runs: PitchRun[] = [];
   let runStartFrame = -1;
   let runPitch = 0;
   let runVelSum = 0;
   let runVelN = 0;
+  let gapFrames = 0;
 
   const flushRun = (endFrame: number) => {
     if (runStartFrame < 0) return;
-    const startSec = (runStartFrame * HOP) / sr;
-    const endSec = (endFrame * HOP) / sr;
-    const durSec = Math.max(spb / 64, endSec - startSec);
-    const startBeat = startSec / spb;
-    const durationBeats = durSec / spb;
     const vel = Math.round(
       Math.max(1, Math.min(127, runVelN > 0 ? runVelSum / runVelN : 72)),
     );
     const pitch = Math.max(0, Math.min(127, Math.round(runPitch)));
-    if (durationBeats >= 1 / 32) notes.push({ pitch, startBeat, durationBeats, velocity: vel });
+    const frameDur = endFrame - runStartFrame;
+    if (frameDur >= 1) {
+      runs.push({ pitch, startFrame: runStartFrame, endFrame, velocity: vel });
+    }
     runStartFrame = -1;
+    gapFrames = 0;
   };
 
   for (let i = 0; i < smooth.length; i++) {
     const m = smooth[i];
     const rms = rmses[i] ?? 0;
-    const velCand = Math.round(38 + Math.min(1, rms * 10) * 85);
+    const velCand = Math.round(34 + Math.min(1, rms * 14) * 88);
 
     if (!Number.isFinite(m)) {
-      flushRun(i);
+      if (runStartFrame >= 0) {
+        gapFrames += 1;
+        if (gapFrames <= MAX_VOICED_GAP_FRAMES) {
+          runVelSum += velCand * 0.45;
+          runVelN += 0.45;
+          continue;
+        }
+        flushRun(i - gapFrames);
+      }
       continue;
     }
-    const midi = Math.round(m);
+
+    gapFrames = 0;
     if (runStartFrame < 0) {
       runStartFrame = i;
-      runPitch = midi;
+      runPitch = m;
       runVelSum = velCand;
       runVelN = 1;
       continue;
     }
-    if (Math.abs(midi - runPitch) <= 1) {
-      runPitch = runPitch * 0.65 + midi * 0.35;
+    if (Math.abs(m - runPitch) <= PITCH_RUN_TOLERANCE) {
+      runPitch = runPitch * 0.55 + m * 0.45;
       runVelSum += velCand;
       runVelN += 1;
     } else {
       flushRun(i);
       runStartFrame = i;
-      runPitch = midi;
+      runPitch = m;
       runVelSum = velCand;
       runVelN = 1;
     }
   }
   flushRun(smooth.length);
+  return runs;
+}
+
+/**
+ * Extract monophonic notes with wall-clock timing (no BPM required).
+ * Used by Neural Hum-to-Instrument offline render.
+ */
+export function audioBufferToMonophonicTimedNotes(buffer: AudioBuffer): TimedMonophonicNote[] {
+  const { sr } = monoDecimate(buffer);
+  const minDurSec = 0.016;
+  const notes = extractMonophonicPitchRuns(buffer).map((run) => {
+    const startSec = (run.startFrame * HOP) / sr;
+    const endSec = (run.endFrame * HOP) / sr;
+    return {
+      pitch: run.pitch,
+      startSec,
+      durationSec: Math.max(minDurSec, endSec - startSec),
+      velocity: run.velocity,
+    };
+  });
+  notes.sort((a, b) => (a.startSec !== b.startSec ? a.startSec - b.startSec : a.pitch - b.pitch));
+  return notes;
+}
+
+/**
+ * Extract monophonic MIDI-like notes from decoded audio.
+ * @param buffer — decoded `AudioBuffer` (any sample rate)
+ * @param bpm — project tempo
+ */
+export function audioBufferToMonophonicMidiNotes(buffer: AudioBuffer, bpm: number): AudioToMidiNote[] {
+  const spb = spbFromBpm(bpm);
+  const timed = audioBufferToMonophonicTimedNotes(buffer);
+  return timed.map((t) => ({
+    pitch: t.pitch,
+    startBeat: t.startSec / spb,
+    durationBeats: Math.max(spb / 64, t.durationSec) / spb,
+    velocity: t.velocity,
+  }));
+}
+
+/** Brightness ratio in a frame — higher = more transient / hat-like. */
+function frameBrightness(samples: Float32Array, start: number): number {
+  let low = 0;
+  let high = 0;
+  for (let i = 0; i < FRAME - 1; i++) {
+    const s = samples[start + i] ?? 0;
+    const d = (samples[start + i + 1] ?? 0) - s;
+    low += s * s;
+    high += d * d;
+  }
+  return high / (low + high + 1e-12);
+}
+
+/**
+ * Clip-level drum hit detection (onset peaks → GM drum map). Not full-song stem separation.
+ * Best on isolated drum loops or one-shot layers.
+ */
+export function audioBufferToPercussiveMidiNotes(buffer: AudioBuffer, bpm: number): AudioToMidiNote[] {
+  const spb = spbFromBpm(bpm);
+  const { data, sr } = monoDecimate(buffer);
+  const maxSamples = Math.min(data.length, Math.floor(MAX_ANALYSIS_SEC * sr));
+  if (maxSamples < FRAME + HOP) return [];
+
+  const rmses: number[] = [];
+  for (let start = 0; start + FRAME <= maxSamples; start += HOP) {
+    rmses.push(frameRms(data.subarray(start, start + FRAME)));
+  }
+  const gate = adaptiveRmsGate(rmses);
+  const minGapFrames = Math.max(2, Math.round((0.045 * sr) / HOP));
+  const notes: AudioToMidiNote[] = [];
+  let lastOnset = -minGapFrames;
+
+  for (let i = 1; i < rmses.length - 1; i++) {
+    const prev = rmses[i - 1] ?? 0;
+    const cur = rmses[i] ?? 0;
+    const next = rmses[i + 1] ?? 0;
+    if (cur < gate * 1.15) continue;
+    if (!(cur >= prev && cur >= next * 0.92)) continue;
+    if (i - lastOnset < minGapFrames) continue;
+    lastOnset = i;
+
+    const frameStart = i * HOP;
+    const bright = frameBrightness(data, frameStart);
+    let pitch = 42;
+    if (bright < 0.22) pitch = 36;
+    else if (bright < 0.48) pitch = 38;
+    const vel = Math.round(Math.max(40, Math.min(127, 50 + cur * 900)));
+    const startSec = (i * HOP) / sr;
+    notes.push({
+      pitch,
+      startBeat: startSec / spb,
+      durationBeats: Math.max(spb / 16, 0.08 / spb),
+      velocity: vel,
+    });
+  }
 
   notes.sort((a, b) => (a.startBeat !== b.startBeat ? a.startBeat - b.startBeat : a.pitch - b.pitch));
   return notes;
+}
+
+/** Monophonic bass-line extraction — same engine, clamped to bass register. */
+export function audioBufferToBassMidiNotes(buffer: AudioBuffer, bpm: number): AudioToMidiNote[] {
+  const raw = audioBufferToMonophonicMidiNotes(buffer, bpm);
+  return raw
+    .map((n) => ({
+      ...n,
+      pitch: Math.max(28, Math.min(60, n.pitch)),
+      durationBeats: Math.max(n.durationBeats, 1 / 64),
+    }))
+    .filter((n) => n.durationBeats >= 1 / 64);
 }

@@ -18,6 +18,8 @@ import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 
 export type BeatLabSynthV2PlayOpts = Omit<BeatLabMelodicPlayOpts, 'instrumentId'> & {
   voice: BeatLabBassSynthVoiceParams;
+  /** When set, output routes to this node (SE2 per-track strip); pan/fader live on the strip. */
+  stripOutput?: AudioNode;
   /** Legato glide source when glideMode is legato (overlapping note in roll). */
   legatoFromMidi?: number;
   /** Chord-rail glide source when glideMode is chord (prior bar root). */
@@ -31,6 +33,8 @@ export type BeatLabSynthV2PlayOpts = Omit<BeatLabMelodicPlayOpts, 'instrumentId'
   beatsPerBar?: number;
   /** If true, force hard note-off at grid end (no long release overlap). */
   strictNoteOff?: boolean;
+  /** Transport playback — skip delay/reverb/mod sends to reduce node buildup (SE2). */
+  transportLite?: boolean;
   keyRoot?: number;
   keyMode?: ChordMode;
 };
@@ -118,7 +122,7 @@ function attachSynthV2MeterTap(
 ): void {
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0.12;
+  analyser.smoothingTimeConstant = 0.14;
   dryBus.connect(analyser);
   registerBeatLabMeterVoice(ch, analyser, panSigned, when, until);
 }
@@ -193,9 +197,11 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
       ? { stepCol: sc, noteEndCol: sc + slen, subSpb, stepsPerBar }
       : undefined;
 
+  const stripRouted = opts.stripOutput != null;
+  const transportLite = opts.transportLite === true;
   const ch = beatLabMelodicMixerChannel(opts.lane);
-  const panSigned = channelPan(ch);
-  const volGain = channelVolumeGain(ch, opts.channelVolumes);
+  const panSigned = stripRouted ? 0 : channelPan(ch);
+  const volGain = stripRouted ? 1 : channelVolumeGain(ch, opts.channelVolumes);
   const peak = beatLabSynthV2Peak(opts.velocity, volGain, v);
 
   const atk = Math.max(0.001, v.ampAttackMs / 1000);
@@ -205,7 +211,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
   const rel = opts.strictNoteOff === true ? 0.006 : relRaw;
   const panner = ctx.createStereoPanner();
   panner.pan.setValueAtTime(panSigned, when);
-  panner.connect(masterDestination(ctx));
+  panner.connect(opts.stripOutput ?? masterDestination(ctx));
 
   const dryBus = ctx.createGain();
   dryBus.gain.setValueAtTime(1, when);
@@ -359,7 +365,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     noise.stop(noteEnd + rel + 0.02);
   }
 
-  if (v.chorusMix > 0.02) {
+  if (!transportLite && v.chorusMix > 0.02) {
     const chorusDelay = ctx.createDelay(0.08);
     chorusDelay.delayTime.setValueAtTime(0.012 + v.chorusSpread * 0.028, when);
     const lfo = ctx.createOscillator();
@@ -378,7 +384,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     lfo.stop(noteEnd + rel + 0.1);
   }
 
-  if (v.delayMix > 0.02) {
+  if (!transportLite && v.delayMix > 0.02) {
     const dly = ctx.createDelay(4);
     const t = Math.max(0.03, Math.min(1.8, v.delayTimeMs / 1000));
     dly.delayTime.setValueAtTime(t, when);
@@ -393,7 +399,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     wet.connect(panner);
   }
 
-  if (v.reverbMix > 0.02) {
+  if (!transportLite && v.reverbMix > 0.02) {
     const revDelay = ctx.createDelay(0.6);
     revDelay.delayTime.setValueAtTime(0.03 + v.reverbPreDelayMs / 1000, when);
     const revFb = ctx.createGain();
@@ -407,7 +413,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     wet.connect(panner);
   }
 
-  if (v.phaserMix > 0.02) {
+  if (!transportLite && v.phaserMix > 0.02) {
     const ap = ctx.createBiquadFilter();
     ap.type = 'allpass';
     ap.frequency.setValueAtTime(600 + v.phaserDepth * 2200, when);
@@ -427,7 +433,7 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     lfo.stop(noteEnd + rel + 0.1);
   }
 
-  if (v.flangerMix > 0.02) {
+  if (!transportLite && v.flangerMix > 0.02) {
     const fl = ctx.createDelay(0.02);
     fl.delayTime.setValueAtTime(0.002 + v.flangerFeedback * 0.008, when);
     const fb = ctx.createGain();
@@ -441,14 +447,16 @@ export function scheduleBeatLabSynthV2Note(ctx: AudioContext, opts: BeatLabSynth
     wet.connect(panner);
   }
 
-  attachSynthV2MeterTap(
-    ctx,
-    dryBus,
-    ch,
-    panSigned,
-    when,
-    noteEnd + rel + fxTailEstimateSec(v),
-  );
+  if (!stripRouted) {
+    attachSynthV2MeterTap(
+      ctx,
+      dryBus,
+      ch,
+      panSigned,
+      when,
+      noteEnd + rel + fxTailEstimateSec(v),
+    );
+  }
 
   const stopTransportVoice = () => {
     beatLabSynthV2TransportStoppers.delete(stopTransportVoice);
@@ -684,9 +692,10 @@ function beginLiveVoice(
 ): void {
   const when = scheduleTime(ctx, opts.when ?? ctx.currentTime, immediate);
   const v = opts.voice;
+  const stripRouted = opts.stripOutput != null;
   const ch = beatLabMelodicMixerChannel(opts.lane);
-  const panSigned = channelPan(ch);
-  const volGain = channelVolumeGain(ch, opts.channelVolumes);
+  const panSigned = stripRouted ? 0 : channelPan(ch);
+  const volGain = stripRouted ? 1 : channelVolumeGain(ch, opts.channelVolumes);
   const peak = beatLabSynthV2Peak(opts.velocity, volGain, v);
   const atk = Math.max(0.001, v.ampAttackMs / 1000);
   const dec = Math.max(0.004, v.ampDecayMs / 1000);
@@ -694,7 +703,7 @@ function beginLiveVoice(
 
   const panner = ctx.createStereoPanner();
   panner.pan.setValueAtTime(panSigned, when);
-  panner.connect(masterDestination(ctx));
+  panner.connect(opts.stripOutput ?? masterDestination(ctx));
 
   const dryBus = ctx.createGain();
   dryBus.gain.setValueAtTime(1, when);
@@ -768,7 +777,9 @@ function beginLiveVoice(
   spawnHeldOscillators(rt, v, opts.midi, when, peak, glideFromMidi, opts.bpm ?? 120);
   applyVoiceToHeldNodes(rt, v, when);
   target.set(opts.lane, rt);
-  attachSynthV2MeterTap(ctx, dryBus, ch, panSigned, when, when + 180);
+  if (!stripRouted) {
+    attachSynthV2MeterTap(ctx, dryBus, ch, panSigned, when, when + 180);
+  }
 }
 
 /** Sustained preview for Audition mode — call stopBeatLabSynthV2HeldPreview to release. */
@@ -814,7 +825,7 @@ export function playBeatLabSynthV2KeyboardNote(ctx: AudioContext, opts: HeldOpts
     const when = ctx.currentTime;
     const ch = beatLabMelodicMixerChannel(opts.lane);
     const volGain = channelVolumeGain(ch, opts.channelVolumes);
-    const peak = beatLabSynthV2Peak(opts.velocity, volGain, v);
+    const peak = beatLabSynthV2Peak(opts.velocity, volGain, opts.voice);
     stopHeldOscillators(existing, when);
     spawnHeldOscillators(existing, opts.voice, opts.midi, when, peak, glideFrom, opts.bpm ?? 120);
     existing.midi = opts.midi;

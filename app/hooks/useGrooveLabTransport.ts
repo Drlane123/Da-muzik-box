@@ -3,11 +3,22 @@ import type { ChordVoiceId } from '@/app/lib/creationStation/chordSequencerVoice
 import type { GrooveLabBassSoundId } from '@/app/lib/creationStation/grooveLabBassSounds';
 import type { GrooveLabAnyLeadSoundId } from '@/app/lib/creationStation/grooveLabLeadSounds';
 import type { GrooveLabGuitarFxSettings } from '@/app/lib/creationStation/grooveLabGuitarFx';
-import { restoreChordSequencerTransportVoices } from '@/app/lib/creationStation/chordSequencerVoices';
 import {
+  restoreChordSequencerTransportVoices,
+  haltGrooveLabTransportChordVoices,
+  haltProgressionAuditionVoices,
+} from '@/app/lib/creationStation/chordSequencerVoices';
+import {
+  applyGrooveLabChannelVolumes,
+  haltGrooveLabTransportGuitarBus,
+  haltGrooveLabTransportMelodyBus,
+  muteAllGrooveLabChannelBuses,
   restoreGrooveLabTransportGuitarBus,
   restoreGrooveLabTransportMelodyBus,
 } from '@/app/lib/creationStation/grooveLabAudio';
+import { truncateKickKeyboardVoice } from '@/app/lib/creationStation/eightZeroEightVoice';
+import { haltAllGrooveLabLeadVoices } from '@/app/lib/creationStation/grooveLabLeadVoices';
+import { haltGrooveLabMelodyLeadVoices } from '@/app/lib/creationStation/grooveLabLeadMono';
 import { preloadGuitarLickBank } from '@/app/lib/creationStation/grooveLabGuitarLickBank';
 import { CB_PIANO_METRICS } from '@/app/lib/creationStation/chordBuilderPianoRollTheme';
 import { grooveLabSlotToGlobalCol } from '@/app/lib/creationStation/grooveLabGrid';
@@ -34,6 +45,9 @@ import {
   type GrooveRollHit,
 } from '@/app/lib/creationStation/grooveLabRoll';
 import { grooveLabColFToPx, loopSlotIndex, slotAtSessionTime } from '@/app/lib/creationStation/grooveLabTransportSync';
+import { syncLab808GrooveClockFromGrooveTransport } from '@/app/lib/creationStation/lab808GrooveClock';
+import { dispatchGrooveLabBeatlabPlayMirror } from '@/app/lib/creationStation/creationSessionLink';
+import { dispatchGrooveLabTransportMirror } from '@/app/lib/creationStation/lab808Sync';
 import { useMasterClock } from '@/app/context/MasterClockContext';
 import {
   ensureCreationMetronomeClickBuffers,
@@ -59,6 +73,12 @@ import {
   silenceGrooveLabPlayback,
   withGrooveLabPlaybackSink,
 } from '@/app/lib/creationStation/grooveLabAudio';
+import {
+  bypassWaveLeafLeadChopGate,
+  refillWaveLeafLeadChop,
+  resetWaveLeafLeadChopScheduler,
+} from '@/app/lib/creationStation/waveLeafLeadChop';
+import { haltWaveLeafVoices } from '@/app/lib/creationStation/waveLeafEngine';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
 import { useGrooveLabTransportPump } from '@/app/hooks/useGrooveLabTransportPump';
 
@@ -96,6 +116,10 @@ export interface UseGrooveLabTransportOpts {
   playheadElRef: RefObject<HTMLDivElement | null>;
   rollScrollRef?: RefObject<HTMLDivElement | null>;
   onPlayheadSlot?: (slot: number) => void;
+  /** When 808 PLAY mirrored Groove in — skip echo dispatch back to 808. */
+  skip808OutboundMirrorRef?: RefObject<boolean>;
+  /** When Beat Lab PLAY mirrored Groove in — skip echo dispatch back to Beat Lab. */
+  skipBeatLabOutboundMirrorRef?: RefObject<boolean>;
 }
 
 const GROOVE_PLAYLINE_CENTER_X = 0.5;
@@ -134,6 +158,8 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     playheadElRef,
     rollScrollRef,
     onPlayheadSlot,
+    skip808OutboundMirrorRef,
+    skipBeatLabOutboundMirrorRef,
   } = opts;
 
   const [transportState, setTransportState] = useState<GrooveLabTransportState>('stopped');
@@ -181,6 +207,7 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
   const guitarFxSettingsRef = useRef(guitarFxSettings);
   const channelVolumesRef = useRef(channelVolumes);
   const nextMetroKRef = useRef(0);
+  const nextChopStepRef = useRef(0);
   const metroClickBuffersRef = useRef<CreationMetronomeClickBuffers | null>(null);
   const scheduledMetroNodesRef = useRef<CreationScheduledMetroNode[]>([]);
 
@@ -399,6 +426,15 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
           },
           pumpOpts,
         );
+        const melodyCh = melodyChannelRef.current;
+        if (melodyCh != null && Number.isFinite(melodyCh)) {
+          refillWaveLeafLeadChop(ctx, ctSnap, nextChopStepRef, {
+            sessionStart: sessionStartRef.current,
+            bpm: bpmRef.current,
+            melodyChannel: melodyCh,
+            loopContinuation: pumpOpts?.loopContinuation,
+          });
+        }
       });
     },
     [scheduleMetronomeClickAt],
@@ -406,6 +442,82 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
 
   const refillRef = useRef(scheduleAhead);
   refillRef.current = scheduleAhead;
+
+  const publish808GrooveClock = useCallback(() => {
+    if (!runningRef.current || sessionStartRef.current <= 0) {
+      syncLab808GrooveClockFromGrooveTransport(null);
+      return;
+    }
+    syncLab808GrooveClockFromGrooveTransport({
+      sessionStart: sessionStartRef.current,
+      originSlot: originSlotRef.current,
+      bpm: bpmRef.current,
+      loopSlots: loopSlotsRef.current,
+    });
+  }, []);
+
+  const mirror808Transport = useCallback((action: 'play' | 'pause' | 'stop') => {
+    if (skip808OutboundMirrorRef?.current) {
+      skip808OutboundMirrorRef.current = false;
+      // Stop must always reach linked 808 — suppress is only for play/pause echo.
+      if (action !== 'stop') return;
+    }
+    dispatchGrooveLabTransportMirror(action);
+  }, [skip808OutboundMirrorRef]);
+
+  const mirrorBeatLabTransport = useCallback((action: 'play' | 'pause' | 'stop') => {
+    if (skipBeatLabOutboundMirrorRef?.current) {
+      skipBeatLabOutboundMirrorRef.current = false;
+      if (action !== 'stop') return;
+    }
+    dispatchGrooveLabBeatlabPlayMirror(action);
+  }, [skipBeatLabOutboundMirrorRef]);
+
+  const anchorGrooveSessionAndMirror808 = useCallback((ctx: AudioContext, origin: number) => {
+    const tCapture = grooveLabAudioNow(ctx);
+    sessionStartRef.current = grooveLabTransportSessionStart(tCapture, SE2_AUDIO_START_FLOOR_SEC);
+    originSlotRef.current = origin;
+    schedAnchorTimeRef.current = tCapture;
+    schedAnchorPerfRef.current = performance.now();
+    syncLab808GrooveClockFromGrooveTransport({
+      sessionStart: sessionStartRef.current,
+      originSlot: originSlotRef.current,
+      bpm: bpmRef.current,
+      loopSlots: loopSlotsRef.current,
+    });
+  }, []);
+
+  const haltGrooveLabTransportAudio = useCallback(
+    (ctx: AudioContext | null, opts?: { zeroSession?: boolean }) => {
+      if (opts?.zeroSession) {
+        sessionStartRef.current = 0;
+        schedAnchorTimeRef.current = 0;
+        schedAnchorPerfRef.current = 0;
+      }
+      haltGrooveLabTransportChordVoices();
+      haltProgressionAuditionVoices();
+      haltGrooveLabTransportGuitarBus();
+      haltGrooveLabTransportMelodyBus();
+      cancelScheduledMetroNodes();
+      resetWaveLeafLeadChopScheduler(nextChopStepRef);
+      stopMetronomeLoop();
+      if (ctx) {
+        const t = ctx.currentTime;
+        truncateKickKeyboardVoice(ctx, t);
+        muteAllGrooveLabChannelBuses(ctx, t);
+        haltAllGrooveLabLeadVoices(t);
+        haltGrooveLabMelodyLeadVoices(t);
+        haltWaveLeafVoices();
+        silenceGrooveLabPlayback(ctx);
+        resetGrooveLabPlaybackBus(ctx);
+        const melodyCh = melodyChannelRef.current;
+        if (melodyCh != null && Number.isFinite(melodyCh)) {
+          bypassWaveLeafLeadChopGate(ctx, melodyCh);
+        }
+      }
+    },
+    [cancelScheduledMetroNodes, stopMetronomeLoop],
+  );
 
   const getOrCreateAudioContext = useCallback(() => {
     const ctx = getAudioContext?.() ?? null;
@@ -438,15 +550,23 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     startGenRef.current += 1;
     runningRef.current = false;
     setGrooveLabTransportRunning(false);
+    setTransportState('stopped');
+    syncLab808GrooveClockFromGrooveTransport(null);
     firedTransportKeysRef.current.clear();
-    cancelScheduledMetroNodes();
     lastScrollColRef.current = -1;
     const ctx = ctxRef.current ?? getAudioContext?.() ?? null;
-    if (ctx) silenceGrooveLabPlayback(ctx);
-    setTransportState('stopped');
-    cancelGrooveLabPlaylineWapi(playlineRefs, playheadElRef.current);
-    snapPlaylineStatic(seekSlotRef.current);
-  }, [cancelScheduledMetroNodes, getAudioContext, playheadElRef, snapPlaylineStatic]);
+    haltGrooveLabTransportAudio(ctx, { zeroSession: true });
+    wapiSegStateRef.current = { ...GROOVE_PLAYLINE_WAPI_SEG_IDLE };
+    launchPlaylineNow(seekSlotRef.current, false);
+    mirror808Transport('stop');
+    mirrorBeatLabTransport('stop');
+  }, [
+    getAudioContext,
+    haltGrooveLabTransportAudio,
+    launchPlaylineNow,
+    mirror808Transport,
+    mirrorBeatLabTransport,
+  ]);
 
   const publishSeekSlot = useCallback(
     (s: number) => {
@@ -478,7 +598,9 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
         schedAnchorTimeRef.current = tCapture;
         schedAnchorPerfRef.current = performance.now();
         originSlotRef.current = loopSlotIndex(s, loopSlotsRef.current);
+        publish808GrooveClock();
         nextMetroKRef.current = Math.ceil(grooveLabOriginBeatFromSlot(s) - 1e-8) - 1;
+        resetWaveLeafLeadChopScheduler(nextChopStepRef);
         firedTransportKeysRef.current.clear();
         cancelScheduledMetroNodes();
         launchPlaylineNow(s, true, { immediateCompositorStart: true });
@@ -496,6 +618,7 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
       scheduleAhead,
       snapPlaylineStatic,
       transportState,
+      publish808GrooveClock,
     ],
   );
 
@@ -512,20 +635,37 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     if (evs.length === 0 && guitarHits.length === 0 && !metronomeEnabledRef.current) return;
 
     const gen = ++startGenRef.current;
+    const origin = seekSlotRef.current;
+    originSlotRef.current = origin;
+    displaySlotRef.current = origin;
+
+    // SE2 pattern: capture audio anchor + tell 808 before any await (preload must not delay 808).
+    try {
+      const earlyCtx = getAudioContext?.() ?? null;
+      if (earlyCtx && earlyCtx.state !== 'closed') {
+        anchorGrooveSessionAndMirror808(earlyCtx, origin);
+      }
+    } catch {
+      /* ctx not unlocked yet — anchored after ensure below */
+    }
+
     const ctx = await ensureGrooveLabAudioReady(getAudioContext);
     if (!ctx || gen !== startGenRef.current) return;
+
+    if (sessionStartRef.current <= 0) {
+      anchorGrooveSessionAndMirror808(ctx, origin);
+    }
 
     restoreChordSequencerTransportVoices();
     restoreGrooveLabTransportGuitarBus();
     restoreGrooveLabTransportMelodyBus();
+    applyGrooveLabChannelVolumes(ctx, channelVolumesRef.current);
 
     if (guitarHits.length > 0) {
       await preloadGuitarLickBank(ctx);
     }
+    if (!ctx || gen !== startGenRef.current) return;
 
-    const origin = seekSlotRef.current;
-    originSlotRef.current = origin;
-    displaySlotRef.current = origin;
     setGrooveLabTransportRunning(true);
     stopMetronomeLoop();
 
@@ -534,21 +674,30 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     resetGrooveLabPlaybackBus(ctx);
     armGrooveLabPlayback(ctx);
 
-    const tAnchor = grooveLabAudioNow(ctx);
-    sessionStartRef.current = grooveLabTransportSessionStart(tAnchor, SE2_AUDIO_START_FLOOR_SEC);
-    schedAnchorTimeRef.current = tAnchor;
-    schedAnchorPerfRef.current = performance.now();
+    const melodyCh = melodyChannelRef.current;
+    if (melodyCh != null && Number.isFinite(melodyCh)) {
+      bypassWaveLeafLeadChopGate(ctx, melodyCh);
+    }
+
+    const tRefill = grooveLabAudioNow(ctx);
+    publish808GrooveClock();
     seekSlotRef.current = origin;
     nextMetroKRef.current = Math.ceil(grooveLabOriginBeatFromSlot(origin) - 1e-8) - 1;
+    resetWaveLeafLeadChopScheduler(nextChopStepRef);
     lastPublishedColRef.current = Math.floor(origin / Math.max(1, snapStepRef.current));
     lastScrollColRef.current = -1;
     firedTransportKeysRef.current.clear();
     cancelScheduledMetroNodes();
+    if (gen !== startGenRef.current) {
+      setGrooveLabTransportRunning(false);
+      return;
+    }
+
     runningRef.current = true;
 
     if (playheadElRef.current) playheadElRef.current.style.opacity = '1';
     launchPlaylineNow(origin, true, { immediateCompositorStart: true });
-    refillRef.current(ctx, tAnchor);
+    refillRef.current(ctx, tRefill);
     seekRunningGrooveLabPlaylineWapi(
       playlineRefs,
       origin,
@@ -556,16 +705,25 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
       snapStepRef.current,
     );
     queueMicrotask(() => {
-      if (!runningRef.current) return;
+      if (!runningRef.current || gen !== startGenRef.current) return;
       const c = ctxRef.current;
       if (!c || c.state === 'closed') return;
       refillRef.current(c, grooveLabAudioNow(c));
     });
 
+    if (gen !== startGenRef.current || !runningRef.current) {
+      runningRef.current = false;
+      setGrooveLabTransportRunning(false);
+      cancelGrooveLabPlaylineWapi(playlineRefs, playheadElRef.current);
+      return;
+    }
+
+    mirror808Transport('play');
+    mirrorBeatLabTransport('play');
     setTransportState('playing');
 
     window.setTimeout(() => {
-      if (!runningRef.current) return;
+      if (!runningRef.current || gen !== startGenRef.current) return;
       scrollFollowRef.current(origin);
       publishSeekSlot(origin);
     }, 0);
@@ -575,37 +733,54 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     chordHits,
     guitarHits,
     melodyHits,
+    sampleHits,
     getAudioContext,
     launchPlaylineNow,
+    mirror808Transport,
+    mirrorBeatLabTransport,
     playheadElRef,
     publishSeekSlot,
     stopMetronomeLoop,
+    publish808GrooveClock,
+    anchorGrooveSessionAndMirror808,
   ]);
 
   const pauseTransport = useCallback(() => {
-    const ctx = getAudioContext?.();
-    if (!ctx || transportState !== 'playing') return;
-    updateSchedAnchor(ctx, schedAnchorTimeRef, schedAnchorPerfRef);
-    const tNow = smoothSchedNow(schedAnchorTimeRef, schedAnchorPerfRef, ctx);
-    const slot = loopSlotIndex(
-      slotAtSessionTime(tNow, sessionStartRef.current, originSlotRef.current, bpmRef.current),
-      loopSlotsRef.current,
-    );
-    setGrooveLabTransportRunning(false);
+    if (transportState !== 'playing') return;
+    const ctx = getAudioContext?.() ?? ctxRef.current ?? null;
+    let slot = seekSlotRef.current;
+    if (ctx && sessionStartRef.current > 0) {
+      updateSchedAnchor(ctx, schedAnchorTimeRef, schedAnchorPerfRef);
+      const tNow = smoothSchedNow(schedAnchorTimeRef, schedAnchorPerfRef, ctx);
+      slot = loopSlotIndex(
+        slotAtSessionTime(tNow, sessionStartRef.current, originSlotRef.current, bpmRef.current),
+        loopSlotsRef.current,
+      );
+    }
     startGenRef.current += 1;
     runningRef.current = false;
+    setGrooveLabTransportRunning(false);
+    syncLab808GrooveClockFromGrooveTransport(null);
     lastScrollColRef.current = -1;
     firedTransportKeysRef.current.clear();
-    cancelScheduledMetroNodes();
-    silenceGrooveLabPlayback(ctx);
-    resetGrooveLabPlaybackBus(ctx);
+    haltGrooveLabTransportAudio(ctx, { zeroSession: true });
     seekSlotRef.current = slot;
     originSlotRef.current = slot;
     displaySlotRef.current = slot;
     publishSeekSlot(slot);
     setTransportState('paused');
     launchPlaylineNow(slot, false);
-  }, [cancelScheduledMetroNodes, getAudioContext, launchPlaylineNow, publishSeekSlot, transportState]);
+    mirror808Transport('pause');
+    mirrorBeatLabTransport('pause');
+  }, [
+    getAudioContext,
+    haltGrooveLabTransportAudio,
+    launchPlaylineNow,
+    mirror808Transport,
+    mirrorBeatLabTransport,
+    publishSeekSlot,
+    transportState,
+  ]);
 
   const togglePlayPause = useCallback(() => {
     if (transportState === 'playing') {
@@ -649,10 +824,12 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
     armGrooveLabPlayback(ctx);
     const tCapture = grooveLabAudioNow(ctx);
     sessionStartRef.current = grooveLabTransportSessionStart(tCapture, SE2_AUDIO_START_FLOOR_SEC);
+    publish808GrooveClock();
     schedAnchorTimeRef.current = tCapture;
     schedAnchorPerfRef.current = performance.now();
     originSlotRef.current = loopSlotIndex(displaySlotRef.current, loopSlotsRef.current);
     nextMetroKRef.current = Math.ceil(grooveLabOriginBeatFromSlot(originSlotRef.current) - 1e-8) - 1;
+    resetWaveLeafLeadChopScheduler(nextChopStepRef);
     firedTransportKeysRef.current.clear();
     cancelScheduledMetroNodes();
     launchPlaylineNow(displaySlotRef.current, true, { immediateCompositorStart: true });
@@ -663,20 +840,36 @@ export function useGrooveLabTransport(opts: UseGrooveLabTransportOpts) {
       snapStepRef.current,
     );
     scheduleAhead(ctx, tCapture);
-  }, [pxPerCol, quantize, bpm, cancelScheduledMetroNodes, getAudioContext, launchPlaylineNow, scheduleAhead]);
+  }, [pxPerCol, quantize, bpm, cancelScheduledMetroNodes, getAudioContext, launchPlaylineNow, publish808GrooveClock, scheduleAhead]);
 
   useEffect(() => {
     if (!isScreenActive && transportState !== 'stopped') {
+      startGenRef.current += 1;
       runningRef.current = false;
-      cancelScheduledMetroNodes();
+      setGrooveLabTransportRunning(false);
+      syncLab808GrooveClockFromGrooveTransport(null);
+      firedTransportKeysRef.current.clear();
+      const ctx = ctxRef.current ?? getAudioContext?.() ?? null;
+      haltGrooveLabTransportAudio(ctx, { zeroSession: true });
+      mirror808Transport('stop');
+      mirrorBeatLabTransport('stop');
       setTransportState('stopped');
       cancelGrooveLabPlaylineWapi(playlineRefs, playheadElRef.current);
     }
-  }, [cancelScheduledMetroNodes, isScreenActive, playheadElRef, transportState]);
+  }, [
+    getAudioContext,
+    haltGrooveLabTransportAudio,
+    isScreenActive,
+    mirror808Transport,
+    mirrorBeatLabTransport,
+    playheadElRef,
+    transportState,
+  ]);
 
   useEffect(() => {
     return () => {
       runningRef.current = false;
+      syncLab808GrooveClockFromGrooveTransport(null);
       cancelScheduledMetroNodes();
       cancelGrooveLabPlaylineWapi(playlineRefs, playheadElRef.current);
     };

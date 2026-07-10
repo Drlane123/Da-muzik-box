@@ -75,7 +75,58 @@ export const HIT_SONG_CORE_PROGRESSIONS: (ProgressionDef & { era: string })[] = 
   { id: 'hit-kpop', era: 'K-Pop/Dance', name: 'Chant Hook · vi-IV-I-V', chords: ['vi', 'IV', 'I', 'V'] },
 ];
 
+const ERA_CATEGORY_IDS = new Set([
+  'soul-eras',
+  'rnb-eras',
+  'neo-soul-eras',
+  'pop-eras',
+  'disco-eras',
+  'blues-eras',
+  'latin-eras',
+  'kpop-eras',
+]);
+
 export const PRO_PROGRESSION_CATEGORIES: ProProgressionCategory[] = [
+  {
+    id: 'soul-eras',
+    label: 'Soul · Classic',
+    description: 'Motown, Philly, and quiet-storm soul — maj7 walks and borrowed color.',
+  },
+  {
+    id: 'rnb-eras',
+    label: 'R&B · Slow Jam',
+    description: '70s–2010s R&B ballads, slow jams, and contemporary alt-R&B loops.',
+  },
+  {
+    id: 'neo-soul-eras',
+    label: 'Neo-Soul · Groove',
+    description: 'Neo-soul harmony — half-dim turns, sus resolves, and lush maj7 vamps.',
+  },
+  {
+    id: 'pop-eras',
+    label: 'Pop · 70s–2000s',
+    description: '20 pop progressions from yacht rock through 2000s hooks.',
+  },
+  {
+    id: 'disco-eras',
+    label: 'Disco · 70s–2000s',
+    description: '20 disco / boogie / nu-disco turnaround loops.',
+  },
+  {
+    id: 'blues-eras',
+    label: 'Blues · Classic',
+    description: 'Classic blues turnarounds — 5 to 7 bar loops with dominant 7ths.',
+  },
+  {
+    id: 'latin-eras',
+    label: 'Latin · Bossa & Salsa',
+    description: 'Bossa, montuno, and salsa harmony — mixed 5–7 chord loops.',
+  },
+  {
+    id: 'kpop-eras',
+    label: 'K-Pop · Hooks',
+    description: 'Bright K-pop and dance-pop cadences — varied loop lengths.',
+  },
   {
     id: 'emotional-core',
     label: 'Emotional Core',
@@ -91,7 +142,7 @@ export const PRO_PROGRESSION_CATEGORIES: ProProgressionCategory[] = [
     label: 'All Eras',
     description: 'Every professional progression across all genre packs.',
   },
-  ...GENRES.map((g) => ({
+  ...GENRES.filter((g) => !ERA_CATEGORY_IDS.has(g.id)).map((g) => ({
     id: g.id,
     label: g.label,
     description: `Complete ${g.label} progression pack — load and edit in the step sequencer.`,

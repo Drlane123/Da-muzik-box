@@ -1,8 +1,11 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, MouseEvent } from 'react';
 import { Pause, Play, SkipBack, SkipForward, Square } from 'lucide-react';
 
 export interface OrchidTransportControlsProps {
   playing: boolean;
+  /** Block Play when there is nothing to schedule — Stop/Pause stay active while playing. */
+  playDisabled?: boolean;
+  /** @deprecated use playDisabled */
   disabled?: boolean;
   onRewind: () => void;
   onStop: () => void;
@@ -25,14 +28,23 @@ const btnBase: CSSProperties = {
 
 export function OrchidTransportControls({
   playing,
+  playDisabled,
   disabled = false,
   onRewind,
   onStop,
   onPlayPause,
   onFastForward,
 }: OrchidTransportControlsProps) {
-  const dim = disabled ? 0.42 : 1;
-  const playAccent = playing && !disabled;
+  const blockPlay = (playDisabled ?? disabled) && !playing;
+  const playAccent = playing && !blockPlay;
+
+  const handleStop = (e: MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Pause path is verified to halt Groove transport; run it before stop when playing.
+    if (playing) onPlayPause();
+    onStop();
+  };
 
   return (
     <div
@@ -45,8 +57,6 @@ export function OrchidTransportControls({
         background: 'rgba(5, 8, 5, 0.92)',
         border: '1px solid #1f3a29',
         boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
-        opacity: dim,
-        pointerEvents: disabled ? 'none' : 'auto',
       }}
       title="Groove Lab transport — play piano roll (green chords + blue bass)"
     >
@@ -60,8 +70,8 @@ export function OrchidTransportControls({
       </button>
       <button
         type="button"
-        onClick={onStop}
-        style={{ ...btnBase, width: 26, height: 26 }}
+        onClick={handleStop}
+        style={{ ...btnBase, width: 26, height: 26, position: 'relative', zIndex: 2 }}
         title="Stop"
       >
         <Square size={12} fill="currentColor" />
@@ -69,15 +79,18 @@ export function OrchidTransportControls({
       <button
         type="button"
         onClick={onPlayPause}
+        disabled={blockPlay}
         style={{
           ...btnBase,
           width: 32,
           height: 26,
           background: playAccent ? '#15321e' : '#112015',
           borderColor: playAccent ? '#22c55e88' : '#1f3a29',
-          color: playAccent ? '#4ade80' : '#86efac',
+          color: playAccent ? '#4ade80' : blockPlay ? '#5c5c68' : '#86efac',
+          opacity: blockPlay ? 0.42 : 1,
+          cursor: blockPlay ? 'not-allowed' : 'pointer',
         }}
-        title={playing ? 'Pause' : 'Play'}
+        title={playing ? 'Pause' : blockPlay ? 'Nothing to play — add notes or enable MET' : 'Play'}
       >
         {playing ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" />}
       </button>

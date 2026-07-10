@@ -1,0 +1,35 @@
+FIND THE SAVE BUTTON - STEP BY STEP
+===================================
+
+OPTION 1 (EASIEST - on E:\ root)
+  1. Open File Explorer
+  2. Click "This PC" then drive "E:"
+  3. You should see AT THE TOP of E:\ (not inside any folder):
+       CLICK HERE - SAVE DA MUSIC BOX SOURCE.bat
+  4. Double-click it
+  5. A black window opens - leave it open 20-40 minutes
+  6. When done, new zip appears on E:\
+
+OPTION 2 (inside project folder)
+  1. File Explorer -> E:\Da-Music-Box-v4-SOURCE-COMPLETE
+  2. Double-click: SAVE-SOURCE-NOW.bat
+     (or RUN-BACKUP-NOW.bat - same thing)
+
+CANNOT FIND THE FOLDER?
+  Double-click on E:\ :
+    OPEN DA MUSIC BOX PROJECT FOLDER.bat
+  That opens the project folder for you.
+
+WHAT YOU ARE LOOKING FOR
+  File name:  SAVE-SOURCE-NOW.bat
+  Full path:  E:\Da-Music-Box-v4-SOURCE-COMPLETE\SAVE-SOURCE-NOW.bat
+
+  If Windows hides extensions, it may show as:
+    SAVE-SOURCE-NOW    Type: Windows Batch File
+
+WHEN BACKUP FINISHES
+  New file on E:\ :
+    Da-Music-Box-v4-SOURCE-COMPLETE_YYYY-MM-DD_HHmm.zip
+
+WORKING BACKUP (use anytime):
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE_2026-06-13_1550.zip

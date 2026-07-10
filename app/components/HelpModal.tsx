@@ -79,12 +79,12 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
             </h3>
             <ul className="space-y-2 text-sm text-gray-300">
               <li><strong>AI Vocal Lab:</strong> Upload and process vocal tracks with AI enhancement</li>
-              <li><strong>AI Song Generator:</strong> Generate complete songs with AI and export</li>
+              <li><strong>AI Song Generator:</strong> Rebuild in progress — placeholder screen for now</li>
               <li><strong>AI Pattern Generator:</strong> Create drum patterns and loops with AI</li>
               <li><strong>Melody-to-MIDI:</strong> Record melodies and convert to MIDI</li>
               <li><strong>Creation Station:</strong> 16 pads, piano roll, 8 kits, mixer with tracks 1-17</li>
               <li><strong>Studio Editor:</strong> Multi-track editing and management</li>
-              <li><strong>Master Arranger:</strong> Arrange tracks into complete songs</li>
+              <li><strong>Mastering Bay:</strong> Bass X → DMB Match → Master X1 · optional De-Noise from the top bar (before or after Master)</li>
               <li><strong>Piano Roll:</strong> Precise MIDI note editing</li>
               <li><strong>My Projects:</strong> Create, manage, and organize your projects</li>
               <li><strong>Export & Playback:</strong> Export audio and test your mixes</li>

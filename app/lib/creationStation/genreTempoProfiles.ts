@@ -40,6 +40,9 @@ export const GENRE_TEMPO_PROFILES: Record<string, GenreTempoProfile> = {
   lofi: { min: 68, max: 92, recommended: 76, note: 'Lo-fi chill head-nod' },
   funk: { min: 96, max: 118, recommended: 104, note: 'Funk pocket' },
   country: { min: 84, max: 120, recommended: 102, note: 'Country mid-tempo' },
+  afrobeat: { min: 95, max: 115, recommended: 105, note: 'Afrobeats / Afropop · 95–115 BPM (sweet spot ~105)' },
+  'uk-garage': { min: 128, max: 142, recommended: 132, note: 'UK garage · 2-step shuffle · ~130 BPM' },
+  reggae: { min: 76, max: 104, recommended: 100, note: 'Reggae / dancehall snap · 76–104 BPM' },
 };
 
 /** Curated BPM for named loops that sit outside the genre average. */
@@ -62,7 +65,52 @@ const PROGRESSION_TEMPO_OVERRIDES: Record<string, number> = {
   'hiphop::hh-mellow': 78,
   'lofi::lofi-chill': 72,
   'lofi::lofi-study': 74,
+  'afrobeat::afro-makosa': 102,
+  'afrobeat::afro-highlife': 100,
+  'afrobeat::afro-donjazzy': 104,
+  'afrobeat::afro-naija': 100,
+  'afrobeat::afro-sensitive': 98,
+  'afrobeat::afro-uplift': 108,
+  'afrobeat::afro-gospel': 100,
+  'afrobeat::afro-vamp': 100,
+  'afrobeat::afro-dorian': 102,
+  'afrobeat::afro-neo': 100,
+  'afrobeat::afro-two': 98,
+  'afrobeat::afro-modal': 102,
+  'afrobeat::afro-654': 100,
+  'afrobeat::afro-6525': 102,
+  'afrobeat::afro-amapiano': 110,
+  'uk-garage::ukg-am-f': 132,
+  'uk-garage::ukg-soul': 132,
+  'uk-garage::ukg-vi-iv': 130,
+  'uk-garage::ukg-turn': 133,
+  'uk-garage::ukg-dorian': 132,
+  'uk-garage::ukg-dark': 135,
+  'uk-garage::ukg-speed': 138,
+  'uk-garage::ukg-reggae': 102,
+  'uk-garage::ukg-one-drop': 88,
+  'uk-garage::ukg-warm': 130,
+  'uk-garage::ukg-minor9': 130,
+  'uk-garage::ukg-bm': 136,
+  'reggae::reg-one-drop': 88,
+  'reggae::reg-skank': 92,
+  'reggae::reg-minor': 94,
+  'reggae::reg-island': 96,
+  'reggae::reg-dub': 100,
+  'reggae::reg-count': 102,
+  'reggae::reg-dancehall': 100,
+  'reggae::reg-steel': 90,
+  'reggae::reg-gospel': 88,
+  'reggae::reg-two': 92,
+  'reggae::reg-am-loop': 94,
+  'reggae::reg-dorian': 96,
+  'reggae::reg-bubble': 100,
+  'reggae::reg-dm-drop': 90,
+  'reggae::reg-offbeat': 98,
 };
+
+/** Genre packs where label keywords like "late night" must not force ballad-slow BPM. */
+const GENRES_USE_RECOMMENDED_BPM = new Set(['afrobeat', 'uk-garage', 'reggae', 'house', 'dance', 'trap']);
 
 export function getGenreTempoProfile(genreId: string): GenreTempoProfile {
   return GENRE_TEMPO_PROFILES[genreId] ?? DEFAULT_TEMPO_PROFILE;
@@ -72,7 +120,10 @@ export function getGenreRecommendedBpm(genreId: string): number {
   return clampGrooveLabBpm(getGenreTempoProfile(genreId).recommended);
 }
 
-function tempoFromProgressionName(name: string, profile: GenreTempoProfile): number {
+function tempoFromProgressionName(name: string, profile: GenreTempoProfile, genreId?: string): number {
+  if (genreId && GENRES_USE_RECOMMENDED_BPM.has(genreId)) {
+    return profile.recommended;
+  }
   const n = name.toLowerCase();
   if (
     /\bslow\b|\bballad\b|\bcrawl\b|\bquiet[- ]?storm\b|\bcrooner\b|\bsteady\b|\bslow dance\b|\bprayer\b|\btender\b|\bsoft\b|\bchill\b|\brainy\b|\blate night\b|\bfalsetto\b|\bmellow\b|\bwarm\b|\bstudy\b/.test(
@@ -109,7 +160,7 @@ export function resolveProgressionBpm(
   const raw =
     override ??
     (opts?.progressionName
-      ? tempoFromProgressionName(opts.progressionName, profile)
+      ? tempoFromProgressionName(opts.progressionName, profile, genreId)
       : profile.recommended);
   return {
     bpm: clampGrooveLabBpm(raw),

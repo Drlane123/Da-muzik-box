@@ -1,3 +1,8 @@
+import { ERA_POP_RNB_DISCO_GENRES } from '@/app/lib/creationStation/eraPopRnbDiscoProgressions';
+import { ERA_SOUL_RNB_NEO_GENRES } from '@/app/lib/creationStation/eraSoulRnbNeoProgressions';
+import { ERA_BLUES_LATIN_KPOP_GENRES } from '@/app/lib/creationStation/eraBluesLatinKpopProgressions';
+import { GENRE_MINOR_EXPANSIONS } from '@/app/lib/creationStation/genreMinorExpansions';
+
 /**
  * Chord Builder — Creation Station chord-progression engine.
  *
@@ -170,6 +175,10 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       bVI:    [8, 12, 15],
       bVII:   [10, 14, 17],
       bIII:   [3, 7, 10],
+      bIIImaj7: [3, 7, 10, 14],
+      bVImaj7: [8, 12, 15, 19],
+      bVIImaj7: [10, 14, 17, 21],
+      bIImaj7: [1, 5, 8, 12],
       Isus4:  [0, 5, 7],
       Vsus4:  [7, 12, 14],
       /** Borrowed minor iv — gospel / pop back-door cadence. */
@@ -193,8 +202,12 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       'vi7':    { interval: 9,  quality: 'm7' },
       'iiø7':   { interval: 2,  quality: 'ø7' },
       'bIII':   { interval: 3,  quality: '' },
+      'bIIImaj7': { interval: 3, quality: 'maj7' },
       'bVI':    { interval: 8,  quality: '' },
+      'bVImaj7': { interval: 8, quality: 'maj7' },
       'bVII':   { interval: 10, quality: '' },
+      'bVIImaj7': { interval: 10, quality: 'maj7' },
+      'bIImaj7': { interval: 1, quality: 'maj7' },
       'Isus4':  { interval: 0,  quality: 'sus4' },
       'Vsus4':  { interval: 7,  quality: 'sus4' },
       'iv':     { interval: 5,  quality: 'm' },
@@ -202,7 +215,8 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
     defaultPads: [
       'I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°',
       'Imaj7', 'ii7', 'iii7', 'IV7', 'IVmaj7', 'V7', 'vi7',
-      'bIII', 'bVI', 'bVII', 'Isus4', 'Vsus4', 'iv',
+      'bIII', 'bIIImaj7', 'bVI', 'bVImaj7', 'bVII', 'bVIImaj7', 'bIImaj7',
+      'Isus4', 'Vsus4', 'iv',
     ],
     defaultStart: 'I',
   },
@@ -226,6 +240,11 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       VImaj7: [8, 12, 15, 19],
       VII7:   [10, 14, 17, 20],
       iiø7:   [2, 5, 8, 12],
+      bVII:   [10, 14, 17],
+      bVI:    [8, 12, 15],
+      bVImaj7: [8, 12, 15, 19],
+      bIIImaj7: [3, 7, 10, 14],
+      bIImaj7: [1, 5, 8, 12],
     },
     info: {
       'i':      { interval: 0,  quality: 'm' },
@@ -244,10 +263,15 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       'VImaj7': { interval: 8,  quality: 'maj7' },
       'VII7':   { interval: 10, quality: '7' },
       'iiø7':   { interval: 2,  quality: 'ø7' },
+      'bVII':   { interval: 10, quality: '' },
+      'bVI':    { interval: 8,  quality: '' },
+      'bVImaj7': { interval: 8, quality: 'maj7' },
+      'bIIImaj7': { interval: 3, quality: 'maj7' },
+      'bIImaj7': { interval: 1, quality: 'maj7' },
     },
     defaultPads: [
       'i', 'ii°', 'III', 'iv', 'v', 'V', 'VI', 'VII',
-      'i7', 'iv7', 'V7', 'VImaj7', 'VII7',
+      'i7', 'iv7', 'V7', 'VImaj7', 'VII7', 'bVII', 'bVI', 'bVImaj7', 'bIIImaj7', 'iiø7',
     ],
     defaultStart: 'i',
   },
@@ -405,6 +429,7 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       bVI:    [8, 12, 15],
       'vii°': [11, 14, 17],
       i7:     [0, 3, 7, 10],
+      'i(maj7)': [0, 3, 7, 11],
       iv7:    [5, 8, 12, 15],
       V7:     [7, 11, 14, 17],
       'vii°7':[11, 14, 17, 20],
@@ -418,13 +443,14 @@ const MODE_TABLES: Record<ChordMode, ModeTable> = {
       'bVI':    { interval: 8,  quality: '' },
       'vii°':   { interval: 11, quality: '°' },
       'i7':     { interval: 0,  quality: 'm7' },
+      'i(maj7)': { interval: 0, quality: 'm(maj7)' },
       'iv7':    { interval: 5,  quality: 'm7' },
       'V7':     { interval: 7,  quality: '7' },
       'vii°7':  { interval: 11, quality: '°7' },
     },
     defaultPads: [
       'i', 'ii°', 'bIII+', 'iv', 'V', 'bVI', 'vii°',
-      'i7', 'iv7', 'V7', 'vii°7',
+      'i7', 'i(maj7)', 'iv7', 'V7', 'vii°7',
     ],
     defaultStart: 'i',
   },
@@ -564,10 +590,18 @@ export function chordSymbolToMidi(
   mode: ChordMode,
   baseOctave = 4,
 ): number[] | null {
-  const intervals = MODE_TABLES[mode].semitones[symbol];
+  const intervals = chordSymbolIntervalMap(symbol, mode);
   if (!intervals) return null;
   const base = (baseOctave + 1) * 12 + keyRoot;
   return intervals.map((iv) => base + iv);
+}
+
+/** Semitone intervals from key root for a Roman symbol (major table fallback). */
+export function chordSymbolIntervalMap(
+  symbol: ChordSymbol,
+  mode: ChordMode,
+): readonly number[] | null {
+  return MODE_TABLES[mode].semitones[symbol] ?? MODE_TABLES.major.semitones[symbol] ?? null;
 }
 
 /** Bass/root pitch for a Roman numeral — uses the mode's scale degree, not voicing order. */
@@ -709,6 +743,9 @@ export const PATTERNS: PatternDef[] = [
  * canon used by Soundtrap's Chord Trigger and Captain Chords.
  */
 export const GENRES: GenreDef[] = [
+  ...ERA_POP_RNB_DISCO_GENRES,
+  ...ERA_SOUL_RNB_NEO_GENRES,
+  ...ERA_BLUES_LATIN_KPOP_GENRES,
   {
     id: 'pop',
     label: 'Pop',
@@ -791,6 +828,10 @@ export const GENRES: GenreDef[] = [
       { id: 'rnb70-teddy',      name: 'Quiet-Storm Turn (ii7-V7-iii7-vi7)',     chords: ['ii7', 'V7', 'iii7', 'vi7'] },
       { id: 'rnb70-marvin',     name: 'Dominant-IV Soul (Imaj7-IV7-iii7-vi7)',  chords: ['Imaj7', 'IV7', 'iii7', 'vi7'] },
       { id: 'rnb70-smokey',     name: 'Soulful Descent (IVmaj7-iii7-ii7-Imaj7)', chords: ['IVmaj7', 'iii7', 'ii7', 'Imaj7'] },
+      { id: 'rnb70-min-soul',   name: 'Minor Soul (i7-iv7-VImaj7-V7)',           mode: 'minor', chords: ['i7', 'iv7', 'VImaj7', 'V7'] },
+      { id: 'rnb70-min-curtis', name: 'Curtis Minor (i7-VII7-VImaj7-iv7)',       mode: 'minor', chords: ['i7', 'VII7', 'VImaj7', 'iv7'] },
+      { id: 'rnb70-min-philly', name: 'Philly Minor (i7-iv7-V7-VImaj7)',         mode: 'minor', chords: ['i7', 'iv7', 'V7', 'VImaj7'] },
+      { id: 'rnb70-min-storm',  name: 'Quiet Storm Minor (i7-VImaj7-iiø7-V7)',    mode: 'minor', chords: ['i7', 'VImaj7', 'iiø7', 'V7'] },
     ],
   },
   {
@@ -811,6 +852,10 @@ export const GENRES: GenreDef[] = [
       { id: 'rnb90-glide',    name: 'Glide Turn (Imaj7-iii7-ii7-V7)',    chords: ['Imaj7', 'iii7', 'ii7', 'V7'] },
       { id: 'rnb90-suspend',  name: 'Suspended Cry (Imaj7-IVmaj7-Vsus4-V7)', chords: ['Imaj7', 'IVmaj7', 'Vsus4', 'V7'] },
       { id: 'rnb90-gospel',   name: 'Church Color (Imaj7-bVII-IVmaj7-V7)', chords: ['Imaj7', 'bVII', 'IVmaj7', 'V7'] },
+      { id: 'rnb90-min-jam',  name: '90s Minor Jam (i7-iv7-VII7-VImaj7)',  mode: 'minor', chords: ['i7', 'iv7', 'VII7', 'VImaj7'] },
+      { id: 'rnb90-min-dark', name: 'Dark 90s (i7-bVI-bVII-V7)',           mode: 'minor', chords: ['i7', 'bVI', 'bVII', 'V7'] },
+      { id: 'rnb90-min-group',name: 'Minor Harmony (i7-VImaj7-iv7-V7)',    mode: 'minor', chords: ['i7', 'VImaj7', 'iv7', 'V7'] },
+      { id: 'rnb90-min-25',   name: 'Minor Two-Five (i7-iiø7-V7-i7)',      mode: 'minor', chords: ['i7', 'iiø7', 'V7', 'i7'] },
     ],
   },
   {
@@ -831,6 +876,12 @@ export const GENRES: GenreDef[] = [
       { id: 'rnb-modern6',name: 'Tender Half-Dim (Imaj7-iiø7-V7-Imaj7)', chords: ['Imaj7', 'iiø7', 'V7', 'Imaj7'] },
       { id: 'rnb-modern7',name: 'Two-Chord Sway (Imaj7-IVmaj7)',        chords: ['Imaj7', 'IVmaj7', 'Imaj7', 'IVmaj7'] },
       { id: 'rnb-modern8',name: 'Falling Silk (Imaj7-iii7-ii7-Imaj7)',  chords: ['Imaj7', 'iii7', 'ii7', 'Imaj7'] },
+      { id: 'rnb-viopen', name: 'Minor Lead (vi7-ii7-iii7-IVmaj7)',       chords: ['vi7', 'ii7', 'iii7', 'IVmaj7'] },
+      { id: 'rnb-cycle7', name: 'Cycle Seven (vi7-ii7-V7-VII7)',          chords: ['vi7', 'ii7', 'V7', 'bVIImaj7'] },
+      { id: 'rnb-min-pocket', name: 'Minor Pocket (i7-VImaj7-iv7-V7)',    mode: 'minor', chords: ['i7', 'VImaj7', 'iv7', 'V7'] },
+      { id: 'rnb-min-dorian', name: 'Dorian Soul (i7-IV7-bVII-i7)',       mode: 'dorian', chords: ['i7', 'IV7', 'bVII', 'i7'] },
+      { id: 'rnb-min-dark',   name: 'Dark Neo Loop (i7-VII7-VImaj7-iv7)', mode: 'minor', chords: ['i7', 'VII7', 'VImaj7', 'iv7'] },
+      { id: 'rnb-min-25',     name: 'Minor Two-Five (i7-iiø7-V7-i7)',     mode: 'minor', chords: ['i7', 'iiø7', 'V7', 'i7'] },
     ],
   },
   // "True R&B" — the deep church-soul vocabulary that real R&B singers,
@@ -867,6 +918,17 @@ export const GENRES: GenreDef[] = [
       { id: 'truernb-crystal',    name: 'Crystal Descent (Imaj7-iii7-ii7-vi7)',     chords: ['Imaj7', 'iii7', 'ii7', 'vi7'] },
       { id: 'truernb-prayer2',    name: 'Prayer Cadence (Imaj7-iiø7-V7-IVmaj7)',    chords: ['Imaj7', 'iiø7', 'V7', 'IVmaj7'] },
       { id: 'truernb-softdoor',   name: 'Soft Back Door (Imaj7-IV7-ii7-V7)',        chords: ['Imaj7', 'IV7', 'ii7', 'V7'] },
+      // Minor-key True R&B — D'Angelo, Maxwell, Tank, Musiq, Jazmine Sullivan pocket.
+      { id: 'truernb-min-25',      name: 'Minor Two-Five (i7-iiø7-V7-i7)',           mode: 'minor', chords: ['i7', 'iiø7', 'V7', 'i7'] },
+      { id: 'truernb-min-cycle',   name: 'Minor Cycle (i7-iv7-VII7-VImaj7)',         mode: 'minor', chords: ['i7', 'iv7', 'VII7', 'VImaj7'] },
+      { id: 'truernb-min-neo',     name: 'Neo Minor Vamp (i7-IV7-i7-bVII)',          mode: 'dorian', chords: ['i7', 'IV7', 'i7', 'bVII'] },
+      { id: 'truernb-min-midnight',name: 'Midnight Minor (i7-VImaj7-iiø7-V7)',       mode: 'minor', chords: ['i7', 'VImaj7', 'iiø7', 'V7'] },
+      { id: 'truernb-min-heart',   name: 'Heartbreak (i7-bVI-bVII-i7)',              mode: 'minor', chords: ['i7', 'bVI', 'bVII', 'i7'] },
+      { id: 'truernb-min-late',    name: 'Late Night (i7-VII7-VImaj7-V7)',           mode: 'minor', chords: ['i7', 'VII7', 'VImaj7', 'V7'] },
+      { id: 'truernb-min-gospel',  name: 'Minor Gospel (i7-iv7-V7-VImaj7)',          mode: 'minor', chords: ['i7', 'iv7', 'V7', 'VImaj7'] },
+      { id: 'truernb-min-silk',    name: 'Silk Descent (i7-VImaj7-iv7-V7)',          mode: 'minor', chords: ['i7', 'VImaj7', 'iv7', 'V7'] },
+      { id: 'truernb-min-bridge',  name: 'Minor Bridge (VImaj7-iiø7-V7-i7)',         mode: 'minor', chords: ['VImaj7', 'iiø7', 'V7', 'i7'] },
+      { id: 'truernb-min-open',    name: 'Minor Open (i7-bIIImaj7-VImaj7-VII7)',     mode: 'minor', chords: ['i7', 'bIIImaj7', 'VImaj7', 'VII7'] },
     ],
   },
   {
@@ -1040,10 +1102,99 @@ export const GENRES: GenreDef[] = [
       { id: 'country-ballad', name: 'Ballad (vi-IV-I-V)',         chords: ['vi', 'IV', 'I', 'V'] },
     ],
   },
+  // Afrobeats / Afropop — highlife & makosa (major) plus minor/Dorian m7 loops.
+  // Distilled from common Naija producer vocabulary + contemporary Afrobeats harmony.
+  {
+    id: 'afrobeat',
+    label: 'Afrobeats / Afropop',
+    mode: 'minor',
+    progressions: [
+      { id: 'afro-makosa', name: 'Makosa · I–IV–V (Highlife)', mode: 'major', chords: ['I', 'IV', 'V', 'I'] },
+      { id: 'afro-highlife', name: 'Highlife · I–IV–V–IV', mode: 'major', chords: ['I', 'IV', 'V', 'IV'] },
+      { id: 'afro-donjazzy', name: 'Producer · I–ii–V–IV', mode: 'major', chords: ['I', 'ii', 'V', 'IV'] },
+      { id: 'afro-naija', name: 'Naija Pop · I–IV–vi–V', mode: 'major', chords: ['I', 'IV', 'vi', 'V'] },
+      { id: 'afro-sensitive', name: 'Afropop · vi–IV–I–V', mode: 'major', chords: ['vi', 'IV', 'I', 'V'] },
+      { id: 'afro-uplift', name: 'Afropop Uplift · Imaj7–IV–V–vi', mode: 'major', chords: ['Imaj7', 'IV', 'V', 'vi'] },
+      { id: 'afro-gospel', name: 'Afro Gospel · I–IV–I–V', mode: 'major', chords: ['I', 'IV', 'I', 'V'] },
+      { id: 'afro-vamp', name: 'Classic Vamp · i7–iv7', chords: ['i7', 'iv7', 'i7', 'iv7'] },
+      { id: 'afro-dorian', name: 'Dorian Groove · i7–IV7', mode: 'dorian', chords: ['i7', 'IV7', 'i7', 'IV7'] },
+      { id: 'afro-neo', name: 'Neo Afro · i7–VImaj7–VII7–i7', chords: ['i7', 'VImaj7', 'VII7', 'i7'] },
+      { id: 'afro-two', name: 'Two-Chord · i7–VII7', chords: ['i7', 'VII7', 'i7', 'VII7'] },
+      { id: 'afro-modal', name: 'Modal Lift · i7–VII–VI–V7', chords: ['i7', 'VII', 'VI', 'V7'] },
+      { id: 'afro-654', name: '654 · vi–V–IV', mode: 'major', chords: ['vi', 'V', 'IV', 'vi'] },
+      { id: 'afro-6525', name: '6525 · vi–V–ii–V', mode: 'major', chords: ['vi', 'V', 'ii', 'V'] },
+      { id: 'afro-amapiano', name: 'Amapiano Jazz · i7–VImaj7–iiø7–V7', chords: ['i7', 'VImaj7', 'iiø7', 'V7'] },
+    ],
+  },
+  // UK garage / 2-step — skippy shuffle, warm m7 pads, reggae-borrowed offbeat harmony.
+  {
+    id: 'uk-garage',
+    label: 'UK Garage · 2-Step',
+    mode: 'minor',
+    progressions: [
+      { id: 'ukg-am-f', name: '2-Step · i7–VImaj7 (double)', chords: ['i7', 'i7', 'VImaj7', 'VImaj7'] },
+      { id: 'ukg-soul', name: 'Soul Garage · i7–VImaj7–VII7–III7', chords: ['i7', 'VImaj7', 'VII7', 'III7'] },
+      { id: 'ukg-vi-iv', name: 'vi–IV · R&B borrow', mode: 'major', chords: ['vi7', 'IVmaj7', 'Imaj7', 'V7'] },
+      { id: 'ukg-turn', name: 'Turn · i7–VII7–VImaj7–V7', chords: ['i7', 'VII7', 'VImaj7', 'V7'] },
+      { id: 'ukg-dorian', name: 'Dorian stab · i7–IV7', mode: 'dorian', chords: ['i7', 'IV7', 'i7', 'IV7'] },
+      { id: 'ukg-dark', name: 'Dark garage · i7–VImaj7–V7–iv7', chords: ['i7', 'VImaj7', 'V7', 'iv7'] },
+      { id: 'ukg-speed', name: 'Speed · i–VII–VI–V', chords: ['i', 'VII', 'VI', 'V'] },
+      { id: 'ukg-reggae', name: 'Reggae snap · i–iv–VII–i', chords: ['i', 'iv', 'VII', 'i'] },
+      { id: 'ukg-one-drop', name: 'One drop · I–IV–V–I', mode: 'major', chords: ['I', 'IV', 'V', 'I'] },
+      { id: 'ukg-warm', name: 'Warm pad · i7–VImaj7–V7–III7', chords: ['i7', 'VImaj7', 'V7', 'III7'] },
+      { id: 'ukg-minor9', name: 'Late night · i7–iv7–VII7–i7', chords: ['i7', 'iv7', 'VII7', 'i7'] },
+      { id: 'ukg-bm', name: 'Polarity dark · i7–VImaj7–iv7–V7', chords: ['i7', 'VImaj7', 'iv7', 'V7'] },
+    ],
+  },
+  // Reggae / dub / dancehall — one-drop, skank, i–iv–VII–i, dub snap (roots ~88–94 · snap ~100–102 BPM).
+  {
+    id: 'reggae',
+    label: 'Reggae · Dub · Dancehall',
+    mode: 'minor',
+    progressions: [
+      { id: 'reg-one-drop', name: 'One Drop · I–IV–V–I', mode: 'major', chords: ['I', 'IV', 'V', 'I'] },
+      { id: 'reg-skank', name: 'Skank · I–IV–V–I', mode: 'major', chords: ['I', 'IV', 'V', 'I'] },
+      { id: 'reg-minor', name: 'Roots Minor · i–iv–VII–i', chords: ['i', 'iv', 'VII', 'i'] },
+      { id: 'reg-island', name: 'Island · i–VII–VI–VII', chords: ['i', 'VII', 'VI', 'VII'] },
+      { id: 'reg-dub', name: 'Dub Snap · i7–VII7–VImaj7–V7', chords: ['i7', 'VII7', 'VImaj7', 'V7'] },
+      { id: 'reg-count', name: 'Count Snap · i–iv–V–i', chords: ['i', 'iv', 'V', 'i'] },
+      { id: 'reg-dancehall', name: 'Dancehall · i–VII–i–VII', chords: ['i', 'VII', 'i', 'VII'] },
+      { id: 'reg-steel', name: 'Steel Pulse · i–bVII–bVI–V7', chords: ['i', 'bVII', 'bVI', 'V7'] },
+      { id: 'reg-gospel', name: 'Gospel Reggae · I–IV–I–V', mode: 'major', chords: ['I', 'IV', 'I', 'V'] },
+      { id: 'reg-two', name: 'Two-Chord · i–IV7', chords: ['i', 'IV7', 'i', 'IV7'] },
+      { id: 'reg-am-loop', name: 'Am Loop · i–v–VI–VII', chords: ['i', 'v', 'VI', 'VII'] },
+      { id: 'reg-dorian', name: 'Dorian Skank · i7–IV7', mode: 'dorian', chords: ['i7', 'IV7', 'i7', 'IV7'] },
+      { id: 'reg-bubble', name: 'Bubble · i7–iv7', chords: ['i7', 'iv7', 'i7', 'iv7'] },
+      { id: 'reg-dm-drop', name: 'Dm One Drop · i–iv–v–i', chords: ['i', 'iv', 'v', 'i'] },
+      { id: 'reg-offbeat', name: 'Offbeat · i–VII–IV–i', chords: ['i', 'VII', 'IV', 'i'] },
+    ],
+  },
 ];
+
+for (const genre of GENRES) {
+  const extra = GENRE_MINOR_EXPANSIONS[genre.id];
+  if (extra?.length) genre.progressions.push(...extra);
+}
 
 export function getGenre(id: string): GenreDef | undefined {
   return GENRES.find((g) => g.id === id);
+}
+
+/** True when a genre pack has at least one progression for the user's key family. */
+export function genreHasProgressionsForMode(genreId: string, wantMode: ChordMode): boolean {
+  const genre = getGenre(genreId);
+  if (!genre) return false;
+  const want = MODE_FAMILY[wantMode];
+  for (const prog of genre.progressions) {
+    const progMode = (prog.mode ?? genre.mode) as ChordMode;
+    const have = MODE_FAMILY[progMode];
+    if (want === 'other') {
+      if (have === 'other') return true;
+    } else if (want === have) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function getPattern(id: string): PatternDef | undefined {
