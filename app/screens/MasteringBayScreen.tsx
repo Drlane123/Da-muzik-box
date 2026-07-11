@@ -14,7 +14,7 @@ import { MasterMeterSuite } from '@/app/components/masteringBay/MasterMeterSuite
 import { MasteringBaySourceTrack } from '@/app/components/masteringBay/MasteringBaySourceTrack';
 import { MasteringRackChain } from '@/app/components/masteringBay/MasteringRackChain';
 import { useMasteringBayEngine } from '@/app/hooks/useMasteringBayEngine';
-import { processLiveFromNugen } from '@/app/lib/masteringBay/masteringBayProcessLive';
+import { processLiveFromMeters } from '@/app/lib/masteringBay/masteringBayProcessLive';
 import {
   DA_MUZIK_BOX_PRESETS,
   DEFAULT_RACK_STATE,
@@ -65,7 +65,10 @@ export default function MasteringBayScreen({
     if (pending) setPendingSe2Import(pending);
   }, []);
 
-  const processLive = useMemo(() => processLiveFromNugen(nugenSnap), [nugenSnap]);
+  const processLive = useMemo(
+    () => processLiveFromMeters(nugenSnap, multiSnap),
+    [nugenSnap, multiSnap],
+  );
 
   return (
     <div className="mastering-bay">

@@ -1330,31 +1330,27 @@ const TIMELINE_FOLLOW_PAINT_FWD_PX = 5600;
 /** Refill when the right edge of the viewport is this close to the painted end. */
 const TIMELINE_FOLLOW_PAINT_REARM_PX = 640;
 
-/** Smooth edge-follow: integer scrollLeft + sub-pixel strip offset (reduces 1px shake). */
+/** Sticky follow scroll — integer scrollLeft only (no strip translate). */
 function applyTimelineSmoothFollowScroll(
   targetScrollLeft: number,
   main: HTMLElement | null,
   ruler: HTMLElement | null,
   bar: HTMLElement | null,
-  laneStrip: HTMLElement | null,
-  rulerStrip: HTMLElement | null,
 ): void {
-  const intScroll = Math.floor(targetScrollLeft);
-  const frac = targetScrollLeft - intScroll;
-  /* Only write scrollLeft when the integer changes — avoids redundant scroll events / hitch. */
-  if (main && main.scrollLeft !== intScroll) main.scrollLeft = intScroll;
-  if (ruler && ruler.scrollLeft !== intScroll) ruler.scrollLeft = intScroll;
-  if (bar && bar.scrollLeft !== intScroll) bar.scrollLeft = intScroll;
-  const tx = frac > 0.0005 ? `translate3d(${-frac}px,0,0)` : 'translate3d(0,0,0)';
-  if (laneStrip) laneStrip.style.transform = tx;
-  if (rulerStrip) rulerStrip.style.transform = tx;
+  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+  /* Round to device pixels — avoids main-thread/compositor 1px fight with WAAPI playhead. */
+  const intScroll = Math.round(targetScrollLeft * dpr) / dpr;
+  const scrollPx = Math.round(intScroll);
+  if (main && main.scrollLeft !== scrollPx) main.scrollLeft = scrollPx;
+  if (ruler && ruler.scrollLeft !== scrollPx) ruler.scrollLeft = scrollPx;
+  if (bar && bar.scrollLeft !== scrollPx) bar.scrollLeft = scrollPx;
 }
 
 function clearTimelineFollowStripTransform(
-  laneStrip: HTMLElement | null,
+  laneContent: HTMLElement | null,
   rulerStrip: HTMLElement | null,
 ): void {
-  if (laneStrip) laneStrip.style.transform = '';
+  if (laneContent) laneContent.style.transform = '';
   if (rulerStrip) rulerStrip.style.transform = '';
 }
 
@@ -6833,6 +6829,8 @@ export default function StudioEditor2Screen({
   /** Cached reference to the inner line element Ã¢â‚¬â€ avoids querySelector on every RAF frame. */
   const playheadLineRef = useRef<HTMLDivElement | null>(null);
   const timelineStripRef = useRef<HTMLDivElement | null>(null);
+  /** Follow sub-pixel pan — lanes/canvas only; playhead stays outside so WAAPI does not fight it. */
+  const timelineFollowContentRef = useRef<HTMLDivElement | null>(null);
   /**
    * Arrange-view lane row height (timeline canvas + track name column).
    * Ref mirrors state for transport / RAF paths that cannot depend on render closure.
@@ -7308,7 +7306,7 @@ export default function StudioEditor2Screen({
       timelineFollowPaintRafRef.current = 0;
     }
     timelineProgrammaticScrollRef.current = false;
-    clearTimelineFollowStripTransform(timelineStripRef.current, timelineRulerStripRef.current);
+    clearTimelineFollowStripTransform(timelineFollowContentRef.current, timelineRulerStripRef.current);
   }, []);
 
   const scrollTrackListToEnd = useCallback(() => {
@@ -9918,11 +9916,6 @@ export default function StudioEditor2Screen({
     const bClamped   = Math.max(0, Math.min(b, tb));
     const lineCenter = bClamped * ppb;
 
-    const gw = PLAYHEAD_GRIP_W_PX;
-    const pw = PLAYHEAD_W_PX;
-    // WAAPI uses unclamped group position (x = b*ppb - gw/2); algebraically innerOffset = 0 always.
-    const innerOffset = 0;
-
     const pad = TIMELINE_SCROLL_MARGIN_PX;
     let newScrollLeft = scrollLeft;
     const playheadScreen = lineCenter - scrollLeft;
@@ -9940,7 +9933,8 @@ export default function StudioEditor2Screen({
         timelineFollowPinScreenXRef.current = Math.max(8, Math.min(pad, playheadScreen));
       } else if (playheadScreen >= pinLine) {
         timelineEdgeFollowActiveRef.current = true;
-        timelineFollowPinScreenXRef.current = playheadScreen;
+        /* Integer pin — sub-pixel pin X made WAAPI vs scroll fight look like shake. */
+        timelineFollowPinScreenXRef.current = Math.round(playheadScreen);
       }
       if (timelineEdgeFollowActiveRef.current && !(timelineFollowPaintEndRef.current > 0)) {
         /*
@@ -9976,10 +9970,8 @@ export default function StudioEditor2Screen({
     const sec  = (bReadout / Math.max(1, bpmRef.current)) * 60;
     const timeParts = formatTimeMmSsFfParts(sec);
 
-    /* --- 4. WRITE — inner line, scroll, readouts only --- */
+    /* --- 4. WRITE — scroll + readouts only (playhead = WAAPI compositor) --- */
     /* playheadGroupRef and pianoPlayheadRef are driven by WAAPI — do NOT touch them */
-    const ln = playheadLineRef.current;
-    if (ln) ln.style.transform = `translateX(${innerOffset}px)`;
     if (scrollEl) {
       if (following) {
         /* Stay true for the whole sticky session so echo onScroll cannot drop follow. */
@@ -9989,10 +9981,8 @@ export default function StudioEditor2Screen({
           scrollEl,
           timelineRulerHScrollRef.current,
           timelineHBarRef.current,
-          timelineStripRef.current,
-          timelineRulerStripRef.current,
         );
-        timelineFollowIntScrollRef.current = Math.floor(newScrollLeft);
+        timelineFollowIntScrollRef.current = Math.round(newScrollLeft);
         /*
          * Only refill the grid when the viewport is about to run off the painted window.
          * Never on a fixed px cadence — that caused the jump every ~N bars.
@@ -21065,6 +21055,15 @@ export default function StudioEditor2Screen({
                 lineHeight: 0,
               }}
             >
+              {/*
+                Sub-pixel follow pan lives here — NOT on the strip that holds the WAAPI playhead.
+                Translating the playhead’s parent against WAAPI was the shake.
+              */}
+              <div
+                ref={timelineFollowContentRef}
+                className="absolute inset-0"
+                style={{ willChange: 'transform' }}
+              >
               <canvas ref={timelineCanvasRef} className="block max-w-none pointer-events-none" style={{ verticalAlign: 'top' }} />
               {/* Lane gestures: select track / draw & edit MIDI (tools match piano roll toolbar). */}
               <div
@@ -21128,6 +21127,7 @@ export default function StudioEditor2Screen({
                   aria-hidden
                 />
               )}
+              </div>
               <div
                 ref={playheadGroupRef}
                 className="absolute top-0 bottom-0 z-[4] flex justify-center pointer-events-auto select-none"
