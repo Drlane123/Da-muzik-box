@@ -22474,7 +22474,28 @@ export default function StudioEditor2Screen({
           gap: '0 1.5rem',
         }}
       >
-        {/* Transport */}
+        {/* Left: position readouts */}
+        <StudioTransportBarsIsland
+          compact
+          barsReadoutRefs={{
+            bar: barsBarReadoutRef,
+            beat: barsBeatReadoutRef,
+            tick: barsTickReadoutRef,
+            pause: barsPauseReadoutRef,
+          }}
+          beatsPerBar={beatsPerBar}
+        />
+
+        <StudioTransportTimeIsland
+          compact
+          timeReadoutRefs={{
+            minutes: timeMinReadoutRef,
+            seconds: timeSecReadoutRef,
+            frames: timeFrameReadoutRef,
+          }}
+        />
+
+        {/* Middle: transport + record count-in */}
         <div className="se2-transport-footer-island se2-transport-transport-controls flex items-end gap-4 shrink-0 box-border">
           <button
             type="button"
@@ -22603,26 +22624,6 @@ export default function StudioEditor2Screen({
                 : '0/0'}
             </span>
         </div>
-
-        <StudioTransportBarsIsland
-          compact
-          barsReadoutRefs={{
-            bar: barsBarReadoutRef,
-            beat: barsBeatReadoutRef,
-            tick: barsTickReadoutRef,
-            pause: barsPauseReadoutRef,
-          }}
-          beatsPerBar={beatsPerBar}
-        />
-
-        <StudioTransportTimeIsland
-          compact
-          timeReadoutRefs={{
-            minutes: timeMinReadoutRef,
-            seconds: timeSecReadoutRef,
-            frames: timeFrameReadoutRef,
-          }}
-        />
 
         <StudioTransportBpmIsland
           compact
