@@ -13,6 +13,7 @@ import {
   SPECTRUM_FORGE_BOOST_MAX_DB,
   type StudioSpectrumForgeFx,
 } from '@/app/lib/studio/studioSpectrumForge';
+import { isStudioMixerStripGraphPlaybackLocked } from '@/app/lib/studio/studioMixerStripBus';
 import { spectrumForgeConfigureAnalyser } from '@/app/lib/studio/studioSpectrumForgeAnalyzer';
 
 export const SPECTRUM_FORGE_METER_FFT = 2048;
@@ -289,6 +290,8 @@ export function readSpectrumForgeMeterSnapshot(
   trackIndex: number,
   reuseSpectrum?: Float32Array,
 ): SpectrumForgeMeterSnapshot | null {
+  // Main-thread analyser pulls during SE2 transport cause audible dropouts on WAV/MIDI lanes.
+  if (isStudioMixerStripGraphPlaybackLocked()) return null;
   return buses.get(trackIndex)?.readMeter(reuseSpectrum) ?? null;
 }
 

@@ -141,6 +141,7 @@ function purgeLegacyForgeSplice(trackIndex: number, preStrip: GainNode, stripIn:
 }
 
 function destroyRoute(route: StripRoute, trackIndex: number, stripIn?: GainNode | null): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   stopNodes(route.innerNodes);
   route.innerNodes = [];
   purgeLegacyForgeSplice(trackIndex, route.preStrip, stripIn ?? route.stripIn ?? route.preStrip);
@@ -285,6 +286,7 @@ function wireBypass(
   stripIn: GainNode,
   trackIndex: number,
 ): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
   stopNodes(route.innerNodes);
   route.innerNodes = [];
@@ -314,6 +316,7 @@ function wireSuite(
   bpm: number,
   trackIndex: number,
 ): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
   stopNodes(route.innerNodes);
   route.innerNodes = [];
@@ -353,6 +356,7 @@ function wireSuiteSwap(
   bpm: number,
   trackIndex: number,
 ): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
   const oldInner = [...route.innerNodes];
   const oldInput = route.suiteInput;
@@ -411,10 +415,17 @@ export function resolveStudioTrackPlaybackInput(
   bpm: number,
   downstream?: AudioNode,
 ): GainNode {
+  if (isStudioMixerStripGraphPlaybackLocked()) {
+    const routeLocked = routes.get(trackIndex);
+    if (routeLocked?.preStrip) {
+      return resolveClipPlaybackBus(trackIndex, routeLocked.preStrip);
+    }
+    return ensurePreStrip(ctx, trackIndex).preStrip;
+  }
+
   const routeEarly = routes.get(trackIndex);
   if (
-    isStudioMixerStripGraphPlaybackLocked()
-    && routeEarly?.stripFeed
+    routeEarly?.stripFeed
     && routeEarly.preStrip
   ) {
     retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex);
@@ -506,6 +517,7 @@ export function resyncStudioTrackInsertFxStripInputs(
   stripCount: number,
   downstream?: AudioNode,
 ): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   for (const [trackIndex, route] of routes) {
     if (trackIndex >= stripCount) continue;
     const stripIn =
@@ -532,7 +544,41 @@ export function getStudioTrackClipPlaybackBus(trackIndex: number): GainNode | nu
   return resolveClipPlaybackBus(trackIndex, route.preStrip);
 }
 
+/**
+ * During transport lock: reconnect stripFeed → live strip.input when mixer strips were rebuilt
+ * (e.g. STRIP_BUS_VERSION bump) without tearing down insert / vocal FX graphs.
+ */
+export function healStudioTrackPlaybackRouteIfStale(
+  ctx: AudioContext,
+  masterBus: GainNode,
+  trackIndex: number,
+  stripCount: number,
+  downstream?: AudioNode,
+): GainNode | null {
+  const route = routes.get(trackIndex);
+  if (!route?.preStrip) return null;
+
+  const stripIn =
+    getStudioMixerStripInput(trackIndex)
+    ?? (isStudioMixerStripGraphPlaybackLocked()
+      ? null
+      : resolveStudioMixerStripInput(ctx, masterBus, trackIndex, stripCount, downstream));
+
+  if (!stripIn) return resolveClipPlaybackBus(trackIndex, route.preStrip);
+
+  if (route.stripFeed && route.stripIn === stripIn) {
+    return resolveClipPlaybackBus(trackIndex, route.preStrip);
+  }
+
+  const stripFeed = ensureStripFeed(ctx, route, stripIn);
+  severStripFeedInputs(route, stripFeed, stripIn);
+  reconnectTapToStripFeed(route, stripFeed, route.suiteWired);
+  retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex);
+  return resolveClipPlaybackBus(trackIndex, route.preStrip);
+}
+
 export function retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex: number): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   if (!studioTrackAnalyserHasConsumer(trackIndex, 'fxSuite')) return;
   const tap = routes.get(trackIndex)?.preStrip;
   if (!tap || tap.context.state === 'closed') return;
@@ -546,6 +592,7 @@ export function getStudioTrackInsertRouteSignature(trackIndex: number): string {
 }
 
 export function resetStudioTrackInsertFxStrips(): void {
+  if (isStudioMixerStripGraphPlaybackLocked()) return;
   resetAllSpectrumForgeBuses();
   for (const trackIndex of [...routes.keys()]) {
     const route = routes.get(trackIndex);

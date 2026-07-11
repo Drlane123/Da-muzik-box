@@ -1,7 +1,7 @@
 /**
  * Studio Editor 2 — DSP-thread meter (AudioWorklet render quantum).
- * Holds absolute peak + RMS and posts ~60 Hz so main-thread VU tracks the
- * real post-fader signal (not a one-block flash).
+ * Holds absolute peak + RMS and posts ~20 Hz. Idle/unused strips post silence once
+ * then stay quiet — 64×60 Hz posts were flooding the main thread (play dropouts).
  */
 class StudioChannelMeterProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -12,6 +12,7 @@ class StudioChannelMeterProcessor extends AudioWorkletProcessor {
     this._rmsAccR = 0;
     this._rmsBlocks = 0;
     this._blocksSincePost = 0;
+    this._postedSilence = false;
   }
 
   process(inputs, outputs) {
@@ -50,15 +51,29 @@ class StudioChannelMeterProcessor extends AudioWorkletProcessor {
     this._rmsBlocks += 1;
     this._blocksSincePost += 1;
 
-    // ~60 Hz post rate — enough for honest VU without flooding the main thread.
-    if (this._blocksSincePost >= 8) {
+    // ~20 Hz — was 60 Hz × 64 strips and flooded the main thread (SE2 play dropouts).
+    if (this._blocksSincePost >= 24) {
       const blocks = Math.max(1, this._rmsBlocks);
+      const outPeakL = this._peakL;
+      const outPeakR = this._peakR;
+      const silent = outPeakL < 0.00025 && outPeakR < 0.00025;
+      // Idle/unused strips: one silence post, then stay quiet until signal returns.
+      if (silent && this._postedSilence) {
+        this._peakL = 0;
+        this._peakR = 0;
+        this._rmsAccL = 0;
+        this._rmsAccR = 0;
+        this._rmsBlocks = 0;
+        this._blocksSincePost = 0;
+        return true;
+      }
       this.port.postMessage({
-        peakL: this._peakL,
-        peakR: this._peakR,
+        peakL: outPeakL,
+        peakR: outPeakR,
         rmsL: Math.sqrt(this._rmsAccL / blocks),
         rmsR: Math.sqrt(this._rmsAccR / blocks),
       });
+      this._postedSilence = silent;
       this._peakL = 0;
       this._peakR = 0;
       this._rmsAccL = 0;

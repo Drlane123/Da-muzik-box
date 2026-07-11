@@ -107,6 +107,7 @@ import { scheduleBeatLabMeterPulseAt } from '@/app/lib/creationStation/beatLabCh
 import {
   isCreationBeatLabTransportRunning,
   isGrooveLabTransportRunning,
+  isSe2EditorTransportRunning,
   shouldHoldSharedAudioGraphForCreationModules,
 } from '@/app/lib/creationStation/creationTransportSync';
 import { isPianoRollTransportRunning } from '@/app/lib/pianoRoll/pianoRollTransportSync';
@@ -1324,7 +1325,7 @@ export function MasterClockProvider({
     ): boolean => {
       try {
         /** Beat Lab / Groove Lab own buffer-click lookahead — never stack oscillator clicks. */
-        if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning() || isPianoRollTransportRunning()) {
+        if (isCreationBeatLabTransportRunning() || isGrooveLabTransportRunning() || isPianoRollTransportRunning() || isSe2EditorTransportRunning()) {
           return false;
         }
         const ctx = getOrCreateAudioContext();
@@ -2483,14 +2484,8 @@ export function MasterClockProvider({
             0.0001,
             Math.min(1, masterOutputLinearRef.current),
           );
-          /**
-           * Metronome routes through this bus — a 20ms ramp from ~silence made beat 1 **inaudible** and
-           * felt “late”. Start at an audible fraction, short ramp (pro DAW: click on grid is heard).
-           */
-          const startAudible = Math.max(0.07, Math.min(target * 0.35, 0.35));
           master.gain.cancelScheduledValues(now);
-          master.gain.setValueAtTime(startAudible, now);
-          master.gain.exponentialRampToValueAtTime(target, now + 0.01);
+          master.gain.setValueAtTime(target, now);
         }
       } catch (e) {
         console.warn('[MasterClock] play: AudioContext resume failed', e);
@@ -2587,10 +2582,8 @@ export function MasterClockProvider({
           0.0001,
           Math.min(1, masterOutputLinearRef.current),
         );
-        const startAudible = Math.max(0.07, Math.min(target * 0.35, 0.35));
         master.gain.cancelScheduledValues(now);
-        master.gain.setValueAtTime(startAudible, now);
-        master.gain.exponentialRampToValueAtTime(target, now + 0.01);
+        master.gain.setValueAtTime(target, now);
       } catch {
         /* non-fatal — count-in clicks still route to ctx.destination if master fails */
       }

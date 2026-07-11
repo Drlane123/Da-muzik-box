@@ -12,6 +12,10 @@ import {
 
   se2AudioPreviewPurgeLoopLapKeys,
 
+  se2AudioPreviewClipStillAudible,
+
+  se2GateAudioPreviewOccurrence,
+
 } from '@/app/lib/studio/se2AudioLoopPreview';
 
 
@@ -293,4 +297,56 @@ describe('se2AudioClipPreviewScheduleKeyLoopLap', () => {
 
 });
 
+describe('se2AudioPreviewClipStillAudible', () => {
+  test('returns false when source playbackState is finished', () => {
+    const src = { playbackState: 3 } as AudioBufferSourceNode;
+    expect(
+      se2AudioPreviewClipStillAudible(
+        [{ scheduleKey: 'k1', endTime: 100, src }],
+        'k1',
+        { currentTime: 5, state: 'running' },
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('se2GateAudioPreviewOccurrence', () => {
+  test('re-schedules when dedupe key is set but BufferSource is gone', () => {
+    const scheduled = new Set(['audio:tr1:c1:align0']);
+    const ctx = { currentTime: 10, state: 'running' } as AudioContext;
+    const occ = { tOn: 8, tOff: 40 };
+    expect(
+      se2GateAudioPreviewOccurrence({
+        scheduled,
+        tracking: [],
+        key: 'audio:tr1:c1:align0',
+        ctx,
+        occ,
+        ctSnap: 10,
+        inLoopRegion: false,
+        isLoopDownbeat: false,
+      }),
+    ).toBe('schedule');
+    expect(scheduled.has('audio:tr1:c1:align0')).toBe(false);
+  });
+
+  test('skips when clip is still audible mid-occurrence', () => {
+    const scheduled = new Set<string>();
+    const ctx = { currentTime: 10 } as AudioContext;
+    const occ = { tOn: 8, tOff: 40 };
+    expect(
+      se2GateAudioPreviewOccurrence({
+        scheduled,
+        tracking: [{ scheduleKey: 'audio:tr1:c1:align0', endTime: 38 }],
+        key: 'audio:tr1:c1:align0',
+        ctx,
+        occ,
+        ctSnap: 10,
+        inLoopRegion: false,
+        isLoopDownbeat: false,
+      }),
+    ).toBe('skip');
+    expect(scheduled.has('audio:tr1:c1:align0')).toBe(true);
+  });
+});
 

@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import { detectPitchACF, frequencyToMidiNote } from '@/app/lib/pitchDetection';
 import { getStudioPitchMonitorActiveTrack, getStudioPitchMonitorAnalyser, getStudioVocoderMonitorAnalyser } from '@/app/lib/studio/studioPitchTuneMonitorBus';
-import { studioMixerStripAudible } from '@/app/lib/studio/studioMixerStripBus';
+import {
+  isStudioMixerStripGraphPlaybackLocked,
+  studioMixerStripAudible,
+} from '@/app/lib/studio/studioMixerStripBus';
 import type { PitchTuneScaleId } from '@/app/lib/studio/studioPitchTune';
 import type { StudioTrackVocalFx } from '@/app/lib/studio/studioTrackVocalFx';
 import {
@@ -154,6 +157,12 @@ export function useStudioPitchTuneMonitor({
 
     const tick = () => {
       if (cancelled) return;
+
+      // Analyser pulls on the main thread during SE2 transport cause audible dropouts.
+      if (isStudioMixerStripGraphPlaybackLocked()) {
+        raf = requestAnimationFrame(tick);
+        return;
+      }
 
       if (!studioMixerStripAudible(trackIndex) && getStudioPitchMonitorActiveTrack() !== trackIndex) {
         calibFrames = 0;

@@ -34,9 +34,10 @@ const MENU_BG = '#0a0a0a';
 const MENU_BORDER = '#333333';
 const MENU_ROW = '#0a0a0a';
 const MENU_HOVER = '#1a1a1a';
-const MENU_ACTIVE = '#241428';
+const MENU_ACTIVE = '#0a1a22';
 const MENU_Z = 10000;
-const ACCENT = '#D500F9';
+/** Gen-DAW cyan — matches Da Muzik Box / Gen-DAW title bar */
+const ACCENT = '#00E5FF';
 
 function navIcon(id: ScreenId, size = 14) {
   switch (id) {
@@ -76,10 +77,13 @@ function menuRowStyle(active: boolean): React.CSSProperties {
     alignItems: 'center',
     gap: 8,
     width: '100%',
-    padding: '7px 12px',
-    fontSize: 12,
-    fontWeight: active ? 600 : 500,
-    color: active ? ACCENT : '#c8c8c8',
+    padding: '8px 12px',
+    fontFamily: 'Rajdhani, system-ui, sans-serif',
+    fontSize: 13,
+    fontWeight: active ? 700 : 600,
+    letterSpacing: '0.08em',
+    lineHeight: 1.35,
+    color: active ? ACCENT : '#e8e8e8',
     background: active ? MENU_ACTIVE : MENU_ROW,
     border: 'none',
     textAlign: 'left',
@@ -162,11 +166,12 @@ export default function ModulesMenu({
     return (
       <div
         role="menu"
+        className="dmb-modules-dropdown"
         style={{
           position: 'fixed',
           top: submenuAnchor.top,
           left: submenuAnchor.right + 2,
-          minWidth: 220,
+          minWidth: 240,
           maxHeight: 'min(70vh, 480px)',
           overflowY: 'auto',
           backgroundColor: MENU_BG,
@@ -341,32 +346,41 @@ export default function ModulesMenu({
     <div
       ref={rootRef}
       data-dmb-modules-menu
-      className="relative shrink-0"
+      className="dmb-modules-menu-wrap relative shrink-0"
       style={{ zIndex: MENU_Z }}
     >
+      <span className="dmb-modules-side-arrows" aria-hidden>
+        <ChevronRight size={16} strokeWidth={2.75} className="dmb-modules-side-arrow--1" />
+        <ChevronRight size={16} strokeWidth={2.75} className="dmb-modules-side-arrow--2" />
+      </span>
+      <div className="relative shrink-0">
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 rounded-md transition-colors active:scale-95"
+        className="dmb-modules-trigger flex items-center justify-center gap-1.5 rounded-md transition-colors active:scale-[0.98]"
         style={{
-          height: 32,
-          padding: '0 10px',
-          border: `1px solid ${open ? 'rgba(213,0,249,0.35)' : MENU_BORDER}`,
-          background: open ? 'rgba(213,0,249,0.08)' : '#141414',
-          color: open ? ACCENT : '#b0b0b0',
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.14em',
+          height: 44,
+          minWidth: 144,
+          padding: '0 14px',
+          border: `1px solid ${open ? 'rgba(0,229,255,0.55)' : 'rgba(0,229,255,0.32)'}`,
+          background: open
+            ? 'linear-gradient(180deg, rgba(0,229,255,0.16) 0%, rgba(10,24,32,0.95) 100%)'
+            : 'linear-gradient(180deg, #0f1a22 0%, #0a1218 100%)',
+          color: '#ffffff',
+          fontFamily: 'Rajdhani, system-ui, sans-serif',
+          fontWeight: 600,
+          letterSpacing: '0.13em',
           textTransform: 'uppercase',
           cursor: 'pointer',
+          boxShadow: 'none',
         }}
         title="Open module menu"
       >
         Modules
         <ChevronDown
-          size={14}
+          size={15}
           style={{
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.15s ease',
@@ -375,13 +389,14 @@ export default function ModulesMenu({
       </button>
 
       {open && (
-        <div
-          role="menu"
-          style={{
+      <div
+        role="menu"
+        className="dmb-modules-dropdown"
+        style={{
             position: 'absolute',
             top: 'calc(100% + 4px)',
             left: 0,
-            minWidth: 240,
+            minWidth: 260,
             maxHeight: 'min(70vh, 520px)',
             overflowY: 'auto',
             backgroundColor: MENU_BG,
@@ -396,6 +411,7 @@ export default function ModulesMenu({
           {items.map((item) => renderItem(item))}
         </div>
       )}
+      </div>
     </div>
   );
 }

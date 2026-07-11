@@ -6871,6 +6871,15 @@ function CreationStationScreenBody({
 
   /** Master transport UI only exists on Beat Lab — pause if the user leaves while playing so audio is not stuck with no controls. */
   useEffect(() => {
+    if (isScreenActive) return;
+    if (!runningRef.current) {
+      setCreationBeatLabTransportRunning(false);
+      return;
+    }
+    void pauseTransport();
+  }, [isScreenActive, pauseTransport]);
+
+  useEffect(() => {
     if (tab === 'grid') return;
     if (tab === 'groove-lab' && grooveBeatlabMirror) return;
     if (!runningRef.current) return;

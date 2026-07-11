@@ -168,3 +168,114 @@ export function se2AudioClipLoopOccurrences(args: {
     },
   ];
 }
+
+/** Minimal clip row for transport refill — avoids coupling to screen-local types. */
+export type Se2AudioPreviewTrackingClip = {
+  scheduleKey?: string;
+  endTime?: number;
+  /** Live BufferSource — used to detect dead sources before dedupe keys block re-schedule. */
+  src?: AudioBufferSourceNode;
+};
+
+function se2AudioPreviewSourceStillRunning(src: AudioBufferSourceNode | undefined): boolean {
+  if (!src) return false;
+  try {
+    const state = (src as AudioBufferSourceNode & { playbackState?: number }).playbackState;
+    // 0 = UNSCHEDULED, 3 = FINISHED — treat both as dead so refill can recover.
+    if (state === 0 || state === 3) return false;
+  } catch {
+    /* older browsers — fall back to endTime only */
+  }
+  return true;
+}
+
+export function se2AudioPreviewClipStillAudible(
+  tracking: readonly Se2AudioPreviewTrackingClip[],
+  scheduleKey: string,
+  ctx: Pick<AudioContext, 'currentTime' | 'state'>,
+): boolean {
+  if (ctx.state !== 'running') return false;
+  const now = ctx.currentTime;
+  for (const clip of tracking) {
+    if (clip.scheduleKey !== scheduleKey) continue;
+    if (clip.endTime != null && now >= clip.endTime - 0.01) return false;
+    if (!se2AudioPreviewSourceStillRunning(clip.src)) return false;
+    if (clip.endTime != null && now < clip.endTime - 0.01) return true;
+  }
+  return false;
+}
+
+export type Se2AudioPreviewOccurrenceGate = {
+  scheduled: Set<string>;
+  tracking: readonly Se2AudioPreviewTrackingClip[];
+  key: string;
+  ctx: Pick<AudioContext, 'currentTime'>;
+  occ: { tOn: number; tOff: number };
+  ctSnap: number;
+  opts?: { loopContinuation?: boolean };
+  inLoopRegion: boolean;
+  isLoopDownbeat: boolean;
+  loopCatchUpSec?: number;
+};
+
+/**
+ * Decide whether an audio occurrence should be scheduled on this refill tick.
+ * Re-schedules when a prior BufferSource died but the dedupe key is still set.
+ */
+export function se2GateAudioPreviewOccurrence(gate: Se2AudioPreviewOccurrenceGate): 'skip' | 'schedule' {
+  const {
+    scheduled,
+    tracking,
+    key,
+    ctx,
+    occ,
+    ctSnap,
+    opts,
+    inLoopRegion,
+    isLoopDownbeat,
+    loopCatchUpSec = 0.15,
+  } = gate;
+
+  if (occ.tOff < ctSnap - 0.02) {
+    scheduled.delete(key);
+    return 'skip';
+  }
+
+  if (occ.tOn < ctSnap - 0.03) {
+    const allowLoopReschedule =
+      inLoopRegion &&
+      (opts?.loopContinuation === true || isLoopDownbeat) &&
+      occ.tOn >= ctSnap - loopCatchUpSec;
+    if (!allowLoopReschedule) {
+      if (se2AudioPreviewClipStillAudible(tracking, key, ctx)) {
+        scheduled.add(key);
+        return 'skip';
+      }
+      scheduled.delete(key);
+    }
+  }
+
+  if (scheduled.has(key)) {
+    if (se2AudioPreviewClipStillAudible(tracking, key, ctx)) return 'skip';
+    scheduled.delete(key);
+  }
+
+  if (se2AudioPreviewClipStillAudible(tracking, key, ctx)) {
+    scheduled.add(key);
+    return 'skip';
+  }
+
+  return 'schedule';
+}
+
+/** Drop stale dedupe keys whose BufferSource is no longer running. */
+export function se2PurgeDeadAudioPreviewScheduleKeys(
+  scheduled: Set<string>,
+  tracking: readonly Se2AudioPreviewTrackingClip[],
+  ctx: Pick<AudioContext, 'currentTime' | 'state'>,
+): void {
+  for (const key of [...scheduled]) {
+    if (se2AudioPreviewClipStillAudible(tracking, key, ctx)) continue;
+    scheduled.delete(key);
+  }
+}

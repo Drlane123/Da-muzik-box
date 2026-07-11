@@ -1582,7 +1582,15 @@ export function BeatLabDrumMachineOverlay({
                 </button>
               ) : null}
               {embedded ? (
-                <>
+                <div
+                  className="beat-pads-vocalbox-promo"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    flexShrink: 0,
+                  }}
+                >
                   <button
                     type="button"
                     disabled={patternActionsDisabled}
@@ -1622,6 +1630,7 @@ export function BeatLabDrumMachineOverlay({
                     </span>
                   </button>
                   <span
+                    className="beat-pads-vocalbox-tagline"
                     style={{
                       fontSize: 10,
                       fontWeight: 800,
@@ -1634,7 +1643,7 @@ export function BeatLabDrumMachineOverlay({
                   >
                     {BEAT_PADS_VOCALBOX_TAGLINE}
                   </span>
-                </>
+                </div>
               ) : null}
               {exportStatus ? (
                 <span
@@ -1833,6 +1842,12 @@ export function BeatLabDrumMachineOverlay({
               position: 'relative',
             }}
           >
+            {embedded && showFxPanel ? (
+              <div className="beat-pads-fx-per-pad-hint" aria-hidden>
+                <span className="beat-pads-fx-per-pad-hint__text">Effects per pad</span>
+                <span className="beat-pads-fx-per-pad-hint__arrow">→</span>
+              </div>
+            ) : null}
             {embedded && vocalBoxOpen ? (
               <div
                 className="beat-pads-vocalbox-drop"

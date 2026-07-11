@@ -25,9 +25,14 @@ export function se2ComputeGridViewport(
   fullWidthCss: number,
   scrollLeftCss: number,
   viewportWidthCss: number,
+  opts?: { marginBackPx?: number; marginFwdPx?: number },
 ): { viewStart: number; paintWidth: number } {
-  const margin = SE2_GRID_VIEW_MARGIN_PX;
-  const viewStart = Math.max(0, scrollLeftCss - margin);
-  const viewEnd = Math.min(fullWidthCss, scrollLeftCss + Math.max(400, viewportWidthCss) + margin);
+  const marginBack = opts?.marginBackPx ?? SE2_GRID_VIEW_MARGIN_PX;
+  const marginFwd = opts?.marginFwdPx ?? SE2_GRID_VIEW_MARGIN_PX;
+  const viewStart = Math.max(0, scrollLeftCss - marginBack);
+  const viewEnd = Math.min(
+    fullWidthCss,
+    scrollLeftCss + Math.max(400, viewportWidthCss) + marginFwd,
+  );
   return { viewStart, paintWidth: Math.max(1, viewEnd - viewStart) };
 }

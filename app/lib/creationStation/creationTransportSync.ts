@@ -189,6 +189,10 @@ export function isGenoUltraSynthPanelActive(): boolean {
   );
 }
 
+function se2EditorHoldsSharedAudioGraph(): boolean {
+  return isSe2EditorTransportRunning() || isSe2EditorScreenActive();
+}
+
 export function shouldHoldSharedAudioGraphForCreationModules(): boolean {
   return (
     isCreationBeatLabTransportRunning() ||
@@ -198,7 +202,38 @@ export function shouldHoldSharedAudioGraphForCreationModules(): boolean {
     isLab808ScreenActive() ||
     isPianoRollTransportRunning() ||
     isGenoUltraArpPreviewRunning() ||
-    isGenoUltraSynthPanelActive()
+    isGenoUltraSynthPanelActive() ||
+    se2EditorHoldsSharedAudioGraph()
+  );
+}
+
+/** Studio Editor 2 local transport — master pause/stop must not suspend the shared graph. */
+export function setSe2EditorTransportRunning(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicSe2EditorTransportRunning?: boolean }).__daMusicSe2EditorTransportRunning =
+    running;
+}
+
+export function isSe2EditorTransportRunning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicSe2EditorTransportRunning?: boolean })
+      .__daMusicSe2EditorTransportRunning === true
+  );
+}
+
+/** Studio Editor 2 tab visible — keep shared AudioContext alive for preview + meters. */
+export function setSe2EditorScreenActive(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicSe2EditorScreenActive?: boolean }).__daMusicSe2EditorScreenActive =
+    active;
+}
+
+export function isSe2EditorScreenActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicSe2EditorScreenActive?: boolean }).__daMusicSe2EditorScreenActive ===
+    true
   );
 }
 

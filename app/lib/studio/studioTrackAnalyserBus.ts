@@ -1,7 +1,10 @@
 /**
  * Per-lane analyser tap for Pitch Tune scope + FX Suite meters (real signal only).
  */
-import { readStudioMixerStripAnalyserSnapshot } from '@/app/lib/studio/studioMixerStripBus';
+import {
+  isStudioMixerStripGraphPlaybackLocked,
+  readStudioMixerStripAnalyserSnapshot,
+} from '@/app/lib/studio/studioMixerStripBus';
 
 export type StudioTrackAnalyserConsumer = 'pitch' | 'fxSuite' | 'mixer';
 
@@ -233,6 +236,9 @@ export function readStudioTrackMeterSnapshot(
   trackIndex: number,
   reuseSpectrum?: Float32Array,
 ): StudioTrackMeterSnapshot | null {
+  // Main-thread analyser pulls during SE2 transport cause audible dropouts on WAV/MIDI lanes.
+  if (isStudioMixerStripGraphPlaybackLocked()) return null;
+
   const fxSuiteOpen = consumers.get(trackIndex)?.has('fxSuite') ?? false;
   const insertAnalyser = fxSuiteOpen ? analysers.get(trackIndex) : undefined;
 

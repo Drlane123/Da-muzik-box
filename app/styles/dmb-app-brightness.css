@@ -49,3 +49,74 @@ body {
 body[data-studio-geno-build-fullscreen] [data-dmb-modules-menu] {
   display: none !important;
 }
+
+/** Title bar — Modules sits beside Da Muzik Box; side arrows point at the box (no extra height). */
+.dmb-modules-menu-wrap {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1px;
+  height: 44px;
+}
+
+.dmb-modules-side-arrows {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  margin-right: -5px;
+  pointer-events: none;
+  color: #9defff;
+  line-height: 0;
+}
+
+.dmb-modules-side-arrow--2 {
+  margin-left: -9px;
+}
+
+.dmb-modules-side-arrow--1,
+.dmb-modules-side-arrow--2 {
+  animation: beat-pads-sf-arrow-point 1.05s ease-in-out infinite;
+}
+
+.dmb-modules-side-arrow--2 {
+  animation-delay: 0.525s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dmb-modules-side-arrow--1,
+  .dmb-modules-side-arrow--2 {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+.dmb-modules-trigger {
+  font-family: Rajdhani, system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #ffffff;
+  text-shadow: none;
+}
+
+/** Modules dropdown — Rajdhani (same as Music Production Suite); must not inherit title-bar line-height:0. */
+[data-dmb-modules-menu] .dmb-modules-dropdown {
+  line-height: normal;
+  font-family: Rajdhani, system-ui, sans-serif;
+}
+
+[data-dmb-modules-menu] .dmb-modules-dropdown [role='menuitem'] {
+  font-family: Rajdhani, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+[data-dmb-modules-menu] .dmb-modules-dropdown [role='menuitem'] .truncate {
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}

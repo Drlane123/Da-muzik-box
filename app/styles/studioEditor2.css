@@ -306,6 +306,250 @@
   cursor: pointer;
 }
 
+[data-studio-transport] {
+  scrollbar-gutter: stable;
+}
+
+/* Each footer control group is its own fixed-width island — play must not compress neighbors. */
+[data-studio-transport] > .se2-transport-footer-island,
+[data-studio-transport] > .se2-transport-transport-controls {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  isolation: isolate;
+}
+
+[data-studio-transport] .se2-transport-bars-island {
+  width: 11.75rem;
+  min-width: 11.75rem;
+  max-width: 11.75rem;
+}
+
+[data-studio-transport] .se2-transport-time-island {
+  width: 10.25rem;
+  min-width: 10.25rem;
+  max-width: 10.25rem;
+}
+
+/* Caption sits above the bordered wrapper — wrapper is digits only. */
+[data-studio-transport] .se2-transport-readout-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  width: 100%;
+}
+
+[data-studio-transport] .se2-transport-readout-caption {
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* Outer chassis — Bars and Time digit boxes only (label is outside). */
+[data-studio-transport] .se2-transport-readout-wrap {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid #2a2a38;
+  border-radius: 0.25rem;
+  background: linear-gradient(180deg, #0c0c12 0%, #08080c 100%);
+  contain: layout style;
+  isolation: isolate;
+}
+
+[data-studio-transport] .se2-transport-bars-wrap {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+[data-studio-transport] .se2-transport-time-wrap {
+  box-shadow: inset 0 1px 0 rgba(124, 244, 198, 0.04);
+}
+
+[data-studio-transport] .se2-transport-bpm-island {
+  width: 7.75rem;
+  min-width: 7.75rem;
+  max-width: 7.75rem;
+}
+
+[data-studio-transport] .se2-transport-precount-island {
+  width: 2rem;
+  min-width: 2rem;
+  max-width: 2rem;
+}
+
+[data-studio-transport] .se2-transport-utility-btns {
+  width: 4.5rem;
+  min-width: 4.5rem;
+}
+
+[data-studio-transport] .se2-transport-piano-island {
+  width: 6.75rem;
+  min-width: 6.75rem;
+}
+
+[data-studio-transport] .se2-transport-mixer-island {
+  width: 2.25rem;
+  min-width: 2.25rem;
+}
+
+[data-studio-transport] .se2-transport-metro-island {
+  width: 2.75rem;
+  min-width: 2.75rem;
+}
+
+[data-studio-transport] .se2-transport-zoom-island {
+  width: 5.5rem;
+  min-width: 5.5rem;
+}
+
+[data-studio-transport] .se2-transport-divider {
+  width: 1px;
+  min-width: 1px;
+  padding: 0;
+  margin: 0 0.25rem;
+}
+
+[data-studio-transport] .se2-transport-position-panel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex-shrink: 0;
+  overflow: hidden;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  box-sizing: border-box;
+}
+
+[data-studio-transport] .se2-transport-bars-panel {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+[data-studio-transport] .se2-transport-bars-digits-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 100%;
+  line-height: 1;
+}
+
+/* Invisible fixed slots — each bars segment updates in its own box so digits never shove neighbors. */
+[data-studio-transport] .se2-transport-bars-seg-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  contain: layout style;
+  overflow: hidden;
+}
+
+[data-studio-transport] .se2-transport-bars-seg-bar,
+[data-studio-transport] .se2-transport-bars-seg-tick {
+  width: 2ch;
+  min-width: 2ch;
+  max-width: 2ch;
+}
+
+[data-studio-transport] .se2-transport-bars-seg-beat {
+  width: 2ch;
+  min-width: 2ch;
+  max-width: 2ch;
+}
+
+[data-studio-transport] .se2-transport-bars-seg-wrap .se2-transport-position-digits {
+  width: 100%;
+  text-align: center;
+}
+
+[data-studio-transport] .se2-transport-bars-sep {
+  flex: 0 0 auto;
+  width: 0.4ch;
+  min-width: 0.4ch;
+  text-align: center;
+  line-height: 1;
+  user-select: none;
+}
+
+[data-studio-transport] .se2-transport-bars-pause-slot:empty {
+  display: none;
+}
+
+[data-studio-transport] .se2-transport-bars-pause-slot:not(:empty) {
+  flex: 0 0 auto;
+  margin-right: 0.2rem;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8a98;
+  line-height: 1;
+}
+
+[data-studio-transport] .se2-transport-time-panel {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+[data-studio-transport] .se2-transport-time-digits-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 100%;
+  line-height: 1;
+}
+
+/* Invisible fixed slots — each time segment updates in its own box so digits never shove neighbors. */
+[data-studio-transport] .se2-transport-time-seg-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  contain: layout style;
+  overflow: hidden;
+  width: 2ch;
+  min-width: 2ch;
+  max-width: 2ch;
+}
+
+[data-studio-transport] .se2-transport-time-seg-wrap .se2-transport-position-digits {
+  width: 100%;
+  text-align: center;
+}
+
+[data-studio-transport] .se2-transport-time-sep {
+  flex: 0 0 auto;
+  width: 0.4ch;
+  min-width: 0.4ch;
+  text-align: center;
+  line-height: 1;
+  user-select: none;
+}
+
+[data-studio-transport] .se2-transport-position-digits {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+[data-studio-transport] .se2-transport-position-bpm-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  flex-shrink: 0;
+  width: 100%;
+}
+
 [data-studio-transport] button {
   font-family: inherit;
 }
@@ -439,6 +683,173 @@
 [data-studio-mixer] .text-\[9px\].font-bold.uppercase,
 [data-studio-mixer] .text-\[8px\].font-bold.uppercase {
   letter-spacing: 0.14em;
+}
+
+[data-studio-mixer] .se2-mixer-channels-title {
+  font-family: Rajdhani, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #9defff;
+}
+
+/* Thin Ultra walnut rails — encase mixer channels (top under title, bottom above transport). */
+[data-studio-mixer] .se2-mixer-wood-rail {
+  flex-shrink: 0;
+  width: 100%;
+  height: 5px;
+  box-sizing: border-box;
+  border-top: 1px solid #1a1008;
+  border-bottom: 1px solid #1a1008;
+  background-color: #3a2410;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.12) 2px,
+      rgba(0, 0, 0, 0.12) 2.5px
+    ),
+    repeating-linear-gradient(
+      94deg,
+      #1e1208 0px,
+      #5a3a20 4px,
+      #2e1c0c 7px,
+      #3a2410 10px,
+      #1e1208 13px
+    );
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Studio One–inspired stereo VU: glass panel + LED segment ladder (visual only). */
+/* Outer trim = Geno Ultra walnut, darkened + recessed into the mixer strip. */
+[data-studio-mixer] .se2-mixer-vu-glass {
+  display: grid;
+  /* Equal L/R tracks + 2px gap = dead-center divider (same thickness as before). */
+  grid-template-columns: 1fr 1fr;
+  column-gap: 2px;
+  justify-content: stretch;
+  justify-items: stretch;
+  align-content: stretch;
+  align-self: stretch;
+  height: 100%;
+  min-height: 84px;
+  flex-shrink: 0;
+  /* 2 border + 4 pad + 2×8 cols + 2 gap = 24 */
+  width: 24px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 1px solid #1a1008;
+  /* Darker Ultra walnut + centered 2px dark stereo split */
+  background-color: #3a2410;
+  background-image:
+    linear-gradient(#020204, #020204),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 36%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.12) 2px,
+      rgba(0, 0, 0, 0.12) 2.5px
+    ),
+    repeating-linear-gradient(
+      94deg,
+      #1e1208 0px,
+      #5a3a20 4px,
+      #2e1c0c 7px,
+      #3a2410 10px,
+      #1e1208 13px
+    );
+  background-size: 2px 100%, auto, auto, auto;
+  background-position: center center, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat, repeat;
+  /* Recessed into the strip — deep inset, not sitting on top */
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, 0.75),
+    inset 0 1px 2px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+[data-studio-mixer] .se2-mixer-vu-glass--mono {
+  width: 18px;
+}
+
+[data-studio-mixer] .se2-mixer-vu-glass--master {
+  border-color: #1a1008;
+  background-color: #3a2410;
+}
+
+/* Equal L/R wells — same border on both so neither side looks thicker */
+[data-studio-mixer] .se2-mixer-vu-col {
+  position: relative;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-radius: 0;
+  border: 1px solid #050508;
+  background:
+    repeating-linear-gradient(
+      to top,
+      transparent 0px,
+      transparent 4px,
+      rgba(0, 0, 0, 0.45) 4px,
+      rgba(0, 0, 0, 0.45) 5px
+    ),
+    linear-gradient(180deg, #0c0c12 0%, #060608 100%);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+[data-studio-mixer] .se2-mixer-vu-col:first-child {
+  border-radius: 1px 0 0 1px;
+}
+
+[data-studio-mixer] .se2-mixer-vu-col:last-child {
+  border-radius: 0 1px 1px 0;
+}
+
+[data-studio-mixer] .se2-mixer-vu-led-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  pointer-events: none;
+  /* 4px lit / 1px gap — thin crisp separators, max light */
+  -webkit-mask-image: repeating-linear-gradient(
+    to top,
+    #000 0px,
+    #000 4px,
+    transparent 4px,
+    transparent 5px
+  );
+  mask-image: repeating-linear-gradient(
+    to top,
+    #000 0px,
+    #000 4px,
+    transparent 4px,
+    transparent 5px
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+[data-studio-mixer] .se2-mixer-vu-glass-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 22%);
+  mix-blend-mode: screen;
+  opacity: 0.35;
 }
 
 /* Track column — FX Suite Rajdhani (names, labels, channel #, lane controls) */

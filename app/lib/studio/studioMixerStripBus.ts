@@ -16,7 +16,7 @@ import {
   studioChannelMeterWorkletUsable,
 } from '@/app/lib/studio/studioMixerMeterWorklet';
 
-const STRIP_BUS_VERSION = 30;
+const STRIP_BUS_VERSION = 33;
 const METER_ANALYSER_FFT = 2048;
 const SPECTRUM_ANALYSER_FFT = 2048;
 
@@ -67,6 +67,7 @@ const strips = new Map<number, StripNodes>();
 
 type MasterMeterTap = {
   ctx: AudioContext;
+  masterBus: GainNode;
   downstream: AudioNode;
   meterWorklet: AudioWorkletNode | null;
   meterPeaks: MeterPeaks;
@@ -76,6 +77,7 @@ type MasterMeterTap = {
   passL: GainNode | null;
   passR: GainNode | null;
   merger: ChannelMergerNode | null;
+  silent: GainNode | null;
   bufL: Float32Array | null;
   bufR: Float32Array | null;
 };
@@ -94,7 +96,24 @@ export function isStudioMixerStripGraphPlaybackLocked(): boolean {
   return stripGraphPlaybackLocked;
 }
 
-function ensureMasterBusOutput(masterBus: GainNode, downstream: AudioNode): void {
+/** How many strip graphs to keep alive — never pre-build all 64 (worklet spam → play dropouts). */
+let stripCountHint = 8;
+
+export function setStudioMixerStripCountHint(trackCount: number): void {
+  const n = Math.max(1, Math.min(64, Math.floor(trackCount) || 1));
+  stripCountHint = n;
+}
+
+export function getStudioMixerStripCountHint(): number {
+  return stripCountHint;
+}
+
+function wirePreviewBusToDownstream(
+  masterBus: GainNode,
+  downstream: AudioNode,
+  force: boolean,
+): void {
+  // Already on the correct dest — never disconnect/reconnect (that gap is audible dropouts).
   if (
     masterBusOutputWired
     && masterBusOutputWired.masterBus === masterBus
@@ -102,13 +121,21 @@ function ensureMasterBusOutput(masterBus: GainNode, downstream: AudioNode): void
   ) {
     return;
   }
+
   if (
     masterBusOutputWired
     && masterBusOutputWired.masterBus === masterBus
     && masterBusOutputWired.downstream !== downstream
   ) {
     try {
-      masterBusOutputWired.masterBus.disconnect(masterBusOutputWired.downstream);
+      masterBus.disconnect(masterBusOutputWired.downstream);
+    } catch {
+      /* */
+    }
+  } else if (force) {
+    // Destination unknown / first wire after HMR — clear a possible stale parallel connect.
+    try {
+      masterBus.disconnect(downstream);
     } catch {
       /* */
     }
@@ -116,8 +143,32 @@ function ensureMasterBusOutput(masterBus: GainNode, downstream: AudioNode): void
   try {
     masterBus.connect(downstream);
   } catch {
-    /* already wired */
+    /* already connected */
   }
+  masterBusOutputWired = { masterBus, downstream };
+}
+
+/** Idempotent preview-bus → master fader wire (always — audible path must never depend on playback lock). */
+export function ensureStudioPreviewBusOutput(
+  masterBus: GainNode,
+  downstream: AudioNode,
+): void {
+  wirePreviewBusToDownstream(masterBus, downstream, false);
+}
+
+/** Play-start only — one clean wire before routes lock (fixes stale / HMR graphs). */
+export function forceStudioPreviewBusOutput(
+  masterBus: GainNode,
+  downstream: AudioNode,
+): void {
+  wirePreviewBusToDownstream(masterBus, downstream, true);
+}
+
+/** Record an existing preview-bus wire (e.g. SE2 ensureCtx) without adding a parallel connect. */
+export function noteStudioPreviewBusOutput(
+  masterBus: GainNode,
+  downstream: AudioNode,
+): void {
   masterBusOutputWired = { masterBus, downstream };
 }
 
@@ -304,6 +355,13 @@ function tearDownMasterMeterTap(): void {
   if (masterMeterTap.meterWorklet) {
     masterMeterTap.meterWorklet.port.onmessage = null;
   }
+  if (masterMeterTap.splitter) {
+    try {
+      masterMeterTap.masterBus.disconnect(masterMeterTap.splitter);
+    } catch {
+      /* */
+    }
+  }
   for (const node of [
     masterMeterTap.meterWorklet,
     masterMeterTap.splitter,
@@ -312,6 +370,7 @@ function tearDownMasterMeterTap(): void {
     masterMeterTap.passL,
     masterMeterTap.passR,
     masterMeterTap.merger,
+    masterMeterTap.silent,
   ]) {
     if (!node) continue;
     try {
@@ -352,8 +411,6 @@ function ensureMasterMeterTap(ctx: AudioContext, masterBus: GainNode, downstream
   passL.gain.value = 1;
   passR.gain.value = 1;
 
-  ensureMasterBusOutput(masterBus, downstream);
-
   masterBus.connect(splitter);
   splitter.connect(analyserL, 0, 0);
   splitter.connect(analyserR, 1, 0);
@@ -375,6 +432,7 @@ function ensureMasterMeterTap(ctx: AudioContext, masterBus: GainNode, downstream
     silent.connect(downstream);
     masterMeterTap = {
       ctx,
+      masterBus,
       downstream,
       meterWorklet: worklet,
       meterPeaks,
@@ -384,6 +442,7 @@ function ensureMasterMeterTap(ctx: AudioContext, masterBus: GainNode, downstream
       passL,
       passR,
       merger,
+      silent,
       bufL,
       bufR,
     };
@@ -394,6 +453,7 @@ function ensureMasterMeterTap(ctx: AudioContext, masterBus: GainNode, downstream
   silent.connect(downstream);
   masterMeterTap = {
     ctx,
+    masterBus,
     downstream,
     meterWorklet: null,
     meterPeaks,
@@ -403,6 +463,7 @@ function ensureMasterMeterTap(ctx: AudioContext, masterBus: GainNode, downstream
     passL,
     passR,
     merger,
+    silent,
     bufL,
     bufR,
   };
@@ -425,8 +486,12 @@ function readStripRawPeaks(strip: StripNodes): {
     peakR = held.peakR;
     rmsL = held.rmsL;
     rmsR = held.rmsR;
-    // Worklet already saw signal — skip expensive analyser pulls this frame.
-    if (peakL > STUDIO_MIXER_SILENCE_LINEAR || peakR > STUDIO_MIXER_SILENCE_LINEAR) {
+    // During transport: worklet peaks only — never pull analysers on the main thread (dropouts).
+    if (
+      stripGraphPlaybackLocked
+      || peakL > STUDIO_MIXER_SILENCE_LINEAR
+      || peakR > STUDIO_MIXER_SILENCE_LINEAR
+    ) {
       if (strip.lastMono) {
         const peak = Math.max(peakL, peakR);
         const rms = Math.max(rmsL, rmsR);
@@ -434,6 +499,10 @@ function readStripRawPeaks(strip: StripNodes): {
       }
       return { peakL, peakR, rmsL, rmsR };
     }
+  }
+
+  if (stripGraphPlaybackLocked) {
+    return { peakL, peakR, rmsL, rmsR };
   }
 
   if (
@@ -491,10 +560,22 @@ export function ensureStudioMixerStrips(
   count: number,
   downstream: AudioNode = masterBus.context.destination,
 ): boolean {
+  ensureStudioPreviewBusOutput(masterBus, downstream);
+  if (stripGraphPlaybackLocked) {
+    return false;
+  }
+  const capped = Math.max(1, Math.min(64, Math.max(count, stripCountHint)));
   ensureMasterMeterTap(ctx, masterBus, downstream);
   let rebuilt = false;
 
-  for (let ti = 0; ti < count; ti++) {
+  for (const ti of [...strips.keys()]) {
+    if (ti >= capped) {
+      tearDownStrip(ti);
+      rebuilt = true;
+    }
+  }
+
+  for (let ti = 0; ti < capped; ti++) {
     const existing = strips.get(ti);
     if (!stripNeedsRebuild(existing, ctx)) {
       continue;
@@ -600,8 +681,9 @@ export function readStudioMixerStripMeter(trackIndex: number): StudioMixerStripS
   return peaksToSnapshot(trackIndex, readStripRawPeaks(strip));
 }
 
-/** Pre-fader peak at strip.input — proves audio reached this track lane (before fader/mute). */
+/** Pre-fader peak at strip.input — idle / paused only (analyser pull skipped during transport). */
 export function readStudioMixerStripInputMeter(trackIndex: number): StudioMixerStripSnapshot | null {
+  if (stripGraphPlaybackLocked) return null;
   const strip = strips.get(trackIndex);
   if (!strip?.inputAnalyser || !strip.inputMeterBuf) return null;
   const { peak, rms } = readMonoAnalyser(strip.inputAnalyser, strip.inputMeterBuf);
@@ -622,7 +704,13 @@ export function readStudioMasterBusMeter(): { peakL: number; peakR: number } | n
     const held = consumeMeterPeaks(tap.meterPeaks);
     let outL = studioMixerMeterTargetLinear(held.peakL, held.rmsL, -2);
     let outR = studioMixerMeterTargetLinear(held.peakR, held.rmsR, -3);
-    if (tap.analyserL && tap.analyserR && tap.bufL && tap.bufR) {
+    if (
+      !stripGraphPlaybackLocked
+      && tap.analyserL
+      && tap.analyserR
+      && tap.bufL
+      && tap.bufR
+    ) {
       const l = readMonoAnalyser(tap.analyserL, tap.bufL);
       const r = readMonoAnalyser(tap.analyserR, tap.bufR);
       outL = Math.max(outL, studioMixerMeterTargetLinear(l.peak, l.rms, -2));
@@ -630,6 +718,8 @@ export function readStudioMasterBusMeter(): { peakL: number; peakR: number } | n
     }
     return { peakL: outL, peakR: outR };
   }
+
+  if (stripGraphPlaybackLocked) return null;
 
   if (!tap.analyserL || !tap.analyserR || !tap.bufL || !tap.bufR) return null;
   const l = readMonoAnalyser(tap.analyserL, tap.bufL);
@@ -663,6 +753,7 @@ export function readStudioMixerStripAnalyserSnapshot(
   trackIndex: number,
   reuseSpectrum?: Float32Array,
 ): StudioMixerStripAnalyserSnapshot | null {
+  if (stripGraphPlaybackLocked) return null;
   const strip = strips.get(trackIndex);
   if (!strip) return null;
 

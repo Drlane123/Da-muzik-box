@@ -4,6 +4,9 @@ import { ChevronDown, Copy, Plus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
+const GENO_CYAN = '#00E5FF';
+const GENO_CYAN_SOFT = '#9defff';
+
 export type StudioNewTrackKind = 'midi' | 'audio' | 'trackAlign' | 'a2m' | 'rhythm' | 'glideBass' | 'synthGeno' | 'grooveLead' | 'genoUltraSynth' | 'genoBassSynth' | 'drumGenerator' | 'beatPads' | 'humCapture' | 'guitar' | 'genoChordCreator' | 'chordGenie' | 'lab808';
 
 const TRACK_KIND_OPTIONS: { value: StudioNewTrackKind; label: string; hint: string }[] = [
@@ -137,8 +140,8 @@ export function StudioAddTrackDropdown({
                 minHeight: TRACK_KIND_MENU_ITEM_H_PX,
                 padding: '8px 12px',
                 borderColor: '#1a1a22',
-                background: sel ? 'rgba(124,244,198,0.1)' : 'transparent',
-                borderLeft: sel ? '2px solid #7cf4c6' : '2px solid transparent',
+                background: sel ? 'rgba(0,229,255,0.1)' : 'transparent',
+                borderLeft: sel ? `2px solid ${GENO_CYAN}` : '2px solid transparent',
               }}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -154,7 +157,7 @@ export function StudioAddTrackDropdown({
               <span
                 data-track-kind-label
                 className="block leading-tight"
-                style={{ color: sel ? '#7cf4c6' : '#e8e8f0' }}
+                style={{ color: sel ? GENO_CYAN_SOFT : '#e8e8f0' }}
               >
                 {opt.label}
               </span>
@@ -220,9 +223,9 @@ export function StudioAddTrackDropdown({
           width: 28,
           minHeight: 26,
           height: '100%',
-          borderColor: '#2a4a3c',
-          background: 'rgba(124,244,198,0.1)',
-          color: '#7cf4c6',
+          borderColor: '#1a3a48',
+          background: 'rgba(0,229,255,0.1)',
+          color: GENO_CYAN,
         }}
       >
         <Plus size={12} strokeWidth={2.5} aria-hidden />
