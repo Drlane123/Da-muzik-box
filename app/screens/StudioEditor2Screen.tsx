@@ -1314,7 +1314,7 @@ function loopRegionEndBeat(beatsPerBar: number, loopBars: number): number {
 }
 /** Keep playhead visible inside horizontal scroll (`MainWindowView` horizontal `ScrollView`). */
 const TIMELINE_SCROLL_MARGIN_PX = 96;
-/** Loop wrap re-entry anchor under the Track View label zone (C/K/KV area). */
+/** Wrapped-loop re-entry anchor under the Track View label zone (C/K/KV area). */
 const TIMELINE_LOOP_REENTRY_ANCHOR_PX = 34;
 
 /**
@@ -9813,6 +9813,7 @@ export default function StudioEditor2Screen({
     const wapiAnim = playheadWapiRef.current;
     let b: number;
     let bDisplay: number;
+    let wrappedToLoopStart = false;
 
     if (runningRef.current && wapiAnim && wapiAnim.playState !== 'idle') {
       /* Visual beat from WAAPI */
@@ -9902,11 +9903,13 @@ export default function StudioEditor2Screen({
       });
       b = loopWrap.b;
       bDisplay = loopWrap.bDisplay;
+      wrappedToLoopStart = loopWrap.wrappedToLoopStart;
       cursorBeatRef.current = b;
       displayBeatRef.current = bDisplay;
     } else {
       b = cursorBeatRef.current;
       bDisplay = b;
+      wrappedToLoopStart = false;
       displayBeatRef.current = b;
     }
 
@@ -9935,15 +9938,16 @@ export default function StudioEditor2Screen({
     } else if (scrollEl && clientWidth > 0) {
       const rightEdge = clientWidth - pad;
       const leftEdge  = pad;
-      if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
-        const wrappedToLeft = playheadScreen < leftEdge && scrollLeft > 0;
+      const leftEdgeReentry = playheadScreen < leftEdge && scrollLeft > 0;
+      if (wrappedToLoopStart || playheadScreen > rightEdge || leftEdgeReentry) {
         /*
-         * Wrapped loop re-entry: land in the Track View start zone (near C/K/KV letters),
-         * not a bar inward. Normal right-edge pagination keeps the 15% lead.
+         * On an actual loop wrap frame, force re-entry under Track View.
+         * Keep the normal 15% lead for right-edge pagination.
          */
-        const jumpLeadPx = wrappedToLeft
-          ? TIMELINE_LOOP_REENTRY_ANCHOR_PX
-          : Math.max(2, Math.round(clientWidth * 0.15));
+        const jumpLeadPx =
+          wrappedToLoopStart || leftEdgeReentry
+            ? TIMELINE_LOOP_REENTRY_ANCHOR_PX
+            : Math.max(2, Math.round(clientWidth * 0.15));
         const jumpScroll = Math.max(0, Math.round(lineCenter - jumpLeadPx));
         const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
         const clamped    = Math.min(jumpScroll, maxScroll);

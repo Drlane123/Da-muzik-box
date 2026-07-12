@@ -254,8 +254,9 @@ function se2AudioNow(ctx: AudioContext): number {
  */
 export function se2AnimationTickLoopWrap(
   input: Se2AnimationTickLoopWrapInput,
-): { b: number; bDisplay: number } {
+): { b: number; bDisplay: number; wrappedToLoopStart: boolean } {
   let { b, bDisplay } = input;
+  let wrappedToLoopStart = false;
   const {
     animMs,
     wapiPlayState,
@@ -340,10 +341,8 @@ export function se2AnimationTickLoopWrap(
         } else {
           input.wapiLoopCycleSeenRef.current = cycle;
         }
+        wrappedToLoopStart = true;
       }
-      // Wrap frame visual anchor: re-enter exactly at loop start (Track View grid edge).
-      b = loopStart;
-      bDisplay = loopStart;
     }
     input.wapiPrevPhaseMsRef.current = phaseMs;
   }
@@ -392,7 +391,8 @@ export function se2AnimationTickLoopWrap(
     input.relaunchPlaylineAtLoopStart(ls);
     b = ls;
     bDisplay = ls;
+    wrappedToLoopStart = true;
   }
 
-  return { b, bDisplay };
+  return { b, bDisplay, wrappedToLoopStart };
 }
