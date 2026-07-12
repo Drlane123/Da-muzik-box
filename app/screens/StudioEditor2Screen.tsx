@@ -1361,6 +1361,45 @@ function clearTimelineFollowStripTransform(
   if (laneContent) laneContent.style.transform = '';
 }
 
+/** Parse translate3d/matrix tx from a follow strip — virtual scroll += -tx. */
+function se2ReadTimelineStripTransformOffsetPx(strip: HTMLElement | null): number {
+  if (!strip) return 0;
+  const raw = strip.style.transform || '';
+  if (!raw || raw === 'none') return 0;
+  const m3d = raw.match(/translate3d\(\s*([-\d.]+)px/);
+  if (m3d) {
+    const tx = parseFloat(m3d[1]!);
+    return Number.isFinite(tx) ? -tx : 0;
+  }
+  const mat = raw.match(/matrix\(([^)]+)\)/);
+  if (mat) {
+    const parts = mat[1]!.split(',').map((s) => parseFloat(s.trim()));
+    if (parts.length >= 6 && Number.isFinite(parts[4]!)) return -parts[4]!;
+  }
+  return 0;
+}
+
+/** Bake strip translate into scrollLeft so click math matches painted grid pixels. */
+function commitTimelineStripTransformToScroll(
+  laneScroll: HTMLElement | null,
+  rulerScroll: HTMLElement | null,
+  barScroll: HTMLElement | null,
+  laneStrip: HTMLElement | null,
+  rulerStrip: HTMLElement | null,
+  laneContent: HTMLElement | null,
+): void {
+  const off = se2ReadTimelineStripTransformOffsetPx(laneStrip);
+  if (Math.abs(off) < 0.5) {
+    clearTimelineFollowStripTransform(laneStrip, rulerStrip, laneContent);
+    return;
+  }
+  const committed = Math.max(0, Math.round((laneScroll?.scrollLeft ?? 0) + off));
+  if (laneScroll) laneScroll.scrollLeft = committed;
+  if (rulerScroll && rulerScroll.scrollLeft !== committed) rulerScroll.scrollLeft = committed;
+  if (barScroll && barScroll.scrollLeft !== committed) barScroll.scrollLeft = committed;
+  clearTimelineFollowStripTransform(laneStrip, rulerStrip, laneContent);
+}
+
 /** Pixel-aligned beat column (same as `clipX = beats * pixelsPerBeat` in Musio `TimelineView`). */
 function beatColumnLeftPx(beat: number, ppb: number): number {
   return Math.round(beat * ppb);
@@ -1375,10 +1414,13 @@ function se2TimelineXContentFromClient(
   clientX: number,
   scrollEl: HTMLElement | null,
   followOffsetPx = 0,
+  transformProbeStrip: HTMLElement | null = null,
 ): number {
   if (!scrollEl) return 0;
   const r = scrollEl.getBoundingClientRect();
-  return clientX - r.left + scrollEl.scrollLeft + followOffsetPx;
+  const domOff = se2ReadTimelineStripTransformOffsetPx(transformProbeStrip);
+  const off = Math.abs(domOff) > 0.5 ? domOff : followOffsetPx;
+  return clientX - r.left + scrollEl.scrollLeft + off;
 }
 
 function se2TimelineBeatFromClientX(
@@ -1387,9 +1429,10 @@ function se2TimelineBeatFromClientX(
   ppb: number,
   totalBeats: number,
   followOffsetPx = 0,
+  transformProbeStrip: HTMLElement | null = null,
 ): number {
   if (!scrollEl || !Number.isFinite(ppb) || ppb <= 0) return 0;
-  const x = se2TimelineXContentFromClient(clientX, scrollEl, followOffsetPx);
+  const x = se2TimelineXContentFromClient(clientX, scrollEl, followOffsetPx, transformProbeStrip);
   return Math.max(0, Math.min(totalBeats, x / ppb));
 }
 
@@ -3562,7 +3605,7 @@ function timelineLanePointFromStripClient(
   return {
     ti,
     yLaneLocal: yRel - ti * laneH,
-    xCss: se2TimelineXContentFromClient(clientX, scrollEl, followOffsetPx),
+    xCss: se2TimelineXContentFromClient(clientX, scrollEl, followOffsetPx, strip),
   };
 }
 
@@ -7559,7 +7602,7 @@ export default function StudioEditor2Screen({
     return () => clearInterval(id);
   }, [recording, tickLiveRecordingWaveform]);
 
-  const applyPlayheadFull = useCallback((beat: number) => {
+  const applyPlayheadFull = useCallback((beat: number, opts?: { pinViewportLeftPx?: number; skipAutoScroll?: boolean }) => {
     if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     timelineFollowPinAppliedRef.current = false;
     timelineFollowTransformOriginRef.current = 0;
@@ -7568,10 +7611,12 @@ export default function StudioEditor2Screen({
     const bpb = beatsPerBarRef.current;
     const scrollEl = timelineHScrollRef.current;
     const rulerEl = timelineRulerHScrollRef.current;
-    scrollTimelineToPlayhead(scrollEl, beat, z, bpb, [rulerEl]);
-    const barEl = timelineHBarRef.current;
-    if (barEl && scrollEl && barEl.scrollLeft !== scrollEl.scrollLeft) {
-      barEl.scrollLeft = scrollEl.scrollLeft;
+    if (!opts?.skipAutoScroll) {
+      scrollTimelineToPlayhead(scrollEl, beat, z, bpb, [rulerEl]);
+      const barEl = timelineHBarRef.current;
+      if (barEl && scrollEl && barEl.scrollLeft !== scrollEl.scrollLeft) {
+        barEl.scrollLeft = scrollEl.scrollLeft;
+      }
     }
 
     const scrollLeft = scrollEl?.scrollLeft ?? 0;
@@ -7595,6 +7640,8 @@ export default function StudioEditor2Screen({
       z,
       bpb,
       scrollLeft,
+      null,
+      opts?.pinViewportLeftPx,
     );
     positionPianoPlayhead(pianoPlayheadRef.current, beat, z, bpb);
   }, [clearTimelineEdgeFollow, syncTimelineGridNow]);
@@ -10331,7 +10378,7 @@ export default function StudioEditor2Screen({
     }
   }, [animationTick]);
 
-  /** Beat under the pointer — scroll host + scrollLeft (+ follow transform offset when active). */
+  /** Beat under the pointer — scroll host + scrollLeft (+ follow / strip transform offset). */
   const clientXToBeat = useCallback((clientX: number, clientY?: number): number => {
     const z = timelineZoomRef.current;
     const bpb = beatsPerBarRef.current;
@@ -10340,10 +10387,10 @@ export default function StudioEditor2Screen({
     const laneScroll = timelineHScrollRef.current;
     const rulerScroll = timelineRulerHScrollRef.current;
     const followOff = timelineEdgeFollowActiveRef.current ? timelineFollowLastOffsetRef.current : 0;
+    const laneStrip = timelineStripRef.current;
 
     let scrollEl = laneScroll ?? rulerScroll;
     if (clientY != null && Number.isFinite(clientY)) {
-      const laneStrip = timelineStripRef.current;
       const rulerStrip = timelineRulerStripRef.current;
       const rulerRect = rulerStrip?.getBoundingClientRect();
       const laneRect = laneStrip?.getBoundingClientRect();
@@ -10354,7 +10401,7 @@ export default function StudioEditor2Screen({
       }
     }
 
-    return se2TimelineBeatFromClientX(clientX, scrollEl, ppb, tb, followOff);
+    return se2TimelineBeatFromClientX(clientX, scrollEl, ppb, tb, followOff, laneStrip);
   }, []);
 
   const setBeatFromScrubClientX = useCallback(
@@ -10369,7 +10416,26 @@ export default function StudioEditor2Screen({
         clientY?: number;
       },
     ) => {
-      /* Sample beat BEFORE follow teardown mutates scroll/transform. */
+      if (runningRef.current) pauseTransport();
+
+      commitTimelineStripTransformToScroll(
+        timelineHScrollRef.current,
+        timelineRulerHScrollRef.current,
+        timelineHBarRef.current,
+        timelineStripRef.current,
+        timelineRulerStripRef.current,
+        timelineFollowContentRef.current,
+      );
+      timelineEdgeFollowActiveRef.current = false;
+      timelineFollowLastOffsetRef.current = 0;
+      timelineFollowTransformOriginRef.current = 0;
+      timelineFollowPinAppliedRef.current = false;
+
+      const scrollEl = timelineHScrollRef.current;
+      const pinViewportLeftPx =
+        scrollEl != null ? clientX - scrollEl.getBoundingClientRect().left : undefined;
+
+      /* Sample beat AFTER follow scroll/transform is committed to scrollLeft. */
       let b = clientXToBeat(clientX, opts?.clientY);
       const tb = totalBeatsRef.current;
       const bpb = beatsPerBarRef.current;
@@ -10377,6 +10443,7 @@ export default function StudioEditor2Screen({
       const alt = opts?.altKey ?? false;
       let snap = opts?.snap;
       if (snap == null && opts?.snapToBeatLine) snap = 'beat';
+      if (snap == null) snap = 'free';
       if (alt || snap === 'free') {
         /* sample-accurate beat position */
       } else if (shift || snap === 'bar') {
@@ -10387,15 +10454,14 @@ export default function StudioEditor2Screen({
         b = snapBeatToSubdivision(b, pianoSnapEffRef.current, tb);
       }
 
-      if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
       timelineFollowPinAppliedRef.current = false;
       timelineFollowTransformOriginRef.current = 0;
       cursorBeatRef.current = b;
       displayBeatRef.current = b;
-      applyPlayheadFull(b);
+      applyPlayheadFull(b, { pinViewportLeftPx, skipAutoScroll: true });
       updateReadouts(b, true);
     },
-    [applyPlayheadFull, clearTimelineEdgeFollow, clientXToBeat, updateReadouts],
+    [applyPlayheadFull, clientXToBeat, pauseTransport, updateReadouts],
   );
 
   const isClientXNearPlayhead = useCallback(
@@ -10417,7 +10483,7 @@ export default function StudioEditor2Screen({
         }
       }
 
-      const x = se2TimelineXContentFromClient(clientX, scrollEl, followOff);
+      const x = se2TimelineXContentFromClient(clientX, scrollEl, followOff, timelineStripRef.current);
       return Math.abs(x - playheadX) <= tolerancePx;
     },
     [],
@@ -17891,19 +17957,19 @@ export default function StudioEditor2Screen({
     const pauseBeat = readVisualPlayheadBeat();
     cursorBeatRef.current = pauseBeat;
     displayBeatRef.current = pauseBeat;
+    clearTimelineEdgeFollow();
     const z = timelineZoomRef.current;
     const bpb = beatsPerBarRef.current;
-    /* Bake CSS so cancel() inside launchWapiAnims cannot flash the line to beat 0. */
+    const scrollLeft = timelineHScrollRef.current?.scrollLeft ?? 0;
     positionTimelinePlayheadGroup(
       playheadGroupRef.current,
       playheadLineRef.current,
       pauseBeat,
       z,
       bpb,
-      timelineHScrollRef.current?.scrollLeft ?? 0,
+      scrollLeft,
     );
     positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
-    clearTimelineEdgeFollow();
     if (!ctx || ctx.state === 'closed') {
       runningRef.current = false;
       setRunning(false);
@@ -18362,7 +18428,7 @@ export default function StudioEditor2Screen({
       if (e.button !== 0) return;
       const strip = timelineStripRef.current;
       if (!strip) return;
-      if (runningRef.current) void Promise.resolve(pauseTransport());
+      if (runningRef.current) pauseTransport();
 
       const tool = pianoToolRef.current;
       const tc = studioTracksRef.current.length;
@@ -18482,7 +18548,6 @@ export default function StudioEditor2Screen({
         }
         setSelectedTrackIndex(pos.ti);
         setBeatFromScrubClientX(e.clientX, {
-          snap: e.altKey ? 'free' : 'subdiv',
           shiftKey: e.shiftKey,
           altKey: e.altKey,
           clientY: e.clientY,
@@ -18552,7 +18617,6 @@ export default function StudioEditor2Screen({
           setSelectedPianoNoteIndex(null);
           clearSelectedPianoNotes();
           setBeatFromScrubClientX(e.clientX, {
-            snap: e.altKey ? 'free' : 'subdiv',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
             clientY: e.clientY,
@@ -18561,7 +18625,6 @@ export default function StudioEditor2Screen({
         }
         if (!e.shiftKey) {
           setBeatFromScrubClientX(e.clientX, {
-            snap: e.altKey ? 'free' : 'subdiv',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
             clientY: e.clientY,
@@ -20235,7 +20298,6 @@ export default function StudioEditor2Screen({
       if (runningRef.current) pauseTransport();
       (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
       setBeatFromScrubClientX(e.clientX, {
-        snap: e.altKey ? 'free' : 'subdiv',
         shiftKey: e.shiftKey,
         altKey: e.altKey,
         clientY: e.clientY,
@@ -20270,7 +20332,7 @@ export default function StudioEditor2Screen({
           /* Already scrubbing — always follow the mouse; never flip to zoom mid-drag so
            * the playhead can't "pop back" or lag behind the cursor. */
           setBeatFromScrubClientX(e.clientX, {
-            snap: e.altKey ? 'free' : e.shiftKey ? 'bar' : 'subdiv',
+            snap: e.shiftKey ? 'bar' : 'free',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
             clientY: e.clientY,
@@ -20282,7 +20344,7 @@ export default function StudioEditor2Screen({
         } else if (adx >= RULER_GESTURE_LOCK_PX) {
           gesture.dragCommitted = true;
           setBeatFromScrubClientX(e.clientX, {
-            snap: e.altKey ? 'free' : e.shiftKey ? 'bar' : 'subdiv',
+            snap: e.shiftKey ? 'bar' : 'free',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
             clientY: e.clientY,
