@@ -1314,14 +1314,14 @@ function loopRegionEndBeat(beatsPerBar: number, loopBars: number): number {
 }
 /** Keep playhead visible inside horizontal scroll (`MainWindowView` horizontal `ScrollView`). */
 const TIMELINE_SCROLL_MARGIN_PX = 96;
-/** Hard loop re-entry target under Track View text (C/K/KV zone). */
-const TIMELINE_LOOP_REENTRY_ANCHOR_PX = 34;
 
 /**
  * Playback follow scroll — pin playhead mid-viewport (not at the right edge). Engaging at the
  * right margin felt like a hard skip; pinning ~38% across is FL-style continuous scroll.
  */
 const TIMELINE_FOLLOW_PIN_RATIO = 0.38;
+/** Loop wrap re-entry lands at the visible grid start, under the Track View header landmark. */
+const TIMELINE_LOOP_REENTRY_PIN_PX = 0;
 
 /**
  * During follow, do NOT repaint the grid every few bars (that was the periodic jump).
@@ -9813,7 +9813,6 @@ export default function StudioEditor2Screen({
     const wapiAnim = playheadWapiRef.current;
     let b: number;
     let bDisplay: number;
-    let wrappedToLoopStart = false;
 
     if (runningRef.current && wapiAnim && wapiAnim.playState !== 'idle') {
       /* Visual beat from WAAPI */
@@ -9903,13 +9902,11 @@ export default function StudioEditor2Screen({
       });
       b = loopWrap.b;
       bDisplay = loopWrap.bDisplay;
-      wrappedToLoopStart = loopWrap.wrappedToLoopStart;
       cursorBeatRef.current = b;
       displayBeatRef.current = bDisplay;
     } else {
       b = cursorBeatRef.current;
       bDisplay = b;
-      wrappedToLoopStart = false;
       displayBeatRef.current = b;
     }
 
@@ -9936,26 +9933,13 @@ export default function StudioEditor2Screen({
     if (!runningRef.current) {
       if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     } else if (scrollEl && clientWidth > 0) {
-      if (wrappedToLoopStart) {
-        const maxScroll = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
-        const target = Math.max(
-          0,
-          Math.min(maxScroll, Math.round(lineCenter - TIMELINE_LOOP_REENTRY_ANCHOR_PX)),
-        );
-        timelineProgrammaticScrollRef.current = true;
-        scrollEl.scrollLeft = target;
-        const ruler = timelineRulerHScrollRef.current;
-        const bar = timelineHBarRef.current;
-        if (ruler) ruler.scrollLeft = target;
-        if (bar) bar.scrollLeft = target;
-        timelineFollowIntScrollRef.current = target;
-        timelineEdgeFollowActiveRef.current = true;
-      } else {
       const rightEdge = clientWidth - pad;
       const leftEdge  = pad;
       if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
-        /* Single jump — place playhead ~15 % from the left of the viewport. */
-        const jumpScroll = Math.max(0, Math.round(lineCenter - clientWidth * 0.15));
+        const wrappedBackToEntry = playheadScreen < leftEdge && scrollLeft > 0;
+        /* Single jump — forward pages keep breathing room; loop re-entry lands at grid start. */
+        const pinPx = wrappedBackToEntry ? TIMELINE_LOOP_REENTRY_PIN_PX : clientWidth * 0.15;
+        const jumpScroll = Math.max(0, Math.round(lineCenter - pinPx));
         const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
         const clamped    = Math.min(jumpScroll, maxScroll);
         timelineProgrammaticScrollRef.current = true;
@@ -9975,7 +9959,6 @@ export default function StudioEditor2Screen({
             syncTimelineGridFollowAhead(paintZ, paintScroll);
           });
         }
-      }
       }
     }
 
