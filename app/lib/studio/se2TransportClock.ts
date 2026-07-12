@@ -341,6 +341,9 @@ export function se2AnimationTickLoopWrap(
           input.wapiLoopCycleSeenRef.current = cycle;
         }
       }
+      // Wrap frame visual anchor: re-enter exactly at loop start (Track View grid edge).
+      b = loopStart;
+      bDisplay = loopStart;
     }
     input.wapiPrevPhaseMsRef.current = phaseMs;
   }
