@@ -5,6 +5,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { TouchInputMode } from '@/app/lib/touch/touchDevice';
 import type { AudioLatencyHint, AudioSampleRateSetting } from '@/app/lib/audioDeviceInfo';
 import type { MidiPortRoutingMap } from '@/app/lib/midi/midiDevices';
+import type { UiScaleMode } from '@/app/lib/uiScale';
+import { clampUiScale } from '@/app/lib/uiScale';
 
 export interface Settings {
   masterVolume: number;
@@ -30,6 +32,13 @@ export interface Settings {
    * `auto` — on when this device has touch; `on` — always; `off` — never.
    */
   touchInput: TouchInputMode;
+  /**
+   * Whole-app display size for laptops / smaller windows.
+   * `auto` — fit to window vs ~1440×900 reference; `manual` — use `uiScale`.
+   */
+  uiScaleMode: UiScaleMode;
+  /** Manual scale 0.70–1.00 (70%–100%). Ignored when `uiScaleMode` is `auto`. */
+  uiScale: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -47,6 +56,8 @@ const DEFAULT_SETTINGS: Settings = {
   midiInputDeviceId: 'all',
   midiPortRouting: {},
   touchInput: 'auto',
+  uiScaleMode: 'auto',
+  uiScale: 0.85,
 };
 
 interface SettingsContextType {
@@ -67,7 +78,14 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as Partial<Settings>;
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+        const merged: Settings = { ...DEFAULT_SETTINGS, ...parsed };
+        merged.uiScale = clampUiScale(
+          typeof parsed.uiScale === 'number' ? parsed.uiScale : DEFAULT_SETTINGS.uiScale,
+        );
+        if (parsed.uiScaleMode !== 'auto' && parsed.uiScaleMode !== 'manual') {
+          merged.uiScaleMode = DEFAULT_SETTINGS.uiScaleMode;
+        }
+        setSettings(merged);
       } catch (e) {
         console.error('Failed to load settings:', e);
       }

@@ -30,6 +30,13 @@ import {
 } from '@/app/lib/midi/midiDevices';
 import { isTouchLikeDevice } from '@/app/lib/touch/touchDevice';
 import type { TouchInputMode } from '@/app/lib/touch/touchDevice';
+import {
+  computeAutoUiScale,
+  UI_SCALE_MAX,
+  UI_SCALE_MIN,
+  UI_SCALE_STEP,
+  type UiScaleMode,
+} from '@/app/lib/uiScale';
 
 const CYAN = '#00E5FF';
 const PANEL_BG = '#0a0a10';
@@ -390,6 +397,45 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <option value="dark" style={{ background: INPUT_BG, color: '#e8e8f0' }}>Dark</option>
               <option value="light" style={{ background: INPUT_BG, color: '#e8e8f0' }}>Light</option>
             </select>
+
+            <label style={fieldLabel}>Display size</label>
+            <select
+              value={settings.uiScaleMode}
+              onChange={(e) => updateSetting('uiScaleMode', e.target.value as UiScaleMode)}
+              style={{ ...selectStyle, marginBottom: 10 }}
+            >
+              <option value="auto" style={{ background: INPUT_BG, color: '#e8e8f0' }}>
+                Auto — fit this window (laptops)
+              </option>
+              <option value="manual" style={{ background: INPUT_BG, color: '#e8e8f0' }}>
+                Manual — use slider
+              </option>
+            </select>
+            {settings.uiScaleMode === 'auto' ? (
+              <p style={{ ...hint, marginTop: 0, marginBottom: 14 }}>
+                Auto fit is {Math.round(computeAutoUiScale() * 100)}% for this window. Large monitors stay at
+                100%. Switch to Manual if you want a fixed size.
+              </p>
+            ) : (
+              <>
+                <label style={fieldLabel}>
+                  Scale — {Math.round(settings.uiScale * 100)}%
+                </label>
+                <input
+                  type="range"
+                  min={UI_SCALE_MIN}
+                  max={UI_SCALE_MAX}
+                  step={UI_SCALE_STEP}
+                  value={settings.uiScale}
+                  onChange={(e) => updateSetting('uiScale', parseFloat(e.target.value))}
+                  style={{ width: '100%', marginBottom: 6, accentColor: CYAN }}
+                />
+                <p style={{ ...hint, marginTop: 0, marginBottom: 14 }}>
+                  Shrink the whole app so DAW screens fit a normal laptop. Does not change song timing or
+                  playhead behavior.
+                </p>
+              </>
+            )}
 
             <label style={fieldLabel}>Grid snap size</label>
             <select

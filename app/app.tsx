@@ -26,6 +26,7 @@ import { TrackAllocationProvider } from '@/app/context/TrackAllocationContext';
 import TitleBar from '@/app/components/TitleBar';
 import { MusicBoxOverviewModal } from '@/app/components/MusicBoxOverviewHub';
 import TouchDeviceBootstrap from '@/app/components/TouchDeviceBootstrap';
+import UiScaleBootstrap from '@/app/components/UiScaleBootstrap';
 import KeyboardShortcutsBootstrap from '@/app/components/KeyboardShortcutsBootstrap';
 import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
@@ -445,6 +446,7 @@ function AppContent() {
   return (
     <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#1e1e1e', color: '#e8e8e8' }}>
       <TouchDeviceBootstrap />
+      <UiScaleBootstrap />
       <KeyboardShortcutsBootstrap
         activeScreen={activeScreen}
         onOpenSettings={() => setShowSettings(true)}
