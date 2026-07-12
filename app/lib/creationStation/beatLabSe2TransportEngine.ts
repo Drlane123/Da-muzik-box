@@ -61,6 +61,12 @@ export function beatLabLoopSpliceSchedBeat(
   return bVis;
 }
 
+/**
+ * Visual wrap-in clamp so loop return lands near bar-1 start instead of appearing late.
+ * 1.25 beats = between beat 1 and beat 2 in a 4/4 bar.
+ */
+export const BEAT_LAB_LOOP_WRAP_VISUAL_MAX_BEATS = 1.25;
+
 /** Skip post-`ensureCtx` WAAPI re-seek when compositor is already within this many beats of anchor. */
 export const BEAT_LAB_COMPOSITOR_RESEEK_EPS_BEATS = 0.04;
 
@@ -425,6 +431,8 @@ export function beatLabAnimationTickLoopWrap(
           bDisplay =
             loopStart +
             (((bDisplay - loopStart) % spanWrap) + spanWrap) % spanWrap;
+          const wrapVisualMax = loopStart + Math.min(spanWrap, BEAT_LAB_LOOP_WRAP_VISUAL_MAX_BEATS);
+          bDisplay = Math.min(bDisplay, wrapVisualMax);
         }
       } else {
         bDisplay = bVis;
