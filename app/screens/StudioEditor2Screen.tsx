@@ -9974,8 +9974,7 @@ export default function StudioEditor2Screen({
     const clientWidth = scrollEl ? scrollEl.clientWidth : 0;
 
     /* â”€â”€ 3. COMPUTE pixel positions (scroll + inner-line correction only) */
-    const followBeat = runningRef.current ? bDisplay : b;
-    const bClamped   = Math.max(0, Math.min(followBeat, tb));
+    const bClamped   = Math.max(0, Math.min(b, tb));
     const lineCenter = bClamped * ppb;
 
     const pad = TIMELINE_SCROLL_MARGIN_PX;
@@ -9991,10 +9990,6 @@ export default function StudioEditor2Screen({
       const pinPx = clientWidth * TIMELINE_FOLLOW_PIN_RATIO;
       const maxScroll = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
       const targetScroll = Math.min(maxScroll, Math.max(0, lineCenter - pinPx));
-      if (!timelineEdgeFollowActiveRef.current) {
-        timelineFollowTransformOriginRef.current = targetScroll;
-        timelineFollowLastOffsetRef.current = 0;
-      }
       timelineProgrammaticScrollRef.current = true;
       const { virtualScroll, offset } = applyTimelineTransformFollow(
         targetScroll,
@@ -10008,7 +10003,7 @@ export default function StudioEditor2Screen({
         positionTimelinePlayheadGroup(
           playheadGroupRef.current,
           playheadLineRef.current,
-          followBeat,
+          bClamped,
           z,
           bpb,
           scrollLeft,
@@ -17587,6 +17582,32 @@ export default function StudioEditor2Screen({
       const virtScroll = Math.min(maxSl, Math.max(0, linePx - pinPx));
       timelineFollowTransformOriginRef.current = virtScroll;
       timelineFollowLastOffsetRef.current = 0;
+      timelineProgrammaticScrollRef.current = true;
+      const committed = Math.max(0, Math.round(virtScroll));
+      if (scrollEl) scrollEl.scrollLeft = committed;
+      const rulerEl = timelineRulerHScrollRef.current;
+      const barEl = timelineHBarRef.current;
+      if (rulerEl) rulerEl.scrollLeft = committed;
+      if (barEl) barEl.scrollLeft = committed;
+      clearTimelineFollowStripTransform(
+        timelineStripRef.current,
+        timelineRulerStripRef.current,
+        timelineFollowContentRef.current,
+      );
+      if (clientW > 0) {
+        positionTimelinePlayheadGroup(
+          playheadGroupRef.current,
+          playheadLineRef.current,
+          snapped,
+          zPlay,
+          bpbPlay,
+          committed,
+          pinPx,
+        );
+        timelineFollowPinAppliedRef.current = true;
+        timelineEdgeFollowActiveRef.current = true;
+        timelineFollowPinScreenXRef.current = pinPx;
+      }
       syncTimelineGridFollowAhead(zPlay, virtScroll);
     }
     /* Launch compositor-thread WAAPI animation â€” this is what the user sees. */
