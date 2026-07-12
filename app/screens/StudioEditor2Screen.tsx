@@ -3320,15 +3320,20 @@ function syncTimelineGridLayer(
   }
 }
 
+/**
+ * Place the timeline playhead in **strip content coordinates** (`left = beat * ppb`).
+ * The playhead element must live inside the scrolling strip so it stays locked to the grid
+ * at any scrollLeft / follow-translate — viewport pinning breaks after you scroll.
+ */
 function positionTimelinePlayheadGroup(
   el: HTMLElement | null,
   innerEl: HTMLElement | null,
   beat: number,
   zoom: number,
   beatsPerBar: number,
-  scrollLeftCss = 0,
-  viewportPinPx: number | null = null,
-  viewportLeftPx?: number,
+  _scrollLeftCss = 0,
+  _viewportPinPx: number | null = null,
+  _viewportLeftPx?: number,
 ): void {
   if (!el) return;
   const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
@@ -3337,37 +3342,22 @@ function positionTimelinePlayheadGroup(
   const bClamped = Math.max(0, Math.min(beat, tb));
   const lineCenter = bClamped * ppb;
   const gw = PLAYHEAD_GRIP_W_PX;
-  if (viewportPinPx !== null) {
-    el.style.left = `${viewportPinPx}px`;
-  } else if (viewportLeftPx !== undefined) {
-    el.style.left = `${viewportLeftPx}px`;
-  } else {
-    el.style.left = `${lineCenter - scrollLeftCss}px`;
-  }
+  el.style.left = `${lineCenter}px`;
   el.style.transform = `translate3d(${-gw / 2}px,0,0)`;
   if (innerEl) innerEl.style.transform = 'translateX(0px)';
 }
 
-/** Loop-only playhead — tracks beat on the grid (no viewport pin); used while loop is on + playing. */
+/** Loop-region playhead — same content-space placement as the main playhead. */
 function positionLoopRegionPlayheadGroup(
   el: HTMLElement | null,
   innerEl: HTMLElement | null,
   beat: number,
   zoom: number,
   beatsPerBar: number,
-  scrollLeftCss: number,
-  stripOffsetPx: number,
+  _scrollLeftCss = 0,
+  _stripOffsetPx = 0,
 ): void {
-  if (!el) return;
-  const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
-  const tb = totalBeatsForSig(bpb);
-  const ppb = ppbAtZoom(zoom, bpb);
-  const bClamped = Math.max(0, Math.min(beat, tb));
-  const viewportX = bClamped * ppb - scrollLeftCss - stripOffsetPx;
-  const gw = PLAYHEAD_GRIP_W_PX;
-  el.style.left = `${viewportX}px`;
-  el.style.transform = `translate3d(${-gw / 2}px,0,0)`;
-  if (innerEl) innerEl.style.transform = 'translateX(0px)';
+  positionTimelinePlayheadGroup(el, innerEl, beat, zoom, beatsPerBar);
 }
 
 function positionPianoPlayhead(el: HTMLElement | null, beat: number, zoom: number, beatsPerBar: number): void {
@@ -7600,7 +7590,7 @@ export default function StudioEditor2Screen({
     return () => clearInterval(id);
   }, [recording, tickLiveRecordingWaveform]);
 
-  const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean; pinViewportLeftPx?: number }) => {
+  const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean }) => {
     if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     timelineFollowPinAppliedRef.current = false;
     timelineFollowTransformOriginRef.current = 0;
@@ -7643,8 +7633,6 @@ export default function StudioEditor2Screen({
       z,
       bpb,
       scrollLeft,
-      null,
-      opts?.pinViewportLeftPx,
     );
     const ph = playheadGroupRef.current;
     if (ph && !runningRef.current) {
@@ -10158,53 +10146,24 @@ export default function StudioEditor2Screen({
             bClamped,
             z,
             bpb,
-            scrollLeft,
-            offset,
           );
         }
       } else {
         const mainPh = playheadGroupRef.current;
         if (mainPh) {
           mainPh.style.visibility = '';
-          mainPh.style.pointerEvents = '';
+          mainPh.style.pointerEvents = 'none';
         }
         if (loopPlayheadGroupRef.current) loopPlayheadGroupRef.current.style.visibility = 'hidden';
-        /* Approach: playhead glides with the beat until it reaches the pin line; then lock
-         * while the grid transform glides underneath (grid logic unchanged). */
-        const playheadViewportX = lineCenter - scrollLeft - offset;
-        if (timelineFollowPinAppliedRef.current) {
-          positionTimelinePlayheadGroup(
-            playheadGroupRef.current,
-            playheadLineRef.current,
-            bClamped,
-            z,
-            bpb,
-            scrollLeft,
-            pinPx,
-          );
-        } else if (playheadViewportX >= pinPx - 0.5) {
-          timelineFollowPinAppliedRef.current = true;
-          positionTimelinePlayheadGroup(
-            playheadGroupRef.current,
-            playheadLineRef.current,
-            bClamped,
-            z,
-            bpb,
-            scrollLeft,
-            pinPx,
-          );
-        } else {
-          positionTimelinePlayheadGroup(
-            playheadGroupRef.current,
-            playheadLineRef.current,
-            bClamped,
-            z,
-            bpb,
-            scrollLeft,
-            null,
-            playheadViewportX,
-          );
-        }
+        /* Content-space playhead rides the strip (incl. follow translate) — always on the beat. */
+        timelineFollowPinAppliedRef.current = true;
+        positionTimelinePlayheadGroup(
+          playheadGroupRef.current,
+          playheadLineRef.current,
+          bClamped,
+          z,
+          bpb,
+        );
       }
       timelineFollowIntScrollRef.current = scrollEl.scrollLeft;
       timelineFollowPinScreenXRef.current = pinPx;
@@ -10415,7 +10374,7 @@ export default function StudioEditor2Screen({
         clientY?: number;
       },
     ) => {
-      /* Commit follow translate → scrollLeft first so click math matches the painted grid. */
+      /* Commit follow translate → scrollLeft; keep lane/ruler/bar scroll locked together. */
       commitTimelineStripTransformToScroll(
         timelineHScrollRef.current,
         timelineRulerHScrollRef.current,
@@ -10429,25 +10388,27 @@ export default function StudioEditor2Screen({
       timelineFollowTransformOriginRef.current = 0;
       timelineFollowPinAppliedRef.current = false;
 
+      const laneScroll = timelineHScrollRef.current;
+      const rulerScroll = timelineRulerHScrollRef.current;
+      const barScroll = timelineHBarRef.current;
+      /* Always use the lane scroller as source of truth (ruler can desync when scrolled). */
+      const scrollEl = laneScroll ?? rulerScroll;
+      if (!scrollEl) return;
+      const sl = scrollEl.scrollLeft;
+      if (rulerScroll && rulerScroll.scrollLeft !== sl) rulerScroll.scrollLeft = sl;
+      if (barScroll && barScroll.scrollLeft !== sl) barScroll.scrollLeft = sl;
+      if (laneScroll && laneScroll !== scrollEl && laneScroll.scrollLeft !== sl) {
+        laneScroll.scrollLeft = sl;
+      }
+
       const z = timelineZoomRef.current;
       const bpb = beatsPerBarRef.current;
       const ppb = ppbAtZoom(z, bpb);
       const tb = totalBeatsRef.current;
-      const laneScroll = timelineHScrollRef.current;
-      const rulerScroll = timelineRulerHScrollRef.current;
-      let scrollEl = laneScroll ?? rulerScroll;
-      const clientY = opts?.clientY;
-      if (clientY != null && Number.isFinite(clientY)) {
-        const rulerRect = timelineRulerStripRef.current?.getBoundingClientRect();
-        if (rulerRect && clientY >= rulerRect.top && clientY <= rulerRect.bottom) {
-          scrollEl = rulerScroll ?? laneScroll;
-        }
-      }
-      if (!scrollEl || !(ppb > 0)) return;
+      if (!(ppb > 0)) return;
 
-      /* Pin playhead under the cursor — same viewport X the user clicked. */
-      const pinViewportLeftPx = clientX - scrollEl.getBoundingClientRect().left;
-      let b = Math.max(0, Math.min(tb, (pinViewportLeftPx + scrollEl.scrollLeft) / ppb));
+      const viewX = clientX - scrollEl.getBoundingClientRect().left;
+      let b = Math.max(0, Math.min(tb, (viewX + scrollEl.scrollLeft) / ppb));
 
       const shift = opts?.shiftKey ?? false;
       const alt = opts?.altKey ?? false;
@@ -10455,7 +10416,7 @@ export default function StudioEditor2Screen({
       if (snap == null && opts?.snapToBeatLine) snap = 'beat';
       if (snap == null) snap = 'free';
       if (alt || snap === 'free') {
-        /* exact click position */
+        /* exact click */
       } else if (shift || snap === 'bar') {
         b = snapBeatToBarGrid(b, bpb, tb);
       } else if (snap === 'beat') {
@@ -10467,12 +10428,7 @@ export default function StudioEditor2Screen({
       timelineUserSeekGuardUntilRef.current = performance.now() + 1200;
       cursorBeatRef.current = b;
       displayBeatRef.current = b;
-      /* Free placement: keep line under the mouse. Snapped: place from beat math. */
-      const pin =
-        snap === 'free' || alt
-          ? pinViewportLeftPx
-          : undefined;
-      applyPlayheadFull(b, { skipAutoScroll: true, pinViewportLeftPx: pin });
+      applyPlayheadFull(b, { skipAutoScroll: true });
       updateReadouts(b, true);
     },
     [applyPlayheadFull, updateReadouts],
@@ -21525,56 +21481,55 @@ export default function StudioEditor2Screen({
                   aria-hidden
                 />
               )}
+              {/* Playheads above the hit layer; pointer-events none so clicks reach the overlay. */}
+              <div
+                ref={loopPlayheadGroupRef}
+                className="absolute top-0 bottom-0 z-[7] flex justify-center pointer-events-none select-none"
+                style={{
+                  width: PLAYHEAD_GRIP_W_PX,
+                  visibility: 'hidden',
+                  willChange: 'left, transform',
+                }}
+                aria-hidden
+              >
+                <div
+                  ref={loopPlayheadLineRef}
+                  data-loop-playhead-line
+                  className="absolute top-0 bottom-0 pointer-events-none rounded-[1px]"
+                  style={{
+                    left: (PLAYHEAD_GRIP_W_PX - PLAYHEAD_W_PX) / 2,
+                    width: PLAYHEAD_W_PX,
+                    background: 'linear-gradient(180deg, #b8fff0 0%, #6ef0c8 50%, #3dd9a8 100%)',
+                    boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 0 8px rgba(110,240,200,0.45)',
+                    willChange: 'transform',
+                  }}
+                />
               </div>
-            </div>
-            <div
-              ref={loopPlayheadGroupRef}
-              className="absolute top-0 z-[5] flex justify-center pointer-events-none select-none"
-              style={{
-                width: PLAYHEAD_GRIP_W_PX,
-                height: arrangeLanesH,
-                visibility: 'hidden',
-                willChange: 'left, transform',
-              }}
-              aria-hidden
-            >
               <div
-                ref={loopPlayheadLineRef}
-                data-loop-playhead-line
-                className="absolute top-0 bottom-0 pointer-events-none rounded-[1px]"
+                ref={playheadGroupRef}
+                className="absolute top-0 bottom-0 z-[7] flex justify-center pointer-events-none select-none"
                 style={{
-                  left: (PLAYHEAD_GRIP_W_PX - PLAYHEAD_W_PX) / 2,
-                  width: PLAYHEAD_W_PX,
-                  background: 'linear-gradient(180deg, #b8fff0 0%, #6ef0c8 50%, #3dd9a8 100%)',
-                  boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 0 8px rgba(110,240,200,0.45)',
-                  willChange: 'transform',
+                  width: PLAYHEAD_GRIP_W_PX,
+                  cursor: 'default',
+                  touchAction: 'none',
+                  willChange: 'left, transform',
                 }}
-              />
-            </div>
-            <div
-              ref={playheadGroupRef}
-              className="absolute top-0 z-[4] flex justify-center pointer-events-none select-none"
-              style={{
-                width: PLAYHEAD_GRIP_W_PX,
-                height: arrangeLanesH,
-                cursor: 'default',
-                touchAction: 'none',
-                willChange: 'left, transform',
-              }}
-              aria-hidden
-            >
-              <div
-                ref={playheadLineRef}
-                data-playhead-line
-                className="absolute top-0 bottom-0 pointer-events-none rounded-[1px]"
-                style={{
-                  left: (PLAYHEAD_GRIP_W_PX - PLAYHEAD_W_PX) / 2,
-                  width: PLAYHEAD_W_PX,
-                  background: 'linear-gradient(180deg, #9fffd8 0%, #5ee9b4 50%, #34d399 100%)',
-                  boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 0 6px rgba(52,211,153,0.28)',
-                  willChange: 'transform',
-                }}
-              />
+                aria-hidden
+              >
+                <div
+                  ref={playheadLineRef}
+                  data-playhead-line
+                  className="absolute top-0 bottom-0 pointer-events-none rounded-[1px]"
+                  style={{
+                    left: (PLAYHEAD_GRIP_W_PX - PLAYHEAD_W_PX) / 2,
+                    width: PLAYHEAD_W_PX,
+                    background: 'linear-gradient(180deg, #9fffd8 0%, #5ee9b4 50%, #34d399 100%)',
+                    boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 0 6px rgba(52,211,153,0.28)',
+                    willChange: 'transform',
+                  }}
+                />
+              </div>
+              </div>
             </div>
           </div>
             </div>
