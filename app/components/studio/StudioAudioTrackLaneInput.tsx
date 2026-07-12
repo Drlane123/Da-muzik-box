@@ -11,10 +11,9 @@ const METER_WELL_STYLE: CSSProperties = {
 };
 
 const METER_FILL_STYLE: CSSProperties = {
-  width: '100%',
-  transform: 'scaleX(0)',
-  transformOrigin: 'left center',
-  willChange: 'transform',
+  width: '0%',
+  height: '100%',
+  // width is painted imperatively (same pattern as mixer VU height) — do not use scaleX here
 };
 
 function LaneMeterWell({
@@ -81,9 +80,11 @@ export function StudioAudioTrackLaneInput({
       data-studio-audio-track-input
       className="flex w-full min-w-0 items-center gap-1 rounded border px-1 py-0.5"
       style={{
+        // border/background painted by paintSe2TrackLaneMeterShell — keep layout-only styles here
+        borderWidth: 1,
+        borderStyle: 'solid',
         borderColor: 'rgba(255,255,255,0.1)',
         background: 'rgba(0,0,0,0.35)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       }}
       title={`${trackName} — lane input (mic/clips → Vocal DSP → mixer). Arm Rec, allow mic.`}
       onClick={(e) => e.stopPropagation()}

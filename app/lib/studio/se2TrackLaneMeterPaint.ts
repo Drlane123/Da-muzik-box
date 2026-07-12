@@ -11,7 +11,7 @@ export function se2TrackLaneMeterFillColor(displayNorm: number, muted: boolean):
   return '#00c853';
 }
 
-type LaneBarPaint = { transform: string; background: string; opacity: string };
+type LaneBarPaint = { width: string; background: string; opacity: string };
 type LaneShellPaint = { borderColor: string; background: string; boxShadow: string };
 type MixerBarPaint = { height: string; background: string };
 
@@ -19,7 +19,10 @@ const laneBarLast = new WeakMap<HTMLDivElement, LaneBarPaint>();
 const laneShellLast = new WeakMap<HTMLDivElement, LaneShellPaint>();
 const mixerBarLast = new WeakMap<HTMLDivElement, MixerBarPaint>();
 
-/** Paint one horizontal L or R lane meter bar (0–1 display norm, same as mixer VU). */
+/**
+ * Paint one horizontal L or R lane meter bar (0–1 display norm, same as mixer VU).
+ * Uses width % (not scaleX) so React re-renders cannot wipe a transform.
+ */
 export function paintSe2TrackLaneMeterBar(
   el: HTMLDivElement | null,
   displayNorm: number,
@@ -29,7 +32,7 @@ export function paintSe2TrackLaneMeterBar(
   if (!el) return;
   const level = Math.max(0, Math.min(1, displayNorm));
   const visible = muted ? 0 : level > 0 ? Math.max(level, 0.05) : 0;
-  const transform = `scaleX(${visible.toFixed(4)})`;
+  const width = `${(visible * 100).toFixed(1)}%`;
   const background =
     level > 0
       ? se2TrackLaneMeterFillColor(displayNorm, muted)
@@ -38,13 +41,14 @@ export function paintSe2TrackLaneMeterBar(
         : 'rgba(110,231,184,0.25)';
   const opacity = muted ? '0.35' : '1';
   const prev = laneBarLast.get(el);
-  if (prev && prev.transform === transform && prev.background === background && prev.opacity === opacity) {
+  if (prev && prev.width === width && prev.background === background && prev.opacity === opacity) {
     return;
   }
-  laneBarLast.set(el, { transform, background, opacity });
-  el.style.transform = transform;
+  laneBarLast.set(el, { width, background, opacity });
+  el.style.width = width;
   el.style.background = background;
   el.style.opacity = opacity;
+  el.style.transform = '';
 }
 
 export function paintSe2TrackLaneMeterShell(el: HTMLDivElement | null, hasSignal: boolean): void {

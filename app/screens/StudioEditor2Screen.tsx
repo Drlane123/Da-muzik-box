@@ -734,7 +734,7 @@ import {
   getStudioMixerStripInput,
   preloadStudioMixerMeterWorklet,
   readStudioMasterBusMeter,
-  readSe2TrackLaneMeter,
+  readStudioMixerStripInputMeter,
   readStudioMixerStripMeter,
   resetStudioMixerMeterPeaks,
   setStudioMixerStripGraphPlaybackLocked,
@@ -9908,19 +9908,24 @@ export default function StudioEditor2Screen({
       let mixL = 0;
       let mixR = 0;
       if (needsMeterRead) {
-        if (isAudio) {
-          const laneSnap = readSe2TrackLaneMeter(ti);
-          if (laneSnap) {
-            // IN meters: show input hitting the lane (do not zero when strip muted).
-            laneL = laneSnap.peakL;
-            laneR = monoT ? laneSnap.peakL : laneSnap.peakR;
+        // One strip peak read per track (worklet consume) — lane + mixer share it.
+        const snap = readStudioMixerStripMeter(ti);
+        if (snap) {
+          if (isAudio) {
+            laneL = snap.peakL;
+            laneR = monoT ? snap.peakL : snap.peakR;
+          }
+          if (paintMixerStrips) {
+            mixL = muted ? 0 : snap.peakL;
+            mixR = muted ? 0 : monoT ? snap.peakL : snap.peakR;
           }
         }
-        if (paintMixerStrips) {
-          const mixSnap = readStudioMixerStripMeter(ti);
-          if (mixSnap) {
-            mixL = muted ? 0 : mixSnap.peakL;
-            mixR = muted ? 0 : monoT ? mixSnap.peakL : mixSnap.peakR;
+        // Paused only: pre-fader IN tap (analyser) if hotter — never call strip meter twice.
+        if (isAudio) {
+          const inputSnap = readStudioMixerStripInputMeter(ti);
+          if (inputSnap && inputSnap.linearPeak > Math.max(laneL, laneR)) {
+            laneL = inputSnap.peakL;
+            laneR = monoT ? inputSnap.peakL : inputSnap.peakR;
           }
         }
       }
