@@ -7550,7 +7550,7 @@ export default function StudioEditor2Screen({
     return () => clearInterval(id);
   }, [recording, tickLiveRecordingWaveform]);
 
-  const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean }) => {
+  const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean; pinViewportLeftPx?: number }) => {
     if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     timelineFollowPinAppliedRef.current = false;
     timelineFollowTransformOriginRef.current = 0;
@@ -7588,6 +7588,8 @@ export default function StudioEditor2Screen({
       z,
       bpb,
       scrollLeft,
+      null,
+      opts?.pinViewportLeftPx,
     );
     positionPianoPlayhead(pianoPlayheadRef.current, beat, z, bpb);
   }, [clearTimelineEdgeFollow, syncTimelineGridNow]);
@@ -10383,7 +10385,10 @@ export default function StudioEditor2Screen({
       timelineFollowTransformOriginRef.current = 0;
       cursorBeatRef.current = b;
       displayBeatRef.current = b;
-      applyPlayheadFull(b, { skipAutoScroll: true });
+      const scrollEl = timelineHScrollRef.current;
+      const pinViewportLeftPx =
+        scrollEl != null ? clientX - scrollEl.getBoundingClientRect().left : undefined;
+      applyPlayheadFull(b, { skipAutoScroll: true, pinViewportLeftPx });
       updateReadouts(b, true);
     },
     [applyPlayheadFull, clearTimelineEdgeFollow, clientXToBeat, updateReadouts],
@@ -18414,6 +18419,15 @@ export default function StudioEditor2Screen({
 
       const arrTool = timelineToolRef.current;
 
+      /* Select tool: every lane click moves the playhead (Shift = marquee only). */
+      if (arrTool === 'select' && tool === 'select' && !e.shiftKey) {
+        setBeatFromScrubClientX(e.clientX, {
+          shiftKey: e.shiftKey,
+          altKey: e.altKey,
+          clientY: e.clientY,
+        });
+      }
+
       if (arrTool === 'scrub' || (arrTool === 'select' && isClientXNearPlayhead(e.clientX, 14, e.clientY))) {
         timelinePlayheadScrubRef.current = { active: true };
         scrubbingRef.current = true;
@@ -18533,19 +18547,9 @@ export default function StudioEditor2Screen({
           setSelectedTrackIndex(pos.ti);
           setSelectedPianoNoteIndex(null);
           clearSelectedPianoNotes();
-          setBeatFromScrubClientX(e.clientX, {
-            shiftKey: e.shiftKey,
-            altKey: e.altKey,
-            clientY: e.clientY,
-          });
           return;
         }
         if (!e.shiftKey) {
-          setBeatFromScrubClientX(e.clientX, {
-            shiftKey: e.shiftKey,
-            altKey: e.altKey,
-            clientY: e.clientY,
-          });
           setSelectedPianoNoteIndex(null);
           clearSelectedPianoNotes();
           return;
@@ -19637,7 +19641,7 @@ export default function StudioEditor2Screen({
       paintTransport();
     } else {
       displayBeatRef.current = cursorBeatRef.current;
-      applyPlayheadFull(cursorBeatRef.current);
+      applyPlayheadFull(cursorBeatRef.current, { skipAutoScroll: true });
       updateReadouts(displayBeatRef.current, !runningRef.current);
     }
   }, [
