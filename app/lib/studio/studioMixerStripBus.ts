@@ -696,6 +696,20 @@ export function readStudioMixerStripInputMeter(trackIndex: number): StudioMixerS
   return { peakL, peakR, rmsL: rms, rmsR: rms, linearPeak };
 }
 
+/**
+ * Audio-track lane IN meters (header L/R bars — not mixer strip VUs).
+ * Paused: prefer pre-fader input tap (mic / clips into the lane); fall back to post-fader.
+ * Playing: worklet post-fader only (no main-thread analyser pulls).
+ */
+export function readSe2TrackLaneMeter(trackIndex: number): StudioMixerStripSnapshot | null {
+  if (!stripGraphPlaybackLocked) {
+    const input = readStudioMixerStripInputMeter(trackIndex);
+    if (input && input.linearPeak > STUDIO_MIXER_SILENCE_LINEAR) return input;
+    return readStudioMixerStripMeter(trackIndex);
+  }
+  return readStudioMixerStripMeter(trackIndex);
+}
+
 export function readStudioMasterBusMeter(): { peakL: number; peakR: number } | null {
   const tap = masterMeterTap;
   if (!tap) return null;

@@ -734,6 +734,7 @@ import {
   getStudioMixerStripInput,
   preloadStudioMixerMeterWorklet,
   readStudioMasterBusMeter,
+  readSe2TrackLaneMeter,
   readStudioMixerStripMeter,
   resetStudioMixerMeterPeaks,
   setStudioMixerStripGraphPlaybackLocked,
@@ -9889,55 +9890,68 @@ export default function StudioEditor2Screen({
     const bus = midiPreviewBusRef.current;
     const meterActive = Boolean(ctx && ctx.state !== 'closed' && bus);
     const paintMixerStrips = showMixerRef.current;
-    const playing = runningRef.current;
-    // While playing: skip lane meters unless mixer is open (main-thread pressure → audio dropouts).
-    if (playing && !paintMixerStrips) {
-      reportSe2MeterPaintWorkMs(0);
-      return;
-    }
     const dt = studioMixerMeterFrameDt();
     const tracks = studioTracksRef.current;
 
     for (let ti = 0; ti < tracks.length; ti++) {
       const isAudio = tracks[ti]?.kind === 'audio';
-      /* strip bus uses worklet peaks during transport — analyser pulls only when paused. */
-      const needsMeterRead = meterActive && (paintMixerStrips || (!playing && isAudio));
+      /* Lane IN + mixer VU. During transport, strip bus uses worklet peaks (no analyser pulls). */
+      const needsMeterRead = meterActive && (paintMixerStrips || isAudio);
       const muted = se2EffectiveTrackMuted(ti, trackMutesRef.current, trackSolosRef.current);
       const vol127 = trackVolumesRef.current[ti] ?? MIXER_UNITY_VOL;
       const pan127 = trackPansRef.current[ti] ?? 64;
       const monoT = trackMonosRef.current[ti] ?? false;
       applyStudioMixerStripMix(ti, { muted, vol127, pan127, mono: monoT });
 
-      let targetL = 0;
-      let targetR = 0;
+      let laneL = 0;
+      let laneR = 0;
+      let mixL = 0;
+      let mixR = 0;
       if (needsMeterRead) {
-        const snap = readStudioMixerStripMeter(ti);
-        if (snap) {
-          targetL = muted ? 0 : snap.peakL;
-          targetR = muted ? 0 : monoT ? snap.peakL : snap.peakR;
+        if (isAudio) {
+          const laneSnap = readSe2TrackLaneMeter(ti);
+          if (laneSnap) {
+            // IN meters: show input hitting the lane (do not zero when strip muted).
+            laneL = laneSnap.peakL;
+            laneR = monoT ? laneSnap.peakL : laneSnap.peakR;
+          }
+        }
+        if (paintMixerStrips) {
+          const mixSnap = readStudioMixerStripMeter(ti);
+          if (mixSnap) {
+            mixL = muted ? 0 : mixSnap.peakL;
+            mixR = muted ? 0 : monoT ? mixSnap.peakL : mixSnap.peakR;
+          }
         }
       }
-      const disp = studioMixerMeterBallisticsStep(ti, targetL, targetR, dt);
-      const lVal = disp.l;
-      const rVal = disp.r;
+      // Shared ballistics when mixer closed (lane only). Separate lane slot when mixer open.
+      const laneDisp = studioMixerMeterBallisticsStep(
+        paintMixerStrips ? ti + 10_000 : ti,
+        laneL,
+        laneR,
+        dt,
+      );
+      const mixDisp = paintMixerStrips
+        ? studioMixerMeterBallisticsStep(ti, mixL, mixR, dt)
+        : null;
 
-      if (isAudio && !playing) {
-        paintSe2TrackLaneMeterBar(trackLaneMeterLsRef.current[ti], lVal, muted, 'L');
+      if (isAudio) {
+        paintSe2TrackLaneMeterBar(trackLaneMeterLsRef.current[ti], laneDisp.l, false, 'L');
         if (!monoT) {
-          paintSe2TrackLaneMeterBar(trackLaneMeterRsRef.current[ti], rVal, muted, 'R');
+          paintSe2TrackLaneMeterBar(trackLaneMeterRsRef.current[ti], laneDisp.r, false, 'R');
         } else if (trackLaneMeterRsRef.current[ti]) {
-          paintSe2TrackLaneMeterBar(trackLaneMeterRsRef.current[ti], 0, muted, 'R');
+          paintSe2TrackLaneMeterBar(trackLaneMeterRsRef.current[ti], 0, false, 'R');
         }
         paintSe2TrackLaneMeterShell(
           trackLaneMeterShellRef.current[ti],
-          !muted && Math.max(lVal, rVal) > 0.02,
+          Math.max(laneDisp.l, laneDisp.r) > 0.02,
         );
       }
 
-      if (!paintMixerStrips) continue;
+      if (!paintMixerStrips || !mixDisp) continue;
 
-      paintStudioMixerMeterBar(mixerMeterLsRef.current[ti], lVal, meterFillGradient, muted);
-      paintStudioMixerMeterBar(mixerMeterRsRef.current[ti], rVal, meterFillGradient, muted);
+      paintStudioMixerMeterBar(mixerMeterLsRef.current[ti], mixDisp.l, meterFillGradient, muted);
+      paintStudioMixerMeterBar(mixerMeterRsRef.current[ti], mixDisp.r, meterFillGradient, muted);
     }
 
     if (!paintMixerStrips) return;
@@ -10301,8 +10315,7 @@ export default function StudioEditor2Screen({
         if (cancelled) return;
         const playing = runningRef.current;
         const mixerOpen = showMixerRef.current;
-        // Playing + mixer open: ~10 Hz VU. Playing + mixer closed: skip (paintMixerMeters no-ops).
-        // Idle: keep prior rates so lane meters stay responsive.
+        // Playing: ~10 Hz with mixer open, ~4 Hz lane-only (worklet peaks). Idle: faster for IN meters.
         const intervalMs = playing
           ? mixerOpen
             ? 100
