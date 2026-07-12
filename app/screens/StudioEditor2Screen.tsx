@@ -9936,10 +9936,11 @@ export default function StudioEditor2Screen({
       if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
         const wrappedToLeft = playheadScreen < leftEdge && scrollLeft > 0;
         /*
-         * Loop re-entry (wrappedToLeft): land at the visible grid start, next to track labels.
+         * Loop re-entry (wrappedToLeft): land in the Track View start zone (under the "Track"
+         * label area), not one bar inward.
          * Normal right-edge pagination keeps the 15% lead to preserve page-jump feel.
          */
-        const jumpLeadPx = wrappedToLeft ? 2 : Math.max(2, Math.round(clientWidth * 0.15));
+        const jumpLeadPx = wrappedToLeft ? 26 : Math.max(2, Math.round(clientWidth * 0.15));
         const jumpScroll = Math.max(0, Math.round(lineCenter - jumpLeadPx));
         const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
         const clamped    = Math.min(jumpScroll, maxScroll);
