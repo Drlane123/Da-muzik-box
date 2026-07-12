@@ -1,0 +1,18 @@
+Da Music Box — save point 2026-07-12
+=====================================
+
+Live source (E: drive):
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE\
+
+Git:
+  branch: main
+  commit: 8ebce1c
+  tag:    se2-timeline-follow-locked-2026-07-12
+  remote: https://github.com/Drlane123/Da-muzik-box.git
+
+Local backup zip + restore notes:
+  E:\Da-Music-Box-v4-SOURCE-COMPLETE\.cache\milestones\2026-07-12-se2-timeline-follow\
+    source.zip      — full source snapshot (~417 MB)
+    RESTORE.md      — how to restore for you or any agent
+
+Milestone: SE2 timeline grid follow + playhead approach-to-pin (user verified).

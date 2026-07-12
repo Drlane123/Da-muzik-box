@@ -1366,6 +1366,24 @@ function beatColumnLeftPx(beat: number, ppb: number): number {
   return Math.round(beat * ppb);
 }
 
+/** Strip-local X from a click — includes scroll + transform via getBoundingClientRect. */
+function timelineStripClientX(strip: HTMLElement | null, clientX: number): number | null {
+  if (!strip) return null;
+  const rect = strip.getBoundingClientRect();
+  return clientX - rect.left;
+}
+
+function beatFromTimelineStripClientX(
+  strip: HTMLElement | null,
+  clientX: number,
+  ppb: number,
+  totalBeats: number,
+): number | null {
+  const x = timelineStripClientX(strip, clientX);
+  if (x == null || !Number.isFinite(ppb) || ppb <= 0) return null;
+  return Math.max(0, Math.min(totalBeats, x / ppb));
+}
+
 function tracksSignature(tracks: MockMusioTrack[]): string {
   try {
     return `${tracks.length}|${JSON.stringify(
@@ -7530,7 +7548,7 @@ export default function StudioEditor2Screen({
     return () => clearInterval(id);
   }, [recording, tickLiveRecordingWaveform]);
 
-  const applyPlayheadFull = useCallback((beat: number) => {
+  const applyPlayheadFull = useCallback((beat: number, opts?: { scrubViewportLeftPx?: number }) => {
     if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     timelineFollowPinAppliedRef.current = false;
     timelineFollowTransformOriginRef.current = 0;
@@ -7539,15 +7557,14 @@ export default function StudioEditor2Screen({
     const bpb = beatsPerBarRef.current;
     const scrollEl = timelineHScrollRef.current;
     const rulerEl = timelineRulerHScrollRef.current;
-    /* Scroll before positioning — far seeks (e.g. bar 13) used to leave the line behind. */
     scrollTimelineToPlayhead(scrollEl, beat, z, bpb, [rulerEl]);
     const barEl = timelineHBarRef.current;
     if (barEl && scrollEl && barEl.scrollLeft !== scrollEl.scrollLeft) {
       barEl.scrollLeft = scrollEl.scrollLeft;
     }
 
-    syncTimelineGridNow(z);
-    /* Seek WAAPI animations: pause â†’ seek so compositor never flashes the from-keyframe. */
+    syncTimelineGridNow(z, scrollEl?.scrollLeft);
+
     const seekMs = Math.max(0, (beat / (wapiBpmRef.current / 60)) * 1000);
     const waSeek = (a: Animation | null) => {
       if (!a) return;
@@ -7558,15 +7575,29 @@ export default function StudioEditor2Screen({
     };
     waSeek(playheadWapiRef.current);
     waSeek(pianoPhWapiRef.current);
-    /* Fallback static positioning (also sets the inner line / scroll). */
-    positionTimelinePlayheadGroup(
-      playheadGroupRef.current,
-      playheadLineRef.current,
-      beat,
-      z,
-      bpb,
-      scrollEl?.scrollLeft ?? 0,
-    );
+
+    const scrollLeft = scrollEl?.scrollLeft ?? 0;
+    if (opts?.scrubViewportLeftPx != null) {
+      positionTimelinePlayheadGroup(
+        playheadGroupRef.current,
+        playheadLineRef.current,
+        beat,
+        z,
+        bpb,
+        scrollLeft,
+        null,
+        opts.scrubViewportLeftPx,
+      );
+    } else {
+      positionTimelinePlayheadGroup(
+        playheadGroupRef.current,
+        playheadLineRef.current,
+        beat,
+        z,
+        bpb,
+        scrollLeft,
+      );
+    }
     positionPianoPlayhead(pianoPlayheadRef.current, beat, z, bpb);
   }, [clearTimelineEdgeFollow, syncTimelineGridNow]);
 
@@ -10293,18 +10324,33 @@ export default function StudioEditor2Screen({
     }
   }, [animationTick]);
 
-  /** Convert a clientX position on the timeline strip into a beat value.
-   *  Accounts for scrollLeft plus any transform-only follow offset on the strip. */
-  const clientXToBeat = useCallback((clientX: number): number => {
+  /** Beat under the pointer — strip getBoundingClientRect (scroll + transform aware). */
+  const clientXToBeat = useCallback((clientX: number, clientY?: number): number => {
+    const z = timelineZoomRef.current;
+    const bpb = beatsPerBarRef.current;
+    const ppb = ppbAtZoom(z, bpb);
+    const tb = totalBeatsRef.current;
+    const laneStrip = timelineStripRef.current;
+    const rulerStrip = timelineRulerStripRef.current;
+
+    let strip = laneStrip;
+    if (clientY != null && Number.isFinite(clientY)) {
+      const rulerRect = rulerStrip?.getBoundingClientRect();
+      const laneRect = laneStrip?.getBoundingClientRect();
+      if (rulerRect && clientY >= rulerRect.top && clientY <= rulerRect.bottom) {
+        strip = rulerStrip;
+      } else if (laneRect && clientY >= laneRect.top && clientY <= laneRect.bottom) {
+        strip = laneStrip;
+      }
+    }
+
+    const fromStrip = beatFromTimelineStripClientX(strip, clientX, ppb, tb);
+    if (fromStrip != null) return fromStrip;
+
     const scrollEl = timelineHScrollRef.current ?? timelineRulerHScrollRef.current;
     if (!scrollEl) return 0;
-    const z    = timelineZoomRef.current;
-    const bpb  = beatsPerBarRef.current;
-    const ppb  = ppbAtZoom(z, bpb);
     const rect = scrollEl.getBoundingClientRect();
-    const followOffset = timelineFollowLastOffsetRef.current;
-    const x    = clientX - rect.left + scrollEl.scrollLeft + followOffset;
-    const tb   = totalBeatsRef.current;
+    const x = clientX - rect.left + scrollEl.scrollLeft;
     return Math.max(0, Math.min(tb, x / ppb));
   }, []);
 
@@ -10317,12 +10363,15 @@ export default function StudioEditor2Screen({
         snap?: 'free' | 'subdiv' | 'bar' | 'beat';
         shiftKey?: boolean;
         altKey?: boolean;
+        clientY?: number;
       },
     ) => {
-      if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
-      timelineFollowPinAppliedRef.current = false;
-      timelineFollowTransformOriginRef.current = 0;
-      let b = clientXToBeat(clientX);
+      const scrollEl = timelineHScrollRef.current;
+      const scrubViewportLeftPx =
+        scrollEl != null ? clientX - scrollEl.getBoundingClientRect().left : undefined;
+
+      /* Sample beat from the visible strip BEFORE follow teardown mutates scroll/transform. */
+      let b = clientXToBeat(clientX, opts?.clientY);
       const tb = totalBeatsRef.current;
       const bpb = beatsPerBarRef.current;
       const shift = opts?.shiftKey ?? false;
@@ -10338,24 +10387,35 @@ export default function StudioEditor2Screen({
       } else {
         b = snapBeatToSubdivision(b, pianoSnapEffRef.current, tb);
       }
+
+      if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
+      timelineFollowPinAppliedRef.current = false;
+      timelineFollowTransformOriginRef.current = 0;
       cursorBeatRef.current = b;
       displayBeatRef.current = b;
-      applyPlayheadFull(b);
+      applyPlayheadFull(b, { scrubViewportLeftPx });
       updateReadouts(b, true);
     },
     [applyPlayheadFull, clearTimelineEdgeFollow, clientXToBeat, updateReadouts],
   );
 
   const isClientXNearPlayhead = useCallback(
-    (clientX: number, tolerancePx = 14): boolean => {
-      const scrollEl = timelineHScrollRef.current ?? timelineRulerHScrollRef.current;
-      if (!scrollEl) return false;
+    (clientX: number, tolerancePx = 14, clientY?: number): boolean => {
       const z = timelineZoomRef.current;
       const bpb = beatsPerBarRef.current;
       const ppb = ppbAtZoom(z, bpb);
       const playheadX = cursorBeatRef.current * ppb;
-      const rect = scrollEl.getBoundingClientRect();
-      const x = clientX - rect.left + scrollEl.scrollLeft + timelineFollowLastOffsetRef.current;
+      const laneStrip = timelineStripRef.current;
+      const rulerStrip = timelineRulerStripRef.current;
+      let strip = laneStrip;
+      if (clientY != null && Number.isFinite(clientY)) {
+        const rulerRect = rulerStrip?.getBoundingClientRect();
+        if (rulerRect && clientY >= rulerRect.top && clientY <= rulerRect.bottom) {
+          strip = rulerStrip;
+        }
+      }
+      const x = timelineStripClientX(strip, clientX);
+      if (x == null) return false;
       return Math.abs(x - playheadX) <= tolerancePx;
     },
     [],
@@ -18361,13 +18421,14 @@ export default function StudioEditor2Screen({
 
       const arrTool = timelineToolRef.current;
 
-      if (arrTool === 'scrub' || (arrTool === 'select' && isClientXNearPlayhead(e.clientX))) {
+      if (arrTool === 'scrub' || (arrTool === 'select' && isClientXNearPlayhead(e.clientX, 14, e.clientY))) {
         timelinePlayheadScrubRef.current = { active: true };
         scrubbingRef.current = true;
         setBeatFromScrubClientX(e.clientX, {
           snap: 'free',
           shiftKey: e.shiftKey,
           altKey: e.altKey,
+          clientY: e.clientY,
         });
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -18414,6 +18475,7 @@ export default function StudioEditor2Screen({
           snap: e.altKey ? 'free' : 'subdiv',
           shiftKey: e.shiftKey,
           altKey: e.altKey,
+          clientY: e.clientY,
         });
         return;
       }
@@ -18483,6 +18545,7 @@ export default function StudioEditor2Screen({
             snap: e.altKey ? 'free' : 'subdiv',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
+            clientY: e.clientY,
           });
           return;
         }
@@ -18491,6 +18554,7 @@ export default function StudioEditor2Screen({
             snap: e.altKey ? 'free' : 'subdiv',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
+            clientY: e.clientY,
           });
           setSelectedPianoNoteIndex(null);
           clearSelectedPianoNotes();
@@ -18600,6 +18664,7 @@ export default function StudioEditor2Screen({
           snap: e.altKey ? 'free' : e.shiftKey ? 'bar' : 'free',
           shiftKey: e.shiftKey,
           altKey: e.altKey,
+          clientY: e.clientY,
         });
         return;
       }
@@ -19021,6 +19086,7 @@ export default function StudioEditor2Screen({
         snap: 'free',
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        clientY: e.clientY,
       });
     },
     [pauseTransport, setBeatFromScrubClientX],
@@ -19033,6 +19099,7 @@ export default function StudioEditor2Screen({
         snap: e.altKey ? 'free' : e.shiftKey ? 'bar' : 'free',
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        clientY: e.clientY,
       });
     },
     [setBeatFromScrubClientX],
@@ -20159,6 +20226,7 @@ export default function StudioEditor2Screen({
         snap: e.altKey ? 'free' : 'subdiv',
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        clientY: e.clientY,
       });
       const startZoom = timelineZoomRef.current;
       measureRulerGestureRef.current = {
@@ -20169,7 +20237,7 @@ export default function StudioEditor2Screen({
         lastY: e.clientY,
         lastZoom: startZoom,
         anchorClientX: e.clientX,
-        anchorBeat: clientXToBeat(e.clientX),
+        anchorBeat: clientXToBeat(e.clientX, e.clientY),
         dragCommitted: false,
       };
     },
@@ -20193,6 +20261,7 @@ export default function StudioEditor2Screen({
             snap: e.altKey ? 'free' : e.shiftKey ? 'bar' : 'subdiv',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
+            clientY: e.clientY,
           });
           return;
         }
@@ -20204,6 +20273,7 @@ export default function StudioEditor2Screen({
             snap: e.altKey ? 'free' : e.shiftKey ? 'bar' : 'subdiv',
             shiftKey: e.shiftKey,
             altKey: e.altKey,
+            clientY: e.clientY,
           });
         }
         return;
@@ -20215,14 +20285,14 @@ export default function StudioEditor2Screen({
         } else if (adx >= RULER_GESTURE_LOCK_PX && adx > ady * RULER_ZOOM_AXIS_BIAS) {
           gesture.mode = 'scrub';
           gesture.dragCommitted = true;
-          setBeatFromScrubClientX(e.clientX);
+          setBeatFromScrubClientX(e.clientX, { clientY: e.clientY });
         } else {
           return;
         }
       }
 
       if (gesture.mode === 'scrub') {
-        if (gesture.dragCommitted) setBeatFromScrubClientX(e.clientX);
+        if (gesture.dragCommitted) setBeatFromScrubClientX(e.clientX, { clientY: e.clientY });
         return;
       }
 
