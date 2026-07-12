@@ -1314,7 +1314,7 @@ function loopRegionEndBeat(beatsPerBar: number, loopBars: number): number {
 }
 /** Keep playhead visible inside horizontal scroll (`MainWindowView` horizontal `ScrollView`). */
 const TIMELINE_SCROLL_MARGIN_PX = 96;
-/** Wrapped-loop re-entry anchor under the Track View label zone (C/K/KV area). */
+/** Hard loop re-entry target under Track View text (C/K/KV zone). */
 const TIMELINE_LOOP_REENTRY_ANCHOR_PX = 34;
 
 /**
@@ -9936,19 +9936,26 @@ export default function StudioEditor2Screen({
     if (!runningRef.current) {
       if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     } else if (scrollEl && clientWidth > 0) {
+      if (wrappedToLoopStart) {
+        const maxScroll = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
+        const target = Math.max(
+          0,
+          Math.min(maxScroll, Math.round(lineCenter - TIMELINE_LOOP_REENTRY_ANCHOR_PX)),
+        );
+        timelineProgrammaticScrollRef.current = true;
+        scrollEl.scrollLeft = target;
+        const ruler = timelineRulerHScrollRef.current;
+        const bar = timelineHBarRef.current;
+        if (ruler) ruler.scrollLeft = target;
+        if (bar) bar.scrollLeft = target;
+        timelineFollowIntScrollRef.current = target;
+        timelineEdgeFollowActiveRef.current = true;
+      } else {
       const rightEdge = clientWidth - pad;
       const leftEdge  = pad;
-      const leftEdgeReentry = playheadScreen < leftEdge && scrollLeft > 0;
-      if (wrappedToLoopStart || playheadScreen > rightEdge || leftEdgeReentry) {
-        /*
-         * On an actual loop wrap frame, force re-entry under Track View.
-         * Keep the normal 15% lead for right-edge pagination.
-         */
-        const jumpLeadPx =
-          wrappedToLoopStart || leftEdgeReentry
-            ? TIMELINE_LOOP_REENTRY_ANCHOR_PX
-            : Math.max(2, Math.round(clientWidth * 0.15));
-        const jumpScroll = Math.max(0, Math.round(lineCenter - jumpLeadPx));
+      if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
+        /* Single jump — place playhead ~15 % from the left of the viewport. */
+        const jumpScroll = Math.max(0, Math.round(lineCenter - clientWidth * 0.15));
         const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
         const clamped    = Math.min(jumpScroll, maxScroll);
         timelineProgrammaticScrollRef.current = true;
@@ -9968,6 +9975,7 @@ export default function StudioEditor2Screen({
             syncTimelineGridFollowAhead(paintZ, paintScroll);
           });
         }
+      }
       }
     }
 
