@@ -1336,7 +1336,7 @@ function applyTimelineSmoothFollowScroll(
   main: HTMLElement | null,
   ruler: HTMLElement | null,
   bar: HTMLElement | null,
-): void {
+): number {
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   /* Round to device pixels — avoids main-thread/compositor 1px fight with WAAPI playhead. */
   const intScroll = Math.round(targetScrollLeft * dpr) / dpr;
@@ -1344,6 +1344,7 @@ function applyTimelineSmoothFollowScroll(
   if (main && main.scrollLeft !== scrollPx) main.scrollLeft = scrollPx;
   if (ruler && ruler.scrollLeft !== scrollPx) ruler.scrollLeft = scrollPx;
   if (bar && bar.scrollLeft !== scrollPx) bar.scrollLeft = scrollPx;
+  return scrollPx;
 }
 
 function clearTimelineFollowStripTransform(
@@ -9917,51 +9918,44 @@ export default function StudioEditor2Screen({
     const lineCenter = bClamped * ppb;
 
     const pad = TIMELINE_SCROLL_MARGIN_PX;
-    let newScrollLeft = scrollLeft;
     const playheadScreen = lineCenter - scrollLeft;
 
+    /*
+     * PAGE-JUMP follow (Studio One / Pro Tools style):
+     *   - While playing, write scrollLeft ZERO times per frame — the grid stays still.
+     *   - The WAAPI playhead walks freely across the stationary grid.
+     *   - Only when it walks off the RIGHT edge (or appears left of the viewport after a
+     *     seek) do we do ONE instant scroll jump so the playhead lands near the left side.
+     * This completely eliminates grid shake caused by per-frame integer scrollLeft writes.
+     */
     if (!runningRef.current) {
       if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
-    } else if (scrollEl && clientWidth > 0 && !timelineEdgeFollowActiveRef.current) {
-      /*
-       * Continuous mid-viewport pin (not right-edge). Engaging at the right margin was the
-       * hard skip; pin ~38% across once the playhead reaches that line — zero scroll delta.
-       */
-      const pinLine = Math.max(pad, Math.min(clientWidth - pad, clientWidth * TIMELINE_FOLLOW_PIN_RATIO));
-      if (playheadScreen < pad && scrollLeft > 0) {
+    } else if (scrollEl && clientWidth > 0) {
+      const rightEdge = clientWidth - pad;
+      const leftEdge  = pad;
+      if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
+        /* Single jump — place playhead ~15 % from the left of the viewport. */
+        const jumpScroll = Math.max(0, Math.round(lineCenter - clientWidth * 0.15));
+        const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
+        const clamped    = Math.min(jumpScroll, maxScroll);
+        timelineProgrammaticScrollRef.current = true;
+        scrollEl.scrollLeft = clamped;
+        const ruler = timelineRulerHScrollRef.current;
+        const bar   = timelineHBarRef.current;
+        if (ruler) ruler.scrollLeft = clamped;
+        if (bar)   bar.scrollLeft   = clamped;
+        timelineFollowIntScrollRef.current = clamped;
         timelineEdgeFollowActiveRef.current = true;
-        timelineFollowPinScreenXRef.current = Math.max(8, Math.min(pad, playheadScreen));
-      } else if (playheadScreen >= pinLine) {
-        timelineEdgeFollowActiveRef.current = true;
-        /* Integer pin — sub-pixel pin X made WAAPI vs scroll fight look like shake. */
-        timelineFollowPinScreenXRef.current = Math.round(playheadScreen);
+        /* Repaint grid at the new scroll position (deferred to next rAF). */
+        if (!timelineFollowPaintRafRef.current) {
+          const paintZ = z;
+          const paintScroll = clamped;
+          timelineFollowPaintRafRef.current = requestAnimationFrame(() => {
+            timelineFollowPaintRafRef.current = 0;
+            syncTimelineGridFollowAhead(paintZ, paintScroll);
+          });
+        }
       }
-      if (timelineEdgeFollowActiveRef.current && !(timelineFollowPaintEndRef.current > 0)) {
-        /*
-         * Do NOT rebuild the grid on the engage frame (that was a hard skip). Seed the
-         * painted-end from the normal 960px overscan already on screen; refill later
-         * only when the viewport nears that end — with a large forward window.
-         */
-        timelineFollowPaintScrollRef.current = scrollLeft;
-        timelineFollowPaintEndRef.current =
-          scrollLeft + clientWidth + SE2_GRID_VIEW_MARGIN_PX;
-      }
-    }
-
-    const following =
-      runningRef.current &&
-      timelineEdgeFollowActiveRef.current &&
-      !!scrollEl &&
-      clientWidth > 0;
-
-    if (following && scrollEl) {
-      const pinX = Math.max(8, Math.min(clientWidth - 8, timelineFollowPinScreenXRef.current));
-      const maxScroll = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
-      newScrollLeft = Math.max(0, Math.min(maxScroll, lineCenter - pinX));
-    } else if (playheadScreen < pad && scrollLeft > 0) {
-      newScrollLeft = Math.max(0, lineCenter - pad);
-    } else if (playheadScreen > clientWidth - pad) {
-      newScrollLeft = Math.max(0, lineCenter - clientWidth + pad);
     }
 
     /* Bar/time readouts use the audio-clock beat so they roll over with the metronome. */
@@ -9970,44 +9964,20 @@ export default function StudioEditor2Screen({
     const sec  = (bReadout / Math.max(1, bpmRef.current)) * 60;
     const timeParts = formatTimeMmSsFfParts(sec);
 
-    /* --- 4. WRITE — scroll + readouts only (playhead = WAAPI compositor) --- */
-    /* playheadGroupRef and pianoPlayheadRef are driven by WAAPI — do NOT touch them */
-    if (scrollEl) {
-      if (following) {
-        /* Stay true for the whole sticky session so echo onScroll cannot drop follow. */
-        timelineProgrammaticScrollRef.current = true;
-        applyTimelineSmoothFollowScroll(
-          newScrollLeft,
-          scrollEl,
-          timelineRulerHScrollRef.current,
-          timelineHBarRef.current,
-        );
-        timelineFollowIntScrollRef.current = Math.round(newScrollLeft);
-        /*
-         * Only refill the grid when the viewport is about to run off the painted window.
-         * Never on a fixed px cadence — that caused the jump every ~N bars.
-         */
-        const paintEnd = timelineFollowPaintEndRef.current;
-        const nearPaintEnd =
-          paintEnd > 0 &&
-          newScrollLeft + clientWidth > paintEnd - TIMELINE_FOLLOW_PAINT_REARM_PX;
-        if (nearPaintEnd && !timelineFollowPaintRafRef.current) {
-          const paintZ = z;
-          const paintScroll = newScrollLeft;
-          timelineFollowPaintRafRef.current = requestAnimationFrame(() => {
-            timelineFollowPaintRafRef.current = 0;
-            if (!timelineEdgeFollowActiveRef.current) return;
-            syncTimelineGridFollowAhead(paintZ, paintScroll);
-          });
-        }
-      } else {
-        if (Math.abs(newScrollLeft - scrollLeft) >= 1) {
-          scrollEl.scrollLeft = newScrollLeft;
-          const rulerScroll = timelineRulerHScrollRef.current;
-          const barScroll = timelineHBarRef.current;
-          if (rulerScroll && rulerScroll.scrollLeft !== newScrollLeft) rulerScroll.scrollLeft = newScrollLeft;
-          if (barScroll && barScroll.scrollLeft !== newScrollLeft) barScroll.scrollLeft = newScrollLeft;
-        }
+    /* --- 4. WRITE — readouts only; grid scroll is handled above by page-jump only --- */
+    if (!runningRef.current && scrollEl) {
+      /* Stopped: still handle manual seeking scroll (non-follow). */
+      const newScrollLeft = (() => {
+        if (playheadScreen < pad && scrollLeft > 0) return Math.max(0, lineCenter - pad);
+        if (playheadScreen > clientWidth - pad) return Math.max(0, lineCenter - clientWidth + pad);
+        return scrollLeft;
+      })();
+      if (Math.abs(newScrollLeft - scrollLeft) >= 1) {
+        scrollEl.scrollLeft = newScrollLeft;
+        const rulerScroll = timelineRulerHScrollRef.current;
+        const barScroll = timelineHBarRef.current;
+        if (rulerScroll && rulerScroll.scrollLeft !== newScrollLeft) rulerScroll.scrollLeft = newScrollLeft;
+        if (barScroll && barScroll.scrollLeft !== newScrollLeft) barScroll.scrollLeft = newScrollLeft;
       }
     }
 
@@ -20554,7 +20524,7 @@ export default function StudioEditor2Screen({
               ref={trackListScrollRef}
               className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
             >
-            <div className="flex w-full min-w-0 shrink-0 flex-row items-start">
+            <div className="relative flex w-full min-w-0 shrink-0 flex-row items-start">
               <div
                 data-studio-track-view
                 className="flex shrink-0 flex-col border-r select-none self-start"
