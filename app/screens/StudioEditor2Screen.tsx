@@ -7428,11 +7428,11 @@ export default function StudioEditor2Screen({
       timelineRulerStripRef.current,
       timelineFollowContentRef.current,
     );
+    /* Content-space playhead uses `left = beat * ppb` — never clear it here (that jumps Stop to bar 1). */
     const ph = playheadGroupRef.current;
     if (ph) {
-      ph.style.left = '';
       ph.style.visibility = '';
-      ph.style.pointerEvents = '';
+      ph.style.pointerEvents = 'none';
     }
     const loopPh = loopPlayheadGroupRef.current;
     if (loopPh) loopPh.style.visibility = 'hidden';
@@ -17945,9 +17945,11 @@ export default function StudioEditor2Screen({
     const pauseBeat = readVisualPlayheadBeat();
     cursorBeatRef.current = pauseBeat;
     displayBeatRef.current = pauseBeat;
+    originBeatRef.current = pauseBeat;
     const z = timelineZoomRef.current;
     const bpb = beatsPerBarRef.current;
-    /* Bake CSS so cancel() inside launchWapiAnims cannot flash the line to beat 0. */
+    /* Commit follow scroll first, then park the playhead — never clear left after parking. */
+    clearTimelineEdgeFollow();
     positionTimelinePlayheadGroup(
       playheadGroupRef.current,
       playheadLineRef.current,
@@ -17957,7 +17959,6 @@ export default function StudioEditor2Screen({
       timelineHScrollRef.current?.scrollLeft ?? 0,
     );
     positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
-    clearTimelineEdgeFollow();
     if (!ctx || ctx.state === 'closed') {
       runningRef.current = false;
       setRunning(false);
@@ -17974,6 +17975,16 @@ export default function StudioEditor2Screen({
     launchWapiAnims(pauseBeat, false);
     syncTimelineGridNow(z);
     updateReadouts(pauseBeat, true);
+    /* Re-assert park after WAAPI bake (defensive — Stop must not flash to bar 1). */
+    positionTimelinePlayheadGroup(
+      playheadGroupRef.current,
+      playheadLineRef.current,
+      pauseBeat,
+      z,
+      bpb,
+      timelineHScrollRef.current?.scrollLeft ?? 0,
+    );
+    positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
   }, [
     cancelArrangerPreviewScheduling,
     cancelPrecountSession,
