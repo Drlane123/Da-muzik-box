@@ -3261,6 +3261,7 @@ function positionTimelinePlayheadGroup(
   beatsPerBar: number,
   scrollLeftCss = 0,
   viewportPinPx: number | null = null,
+  viewportLeftPx?: number,
 ): void {
   if (!el) return;
   const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
@@ -3271,6 +3272,8 @@ function positionTimelinePlayheadGroup(
   const gw = PLAYHEAD_GRIP_W_PX;
   if (viewportPinPx !== null) {
     el.style.left = `${viewportPinPx}px`;
+  } else if (viewportLeftPx !== undefined) {
+    el.style.left = `${viewportLeftPx}px`;
   } else {
     el.style.left = `${lineCenter - scrollLeftCss}px`;
   }
@@ -9999,7 +10002,10 @@ export default function StudioEditor2Screen({
         timelineFollowTransformOriginRef,
       );
       timelineFollowLastOffsetRef.current = offset;
-      if (!timelineFollowPinAppliedRef.current) {
+      /* Approach: playhead glides with the beat until it reaches the pin line; then lock
+       * while the grid transform glides underneath (grid logic unchanged). */
+      const playheadViewportX = lineCenter - scrollLeft - offset;
+      if (timelineFollowPinAppliedRef.current) {
         positionTimelinePlayheadGroup(
           playheadGroupRef.current,
           playheadLineRef.current,
@@ -10009,7 +10015,28 @@ export default function StudioEditor2Screen({
           scrollLeft,
           pinPx,
         );
+      } else if (playheadViewportX >= pinPx - 0.5) {
         timelineFollowPinAppliedRef.current = true;
+        positionTimelinePlayheadGroup(
+          playheadGroupRef.current,
+          playheadLineRef.current,
+          bClamped,
+          z,
+          bpb,
+          scrollLeft,
+          pinPx,
+        );
+      } else {
+        positionTimelinePlayheadGroup(
+          playheadGroupRef.current,
+          playheadLineRef.current,
+          bClamped,
+          z,
+          bpb,
+          scrollLeft,
+          null,
+          playheadViewportX,
+        );
       }
       timelineFollowIntScrollRef.current = scrollEl.scrollLeft;
       timelineFollowPinScreenXRef.current = pinPx;
@@ -17595,6 +17622,8 @@ export default function StudioEditor2Screen({
         timelineFollowContentRef.current,
       );
       if (clientW > 0) {
+        /* Do not pin on Play — let the playhead glide to the pin line while the grid
+         * is still; animationTick locks it once follow offset engages. */
         positionTimelinePlayheadGroup(
           playheadGroupRef.current,
           playheadLineRef.current,
@@ -17602,9 +17631,9 @@ export default function StudioEditor2Screen({
           zPlay,
           bpbPlay,
           committed,
-          pinPx,
+          null,
         );
-        timelineFollowPinAppliedRef.current = true;
+        timelineFollowPinAppliedRef.current = false;
         timelineEdgeFollowActiveRef.current = true;
         timelineFollowPinScreenXRef.current = pinPx;
       }
