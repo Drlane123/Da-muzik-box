@@ -17,11 +17,39 @@ function ePath(...parts: string[]): string {
 if (useEDrive) {
   fs.mkdirSync(ePath('dist'), { recursive: true });
   fs.mkdirSync(ePath('.vite-cache'), { recursive: true });
+  fs.mkdirSync(ePath('.cache', 'temp', 'dist-test'), { recursive: true });
 }
+
+/** After listen, pre-compile heavy screens in the background (does not block index.html). */
+const DEV_BACKGROUND_WARMUP = [
+  '/main.tsx',
+  '/app/boot-app.tsx',
+  '/app/app.tsx',
+  '/app/screens/StudioEditor2Screen.tsx',
+  '/app/screens/CreationStationScreen.tsx',
+];
 
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'dev-background-warmup',
+      apply: 'serve',
+      configureServer(server) {
+        server.httpServer?.once('listening', () => {
+          let delayMs = 400;
+          for (const url of DEV_BACKGROUND_WARMUP) {
+            const target = url;
+            setTimeout(() => {
+              void server.transformRequest(target).catch(() => {
+                /* first compile can fail while deps are still linking */
+              });
+            }, delayMs);
+            delayMs += target.includes('StudioEditor2') || target.includes('CreationStation') ? 8000 : 1200;
+          }
+        });
+      },
+    },
     {
       name: 'dev-disable-service-worker',
       configureServer(server) {
@@ -52,6 +80,24 @@ export default defineConfig({
   publicDir: path.resolve(__viteConfigDir, 'public'),
   resolve: {
     alias: { '@': path.resolve(__viteConfigDir, '.') }
+  },
+  esbuild: {
+    target: 'esnext',
+  },
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react/jsx-dev-runtime',
+      'react/jsx-runtime',
+      'lucide-react',
+      '@supabase/supabase-js',
+      'midi-file',
+      'smplr',
+      'clsx',
+      'tailwind-merge',
+    ],
   },
   /** Vite cache on E: when project mirror exists — keeps C: free. */
   cacheDir: useEDrive ? ePath('.vite-cache') : path.resolve(__viteConfigDir, 'node_modules/.vite'),

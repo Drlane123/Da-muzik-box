@@ -165,6 +165,7 @@ export type Se2SeamlessLoopSpliceRefs = {
 export function applySe2SeamlessLoopSplice(
   ctx: AudioContext,
   seg: Se2WapiSegLoopState,
+  loopStartBeat: number,
   animMs: number,
   bpm: number,
   totalBeats: number,
@@ -193,7 +194,8 @@ export function applySe2SeamlessLoopSplice(
   const rate = Math.max(1, bpm) / 60;
   const sessionStart = refs.sessionStartRef.current;
   const tb = Math.max(1e-9, totalBeats);
-  const bSched = se2LoopSpliceSchedBeat(bVis, seg.loopStartBeat, span);
+  const loopStart = Math.max(0, loopStartBeat);
+  const bSched = loopStart;
   if (tSmoothSnap !== null) {
     refs.originBeatRef.current = bVis - (tSmoothSnap - sessionStart) * rate;
   } else {
@@ -205,18 +207,11 @@ export function applySe2SeamlessLoopSplice(
     refs.nextMetroKRef.current = se2SnapBeatToQuarterGrid(Math.min(tb, Math.max(0, kNext)), tb);
   }
 
-  refs.cursorBeatRef.current = bVis;
-  refs.displayBeatRef.current = bVis;
+  refs.cursorBeatRef.current = loopStart;
+  refs.displayBeatRef.current = loopStart;
 
-  let bDisplay: number;
-  if (tSmoothSnap !== null) {
-    bDisplay = Math.max(
-      0,
-      Math.min(tb, refs.originBeatRef.current + (tSmoothSnap - sessionStart) * rate),
-    );
-  } else {
-    bDisplay = bVis;
-  }
+  // Hard reset the visual playhead directly to the left loop start.
+  const bDisplay = loopStart;
 
   return { bDisplay, bSched };
 }
@@ -254,9 +249,8 @@ function se2AudioNow(ctx: AudioContext): number {
  */
 export function se2AnimationTickLoopWrap(
   input: Se2AnimationTickLoopWrapInput,
-): { b: number; bDisplay: number; wrappedToLoopStart: boolean } {
+): { b: number; bDisplay: number } {
   let { b, bDisplay } = input;
-  let wrappedToLoopStart = false;
   const {
     animMs,
     wapiPlayState,
@@ -298,39 +292,18 @@ export function se2AnimationTickLoopWrap(
           const spliceResult = applySe2SeamlessLoopSplice(
             ctxLoop,
             seg,
+            loopStart,
             animMs,
             input.bpm,
             tb,
             input.refs,
           );
+          // Force the timeline to ONLY use our fixed return values.
           bDisplay = spliceResult.bDisplay;
           input.onSeamlessSplice(ctxLoop, tCapture);
           if (input.lastCompositorLoopLapRef) {
             input.lastCompositorLoopLapRef.current = lapKey;
           }
-        }
-
-        if (ctx && ctx.state === 'running' && input.refs.schedAnchorTimeRef.current > 0) {
-          const tSmoothAfter = smoothSchedNow(
-            input.refs.schedAnchorTimeRef,
-            input.refs.schedAnchorPerfRef,
-            ctx,
-          );
-          bDisplay = Math.max(
-            0,
-            Math.min(
-              tb,
-              input.refs.originBeatRef.current +
-                (tSmoothAfter - input.refs.sessionStartRef.current) * (input.bpm / 60),
-            ),
-          );
-          const spanWrap = loopEnd - loopStart;
-          if (spanWrap > 1e-9) {
-            bDisplay =
-              loopStart + (((bDisplay - loopStart) % spanWrap) + spanWrap) % spanWrap;
-          }
-        } else {
-          bDisplay = bVis;
         }
 
         if (phaseRewind && !cycleBumped) {
@@ -341,21 +314,21 @@ export function se2AnimationTickLoopWrap(
         } else {
           input.wapiLoopCycleSeenRef.current = cycle;
         }
-        wrappedToLoopStart = true;
       }
     }
     input.wapiPrevPhaseMsRef.current = phaseMs;
   }
 
-  const loopBeatEps = 1e-6;
+  // Trigger discrete wrap slightly before absolute loop end to avoid right-edge overshoot.
+  const loopWrapLeadBeats = 0.25;
   const loopEndMsEps = 0.65;
   const segEnds =
     seg.active &&
     loopOn &&
     loopEnd === seg.loopEndBeat &&
     animMs >= Math.max(0, seg.durMs - loopEndMsEps);
-  const audioPastLoopEnd = bDisplay >= loopEnd - loopBeatEps;
-  const compositorPastLoopEnd = b >= loopEnd - loopBeatEps || segEnds;
+  const audioPastLoopEnd = bDisplay >= loopEnd - loopWrapLeadBeats;
+  const compositorPastLoopEnd = b >= loopEnd - loopWrapLeadBeats || segEnds;
   const segmentTimedToLoopBar =
     seg.active && loopOn && loopEnd === seg.loopEndBeat && loopEnd > loopStart;
   const shouldWrapLoopNow =
@@ -368,31 +341,33 @@ export function se2AnimationTickLoopWrap(
       : audioPastLoopEnd || compositorPastLoopEnd);
 
   if (shouldWrapLoopNow) {
-    const ls = loopStart;
-    input.refs.originBeatRef.current = ls;
-    input.refs.cursorBeatRef.current = ls;
-    input.refs.displayBeatRef.current = ls;
+    const wrapTargetBeat = Math.max(0, loopStart + loopWrapLeadBeats);
+    input.refs.originBeatRef.current = wrapTargetBeat;
+    input.refs.cursorBeatRef.current = wrapTargetBeat;
+    input.refs.displayBeatRef.current = wrapTargetBeat;
     if (input.refs.nextMetroKRef) {
-      input.refs.nextMetroKRef.current = se2SnapBeatToQuarterGrid(ls, tb);
+      input.refs.nextMetroKRef.current = se2SnapBeatToQuarterGrid(wrapTargetBeat, tb);
     }
 
     const ctxLoop = ctx;
     if (ctxLoop && ctxLoop.state !== 'closed') {
       const tCapture = se2AudioNow(ctxLoop);
       const spliceFloor = SE2_LOOP_METRO_CHAIN_FLOOR_SEC;
-      input.refs.sessionStartRef.current = tCapture + spliceFloor;
-      input.refs.schedAnchorTimeRef.current = tCapture;
+      const loopDurationBeats = Math.max(0, loopEnd - loopStart);
+      const secondsPerBeat = 60 / Math.max(1, input.bpm);
+      const loopDurationSec = loopDurationBeats * secondsPerBeat;
+      input.refs.sessionStartRef.current = tCapture + spliceFloor - loopDurationSec;
+      input.refs.schedAnchorTimeRef.current = tCapture - loopDurationSec;
       input.refs.schedAnchorPerfRef.current = performance.now();
       input.refs.perfSessionStartMsRef.current =
         performance.now() + spliceFloor * 1000;
-      input.onDiscreteWrap(ctxLoop, tCapture, ls);
+      input.onDiscreteWrap(ctxLoop, tCapture, wrapTargetBeat);
     }
 
-    input.relaunchPlaylineAtLoopStart(ls);
-    b = ls;
-    bDisplay = ls;
-    wrappedToLoopStart = true;
+    input.relaunchPlaylineAtLoopStart(wrapTargetBeat);
+    b = wrapTargetBeat;
+    bDisplay = wrapTargetBeat;
   }
 
-  return { b, bDisplay, wrappedToLoopStart };
+  return { b, bDisplay };
 }

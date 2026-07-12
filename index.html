@@ -93,14 +93,17 @@
           return;
         }
 
-        if (cap) cap.textContent = 'Compiling in Cursor — keep this tab open…';
+        if (cap) cap.textContent = 'Dev compiling — or use bun run open:fast for instant preview…';
         var devId = window.setInterval(function () {
-          if (p >= 88) return;
+          if (p >= 99) return;
           p += 1;
+          if (p === 89 && cap) {
+            cap.textContent = 'Still compiling (SE2 is huge) — or bun run open:fast on port 4173…';
+          }
           window.__daMuzikBootPct = p;
           if (fill) fill.style.width = p + '%';
           if (pct) pct.textContent = p + '%';
-        }, 520);
+        }, p >= 88 ? 900 : 520);
       })();
     </script>
     <script type="module" src="./main.tsx"></script>

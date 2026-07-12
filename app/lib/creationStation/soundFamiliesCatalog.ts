@@ -14,7 +14,7 @@ import {
   ORCHESTRA_HITS_SOUND_FAMILY_ID,
 } from '@/app/lib/creationStation/soundFamilyOrchestraHits';
 
-import bundledCatalogJson from '../../../public/samples/sound-families/catalog.json';
+import bundledCatalogUrl from '/samples/sound-families/catalog.json?url';
 
 const CATALOG_URL = '/samples/sound-families/catalog.json';
 const SAMPLE_BASE = '/samples/sound-families/';
@@ -44,8 +44,8 @@ export type SoundFamiliesCatalog = {
   builtAt?: string;
 };
 
-/** Shipped with the app so Sound Families works without a separate build step. */
-const BUNDLED_CATALOG = bundledCatalogJson as SoundFamiliesCatalog;
+/** Vite-safe URL for bundled public asset (avoid importing JSON object from /public). */
+const BUNDLED_CATALOG_URL = bundledCatalogUrl;
 
 let cachedCatalog: SoundFamiliesCatalog | null = null;
 let catalogPromise: Promise<SoundFamiliesCatalog | null> | null = null;
@@ -87,7 +87,15 @@ export async function fetchSoundFamiliesCatalog(): Promise<SoundFamiliesCatalog 
       } catch {
         /* use bundled catalog */
       }
-      const bundled = normalizeCatalog(BUNDLED_CATALOG);
+      let bundled: SoundFamiliesCatalog | null = null;
+      try {
+        const resp = await fetch(BUNDLED_CATALOG_URL, { cache: 'force-cache' });
+        if (resp.ok) {
+          bundled = normalizeCatalog((await resp.json()) as SoundFamiliesCatalog);
+        }
+      } catch {
+        /* no-op */
+      }
       if (bundled) cachedCatalog = bundled;
       return bundled;
     })();

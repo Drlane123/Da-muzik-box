@@ -1328,33 +1328,37 @@ const TIMELINE_LOOP_REENTRY_PIN_PX = 0;
  * Paint a large forward window rarely; only refill when scroll nears the painted end.
  */
 const TIMELINE_FOLLOW_PAINT_BACK_PX = 160;
-const TIMELINE_FOLLOW_PAINT_FWD_PX = 5600;
+const TIMELINE_FOLLOW_PAINT_FWD_PX = 16000;
 /** Refill when the right edge of the viewport is this close to the painted end. */
-const TIMELINE_FOLLOW_PAINT_REARM_PX = 640;
+const TIMELINE_FOLLOW_PAINT_REARM_PX = 1200;
 
-/** Sticky follow scroll — integer scrollLeft only (no strip translate). */
-function applyTimelineSmoothFollowScroll(
+/**
+ * Transform-only follow — scrollLeft stays frozen during play; the strip glides via translate3d.
+ * Avoids scrollLeft + canvas marginLeft fights that read as playhead/grid shake.
+ */
+function applyTimelineTransformFollow(
   targetScrollLeft: number,
-  main: HTMLElement | null,
-  ruler: HTMLElement | null,
-  bar: HTMLElement | null,
-): number {
-  const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  /* Round to device pixels — avoids main-thread/compositor 1px fight with WAAPI playhead. */
-  const intScroll = Math.round(targetScrollLeft * dpr) / dpr;
-  const scrollPx = Math.round(intScroll);
-  if (main && main.scrollLeft !== scrollPx) main.scrollLeft = scrollPx;
-  if (ruler && ruler.scrollLeft !== scrollPx) ruler.scrollLeft = scrollPx;
-  if (bar && bar.scrollLeft !== scrollPx) bar.scrollLeft = scrollPx;
-  return scrollPx;
+  laneStrip: HTMLElement | null,
+  rulerStrip: HTMLElement | null,
+  laneContent: HTMLElement | null,
+  transformOriginRef: { current: number },
+): { virtualScroll: number; offset: number } {
+  const offset = targetScrollLeft - transformOriginRef.current;
+  const tx = Math.abs(offset) > 1e-4 ? `translate3d(${-offset}px,0,0)` : '';
+  if (laneStrip) laneStrip.style.transform = tx;
+  if (rulerStrip) rulerStrip.style.transform = tx;
+  if (laneContent) laneContent.style.transform = '';
+  return { virtualScroll: targetScrollLeft, offset };
 }
 
 function clearTimelineFollowStripTransform(
-  laneContent: HTMLElement | null,
+  laneStrip: HTMLElement | null,
   rulerStrip: HTMLElement | null,
+  laneContent: HTMLElement | null,
 ): void {
-  if (laneContent) laneContent.style.transform = '';
+  if (laneStrip) laneStrip.style.transform = '';
   if (rulerStrip) rulerStrip.style.transform = '';
+  if (laneContent) laneContent.style.transform = '';
 }
 
 /** Pixel-aligned beat column (same as `clipX = beats * pixelsPerBeat` in Musio `TimelineView`). */
@@ -3255,24 +3259,22 @@ function positionTimelinePlayheadGroup(
   beat: number,
   zoom: number,
   beatsPerBar: number,
+  scrollLeftCss = 0,
+  viewportPinPx: number | null = null,
 ): void {
   if (!el) return;
-  const stripW = TOTAL_WIDTH_PX * zoom;
   const bpb = Math.max(2, Math.min(16, Math.round(beatsPerBar)));
   const tb = totalBeatsForSig(bpb);
   const ppb = ppbAtZoom(zoom, bpb);
   const bClamped = Math.max(0, Math.min(beat, tb));
-  /* Exact sub-pixel Ã¢â‚¬â€ no Math.round. translate3d is composited by GPU without layout. */
   const lineCenter = bClamped * ppb;
   const gw = PLAYHEAD_GRIP_W_PX;
-  const pw = PLAYHEAD_W_PX;
-  /*
-   * Use the UNCLAMPED position so CSS matches the WAAPI from-keyframe exactly.
-   * Clamping to 0 at the left edge created an 8-px gap between the CSS-set position
-   * and the WAAPI "from" keyframe (-gw/2), causing a visible jump when Play is pressed.
-   */
-  el.style.transform = `translate3d(${lineCenter - gw / 2}px,0,0)`;
-  /* Only update inner position when clamped at edge Ã¢â‚¬â€ avoids layout on every frame. */
+  if (viewportPinPx !== null) {
+    el.style.left = `${viewportPinPx}px`;
+  } else {
+    el.style.left = `${lineCenter - scrollLeftCss}px`;
+  }
+  el.style.transform = `translate3d(${-gw / 2}px,0,0)`;
   if (innerEl) innerEl.style.transform = 'translateX(0px)';
 }
 
@@ -6828,6 +6830,7 @@ export default function StudioEditor2Screen({
   const timeFrameReadoutRef = useRef<HTMLSpanElement | null>(null);
   const timelineCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const timelineRulerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const playheadWapiTimingRef = useRef<HTMLDivElement | null>(null);
   const playheadGroupRef = useRef<HTMLDivElement | null>(null);
   /** Cached reference to the inner line element Ã¢â‚¬â€ avoids querySelector on every RAF frame. */
   const playheadLineRef = useRef<HTMLDivElement | null>(null);
@@ -7284,6 +7287,12 @@ export default function StudioEditor2Screen({
   /** RAF edge-follow scroll — skip onScroll grid repaint churn. */
   const timelineProgrammaticScrollRef = useRef(false);
   const timelineFollowIntScrollRef = useRef(-1);
+  /** Virtual scroll (lineCenter − pin) captured at Play — transform offset is relative to this. */
+  const timelineFollowTransformOriginRef = useRef(0);
+  /** Last transform offset (px) — used to commit scrollLeft on Stop/Pause. */
+  const timelineFollowLastOffsetRef = useRef(0);
+  /** Playhead viewport pin written once per follow session (not every rAF). */
+  const timelineFollowPinAppliedRef = useRef(false);
   /** Scroll (css px) at which the overscanned grid slice was last painted during follow. */
   const timelineFollowPaintScrollRef = useRef(Number.NEGATIVE_INFINITY);
   /** Absolute content X where the follow paint window ends (viewStart + paintW). */
@@ -7300,8 +7309,24 @@ export default function StudioEditor2Screen({
   const timelineFollowPaintRafRef = useRef(0);
 
   const clearTimelineEdgeFollow = useCallback(() => {
+    const wasFollowing = timelineEdgeFollowActiveRef.current;
+    const scrollEl = timelineHScrollRef.current;
+    if (wasFollowing && scrollEl) {
+      const committed = Math.max(
+        0,
+        Math.round(timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current),
+      );
+      scrollEl.scrollLeft = committed;
+      const ruler = timelineRulerHScrollRef.current;
+      const bar = timelineHBarRef.current;
+      if (ruler && ruler.scrollLeft !== committed) ruler.scrollLeft = committed;
+      if (bar && bar.scrollLeft !== committed) bar.scrollLeft = committed;
+    }
     timelineEdgeFollowActiveRef.current = false;
     timelineFollowIntScrollRef.current = -1;
+    timelineFollowTransformOriginRef.current = 0;
+    timelineFollowLastOffsetRef.current = 0;
+    timelineFollowPinAppliedRef.current = false;
     timelineFollowPaintScrollRef.current = Number.NEGATIVE_INFINITY;
     timelineFollowPaintEndRef.current = 0;
     if (timelineFollowPaintRafRef.current) {
@@ -7309,7 +7334,13 @@ export default function StudioEditor2Screen({
       timelineFollowPaintRafRef.current = 0;
     }
     timelineProgrammaticScrollRef.current = false;
-    clearTimelineFollowStripTransform(timelineFollowContentRef.current, timelineRulerStripRef.current);
+    clearTimelineFollowStripTransform(
+      timelineStripRef.current,
+      timelineRulerStripRef.current,
+      timelineFollowContentRef.current,
+    );
+    const ph = playheadGroupRef.current;
+    if (ph) ph.style.left = '';
   }, []);
 
   const scrollTrackListToEnd = useCallback(() => {
@@ -7481,7 +7512,14 @@ export default function StudioEditor2Screen({
     waSeek(playheadWapiRef.current);
     waSeek(pianoPhWapiRef.current);
     /* Fallback static positioning (also sets the inner line / scroll). */
-    positionTimelinePlayheadGroup(playheadGroupRef.current, playheadLineRef.current, beat, z, bpb);
+    positionTimelinePlayheadGroup(
+      playheadGroupRef.current,
+      playheadLineRef.current,
+      beat,
+      z,
+      bpb,
+      timelineHScrollRef.current?.scrollLeft ?? 0,
+    );
     positionPianoPlayhead(pianoPlayheadRef.current, beat, z, bpb);
     scrollTimelineToPlayhead(timelineHScrollRef.current, beat, z, bpb, [timelineRulerHScrollRef.current]);
   }, [syncTimelineGridNow]);
@@ -7607,7 +7645,7 @@ export default function StudioEditor2Screen({
     };
 
     const wapiIters = useSegment ? Infinity : 1;
-    playheadWapiRef.current = makeAnim(playheadGroupRef.current, x0Grip, x1Grip, durMs, seekMs, wapiIters);
+    playheadWapiRef.current = makeAnim(playheadWapiTimingRef.current, x0Grip, x1Grip, durMs, seekMs, wapiIters);
     pianoPhWapiRef.current  = makeAnim(pianoPlayheadRef.current, x0Piano, x1Piano, durMs, seekMs, wapiIters);
   }, []);
 
@@ -7617,13 +7655,21 @@ export default function StudioEditor2Screen({
     pianoPhWapiRef.current?.cancel();
     pianoPhWapiRef.current = null;
     playheadGroupRef.current?.getAnimations().forEach((a) => a.cancel());
+    playheadWapiTimingRef.current?.getAnimations().forEach((a) => a.cancel());
     pianoPlayheadRef.current?.getAnimations().forEach((a) => a.cancel());
   }, []);
 
   const applyPlayheadLineOnly = useCallback((beat: number) => {
     const z = timelineZoomRef.current;
     const bpb = beatsPerBarRef.current;
-    positionTimelinePlayheadGroup(playheadGroupRef.current, playheadLineRef.current, beat, z, bpb);
+    positionTimelinePlayheadGroup(
+      playheadGroupRef.current,
+      playheadLineRef.current,
+      beat,
+      z,
+      bpb,
+      timelineHScrollRef.current?.scrollLeft ?? 0,
+    );
     positionPianoPlayhead(pianoPlayheadRef.current, beat, z, bpb);
     scrollTimelineToPlayhead(timelineHScrollRef.current, beat, z, bpb, [timelineRulerHScrollRef.current]);
   }, []);
@@ -9898,7 +9944,19 @@ export default function StudioEditor2Screen({
         lastCompositorLoopLapRef,
         onSeamlessSplice: runLoopPreviewSpliceRefill,
         onDiscreteWrap: (ctxLoop, tCapture) => runLoopPreviewSpliceRefill(ctxLoop, tCapture),
-        relaunchPlaylineAtLoopStart: (ls) => launchWapiAnims(ls, true),
+        relaunchPlaylineAtLoopStart: (ls) => {
+          const scrollElLoop = timelineHScrollRef.current;
+          const cw = scrollElLoop?.clientWidth ?? 0;
+          const pin = cw * TIMELINE_FOLLOW_PIN_RATIO;
+          const ppbLoop = ppbAtZoom(timelineZoomRef.current, beatsPerBarRef.current);
+          const maxSl = Math.max(0, TOTAL_WIDTH_PX * timelineZoomRef.current - cw);
+          const virt = Math.min(maxSl, Math.max(0, ls * ppbLoop - pin));
+          timelineFollowTransformOriginRef.current = virt;
+          timelineFollowLastOffsetRef.current = 0;
+          if (timelineStripRef.current) timelineStripRef.current.style.transform = '';
+          if (timelineRulerStripRef.current) timelineRulerStripRef.current.style.transform = '';
+          launchWapiAnims(ls, true);
+        },
       });
       b = loopWrap.b;
       bDisplay = loopWrap.bDisplay;
@@ -9916,49 +9974,62 @@ export default function StudioEditor2Screen({
     const clientWidth = scrollEl ? scrollEl.clientWidth : 0;
 
     /* â”€â”€ 3. COMPUTE pixel positions (scroll + inner-line correction only) */
-    const bClamped   = Math.max(0, Math.min(b, tb));
+    const followBeat = runningRef.current ? bDisplay : b;
+    const bClamped   = Math.max(0, Math.min(followBeat, tb));
     const lineCenter = bClamped * ppb;
 
     const pad = TIMELINE_SCROLL_MARGIN_PX;
     const playheadScreen = lineCenter - scrollLeft;
 
     /*
-     * PAGE-JUMP follow (Studio One / Pro Tools style):
-     *   - While playing, write scrollLeft ZERO times per frame — the grid stays still.
-     *   - The WAAPI playhead walks freely across the stationary grid.
-     *   - Only when it walks off the RIGHT edge (or appears left of the viewport after a
-     *     seek) do we do ONE instant scroll jump so the playhead lands near the left side.
-     * This completely eliminates grid shake caused by per-frame integer scrollLeft writes.
+     * Transform-only follow — scrollLeft frozen; strip translate glides the grid under a
+     * viewport-pinned playhead (no scrollLeft / canvas margin fights).
      */
     if (!runningRef.current) {
       if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     } else if (scrollEl && clientWidth > 0) {
-      const rightEdge = clientWidth - pad;
-      const leftEdge  = pad;
-      if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
-        const wrappedBackToEntry = playheadScreen < leftEdge && scrollLeft > 0;
-        /* Single jump — forward pages keep breathing room; loop re-entry lands at grid start. */
-        const pinPx = wrappedBackToEntry ? TIMELINE_LOOP_REENTRY_PIN_PX : clientWidth * 0.15;
-        const jumpScroll = Math.max(0, Math.round(lineCenter - pinPx));
-        const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
-        const clamped    = Math.min(jumpScroll, maxScroll);
-        timelineProgrammaticScrollRef.current = true;
-        scrollEl.scrollLeft = clamped;
-        const ruler = timelineRulerHScrollRef.current;
-        const bar   = timelineHBarRef.current;
-        if (ruler) ruler.scrollLeft = clamped;
-        if (bar)   bar.scrollLeft   = clamped;
-        timelineFollowIntScrollRef.current = clamped;
-        timelineEdgeFollowActiveRef.current = true;
-        /* Repaint grid at the new scroll position (deferred to next rAF). */
-        if (!timelineFollowPaintRafRef.current) {
-          const paintZ = z;
-          const paintScroll = clamped;
-          timelineFollowPaintRafRef.current = requestAnimationFrame(() => {
-            timelineFollowPaintRafRef.current = 0;
-            syncTimelineGridFollowAhead(paintZ, paintScroll);
-          });
-        }
+      const pinPx = clientWidth * TIMELINE_FOLLOW_PIN_RATIO;
+      const maxScroll = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
+      const targetScroll = Math.min(maxScroll, Math.max(0, lineCenter - pinPx));
+      if (!timelineEdgeFollowActiveRef.current) {
+        timelineFollowTransformOriginRef.current = targetScroll;
+        timelineFollowLastOffsetRef.current = 0;
+      }
+      timelineProgrammaticScrollRef.current = true;
+      const { virtualScroll, offset } = applyTimelineTransformFollow(
+        targetScroll,
+        timelineStripRef.current,
+        timelineRulerStripRef.current,
+        timelineFollowContentRef.current,
+        timelineFollowTransformOriginRef,
+      );
+      timelineFollowLastOffsetRef.current = offset;
+      if (!timelineFollowPinAppliedRef.current) {
+        positionTimelinePlayheadGroup(
+          playheadGroupRef.current,
+          playheadLineRef.current,
+          followBeat,
+          z,
+          bpb,
+          scrollLeft,
+          pinPx,
+        );
+        timelineFollowPinAppliedRef.current = true;
+      }
+      timelineFollowIntScrollRef.current = scrollEl.scrollLeft;
+      timelineFollowPinScreenXRef.current = pinPx;
+      timelineEdgeFollowActiveRef.current = true;
+      const paintEnd = timelineFollowPaintEndRef.current;
+      const needsPaint =
+        paintEnd <= 0 ||
+        virtualScroll + clientWidth >= paintEnd - TIMELINE_FOLLOW_PAINT_REARM_PX;
+      if (needsPaint && !timelineFollowPaintRafRef.current) {
+        const paintZ = z;
+        const paintScroll = virtualScroll;
+        timelineFollowPaintRafRef.current = requestAnimationFrame(() => {
+          timelineFollowPaintRafRef.current = 0;
+          syncTimelineGridFollowAhead(paintZ, paintScroll);
+        });
       }
     }
 
@@ -9968,7 +10039,7 @@ export default function StudioEditor2Screen({
     const sec  = (bReadout / Math.max(1, bpmRef.current)) * 60;
     const timeParts = formatTimeMmSsFfParts(sec);
 
-    /* --- 4. WRITE — readouts only; grid scroll is handled above by page-jump only --- */
+    /* --- 4. WRITE — readouts only; grid scroll is handled above during follow --- */
     if (!runningRef.current && scrollEl) {
       /* Stopped: still handle manual seeking scroll (non-follow). */
       const newScrollLeft = (() => {
@@ -17504,10 +17575,20 @@ export default function StudioEditor2Screen({
      * Pre-paint a large forward grid window BEFORE the playhead moves so follow scroll
      * does not hitch every few bars rebuilding the waveform mid-playback.
      */
-    syncTimelineGridFollowAhead(
-      timelineZoomRef.current,
-      timelineHScrollRef.current?.scrollLeft ?? 0,
-    );
+    {
+      const scrollEl = timelineHScrollRef.current;
+      const zPlay = timelineZoomRef.current;
+      const bpbPlay = beatsPerBarRef.current;
+      const ppbPlay = ppbAtZoom(zPlay, bpbPlay);
+      const clientW = scrollEl?.clientWidth ?? 0;
+      const pinPx = clientW * TIMELINE_FOLLOW_PIN_RATIO;
+      const linePx = snapped * ppbPlay;
+      const maxSl = Math.max(0, TOTAL_WIDTH_PX * zPlay - clientW);
+      const virtScroll = Math.min(maxSl, Math.max(0, linePx - pinPx));
+      timelineFollowTransformOriginRef.current = virtScroll;
+      timelineFollowLastOffsetRef.current = 0;
+      syncTimelineGridFollowAhead(zPlay, virtScroll);
+    }
     /* Launch compositor-thread WAAPI animation â€” this is what the user sees. */
     launchWapiAnims(snapped, true);
       runningRef.current = true;
@@ -17602,7 +17683,14 @@ export default function StudioEditor2Screen({
     const z = timelineZoomRef.current;
     const bpb = beatsPerBarRef.current;
     /* Bake CSS so cancel() inside launchWapiAnims cannot flash the line to beat 0. */
-    positionTimelinePlayheadGroup(playheadGroupRef.current, playheadLineRef.current, pauseBeat, z, bpb);
+    positionTimelinePlayheadGroup(
+      playheadGroupRef.current,
+      playheadLineRef.current,
+      pauseBeat,
+      z,
+      bpb,
+      timelineHScrollRef.current?.scrollLeft ?? 0,
+    );
     positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
     clearTimelineEdgeFollow();
     if (!ctx || ctx.state === 'closed') {
@@ -19808,13 +19896,20 @@ export default function StudioEditor2Screen({
     return () => window.removeEventListener('keydown', onKey);
   }, [pianoRollExpanded]);
 
-  const syncTimelineHorizontalScroll = useCallback((source: 'main' | 'ruler' | 'bar') => {
-    if (timelineScrollSyncRef.current) return;
+  const syncTimelineHorizontalScroll = useCallback((source: 'main' | 'ruler' | 'bar' | 'programmatic', forcedScrollLeft?: number) => {
     const main = timelineHScrollRef.current;
     const ruler = timelineRulerHScrollRef.current;
     const bar = timelineHBarRef.current;
-    const src =
-      source === 'main' ? main : source === 'ruler' ? ruler : bar;
+
+    if (source === 'programmatic' && typeof forcedScrollLeft === 'number') {
+      if (main) main.scrollLeft = forcedScrollLeft;
+      if (ruler) ruler.scrollLeft = forcedScrollLeft;
+      if (bar) bar.scrollLeft = forcedScrollLeft;
+      return;
+    }
+
+    if (timelineScrollSyncRef.current) return;
+    const src = source === 'main' ? main : source === 'ruler' ? ruler : bar;
     if (!src) return;
     const left = src.scrollLeft;
     timelineScrollSyncRef.current = source;
@@ -20447,7 +20542,7 @@ export default function StudioEditor2Screen({
                 <div
                   ref={timelineRulerStripRef}
                   className="relative shrink-0"
-                  style={{ width: timelineStripWidthPx, height: RULER_TOTAL_H_PX, lineHeight: 0 }}
+                  style={{ width: timelineStripWidthPx, height: RULER_TOTAL_H_PX, lineHeight: 0, willChange: 'transform' }}
                 >
                   <canvas
                     ref={timelineRulerCanvasRef}
@@ -21012,7 +21107,7 @@ export default function StudioEditor2Screen({
 
           <div
             ref={timelineHScrollRef}
-            className="min-w-0 shrink-0 flex-1 self-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            className="relative min-w-0 shrink-0 flex-1 self-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             onScroll={onTimelineHScroll}
             onWheel={onTimelineWheel}
@@ -21027,16 +21122,23 @@ export default function StudioEditor2Screen({
                 height: arrangeLanesH,
                 backgroundColor: '#0a0a10',
                 lineHeight: 0,
+                willChange: 'transform',
               }}
             >
+              {/* Hidden — WAAPI timing only; visible playhead is viewport-pinned below. */}
+              <div
+                ref={playheadWapiTimingRef}
+                aria-hidden
+                className="pointer-events-none absolute top-0"
+                style={{ width: 0, height: 0, overflow: 'hidden', opacity: 0 }}
+              />
               {/*
-                Sub-pixel follow pan lives here — NOT on the strip that holds the WAAPI playhead.
-                Translating the playhead’s parent against WAAPI was the shake.
+                Lanes/canvas only — strip-level translate handles follow glide; playhead is
+                viewport-pinned on the scroll container sibling below.
               */}
               <div
                 ref={timelineFollowContentRef}
                 className="absolute inset-0"
-                style={{ willChange: 'transform' }}
               >
               <canvas ref={timelineCanvasRef} className="block max-w-none pointer-events-none" style={{ verticalAlign: 'top' }} />
               {/* Lane gestures: select track / draw & edit MIDI (tools match piano roll toolbar). */}
@@ -21102,34 +21204,35 @@ export default function StudioEditor2Screen({
                 />
               )}
               </div>
+            </div>
+            <div
+              ref={playheadGroupRef}
+              className="absolute top-0 z-[4] flex justify-center pointer-events-auto select-none"
+              style={{
+                width: PLAYHEAD_GRIP_W_PX,
+                height: arrangeLanesH,
+                cursor: 'ew-resize',
+                touchAction: 'none',
+                willChange: 'left, transform',
+              }}
+              onPointerDown={onPlayheadPointerDown}
+              onPointerMove={onPlayheadPointerMove}
+              onPointerUp={onPlayheadPointerUp}
+              onPointerCancel={onPlayheadPointerUp}
+              onContextMenu={onTimelinePlayheadContextMenu}
+            >
               <div
-                ref={playheadGroupRef}
-                className="absolute top-0 bottom-0 z-[4] flex justify-center pointer-events-auto select-none"
+                ref={playheadLineRef}
+                data-playhead-line
+                className="absolute top-0 bottom-0 pointer-events-none rounded-[1px]"
                 style={{
-                  width: PLAYHEAD_GRIP_W_PX,
-                  cursor: 'ew-resize',
-                  touchAction: 'none',
+                  left: (PLAYHEAD_GRIP_W_PX - PLAYHEAD_W_PX) / 2,
+                  width: PLAYHEAD_W_PX,
+                  background: 'linear-gradient(180deg, #9fffd8 0%, #5ee9b4 50%, #34d399 100%)',
+                  boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 0 6px rgba(52,211,153,0.28)',
                   willChange: 'transform',
                 }}
-                onPointerDown={onPlayheadPointerDown}
-                onPointerMove={onPlayheadPointerMove}
-                onPointerUp={onPlayheadPointerUp}
-                onPointerCancel={onPlayheadPointerUp}
-                onContextMenu={onTimelinePlayheadContextMenu}
-              >
-                <div
-                  ref={playheadLineRef}
-                  data-playhead-line
-                  className="absolute top-0 bottom-0 pointer-events-none rounded-[1px]"
-                  style={{
-                    left: (PLAYHEAD_GRIP_W_PX - PLAYHEAD_W_PX) / 2,
-                    width: PLAYHEAD_W_PX,
-                    background: 'linear-gradient(180deg, #9fffd8 0%, #5ee9b4 50%, #34d399 100%)',
-                    boxShadow: '0 0 0 1px rgba(0,0,0,0.35), 0 0 6px rgba(52,211,153,0.28)',
-                    willChange: 'transform',
-                  }}
-                />
-              </div>
+              />
             </div>
           </div>
             </div>

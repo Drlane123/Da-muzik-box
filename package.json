@@ -7,6 +7,8 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
+		"open:fast": "vite preview --host 127.0.0.1 --port 4173 --outDir .cache/temp/dist-test",
+		"dev:fast": "vite build --outDir .cache/temp/dist-test && vite preview --host 127.0.0.1 --port 4173",
 		"dev:preview": "vite build && vite preview",
 		"cursor": "vite build && vite preview --port 4173",
 		"lint": "eslint .",
