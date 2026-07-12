@@ -10416,8 +10416,6 @@ export default function StudioEditor2Screen({
         clientY?: number;
       },
     ) => {
-      if (runningRef.current) pauseTransport();
-
       commitTimelineStripTransformToScroll(
         timelineHScrollRef.current,
         timelineRulerHScrollRef.current,
@@ -10461,7 +10459,7 @@ export default function StudioEditor2Screen({
       applyPlayheadFull(b, { pinViewportLeftPx, skipAutoScroll: true });
       updateReadouts(b, true);
     },
-    [applyPlayheadFull, clientXToBeat, pauseTransport, updateReadouts],
+    [applyPlayheadFull, clientXToBeat, updateReadouts],
   );
 
   const isClientXNearPlayhead = useCallback(
