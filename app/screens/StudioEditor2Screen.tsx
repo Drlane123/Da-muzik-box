@@ -1314,6 +1314,8 @@ function loopRegionEndBeat(beatsPerBar: number, loopBars: number): number {
 }
 /** Keep playhead visible inside horizontal scroll (`MainWindowView` horizontal `ScrollView`). */
 const TIMELINE_SCROLL_MARGIN_PX = 96;
+/** Loop wrap re-entry anchor under the Track View label zone (C/K/KV area). */
+const TIMELINE_LOOP_REENTRY_ANCHOR_PX = 34;
 
 /**
  * Playback follow scroll — pin playhead mid-viewport (not at the right edge). Engaging at the
@@ -9936,11 +9938,12 @@ export default function StudioEditor2Screen({
       if (playheadScreen > rightEdge || (playheadScreen < leftEdge && scrollLeft > 0)) {
         const wrappedToLeft = playheadScreen < leftEdge && scrollLeft > 0;
         /*
-         * Loop re-entry (wrappedToLeft): land in the Track View start zone (under the "Track"
-         * label area), not one bar inward.
-         * Normal right-edge pagination keeps the 15% lead to preserve page-jump feel.
+         * Wrapped loop re-entry: land in the Track View start zone (near C/K/KV letters),
+         * not a bar inward. Normal right-edge pagination keeps the 15% lead.
          */
-        const jumpLeadPx = wrappedToLeft ? 26 : Math.max(2, Math.round(clientWidth * 0.15));
+        const jumpLeadPx = wrappedToLeft
+          ? TIMELINE_LOOP_REENTRY_ANCHOR_PX
+          : Math.max(2, Math.round(clientWidth * 0.15));
         const jumpScroll = Math.max(0, Math.round(lineCenter - jumpLeadPx));
         const maxScroll  = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
         const clamped    = Math.min(jumpScroll, maxScroll);
