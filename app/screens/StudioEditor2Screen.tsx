@@ -7550,7 +7550,7 @@ export default function StudioEditor2Screen({
     return () => clearInterval(id);
   }, [recording, tickLiveRecordingWaveform]);
 
-  const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean; pinViewportLeftPx?: number }) => {
+  const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean }) => {
     if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
     timelineFollowPinAppliedRef.current = false;
     timelineFollowTransformOriginRef.current = 0;
@@ -7565,6 +7565,11 @@ export default function StudioEditor2Screen({
       if (barEl && scrollEl && barEl.scrollLeft !== scrollEl.scrollLeft) {
         barEl.scrollLeft = scrollEl.scrollLeft;
       }
+    } else if (scrollEl) {
+      const sl = scrollEl.scrollLeft;
+      if (rulerEl && rulerEl.scrollLeft !== sl) rulerEl.scrollLeft = sl;
+      const barEl = timelineHBarRef.current;
+      if (barEl && barEl.scrollLeft !== sl) barEl.scrollLeft = sl;
     }
 
     const scrollLeft = scrollEl?.scrollLeft ?? 0;
@@ -7588,9 +7593,11 @@ export default function StudioEditor2Screen({
       z,
       bpb,
       scrollLeft,
-      null,
-      opts?.pinViewportLeftPx,
     );
+    const ph = playheadGroupRef.current;
+    if (ph && !runningRef.current) {
+      ph.style.pointerEvents = 'none';
+    }
     positionPianoPlayhead(pianoPlayheadRef.current, beat, z, bpb);
   }, [clearTimelineEdgeFollow, syncTimelineGridNow]);
 
@@ -10385,10 +10392,7 @@ export default function StudioEditor2Screen({
       timelineFollowTransformOriginRef.current = 0;
       cursorBeatRef.current = b;
       displayBeatRef.current = b;
-      const scrollEl = timelineHScrollRef.current;
-      const pinViewportLeftPx =
-        scrollEl != null ? clientX - scrollEl.getBoundingClientRect().left : undefined;
-      applyPlayheadFull(b, { skipAutoScroll: true, pinViewportLeftPx });
+      applyPlayheadFull(b, { skipAutoScroll: true });
       updateReadouts(b, true);
     },
     [applyPlayheadFull, clearTimelineEdgeFollow, clientXToBeat, updateReadouts],
@@ -18428,7 +18432,7 @@ export default function StudioEditor2Screen({
         });
       }
 
-      if (arrTool === 'scrub' || (arrTool === 'select' && isClientXNearPlayhead(e.clientX, 14, e.clientY))) {
+      if (arrTool === 'scrub') {
         timelinePlayheadScrubRef.current = { active: true };
         scrubbingRef.current = true;
         setBeatFromScrubClientX(e.clientX, {
@@ -18643,7 +18647,6 @@ export default function StudioEditor2Screen({
       pauseTransport,
       selectOnlyPianoNote,
       splitTimelineAudioClipAtBeat,
-      isClientXNearPlayhead,
       setBeatFromScrubClientX,
       timelineLaneBrushSegment,
       togglePianoNoteSelection,
@@ -19659,6 +19662,22 @@ export default function StudioEditor2Screen({
     updateReadouts,
     syncTimelineGridNow,
   ]);
+
+  /** Unstick scrub / ruler gestures if pointer-up is lost outside the lane overlay. */
+  useEffect(() => {
+    if (!isScreenActive) return;
+    const resetPointerGestures = () => {
+      timelinePlayheadScrubRef.current = { active: false };
+      scrubbingRef.current = false;
+      measureRulerGestureRef.current = null;
+    };
+    window.addEventListener('pointerup', resetPointerGestures);
+    window.addEventListener('pointercancel', resetPointerGestures);
+    return () => {
+      window.removeEventListener('pointerup', resetPointerGestures);
+      window.removeEventListener('pointercancel', resetPointerGestures);
+    };
+  }, [isScreenActive]);
 
   useEffect(() => {
     if (!isScreenActive) return;
@@ -21348,7 +21367,7 @@ export default function StudioEditor2Screen({
               <canvas ref={timelineCanvasRef} className="block max-w-none pointer-events-none" style={{ verticalAlign: 'top' }} />
               {/* Lane gestures: select track / draw & edit MIDI (tools match piano roll toolbar). */}
               <div
-                className="absolute inset-0 z-[2]"
+                className="absolute inset-0 z-[6]"
                 style={{
                   cursor:
                     timelineTool === 'scrub'
@@ -21436,19 +21455,15 @@ export default function StudioEditor2Screen({
             </div>
             <div
               ref={playheadGroupRef}
-              className="absolute top-0 z-[4] flex justify-center pointer-events-auto select-none"
+              className="absolute top-0 z-[4] flex justify-center pointer-events-none select-none"
               style={{
                 width: PLAYHEAD_GRIP_W_PX,
                 height: arrangeLanesH,
-                cursor: 'ew-resize',
+                cursor: 'default',
                 touchAction: 'none',
                 willChange: 'left, transform',
               }}
-              onPointerDown={onPlayheadPointerDown}
-              onPointerMove={onPlayheadPointerMove}
-              onPointerUp={onPlayheadPointerUp}
-              onPointerCancel={onPlayheadPointerUp}
-              onContextMenu={onTimelinePlayheadContextMenu}
+              aria-hidden
             >
               <div
                 ref={playheadLineRef}
