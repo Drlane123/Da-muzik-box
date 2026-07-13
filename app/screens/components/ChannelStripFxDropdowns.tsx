@@ -17,10 +17,14 @@ import {
 } from '@/app/lib/studio/studioFxStackOrder';
 import {
   cloneStudioTrackInsertFxRack,
-  studioInsertFxSuiteActive,
+  studioInsertFxRackActive,
   type StudioTrackInsertFxRack,
 } from '@/app/lib/studio/studioTrackInsertFx';
-import { studioTrackVocalFxActive, type StudioTrackVocalFx } from '@/app/lib/studio/studioTrackVocalFx';
+import {
+  studioEffectiveTrackVocalFx,
+  studioTrackVocalFxActive,
+  type StudioTrackVocalFx,
+} from '@/app/lib/studio/studioTrackVocalFx';
 import type { StudioDetectedKeyMode } from '@/app/lib/studio/studioAudioClipAnalysis';
 import type { StudioVocoderCarrierTrack } from '@/app/lib/studio/studioVocoderCarrier';
 
@@ -371,11 +375,12 @@ export function ChannelStripFxButton({
   const onInsertFxRackChangeRef = useRef(onInsertFxRackChange);
   onInsertFxRackChangeRef.current = onInsertFxRackChange;
 
-  const suiteActive = insertFxRack ? studioInsertFxSuiteActive(insertFxRack) : false;
+  const suiteActive = insertFxRack ? studioInsertFxRackActive(insertFxRack) : false;
   const rackActive = suiteActive;
-  const pitchActive = Boolean(vocalFx?.autotuneOn);
-  const vocoderActive = Boolean(vocalFx?.vocoderOn);
-  const vocalActive = vocalFx ? studioTrackVocalFxActive(vocalFx) : false;
+  const effectiveVocalFx = vocalFx ? studioEffectiveTrackVocalFx(vocalFx, slots) : null;
+  const pitchActive = Boolean(effectiveVocalFx?.autotuneOn);
+  const vocoderActive = Boolean(effectiveVocalFx?.vocoderOn);
+  const vocalActive = effectiveVocalFx ? studioTrackVocalFxActive(effectiveVocalFx) : false;
   const hasFx = rackActive || vocalActive || slots.some((s) => s !== '');
 
   const handleRackChange = useCallback((next: StudioTrackInsertFxRack) => {

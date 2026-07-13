@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 
 import {
   formatMeterDb,
-  idleNugenMeterSnap,
   isNugenMeterSilent,
   VU_METER_DB_TICKS,
   VU_REDUCTION_DB_TICKS,
@@ -12,6 +11,7 @@ import {
 } from '@/app/lib/masteringBay/masteringBayMeterIdle';
 import { METER_DB_FLOOR } from '@/app/lib/masteringBay/masteringBayMeterBallistics';
 import { VerticalMeterDbGrid } from '@/app/components/masteringBay/MeterDbGrid';
+import { useMasteringBayNugenSnap } from '@/app/hooks/useMasteringBayMeterStore';
 
 const DB_SCALE = VU_METER_DB_TICKS;
 
@@ -223,13 +223,14 @@ function complianceDelta(measured: number, goal: number): string {
 }
 
 export function MasterVuMeterSidebar({
-  snap,
+  snap: snapProp,
   onResetMeters,
 }: {
   snap?: NugenMeterSnap;
   onResetMeters?: () => void;
 }) {
-  const m: NugenMeterSnap = snap ?? idleNugenMeterSnap();
+  const storeSnap = useMasteringBayNugenSnap();
+  const m: NugenMeterSnap = snapProp ?? storeSnap;
   const silent = isNugenMeterSilent(m);
   const [tab, setTab] = useState<VisLmTab>('loudness');
   const [options, setOptions] = useState<VisLmOptions>(DEFAULT_VISLM_OPTIONS);

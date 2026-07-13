@@ -544,7 +544,7 @@ export function useSe2BeatPadsSampler({
         midiNote?: number;
       },
     ) => {
-      void ensureCtx().then((ctx) => {
+      const run = (ctx: AudioContext) => {
         const isManual = when === undefined;
         if (ctx.state === 'suspended') {
           void ctx.resume().catch(() => {});
@@ -606,7 +606,11 @@ export function useSe2BeatPadsSampler({
           };
         }
         const fxRack = padSampleFxRackRef.current[key] ?? defaultPadSamplerFxRack();
+        // Prefer track strip; fall back to master so VocalBox Pvw / pad taps stay audible
+        // when insert FX / transport-lock briefly returns a null strip input.
         const stripIn = getTrackStripInput?.() ?? null;
+        const masterOut = getMasterOutput?.() ?? null;
+        const outNode = stripIn ?? masterOut ?? undefined;
         const voiceStop = playPadSampleBuffer(
           ctx,
           buf,
@@ -626,21 +630,30 @@ export function useSe2BeatPadsSampler({
           isManual,
           chromaticDetuneCents,
           {
-            outputNode: stripIn ?? undefined,
+            outputNode: outNode,
             skipMeter: true,
             outputGain: getSe2BeatPadsMainVolume(),
           },
         );
         const voiceEntry = { stop: voiceStop, when: scheduleWhen };
         bag.add(voiceEntry);
+      };
+
+      const existing = audioCtxRef.current;
+      if (existing && existing.state !== 'closed') {
+        run(existing);
+        return;
+      }
+      void ensureCtx().then((ctx) => {
+        audioCtxRef.current = ctx;
+        run(ctx);
       });
     },
-    [ensureCtx, getTrackStripInput, sessionBpm],
+    [ensureCtx, getMasterOutput, getTrackStripInput, sessionBpm],
   );
 
   const onStrikePad = useCallback(
     (padIndex: number, velocity01: number, gridCol?: number, whenSec?: number) => {
-      void ensureCtx();
       const vk = se2VoiceKey(trackIdRef.current, padIndex);
       const voice = padDrumVoiceOptsRef.current[vk] ?? defaultBeatLabDrumPadVoiceOpts(padIndex);
       const vel =
@@ -649,7 +662,12 @@ export function useSe2BeatPadsSampler({
           : beatLabDrumVoiceManualVelocity(voice, velocity01);
       const offsetSec =
         gridCol != null ? beatLabDrumVoiceScheduleOffsetSec(voice, gridCol) : 0;
-      void ensureCtx().then((ctx) => {
+
+      const schedule = (ctx: AudioContext) => {
+        audioCtxRef.current = ctx;
+        if (ctx.state === 'suspended') {
+          void ctx.resume().catch(() => {});
+        }
         const when =
           whenSec != null
             ? whenSec + offsetSec
@@ -657,7 +675,14 @@ export function useSe2BeatPadsSampler({
               ? ctx.currentTime + Math.max(0.002, offsetSec)
               : undefined;
         playPadSound(padIndex, vel, when, 0, { beatPadVoice: voice });
-      });
+      };
+
+      const existing = audioCtxRef.current;
+      if (existing && existing.state !== 'closed') {
+        schedule(existing);
+        return;
+      }
+      void ensureCtx().then(schedule);
     },
     [ensureCtx, playPadSound],
   );
@@ -668,7 +693,10 @@ export function useSe2BeatPadsSampler({
   );
 
   const hasPadSample = useCallback(
-    (padIndex: number) => Boolean(padSamplePresence[se2BeatPadsPadKey(trackId, padIndex)]),
+    (padIndex: number) => {
+      const k = se2BeatPadsPadKey(trackId, padIndex);
+      return Boolean(padSamplePresence[k] || padSampleBuffersRef.current.get(k));
+    },
     [padSamplePresence, trackId],
   );
 
@@ -1673,7 +1701,7 @@ export function useSe2BeatPadsSampler({
       setKit: setKitLabel,
       producerKitId,
       onProducerKitIdChange: onProducerKitIdChangeInternal,
-      onLoadProducerKit: () => void applyProducerKit(),
+      onLoadProducerKit: () => applyProducerKit(),
       producerKitLoading,
       producerKitTribute,
       onLoadDefaultKitToBank: (kitId: BeatLabProducerKitId) => void applyProducerKit(kitId),

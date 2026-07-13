@@ -159,6 +159,8 @@ export type BeatPadsVocalBoxPanelProps = {
   getAudioOutput?: () => AudioNode | null;
   /** SE2 — wake shared AudioContext before mic + decode. */
   warmAudio?: () => void | Promise<void>;
+  /** Load producer kit when kick/snare pads have no samples (SE2 VocalBox preview). */
+  onEnsurePadSamples?: () => void | Promise<void>;
   disabled?: boolean;
 };
 
@@ -408,6 +410,7 @@ export function BeatPadsVocalBoxPanel({
   getAudioContext,
   getAudioOutput,
   warmAudio,
+  onEnsurePadSamples,
   disabled = false,
 }: BeatPadsVocalBoxPanelProps) {
   const [status, setStatus] = useState('Say boom for kick · ka for snare — Rec on count-in.');
@@ -423,6 +426,7 @@ export function BeatPadsVocalBoxPanel({
   const [precountBeatUi, setPrecountBeatUi] = useState<{ beat: number; total: number } | null>(null);
   const [recordBeatUi, setRecordBeatUi] = useState<{ beat: number; total: number } | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [liveRoleLevel, setLiveRoleLevel] = useState<Record<VocalBoxDrumRole, number>>({
     kick: 0,
@@ -595,6 +599,7 @@ export function BeatPadsVocalBoxPanel({
   const analyzeCapture = useCallback(
     async (blob: Blob) => {
       processingRef.current = true;
+      setProcessing(true);
       setStatus('Converting…');
       try {
         const buffer = await decodeCaptureBlob(getAudioContext, warmAudio, blob);
@@ -642,9 +647,10 @@ export function BeatPadsVocalBoxPanel({
         setStatus(err instanceof Error ? err.message : 'VocalBox failed.');
       } finally {
         processingRef.current = false;
+        setProcessing(false);
       }
     },
-    [beatsPerBar, bpm, captureBars, captureDurationSec, getAudioContext, padLabels, padMap, quantize, roleMask, stepsPerBar, warmAudio],
+    [beatsPerBar, bpm, captureBars, getAudioContext, padLabels, padMap, quantize, roleMask, stepsPerBar, warmAudio],
   );
 
   const handleCaptureBlob = useCallback(
@@ -998,18 +1004,28 @@ export function BeatPadsVocalBoxPanel({
       setStatus('No hits in capture window — record again.');
       return;
     }
+
+    const roleNeedsSample = (role: VocalBoxDrumRole) => {
+      if (!hits.some((h) => h.role === role)) return false;
+      const pi = padMap[role];
+      return Boolean(hasPadSample && !hasPadSample(pi));
+    };
+    let missingSamples = VOCALBOX_DRUM_ROLES.filter(roleNeedsSample);
+    if (missingSamples.length > 0 && onEnsurePadSamples) {
+      setStatus('Loading pad samples for preview…');
+      try {
+        await onEnsurePadSamples();
+      } catch {
+        /* kit load may fail — fall through to clear status */
+      }
+      missingSamples = VOCALBOX_DRUM_ROLES.filter(roleNeedsSample);
+    }
+
     // Play through to the end of the whole take (not just one bar) — leave a tail so the
     // last sample rings out before we mark preview done.
     const lastHitSec = hits.reduce((m, h) => Math.max(m, h.startSec), 0);
     const previewDurSec = lastHitSec + 0.6;
     previewDurSecRef.current = previewDurSec;
-
-    const missingSamples: VocalBoxDrumRole[] = [];
-    for (const role of VOCALBOX_DRUM_ROLES) {
-      if (!hits.some((h) => h.role === role)) continue;
-      const pi = padMap[role];
-      if (hasPadSample && !hasPadSample(pi)) missingSamples.push(role);
-    }
 
     const leadSec = VOCALBOX_PREVIEW_LEAD_MS / 1000;
     // Anchor every hit to one AudioContext time so playback is sample-accurate and even
@@ -1036,7 +1052,7 @@ export function BeatPadsVocalBoxPanel({
 
     if (scheduled === 0) {
       setIsPreviewing(false);
-      setStatus('Pads need samples — load kick/snare on routed rows, then Pvw.');
+      setStatus('Pads need samples — load kick/snare (Load kit), then Pvw.');
       return;
     }
 
@@ -1048,11 +1064,11 @@ export function BeatPadsVocalBoxPanel({
   }, [
     bpm,
     captureBars,
-    captureDurationSec,
     clearPreviewTimers,
     draftHits,
     getAudioContext,
     hasPadSample,
+    onEnsurePadSamples,
     onStrikePad,
     padMap,
     warmAudio,
@@ -1155,7 +1171,7 @@ export function BeatPadsVocalBoxPanel({
   );
 
   const hasDraft = draftHits.length > 0;
-  const busy = capture.isRecording || isPrecounting || processingRef.current;
+  const busy = capture.isRecording || isPrecounting || processing;
 
   return (
     <div

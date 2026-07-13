@@ -14,7 +14,7 @@ import {
   type Se2StudioMixerSnapshot,
 } from '@/app/lib/studio/se2StudioMixerState';
 
-export const SE2_FACTORY_DEFAULTS_VERSION = 7;
+export const SE2_FACTORY_DEFAULTS_VERSION = 8;
 export const SE2_FACTORY_SEED_KEY = 'dmb_se2_factory_seeded_v1';
 
 export const SE2_FACTORY_STORAGE_KEYS = [
@@ -80,7 +80,12 @@ function syncOwnerStartupFromFactoryBundle(): void {
       mixer = null;
     }
   }
-  writeSe2OwnerStartupTemplate({ session, mixer, pianoSnapSubdiv });
+  writeSe2OwnerStartupTemplate({
+    session,
+    mixer,
+    pianoSnapSubdiv,
+    view: { showMixer: false, showPianoRoll: false },
+  });
 }
 
 /** Overwrite SE2 session keys from the bundled factory snapshot. */

@@ -73,6 +73,10 @@ export type Se2Lab808DrumGridProps = {
   toneGridExport?: Se2Lab808ToneGridExportHandlers;
   /** Rendered between the grid toolbar and the scrollable step matrix (e.g. tone pads). */
   aboveGrid?: ReactNode;
+  /** Solo loop button label (Beat Pads miniature uses Preview). */
+  playButtonLabel?: string;
+  /** Cap scrollable tone-grid height (miniature dropdown). */
+  gridMaxHeightPx?: number;
 };
 
 export const SE2_LAB808_TONE_GRID_STEP_W = SE2_LAB808_TONE_GRID_STEP_W_BASE;
@@ -205,6 +209,8 @@ export function Se2Lab808DrumGrid({
   onVoiceChange,
   toneGridExport,
   aboveGrid,
+  playButtonLabel = 'Play',
+  gridMaxHeightPx,
 }: Se2Lab808DrumGridProps) {
   const layout = se2Lab808ToneGridLayout(voice.toneGridZoom);
   const pattern = voice.toneGridSteps;
@@ -500,9 +506,9 @@ export function Se2Lab808DrumGrid({
             disabled={disabled || playing}
             style={toolBtn(playing, accent)}
             onClick={play}
-            title="Play tone grid loop from playhead"
+            title="Preview tone grid loop by itself (before Beat Pads play or export)"
           >
-            Play
+            {playButtonLabel}
           </button>
           <button
             type="button"
@@ -574,11 +580,14 @@ export function Se2Lab808DrumGrid({
 
       <div
         ref={gridScrollRef}
-        className="overflow-x-auto overscroll-contain rounded border relative"
+        className="overflow-x-auto overflow-y-auto overscroll-contain rounded border relative"
           style={{
             borderColor: SE2_LAB808_FILTER_VIZ_SURFACE.borderHex,
             background: SE2_LAB808_FILTER_VIZ_SURFACE.fill,
             boxShadow: SE2_LAB808_FILTER_VIZ_SURFACE.insetShadow,
+            ...(typeof gridMaxHeightPx === 'number' && gridMaxHeightPx > 0
+              ? { maxHeight: gridMaxHeightPx }
+              : null),
           }}
           onPointerUp={endPaint}
           onPointerCancel={endPaint}

@@ -67,6 +67,12 @@ export type Se2Lab808PanelProps = {
     bpm: number;
     sourceTrackName: string;
   }) => void;
+  /** Beat Pads dropdown — compact piano-roll 808 Lab (no Root Scope dial). */
+  miniature?: boolean;
+  /** Override tone-grid Play button label (Beat Pads uses Preview). */
+  playButtonLabel?: string;
+  /** Transparent accent-colored pads that light up on hit (Beat Pads cyan chrome). */
+  accentPads?: boolean;
 };
 
 const laneBtn = (active: boolean, accent: string): CSSProperties => ({
@@ -134,6 +140,9 @@ export function Se2Lab808Panel({
   onVoiceChange,
   onExportToneGridToPianoRoll,
   onExportToneGridWavToTrack,
+  miniature = false,
+  playButtonLabel,
+  accentPads = false,
 }: Se2Lab808PanelProps) {
   const accent = track.colorHex ?? '#E8784A';
   const isKick = voice.soundLane === 'kick';
@@ -349,16 +358,24 @@ export function Se2Lab808Panel({
     getAudioContext,
     getPreviewDestination,
     onVoiceChange,
+    accentPads,
   };
 
   return (
-    <div className="flex flex-col gap-1.5 p-2" data-se2-lab808-panel>
+    <div
+      className={miniature ? 'flex flex-col gap-1 p-1.5' : 'flex flex-col gap-1.5 p-2'}
+      data-se2-lab808-panel
+      data-se2-lab808-miniature={miniature ? '1' : undefined}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[9px] font-black uppercase tracking-wide" style={{ color: accent }}>
           {LAB808_DISPLAY_NAME}
+          {miniature ? ' · Beat Pads' : ''}
         </span>
         <span className="text-[8px]" style={{ color: '#6a6a78' }}>
-          Standalone lane — not linked to Creation Station
+          {miniature
+            ? 'Piano-roll 808 — Preview alone, then export to any SE2 track'
+            : 'Standalone lane — not linked to Creation Station'}
         </span>
       </div>
 
@@ -371,11 +388,16 @@ export function Se2Lab808Panel({
         getPreviewDestination={getPreviewDestination}
         onVoiceChange={onVoiceChange}
         toneGridExport={toneGridExport}
+        playButtonLabel={playButtonLabel ?? (miniature ? 'Preview' : 'Play')}
+        gridMaxHeightPx={miniature ? 220 : undefined}
         aboveGrid={
           <div className="flex items-start gap-2 min-w-0 w-full">
-            <Se2Lab808TonePads {...tonePadsShared} padsOnly size="large" />
+            <Se2Lab808TonePads {...tonePadsShared} padsOnly size={miniature ? 'default' : 'large'} />
 
-            <aside className="flex flex-col gap-2.5 shrink-0 min-w-0" style={{ width: 172 }}>
+            <aside
+              className="flex flex-col gap-2.5 shrink-0 min-w-0"
+              style={{ width: miniature ? 156 : 172 }}
+            >
               <div className="flex flex-col gap-1">
                 <span style={sideLabel}>Lane</span>
                 <div className="flex items-stretch gap-2">
@@ -475,20 +497,22 @@ export function Se2Lab808Panel({
               </span>
             </aside>
 
-            <div className="flex-1 flex justify-end items-start min-w-[180] pl-1">
-              <Se2Lab808RootScope
-                dialSize={176}
-                keyRoot={lockKey.keyRoot}
-                keyMode={lockKey.keyMode}
-                keyLabel={keyLabel}
-                progressionRoots={progressionRoots}
-                livePitchClass={livePitchClass}
-                selectedRootIndex={selectedRootIndex}
-                disabled={disabled}
-                onSelectRoot={setSelectedRootIndex}
-                onPreviewMidi={previewMidi}
-              />
-            </div>
+            {!miniature ? (
+              <div className="flex-1 flex justify-end items-start min-w-[180] pl-1">
+                <Se2Lab808RootScope
+                  dialSize={176}
+                  keyRoot={lockKey.keyRoot}
+                  keyMode={lockKey.keyMode}
+                  keyLabel={keyLabel}
+                  progressionRoots={progressionRoots}
+                  livePitchClass={livePitchClass}
+                  selectedRootIndex={selectedRootIndex}
+                  disabled={disabled}
+                  onSelectRoot={setSelectedRootIndex}
+                  onPreviewMidi={previewMidi}
+                />
+              </div>
+            ) : null}
           </div>
         }
       />

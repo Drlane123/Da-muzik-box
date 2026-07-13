@@ -41,6 +41,8 @@ export type Se2Lab808TonePadsProps = {
   progressionRoots?: readonly Lab808ProgressionRoot[];
   selectedRootIndex?: number | null;
   onPadPlay?: (padIndex: number, midi: number) => void;
+  /** Glass cyan pads that light up on hit (Beat Pads 808 Lab). */
+  accentPads?: boolean;
 };
 
 function tonePadSurface(
@@ -48,14 +50,30 @@ function tonePadSurface(
   blackKey: boolean,
   playing: boolean,
   lockedChord: boolean,
+  chromeAccent?: string,
 ): string {
+  if (chromeAccent) {
+    const mix = playing ? 72 : lockedChord ? 42 : blackKey ? 14 : 22;
+    const base = blackKey ? 'rgba(6, 14, 20, 0.55)' : 'rgba(8, 22, 32, 0.42)';
+    return `linear-gradient(165deg, color-mix(in srgb, ${chromeAccent} ${mix}%, transparent) 0%, ${base} 100%)`;
+  }
   const accent = playing ? '#fde68a' : lockedChord ? '#7cf4c6' : lane === 'kick' ? '#ca8a04' : '#22c55e';
   const mix = playing ? 88 : blackKey ? 42 : 62;
   const base = blackKey ? '#0a0a0e' : '#14141c';
   return `linear-gradient(165deg, color-mix(in srgb, ${accent} ${mix}%, ${base}) 0%, #1e1e24 100%)`;
 }
 
-function tonePadBorder(lane: Lab808SoundLane, playing: boolean, lockedChord: boolean): string {
+function tonePadBorder(
+  lane: Lab808SoundLane,
+  playing: boolean,
+  lockedChord: boolean,
+  chromeAccent?: string,
+): string {
+  if (chromeAccent) {
+    if (playing) return chromeAccent;
+    if (lockedChord) return `color-mix(in srgb, ${chromeAccent} 70%, #3f3f46)`;
+    return `color-mix(in srgb, ${chromeAccent} 40%, #3f3f46)`;
+  }
   if (playing) return '#fde68a';
   if (lockedChord) return 'color-mix(in srgb, #7cf4c6 55%, #3f3f46)';
   return lane === 'kick' ? 'color-mix(in srgb, #ca8a04 55%, #3f3f46)' : 'color-mix(in srgb, #22c55e 55%, #3f3f46)';
@@ -80,6 +98,7 @@ function tonePadButton(
   locked: boolean,
   root: Lab808ProgressionRoot | null,
   selected: boolean,
+  chromeAccent?: string,
 ) {
   const midi = locked && root ? root.midi : lab808TonePadMidi(baseMidi, padIndex);
   const label = locked && root ? root.chord : lab808TonePadNoteLabel(midi);
@@ -88,6 +107,9 @@ function tonePadButton(
   const lockedChord = locked && !!root;
   const selectedChord = selected && lockedChord;
   const sz = TONE_PAD_SIZE[size];
+  const hitGlow = chromeAccent
+    ? `0 0 20px color-mix(in srgb, ${chromeAccent} 65%, transparent)`
+    : '0 0 18px rgba(253,224,108,0.55)';
   return (
     <button
       key={`${baseMidi}-${padIndex}`}
@@ -106,17 +128,34 @@ function tonePadButton(
         minHeight: sz.minH,
         minWidth: sz.minW,
         borderRadius: size === 'large' ? 11 : 10,
-        border: `2px solid ${selectedChord ? '#fde68a' : tonePadBorder(voice.soundLane, playing, lockedChord)}`,
-        background: tonePadSurface(voice.soundLane, black, playing, lockedChord || selectedChord),
+        border: `2px solid ${
+          selectedChord && chromeAccent
+            ? chromeAccent
+            : selectedChord
+              ? '#fde68a'
+              : tonePadBorder(voice.soundLane, playing, lockedChord, chromeAccent)
+        }`,
+        background: tonePadSurface(
+          voice.soundLane,
+          black,
+          playing,
+          lockedChord || selectedChord,
+          chromeAccent,
+        ),
         boxShadow: playing
-          ? '0 0 18px rgba(253,224,108,0.55)'
+          ? hitGlow
           : selectedChord
-            ? '0 0 12px rgba(253,224,108,0.35)'
+            ? chromeAccent
+              ? `0 0 12px color-mix(in srgb, ${chromeAccent} 40%, transparent)`
+              : '0 0 12px rgba(253,224,108,0.35)'
             : lockedChord
-              ? 'inset 0 0 10px rgba(124,244,198,0.12)'
+              ? chromeAccent
+                ? `inset 0 0 10px color-mix(in srgb, ${chromeAccent} 18%, transparent)`
+                : 'inset 0 0 10px rgba(124,244,198,0.12)'
               : 'inset 0 1px 0 rgba(255,255,255,0.06)',
         cursor: disabled || (locked && !root) ? 'default' : 'pointer',
         opacity: disabled ? 0.45 : locked && !root ? 0.28 : 1,
+        backdropFilter: chromeAccent ? 'blur(6px)' : undefined,
       }}
     >
       <span
@@ -125,7 +164,15 @@ function tonePadButton(
           top: size === 'large' ? 5 : 4,
           left: size === 'large' ? 6 : 5,
           fontSize: size === 'large' ? 8 : 7,
-          color: playing ? 'rgba(66,32,6,0.75)' : black ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.38)',
+          color: playing
+            ? chromeAccent
+              ? 'rgba(0, 40, 50, 0.85)'
+              : 'rgba(66,32,6,0.75)'
+            : black
+              ? 'rgba(255,255,255,0.45)'
+              : chromeAccent
+                ? 'rgba(180, 240, 255, 0.55)'
+                : 'rgba(0,0,0,0.38)',
         }}
       >
         {padIndex + 1}
@@ -134,7 +181,15 @@ function tonePadButton(
         style={{
           fontSize: black ? sz.font[0] : sz.font[1],
           fontWeight: 900,
-          color: playing ? '#422006' : black ? '#d4d4d8' : '#f4f4f5',
+          color: playing
+            ? chromeAccent
+              ? '#031820'
+              : '#422006'
+            : black
+              ? '#d4d4d8'
+              : chromeAccent
+                ? '#e8fbff'
+                : '#f4f4f5',
           lineHeight: 1.1,
         }}
       >
@@ -181,6 +236,7 @@ export function Se2Lab808TonePads({
   progressionRoots = [],
   selectedRootIndex = null,
   onPadPlay,
+  accentPads = false,
 }: Se2Lab808TonePadsProps) {
   const [playingPad, setPlayingPad] = useState<number | null>(null);
   const baseMidi = voice.tonePadBaseMidi ?? lab808DefaultTonePadBaseMidi();
@@ -415,6 +471,7 @@ export function Se2Lab808TonePads({
             locked,
             locked ? (progressionRoots[padIndex] ?? null) : null,
             selectedRootIndex === padIndex,
+            accentPads ? accent : undefined,
           ),
         )}
       </div>

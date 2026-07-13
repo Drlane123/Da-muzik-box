@@ -12,7 +12,7 @@ import {
 } from '@/app/lib/masteringBay/masteringBayMeterIdle';
 import { MasterBayHorizontalLevels } from '@/app/components/masteringBay/MasterBayHorizontalLevels';
 import { VerticalMeterDbGrid } from '@/app/components/masteringBay/MeterDbGrid';
-import { dbToMeterPct } from '@/app/lib/masteringBay/masteringBayMeterAnalysis';
+import { dbToMeterPct, spectrumHeightToDb } from '@/app/lib/masteringBay/masteringBayMeterAnalysis';
 import { useMemo, useState, memo } from 'react';
 
 const FREQ_MARKS = [
@@ -44,7 +44,8 @@ function freqMarkAlign(idx: number, total: number): 'start' | 'center' | 'end' {
   return 'center';
 }
 
-const DB_SCALE = [0, -6, -12, -18, -24, -30, -36, -42, -48, -55] as const;
+/** Matches SPECTRUM_DB_FLOOR…CEIL (−60…0) bar height mapping. */
+const DB_SCALE = [0, -6, -12, -18, -24, -30, -36, -42, -48, -54, -60] as const;
 
 export const MultiMeterPanel = memo(function MultiMeterPanel({ snap }: { snap?: MultiMeterSnap }) {
   const [detection, setDetection] = useState<'mono' | 'lrmax'>('mono');
@@ -54,8 +55,10 @@ export const MultiMeterPanel = memo(function MultiMeterPanel({ snap }: { snap?: 
 
   const topDb = useMemo(() => {
     if (silent) return '-∞';
-    const max = Math.max(...m.bands);
-    return ((max / 100) * 5 - 0.5).toFixed(0);
+    const max = Math.max(...m.bands, 0);
+    const db = spectrumHeightToDb(max);
+    if (!Number.isFinite(db)) return '-∞';
+    return db.toFixed(1);
   }, [m.bands, silent]);
 
   return (

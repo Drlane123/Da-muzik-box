@@ -9,6 +9,10 @@ import {
   type NugenMeterSnap,
 } from '@/app/lib/masteringBay/masteringBayMeterIdle';
 import { shouldPublishMeterSnaps } from '@/app/lib/masteringBay/masteringBayMeterPublish';
+import {
+  publishMasteringBayMeterSnaps,
+  resetMasteringBayMeterStore,
+} from '@/app/lib/masteringBay/masteringBayMeterStore';
 import type { MasteringBayRackState } from '@/app/lib/masteringBay/masteringBayPresets';
 import type { MasteringBaySourcePayload } from '@/app/lib/masteringBay/masteringBaySourceTrack';
 import {
@@ -17,6 +21,10 @@ import {
   type MasteringBayClipEditState,
 } from '@/app/lib/masteringBay/masteringBayClipEdit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  setMasteringBayScreenActive,
+  setMasteringBayTransportRunning,
+} from '@/app/lib/creationStation/creationTransportSync';
 
 export type MasteringBayTransport = {
   isPlaying: boolean;
@@ -28,6 +36,25 @@ export type MasteringBayTransport = {
 
 const PLAYHEAD_PUSH_MS = 80;
 const PLAYHEAD_EPS_SEC = 0.04;
+/** VU / analyzer UI refresh — ~45 Hz keeps needles smooth without thrashing React. */
+const METER_UI_MS = 22;
+
+function cloneMultiSnap(src: MultiMeterSnap): MultiMeterSnap {
+  return { ...src, bands: src.bands.slice() };
+}
+
+function cloneNugenSnap(src: NugenMeterSnap): NugenMeterSnap {
+  return {
+    ...src,
+    l: { ...src.l },
+    r: { ...src.r },
+    source: { ...src.source },
+    target: { ...src.target },
+    history: src.history.slice(),
+    tpHistory: src.tpHistory.slice(),
+    histogram: src.histogram.slice(),
+  };
+}
 
 export function useMasteringBayEngine(rackState: MasteringBayRackState) {
   const { getOrCreateAudioContext } = useMasterClock();
@@ -40,12 +67,20 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
   const lastMultiRef = useRef<MultiMeterSnap | null>(null);
   const lastNugenRef = useRef<NugenMeterSnap | null>(null);
   const lastFrameMsRef = useRef(performance.now());
-  const [multiSnap, setMultiSnap] = useState<MultiMeterSnap>(() => idleMultiMeterSnap());
-  const [nugenSnap, setNugenSnap] = useState<NugenMeterSnap>(() => idleNugenMeterSnap());
+  const lastMeterUiMsRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playheadSec, setPlayheadSec] = useState(0);
 
   rackStateRef.current = rackState;
+
+  useEffect(() => {
+    setMasteringBayScreenActive(true);
+    return () => {
+      setMasteringBayScreenActive(false);
+      setMasteringBayTransportRunning(false);
+      resetMasteringBayMeterStore();
+    };
+  }, []);
 
   const setPlayhead = useCallback((sec: number) => {
     const dur = durationRef.current;
@@ -64,15 +99,12 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
     return engineRef.current;
   }, [getOrCreateAudioContext]);
 
-  useEffect(() => {
-    ensureEngine();
-  }, [ensureEngine]);
-
+  /** Do not build the audio graph on first paint — wait for load / play. */
   useEffect(() => {
     engineRef.current?.setRackState(rackState);
   }, [rackState]);
 
-  /** Keep AudioContext alive — meters resume when context unsuspends. */
+  /** Keep AudioContext alive once the bay is open — meters resume when context unsuspends. */
   useEffect(() => {
     const ctx = getOrCreateAudioContext();
     const resumeIfNeeded = () => {
@@ -94,28 +126,20 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
     let raf = 0;
     let lastPlayheadPush = 0;
 
-    const publishSnaps = (eng: MasteringBayEngine) => {
+    const publishToStore = (eng: MasteringBayEngine, force: boolean) => {
       const nextMulti = eng.getMultiSnap();
       const nextNugen = eng.getNugenSnap();
-      const playingNow = eng.isPlaying();
       if (
-        playingNow ||
-        shouldPublishMeterSnaps(lastMultiRef.current, nextMulti, lastNugenRef.current, nextNugen)
+        !force &&
+        !shouldPublishMeterSnaps(lastMultiRef.current, nextMulti, lastNugenRef.current, nextNugen)
       ) {
-        lastMultiRef.current = nextMulti;
-        lastNugenRef.current = nextNugen;
-        setMultiSnap({ ...nextMulti, bands: [...nextMulti.bands] });
-        setNugenSnap({
-          ...nextNugen,
-          l: { ...nextNugen.l },
-          r: { ...nextNugen.r },
-          source: { ...nextNugen.source },
-          target: { ...nextNugen.target },
-          history: [...nextNugen.history],
-          tpHistory: [...nextNugen.tpHistory],
-          histogram: [...nextNugen.histogram],
-        });
+        return;
       }
+      const multi = cloneMultiSnap(nextMulti);
+      const nugen = cloneNugenSnap(nextNugen);
+      lastMultiRef.current = multi;
+      lastNugenRef.current = nugen;
+      publishMasteringBayMeterSnaps(multi, nugen);
     };
 
     const tick = (now: number) => {
@@ -125,9 +149,26 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
         lastFrameMsRef.current = now;
 
         eng.tickMeters(dtMs);
-        publishSnaps(eng);
 
         const playing = eng.isPlaying();
+        if (playing !== wasPlayingRef.current) {
+          wasPlayingRef.current = playing;
+          setIsPlaying(playing);
+          if (!playing) {
+            setMasteringBayTransportRunning(false);
+            const t = eng.getPlayheadSec();
+            playheadSecRef.current = t;
+            setPlayheadSec(t);
+          }
+        }
+
+        const dueUi = now - lastMeterUiMsRef.current >= METER_UI_MS;
+        if (dueUi) {
+          lastMeterUiMsRef.current = now;
+          // While playing always push; while idle only if needles moved.
+          publishToStore(eng, playing);
+        }
+
         if (playing && !isScrubbingRef.current) {
           const t = eng.getPlayheadSec();
           playheadSecRef.current = t;
@@ -135,19 +176,6 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
             lastPlayheadPush = now;
             setPlayheadSec((prev) => (Math.abs(prev - t) >= PLAYHEAD_EPS_SEC ? t : prev));
           }
-          wasPlayingRef.current = true;
-          setIsPlaying(true);
-        } else if (playing && isScrubbingRef.current) {
-          wasPlayingRef.current = true;
-          setIsPlaying(true);
-        } else {
-          if (wasPlayingRef.current) {
-            wasPlayingRef.current = false;
-            const t = eng.getPlayheadSec();
-            playheadSecRef.current = t;
-            setPlayheadSec(t);
-          }
-          setIsPlaying(false);
         }
       }
       raf = requestAnimationFrame(tick);
@@ -167,8 +195,10 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
   }, [ensureEngine]);
 
   const onSourceLoaded = useCallback(
-    (payload: MasteringBaySourcePayload) => {
+    async (payload: MasteringBaySourcePayload) => {
       const eng = ensureEngine();
+      const ctx = getOrCreateAudioContext();
+      if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
       eng.resetMeters();
       eng.setSourceBuffer(payload.buffer);
       const edit = createClipEditFromBuffer(payload.buffer);
@@ -177,10 +207,13 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
       lastMultiRef.current = null;
       lastNugenRef.current = null;
       lastFrameMsRef.current = performance.now();
+      lastMeterUiMsRef.current = 0;
+      resetMasteringBayMeterStore();
       setPlayhead(0);
       setIsPlaying(false);
+      setMasteringBayTransportRunning(false);
     },
-    [ensureEngine, setPlayhead, syncClipEdit],
+    [ensureEngine, getOrCreateAudioContext, setPlayhead, syncClipEdit],
   );
 
   const onSourceCleared = useCallback(() => {
@@ -195,24 +228,29 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
     lastNugenRef.current = null;
     setPlayhead(0);
     setIsPlaying(false);
-    setMultiSnap(idleMultiMeterSnap());
-    setNugenSnap(idleNugenMeterSnap());
+    setMasteringBayTransportRunning(false);
+    resetMasteringBayMeterStore();
   }, [setPlayhead]);
 
   const onPlay = useCallback(async () => {
     const eng = ensureEngine();
     const ctx = getOrCreateAudioContext();
     if (ctx.state === 'suspended') await ctx.resume();
+    setMasteringBayTransportRunning(true);
     const offset = playheadSecRef.current;
     eng.play(offset);
     lastFrameMsRef.current = performance.now();
+    lastMeterUiMsRef.current = 0;
     setIsPlaying(true);
+    wasPlayingRef.current = true;
   }, [ensureEngine, getOrCreateAudioContext]);
 
   const onStop = useCallback(() => {
     const eng = engineRef.current;
     if (!eng) return;
     const t = eng.stop();
+    setMasteringBayTransportRunning(false);
+    wasPlayingRef.current = false;
     setPlayhead(t);
     setIsPlaying(false);
   }, [setPlayhead]);
@@ -236,8 +274,7 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
     eng.resetMeters();
     lastMultiRef.current = null;
     lastNugenRef.current = null;
-    setMultiSnap(idleMultiMeterSnap());
-    setNugenSnap(idleNugenMeterSnap());
+    resetMasteringBayMeterStore();
   }, []);
 
   const onScrubActive = useCallback(
@@ -250,6 +287,9 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
 
   useEffect(
     () => () => {
+      setMasteringBayTransportRunning(false);
+      setMasteringBayScreenActive(false);
+      resetMasteringBayMeterStore();
       engineRef.current?.dispose();
       engineRef.current = null;
     },
@@ -268,8 +308,6 @@ export function useMasteringBayEngine(rackState: MasteringBayRackState) {
   );
 
   return {
-    multiSnap,
-    nugenSnap,
     transport,
     onSourceLoaded,
     onSourceCleared,

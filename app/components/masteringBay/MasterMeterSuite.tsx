@@ -4,6 +4,7 @@ import { MultiMeterPanel } from '@/app/components/masteringBay/MultiMeterPanel';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { BarChart3, Clock, Ear, Waves } from 'lucide-react';
+import { useMasteringBayMultiSnap } from '@/app/hooks/useMasteringBayMeterStore';
 
 type MeterTab = 'analyzer' | 'soundfield' | 'history' | 'intelligibility' | 'spectrogram';
 
@@ -19,10 +20,13 @@ import type { MultiMeterSnap } from '@/app/lib/masteringBay/masteringBayMeterIdl
 
 type Props = {
   variant?: 'top' | 'full';
+  /** Optional override — omit to follow the live Mastering Bay meter bus. */
   multiSnap?: MultiMeterSnap;
 };
 
-export function MasterMeterSuite({ variant = 'full', multiSnap }: Props) {
+export function MasterMeterSuite({ variant = 'full', multiSnap: multiSnapProp }: Props) {
+  const storeSnap = useMasteringBayMultiSnap();
+  const multiSnap = multiSnapProp ?? storeSnap;
   const [activeTab, setActiveTab] = useState<MeterTab>('analyzer');
   const isTop = variant === 'top';
 

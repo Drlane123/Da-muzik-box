@@ -2,11 +2,10 @@
 
 import '@/app/styles/mastering-bay.css';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 
 import { consumePendingMasteringBayImport } from '@/app/lib/masteringBay/masteringBayPendingImport';
 
-import { MasteringBayExportModal } from '@/app/components/masteringBay/MasteringBayExportModal';
 import { MasteringBayPresetBar } from '@/app/components/masteringBay/MasteringBayPresetBar';
 import type { MasteringBaySourcePreview } from '@/app/components/masteringBay/MasteringBayMiniWaveStrip';
 import { MasterVuMeterSidebar } from '@/app/components/masteringBay/MasterVuMeterSidebar';
@@ -14,7 +13,6 @@ import { MasterMeterSuite } from '@/app/components/masteringBay/MasterMeterSuite
 import { MasteringBaySourceTrack } from '@/app/components/masteringBay/MasteringBaySourceTrack';
 import { MasteringRackChain } from '@/app/components/masteringBay/MasteringRackChain';
 import { useMasteringBayEngine } from '@/app/hooks/useMasteringBayEngine';
-import { processLiveFromMeters } from '@/app/lib/masteringBay/masteringBayProcessLive';
 import {
   DA_MUZIK_BOX_PRESETS,
   DEFAULT_RACK_STATE,
@@ -24,6 +22,13 @@ import {
   type MasteringBayRackState,
 } from '@/app/lib/masteringBay/masteringBayPresets';
 import type { MasteringBaySourcePayload } from '@/app/lib/masteringBay/masteringBaySourceTrack';
+
+/** Export modal + encoders stay out of the first paint path. */
+const MasteringBayExportModal = lazy(() =>
+  import('@/app/components/masteringBay/MasteringBayExportModal').then((m) => ({
+    default: m.MasteringBayExportModal,
+  })),
+);
 
 export default function MasteringBayScreen({
   onExport: _onExport,
@@ -49,8 +54,6 @@ export default function MasteringBayScreen({
   }, []);
 
   const {
-    multiSnap,
-    nugenSnap,
     transport,
     onSourceLoaded,
     onSourceCleared,
@@ -64,11 +67,6 @@ export default function MasteringBayScreen({
     const pending = consumePendingMasteringBayImport();
     if (pending) setPendingSe2Import(pending);
   }, []);
-
-  const processLive = useMemo(
-    () => processLiveFromMeters(nugenSnap, multiSnap),
-    [nugenSnap, multiSnap],
-  );
 
   return (
     <div className="mastering-bay">
@@ -93,16 +91,19 @@ export default function MasteringBayScreen({
           sourcePreview={sourcePreview}
           onSeek={onSeek}
           onDeNoiseChange={onDeNoiseChange}
-          processLive={processLive}
           onSaveNewMaster={() => setExportOpen(true)}
         />
 
-        <MasteringBayExportModal
-          open={exportOpen}
-          onClose={() => setExportOpen(false)}
-          clipEdit={sourcePreview?.clipEdit ?? null}
-          rackState={rackState}
-        />
+        {exportOpen ? (
+          <Suspense fallback={null}>
+            <MasteringBayExportModal
+              open={exportOpen}
+              onClose={() => setExportOpen(false)}
+              clipEdit={sourcePreview?.clipEdit ?? null}
+              rackState={rackState}
+            />
+          </Suspense>
+        ) : null}
 
         <div className="mastering-bay__workspace">
           <div className="mastering-bay__rack-stack">
@@ -115,14 +116,13 @@ export default function MasteringBayScreen({
                   </div>
 
                   <div className="mb-rack__meter-deck">
-                    <MasterMeterSuite variant="top" multiSnap={multiSnap} />
+                    <MasterMeterSuite variant="top" />
                   </div>
 
                   <div className="mb-rack__chain-deck">
                     <MasteringRackChain
                       rackState={rackState}
                       onRackChange={setRackState}
-                      live={processLive}
                     />
                   </div>
 
@@ -139,7 +139,7 @@ export default function MasteringBayScreen({
                   />
                 </div>
 
-                <MasterVuMeterSidebar snap={nugenSnap} onResetMeters={onResetMeters} />
+                <MasterVuMeterSidebar onResetMeters={onResetMeters} />
               </div>
             </div>
           </div>

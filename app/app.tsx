@@ -291,9 +291,7 @@ function ScreenMount({ active, children }: { active: boolean; children: React.Re
 function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [showOverview, setShowOverview] = useState(false);
-  const [activeScreen, setActiveScreen] = useState<ScreenId>(() =>
-    import.meta.env.DEV ? 'my-projects' : 'creation-station',
-  );
+  const [activeScreen, setActiveScreen] = useState<ScreenId>(() => 'studio-editor-2');
   const [creationSubScreen, setCreationSubScreen] = useState<CreationSubScreenId>('beat-lab');
   const [vocalLabSubScreen, setVocalLabSubScreen] = useState<VocalLabSubScreenId>('vocal-lab');
   /** Passed to Studio Editor when navigating from Vocal Lab with a recorded/uploaded blob. */
@@ -307,7 +305,29 @@ function AppContent() {
     useState<PendingAiMatchStudioImport | null>(null);
   /** Full Studio JSON string from Supabase `data.studioProjectV1` (applied once in StudioEditorScreen). */
   const [pendingStudioCloudJson, setPendingStudioCloudJson] = useState<string | null>(null);
+  /**
+   * Keep a module mounted after its first open (SE2-style). Conditional unmount + Suspense
+   * made the first Modules click look dead until you left and came back.
+   */
+  const [visitedScreens, setVisitedScreens] = useState<ReadonlySet<ScreenId>>(
+    () => new Set<ScreenId>(['studio-editor-2']),
+  );
   const { settings } = useSettings();
+
+  const navigateToScreen = useCallback((id: ScreenId) => {
+    setVisitedScreens((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setActiveScreen(id);
+  }, []);
+
+  const shouldMountScreen = useCallback(
+    (id: ScreenId) => visitedScreens.has(id) || activeScreen === id,
+    [visitedScreens, activeScreen],
+  );
 
   const clearPendingStudioAudio = useCallback(() => {
     setPendingStudioAudioBlob(null);
@@ -334,17 +354,29 @@ function AppContent() {
     if (sub) setVocalLabSubScreen(sub);
   }, [activeScreen]);
 
-  /** Fresh load always lands on Creation Station → Beat Lab (user can navigate away after). */
+  /**
+   * Do NOT force `setActiveScreen('studio-editor-2')` on mount — initial state already is SE2.
+   * A post-paint force was racing the first Modules click and snapping back to SE2
+   * (Beat Lab / Vocal Lab / Mastering Bay looked like they “wouldn’t load” until a second visit).
+   */
+
+  /** Warm common module chunks after SE2 has settled so first clicks rarely wait on network. */
   useEffect(() => {
-    setActiveScreen('creation-station');
-    setCreationSubScreen('beat-lab');
+    const t = window.setTimeout(() => {
+      void import('@/app/screens/VocalLabScreen');
+      void loadCreationStationScreen();
+      void import('@/app/screens/MasterArrangerScreen');
+      void import('@/app/screens/ExportScreen');
+      void import('@/app/screens/MyProjectsScreen');
+    }, 600);
+    return () => window.clearTimeout(t);
   }, []);
 
   useEffect(() => {
-    const openSe2 = () => setActiveScreen('studio-editor-2');
+    const openSe2 = () => navigateToScreen('studio-editor-2');
     window.addEventListener(BEAT_PADS_OPEN_SE2_EVENT, openSe2);
     return () => window.removeEventListener(BEAT_PADS_OPEN_SE2_EVENT, openSe2);
-  }, []);
+  }, [navigateToScreen]);
 
   useEffect(() => {
     if (activeScreen === 'studio-editor-2') return;
@@ -429,18 +461,18 @@ function AppContent() {
     if (typeof a === 'string') {
       if (a === 'groove-lab' || a === 'new-synth') {
         setCreationSubScreen(a === 'groove-lab' ? 'groove-lab' : 'beat-lab');
-        setActiveScreen('creation-station');
+        navigateToScreen('creation-station');
         return;
       }
       const screen = resolveScreen(a);
       if (screen === 'studio-editor-2' && b instanceof Blob && b.size > 0) {
         setPendingStudioAudioBlob(b);
       }
-      setActiveScreen(screen);
+      navigateToScreen(screen);
       return;
     }
     if (Array.isArray(a) && typeof b === 'string') {
-      setActiveScreen(resolveScreen(b));
+      navigateToScreen(resolveScreen(b));
     }
   }
 
@@ -459,7 +491,7 @@ function AppContent() {
         onOpenSettings={() => setShowSettings(true)}
         onOpenOverview={() => setShowOverview(true)}
         activeScreen={activeScreen}
-        onScreenChange={setActiveScreen}
+        onScreenChange={navigateToScreen}
         activeCreationSubScreen={creationSubScreen}
         onCreationSubScreenChange={setCreationSubScreen}
         activeVocalLabSubScreen={vocalLabSubScreen}
@@ -476,84 +508,84 @@ function AppContent() {
           style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', background: '#303030' }}
         >
           <LazyScreenMount active={activeScreen === 'vocal-lab'} moduleName="Vocal Lab">
-            {activeScreen === 'vocal-lab' ? (
+            {shouldMountScreen('vocal-lab') ? (
             <VocalLabScreen
               onExport={handleExport}
               onNeuralHumToStudio={(payload) => {
                 setPendingNeuralHumStudioImport(payload);
-                setActiveScreen('studio-editor-2');
+                navigateToScreen('studio-editor-2');
               }}
               onNeuralHumToCreation={(payload) => {
                 publishNeuralHumCreationImport(payload);
                 setCreationSubScreen(payload.target === 'groove-lab' ? 'groove-lab' : 'beat-lab');
-                setActiveScreen('creation-station');
+                navigateToScreen('creation-station');
               }}
             />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'ai-song'} moduleName="AI Song">
-            {activeScreen === 'ai-song' ? <AiSongScreen onExport={handleExport} /> : null}
+            {shouldMountScreen('ai-song') ? <AiSongScreen onExport={handleExport} /> : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'ai-music-match'} moduleName="AI Music Match">
-            {activeScreen === 'ai-music-match' ? (
+            {shouldMountScreen('ai-music-match') ? (
               <AiMusicMatchScreen
                 onOpenGrooveLab={() => {
                   setCreationSubScreen('groove-lab');
-                  setActiveScreen('creation-station');
+                  navigateToScreen('creation-station');
                 }}
                 onExportStudio={(payload) => {
                   setPendingAiMatchStudioImport(payload);
-                  setActiveScreen('studio-editor-2');
+                  navigateToScreen('studio-editor-2');
                 }}
               />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'ai-pattern'} moduleName="AI Pattern">
-            {activeScreen === 'ai-pattern' ? (
+            {shouldMountScreen('ai-pattern') ? (
               <AiPatternScreen
                 onExport={handleExport}
-                isScreenActive
+                isScreenActive={activeScreen === 'ai-pattern'}
               />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'melody-transcription'} moduleName="Melody Transcription">
-            {activeScreen === 'melody-transcription' ? (
-            <MelodyTranscriptionScreen onExport={handleExport} onBack={() => setActiveScreen('vocal-lab')} />
+            {shouldMountScreen('melody-transcription') ? (
+            <MelodyTranscriptionScreen onExport={handleExport} onBack={() => navigateToScreen('vocal-lab')} />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'harmony-match'} moduleName="Harmony Match">
-            {activeScreen === 'harmony-match' ? (
+            {shouldMountScreen('harmony-match') ? (
             <HarmonyMatchScreen
               onOpenGrooveLab={() => {
                 setCreationSubScreen('groove-lab');
-                setActiveScreen('creation-station');
+                navigateToScreen('creation-station');
               }}
             />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'creation-station'} moduleName="Beat Lab">
-            {activeScreen === 'creation-station' ? (
+            {shouldMountScreen('creation-station') ? (
               <CreationStationScreen
                 onExport={handleExport}
                 onBeatPadsToStudio={(payload) => {
                   setPendingBeatPadsStudioImport(payload);
-                  setActiveScreen('studio-editor-2');
+                  navigateToScreen('studio-editor-2');
                 }}
-                isScreenActive
+                isScreenActive={activeScreen === 'creation-station'}
                 creationSubScreen={creationSubScreen}
                 onCreationSubScreenChange={setCreationSubScreen}
               />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'studio-editor'} moduleName="Studio Editor">
-            {activeScreen === 'studio-editor' ? (
+            {shouldMountScreen('studio-editor') ? (
             <StudioEditorScreen
               onExport={handleExport}
               pendingStudioAudioBlob={pendingStudioAudioBlob}
               onPendingStudioAudioConsumed={clearPendingStudioAudio}
               pendingCloudStudioJson={pendingStudioCloudJson}
               onPendingCloudStudioConsumed={clearPendingStudioCloud}
-              isStudioScreenActive
+              isStudioScreenActive={activeScreen === 'studio-editor'}
             />
             ) : null}
           </LazyScreenMount>
@@ -568,36 +600,36 @@ function AppContent() {
                 pendingBeatPadsStudioImport={pendingBeatPadsStudioImport}
                 onPendingBeatPadsStudioConsumed={clearPendingBeatPadsStudio}
                 onOpenBeatLab={() => {
-                  setActiveScreen('creation-station');
                   setCreationSubScreen('beat-lab');
+                  navigateToScreen('creation-station');
                 }}
                 pendingAiMatchStudioImport={pendingAiMatchStudioImport}
                 onPendingAiMatchStudioConsumed={clearPendingAiMatchStudio}
                 onExportToMasteringBay={(payload) => {
                   setPendingMasteringBayImport(payload);
-                  setActiveScreen('master-arranger');
+                  navigateToScreen('master-arranger');
                 }}
               />
             </StudioEditor2ErrorBoundary>
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'my-projects'} moduleName="My Projects">
-            {activeScreen === 'my-projects' ? (
+            {shouldMountScreen('my-projects') ? (
             <MyProjectsScreen
               onOpenStudioWithCloudProject={(studioTimelineJson) => {
                 setPendingStudioCloudJson(studioTimelineJson);
-                setActiveScreen('studio-editor');
+                navigateToScreen('studio-editor');
               }}
-              onNavigate={(screen) => setActiveScreen(screen as ScreenId)}
+              onNavigate={(screen) => navigateToScreen(screen as ScreenId)}
             />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'master-arranger'} moduleName="Mastering Bay">
-            {activeScreen === 'master-arranger' ? (
-            <MasterArrangerScreen onExport={handleExport} />
+            {shouldMountScreen('master-arranger') ? (
+              <MasterArrangerScreen onExport={handleExport} />
             ) : null}
           </LazyScreenMount>
           <LazyScreenMount active={activeScreen === 'export'} moduleName="Export">
-            {activeScreen === 'export' ? <ExportScreen /> : null}
+            {shouldMountScreen('export') ? <ExportScreen /> : null}
           </LazyScreenMount>
         </main>
       </div>

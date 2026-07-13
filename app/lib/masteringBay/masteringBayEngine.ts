@@ -93,9 +93,10 @@ function configureTimeDomainAnalyser(a: AnalyserNode) {
 
 function configureSpectrumAnalyser(a: AnalyserNode) {
   a.fftSize = 8192;
-  a.smoothingTimeConstant = 0.4;
+  a.smoothingTimeConstant = 0.35;
+  /** Full digital range — display mapping clamps to SPECTRUM_DB_FLOOR…CEIL. */
   a.minDecibels = -96;
-  a.maxDecibels = -3;
+  a.maxDecibels = 0;
 }
 
 /** Route analyser → silent bus so the tap stays live in every browser. */

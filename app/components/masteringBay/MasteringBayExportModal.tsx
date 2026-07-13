@@ -8,10 +8,15 @@ import { exportMasteredTrack } from '@/app/lib/masteringBay/masteringBayMasterEx
 import {
   EMPTY_MASTER_METADATA,
   ISRC_REGEX,
+  MASTER_EXPORT_BITRATES,
+  MASTER_EXPORT_FORMATS,
+  formatNeedsBitrate,
   isValidIsrc,
   normalizeIsrcInput,
   validateMasterMetadata,
+  type MasterExportBitrateKbps,
   type MasterExportCoverArt,
+  type MasterExportFormat,
   type MasterExportMetadata,
 } from '@/app/lib/masteringBay/masteringBayMetadata';
 import type { MasteringBayRackState } from '@/app/lib/masteringBay/masteringBayPresets';
@@ -29,6 +34,8 @@ export function MasteringBayExportModal({ open, onClose, clipEdit, rackState }: 
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverArt, setCoverArt] = useState<MasterExportCoverArt | null>(null);
   const [sampleRate, setSampleRate] = useState<44100 | 48000>(48000);
+  const [format, setFormat] = useState<MasterExportFormat>('wav');
+  const [bitrateKbps, setBitrateKbps] = useState<MasterExportBitrateKbps>(320);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +43,7 @@ export function MasteringBayExportModal({ open, onClose, clipEdit, rackState }: 
   const fileRef = useRef<HTMLInputElement>(null);
 
   const patch = (p: Partial<MasterExportMetadata>) => setMeta((m) => ({ ...m, ...p }));
+  const showBitrate = formatNeedsBitrate(format);
 
   const loadCover = useCallback(async (file: File) => {
     if (!/^image\/(jpeg|png)$/i.test(file.type) && !/\.(jpe?g|png)$/i.test(file.name)) {
@@ -79,8 +87,9 @@ export function MasteringBayExportModal({ open, onClose, clipEdit, rackState }: 
             isrc: meta.isrc.trim() ? normalizeIsrcInput(meta.isrc) : '',
           },
           coverArt,
-          format: 'wav',
+          format,
           sampleRate,
+          bitrateKbps,
         },
         onProgress: setStatus,
       });
@@ -101,6 +110,7 @@ export function MasteringBayExportModal({ open, onClose, clipEdit, rackState }: 
   if (!open) return null;
 
   const isrcOk = isValidIsrc(meta.isrc);
+  const formatMeta = MASTER_EXPORT_FORMATS.find((f) => f.id === format);
 
   return (
     <div className="mb-export-modal" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
@@ -108,7 +118,7 @@ export function MasteringBayExportModal({ open, onClose, clipEdit, rackState }: 
         <header className="mb-export-modal__head">
           <div>
             <h2>Save New Master</h2>
-            <p>Tag and export your mastered track (24-bit WAV)</p>
+            <p>Tag and export your mastered track · WAV · AIFF · FLAC · CAF · M4A · OGG · Opus · MP3</p>
           </div>
           <button type="button" className="mb-export-modal__close" onClick={onClose} disabled={busy} aria-label="Close">
             <X size={16} />
@@ -151,17 +161,59 @@ export function MasteringBayExportModal({ open, onClose, clipEdit, rackState }: 
               />
               <em>Optional · format US-ABC-12-34567 · written to TSRC</em>
             </label>
+
             <label>
-              <span>Sample Rate</span>
+              <span>Format</span>
               <select
-                value={sampleRate}
-                onChange={(e) => setSampleRate(Number(e.target.value) as 44100 | 48000)}
+                value={format}
+                onChange={(e) => setFormat(e.target.value as MasterExportFormat)}
                 disabled={busy}
               >
-                <option value={48000}>48 kHz · 24-bit WAV</option>
-                <option value={44100}>44.1 kHz · 24-bit WAV</option>
+                {MASTER_EXPORT_FORMATS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label} — {f.hint}
+                  </option>
+                ))}
               </select>
+              {formatMeta ? <em>{formatMeta.hint}</em> : null}
             </label>
+
+            <div className="mb-export-modal__row">
+              <label>
+                <span>Sample Rate</span>
+                <select
+                  value={sampleRate}
+                  onChange={(e) => setSampleRate(Number(e.target.value) as 44100 | 48000)}
+                  disabled={busy}
+                >
+                  <option value={48000}>48 kHz</option>
+                  <option value={44100}>44.1 kHz</option>
+                </select>
+              </label>
+              {showBitrate ? (
+                <label>
+                  <span>Bit Rate</span>
+                  <select
+                    value={bitrateKbps}
+                    onChange={(e) => setBitrateKbps(Number(e.target.value) as MasterExportBitrateKbps)}
+                    disabled={busy}
+                  >
+                    {MASTER_EXPORT_BITRATES.map((kbps) => (
+                      <option key={kbps} value={kbps}>
+                        {kbps} kbps{kbps === 320 ? ' · recommended' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <em>Default 320 kbps for MP3 / M4A / OGG / Opus</em>
+                </label>
+              ) : (
+                <label>
+                  <span>Bit Depth</span>
+                  <input value="24-bit PCM" disabled readOnly />
+                  <em>Lossless / PCM formats use 24-bit</em>
+                </label>
+              )}
+            </div>
           </div>
 
           <div

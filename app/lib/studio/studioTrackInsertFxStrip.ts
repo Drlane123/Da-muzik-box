@@ -58,7 +58,7 @@ type StripRoute = {
 const routes = new Map<number, StripRoute>();
 
 /** Bump when insert wiring semantics change — forces one clean rebuild per lane. */
-const INSERT_STRIP_WIRE_REV = 10;
+const INSERT_STRIP_WIRE_REV = 12;
 
 const INSERT_FX_OUTPUT_TRIM = 0.76;
 
@@ -286,7 +286,7 @@ function wireBypass(
   stripIn: GainNode,
   trackIndex: number,
 ): void {
-  if (isStudioMixerStripGraphPlaybackLocked()) return;
+  /* Allowed during transport lock — gapless enough for suite on/off; strip topology stays fixed. */
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
   stopNodes(route.innerNodes);
   route.innerNodes = [];
@@ -316,7 +316,7 @@ function wireSuite(
   bpm: number,
   trackIndex: number,
 ): void {
-  if (isStudioMixerStripGraphPlaybackLocked()) return;
+  /* Allowed during transport lock so preset apply mid-play reaches the graph. */
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
   stopNodes(route.innerNodes);
   route.innerNodes = [];
@@ -356,7 +356,7 @@ function wireSuiteSwap(
   bpm: number,
   trackIndex: number,
 ): void {
-  if (isStudioMixerStripGraphPlaybackLocked()) return;
+  /* Gapless by design — safe while transport lock holds mixer strip topology. */
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
   const oldInner = [...route.innerNodes];
   const oldInput = route.suiteInput;
@@ -405,36 +405,19 @@ function wireSuiteSwap(
   retapStudioPitchMonitorSource(ctx, route.tapFrom, trackIndex);
 }
 
-export function resolveStudioTrackPlaybackInput(
+/**
+ * Apply suite / bypass wiring for an existing route into a known strip.input.
+ * Used both idle and during transport lock (mixer strip nodes stay fixed).
+ */
+function applyInsertRouteWiring(
   ctx: AudioContext,
-  masterBus: GainNode,
-  trackIndex: number,
-  stripCount: number,
+  route: StripRoute,
+  stripIn: GainNode,
   slots: readonly [MixerEffectId, MixerEffectId, MixerEffectId],
   rack: StudioTrackInsertFxRack,
   bpm: number,
-  downstream?: AudioNode,
+  trackIndex: number,
 ): GainNode {
-  if (isStudioMixerStripGraphPlaybackLocked()) {
-    const routeLocked = routes.get(trackIndex);
-    if (routeLocked?.preStrip) {
-      return resolveClipPlaybackBus(trackIndex, routeLocked.preStrip);
-    }
-    return ensurePreStrip(ctx, trackIndex).preStrip;
-  }
-
-  const routeEarly = routes.get(trackIndex);
-  if (
-    routeEarly?.stripFeed
-    && routeEarly.preStrip
-  ) {
-    retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex);
-    return resolveClipPlaybackBus(trackIndex, routeEarly.preStrip);
-  }
-
-  ensureStudioMixerStrips(ctx, masterBus, stripCount, downstream);
-  const stripIn = resolveStudioMixerStripInput(ctx, masterBus, trackIndex, stripCount, downstream);
-  const route = ensurePreStrip(ctx, trackIndex);
   const paramsSig = routeSignature(slots, rack, bpm);
   const wireSig = insertWireSignature(rack, bpm);
   const needSuite = studioTrackInsertFxNeeded(slots, rack);
@@ -511,6 +494,41 @@ export function resolveStudioTrackPlaybackInput(
   return resolveClipPlaybackBus(trackIndex, route.preStrip);
 }
 
+export function resolveStudioTrackPlaybackInput(
+  ctx: AudioContext,
+  masterBus: GainNode,
+  trackIndex: number,
+  stripCount: number,
+  slots: readonly [MixerEffectId, MixerEffectId, MixerEffectId],
+  rack: StudioTrackInsertFxRack,
+  bpm: number,
+  downstream?: AudioNode,
+): GainNode {
+  /* During transport lock: keep mixer strip topology, but still sync DA FX Suite
+     so preset / knob changes apply audibly without Stop→Play. */
+  if (isStudioMixerStripGraphPlaybackLocked()) {
+    const route = ensurePreStrip(ctx, trackIndex);
+    let stripIn = getStudioMixerStripInput(trackIndex);
+    if (!stripIn) {
+      /* Lock forbids strip rebuild, but strips may already exist under a higher count. */
+      ensureStudioMixerStrips(ctx, masterBus, stripCount, downstream);
+      stripIn = getStudioMixerStripInput(trackIndex);
+    }
+    if (!stripIn) {
+      return resolveClipPlaybackBus(trackIndex, route.preStrip);
+    }
+    return applyInsertRouteWiring(ctx, route, stripIn, slots, rack, bpm, trackIndex);
+  }
+
+  /* Do not early-return on stripFeed alone — that left lanes stuck in bypass after
+     idle init, so DA FX Suite toggles never reached wireSuite / liveUpdate. */
+
+  ensureStudioMixerStrips(ctx, masterBus, stripCount, downstream);
+  const stripIn = resolveStudioMixerStripInput(ctx, masterBus, trackIndex, stripCount, downstream);
+  const route = ensurePreStrip(ctx, trackIndex);
+  return applyInsertRouteWiring(ctx, route, stripIn, slots, rack, bpm, trackIndex);
+}
+
 export function resyncStudioTrackInsertFxStripInputs(
   ctx: AudioContext,
   masterBus: GainNode,
@@ -578,9 +596,9 @@ export function healStudioTrackPlaybackRouteIfStale(
 }
 
 export function retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex: number): void {
-  if (isStudioMixerStripGraphPlaybackLocked()) return;
   if (!studioTrackAnalyserHasConsumer(trackIndex, 'fxSuite')) return;
-  const tap = routes.get(trackIndex)?.preStrip;
+  const route = routes.get(trackIndex);
+  const tap = route?.tapFrom ?? route?.preStrip;
   if (!tap || tap.context.state === 'closed') return;
   retapStudioPitchMonitorSource(tap.context as AudioContext, tap, trackIndex);
 }

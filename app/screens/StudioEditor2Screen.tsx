@@ -6595,9 +6595,11 @@ export default function StudioEditor2Screen({
   const [genoBassKeySourceTrackIndex, setGenoBassKeySourceTrackIndex] = useState(0);
   const [genoBuildSessionTick, setGenoBuildSessionTick] = useState(0);
   const [drumGeneratorPanelOpen, setDrumGeneratorPanelOpen] = useState(false);
-  const [beatPadsMachineOpen, setBeatPadsMachineOpen] = useState(
-    () => se2SavedSession?.beatPadsMachineOpen ?? true,
-  );
+  const [beatPadsMachineOpen, setBeatPadsMachineOpen] = useState(() => {
+    const hasBeatPads = se2SessionBoot.tracks.some((t) => studioTrackIsBeatPadsChannel(t));
+    if (hasBeatPads) return true;
+    return se2SavedSession?.beatPadsMachineOpen ?? true;
+  });
   const [humCapturePanelOpen, setHumCapturePanelOpen] = useState(false);
   const [guitarPanelOpen, setGuitarPanelOpen] = useState(false);
   const [chordGeniePanelOpen, setChordGeniePanelOpen] = useState(false);
@@ -6695,9 +6697,12 @@ export default function StudioEditor2Screen({
   const mixerLevelsRef    = useRef<number[]>(Array(MAX_STUDIO_TRACKS).fill(0));
   /** One-time reroute of preview/metro buses onto studio master (avoid disconnect glitches during playback). */
   const se2OutputGraphMigratedRef = useRef(false);
-  const [selectedTrackIndex, setSelectedTrackIndex] = useState(() =>
-    clampSe2SessionSelectedTrack(se2SavedSession?.selectedTrackIndex, se2SessionBoot.tracks.length),
-  );
+  const [selectedTrackIndex, setSelectedTrackIndex] = useState(() => {
+    const tracks = se2SessionBoot.tracks;
+    const beatPadsIdx = tracks.findIndex((t) => studioTrackIsBeatPadsChannel(t));
+    if (beatPadsIdx >= 0) return beatPadsIdx;
+    return clampSe2SessionSelectedTrack(se2SavedSession?.selectedTrackIndex, tracks.length);
+  });
   /** Bumps when Vocal FX pitch scope opens — re-resolves mic → track routing. */
   const [pitchMonitorRouteTick, setPitchMonitorRouteTick] = useState(0);
   const [studioTracks, setStudioTracks] = useState<MockMusioTrack[]>(() =>
@@ -7132,6 +7137,56 @@ export default function StudioEditor2Screen({
     }
   }, []);
 
+  /** Rebuild Pitch Tune / Vocoder stack into strip.input — works while transport is locked. */
+  const syncSe2TrackVocalFxNow = useCallback(async (
+    trackIndex: number,
+    fxOverride?: StudioTrackVocalFx,
+  ) => {
+    const ctx = ctxRef.current;
+    const bus = midiPreviewBusRef.current;
+    if (!ctx || !bus || ctx.state === 'closed') return;
+    const masterOut = studioMasterOutRef.current ?? ctx.destination;
+    ensureSe2MixerStrips(ctx, bus, masterOut);
+    const slots = trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots();
+    const rack = trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack();
+    const rawFx = fxOverride ?? trackVocalFxRef.current[trackIndex] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
+    const effectiveFx = studioEffectiveTrackVocalFx(rawFx, slots);
+    se2TrackPlaybackInput(ctx, bus, trackIndex, slots, rack, bpmRef.current, masterOut);
+    const preStrip = getStudioTrackInsertPreStrip(trackIndex);
+    const stripIn = getStudioMixerStripInput(trackIndex);
+    if (!preStrip || !stripIn) return;
+    const tr = studioTracksRef.current[trackIndex];
+    const keyRoot = tr?.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
+    const sessionStart = sessionStartRef.current;
+    const origin = originBeatRef.current;
+    const beatAtNow =
+      runningRef.current && sessionStart > 0
+        ? origin + Math.max(0, ctx.currentTime - sessionStart) * (bpmRef.current / 60)
+        : origin;
+    try {
+      if (effectiveFx.autotuneOn) {
+        await ensureStudioLivePitchTuneWorklet(ctx);
+      }
+      await syncStudioTrackVocalFxInsert({
+        ctx,
+        trackIndex,
+        preStrip,
+        stripIn,
+        fx: effectiveFx,
+        keyRoot,
+        carrierTracks: studioEditorVocoderCarrierTracks(studioTracksRef.current),
+        bpm: bpmRef.current,
+        clipStartBeat: Math.max(0, beatAtNow),
+        clipDurationBeats: 128,
+        slots,
+        rack,
+      });
+      reconnectStudioVocalLiveMicIfCached(trackIndex);
+    } catch (e) {
+      console.warn(`[Studio] Vocal DSP sync failed for track ${trackIndex}.`, e);
+    }
+  }, []);
+
   const onTrackVocalFxChange = useCallback(
     (trackIndex: number, nextFx: StudioTrackVocalFx) => {
       const prevFx = trackVocalFxRef.current[trackIndex] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
@@ -7153,22 +7208,43 @@ export default function StudioEditor2Screen({
       setTrackVocalFx((prev) => {
         const next = prev.slice();
         next[trackIndex] = nextFx;
+        trackVocalFxRef.current = next;
         return next;
       });
+
+      /* Immediate graph sync — including mid-play — so TUNE/VOC A/B is audible without Stop. */
+      if (reconnect) {
+        void syncSe2TrackVocalFxNow(trackIndex, nextFx);
+      }
     },
-    [clearAudioPreviewForTrack],
+    [clearAudioPreviewForTrack, syncSe2TrackVocalFxNow],
   );
 
   const onTrackInsertFxRackChange = useCallback(
     (trackIndex: number, nextRack: StudioTrackInsertFxRack) => {
+      const cloned = cloneStudioTrackInsertFxRack(nextRack);
       setTrackInsertFxRacks((prev) => {
         const cur = prev[trackIndex] ?? defaultStudioTrackInsertFxRack();
-        const cloned = cloneStudioTrackInsertFxRack(nextRack);
         if (studioTrackInsertFxRacksEqual(cur, cloned)) return prev;
         const next = prev.slice();
         next[trackIndex] = cloned;
         return next;
       });
+      /* Push suite into the Web Audio graph immediately — including while transport is
+         locked — so preset / module changes are audible without Stop→Play. */
+      const ctx = ctxRef.current;
+      const bus = midiPreviewBusRef.current;
+      if (ctx && bus && ctx.state !== 'closed') {
+        se2TrackPlaybackInput(
+          ctx,
+          bus,
+          trackIndex,
+          trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots(),
+          cloned,
+          bpmRef.current,
+          studioMasterOutRef.current ?? ctx.destination,
+        );
+      }
       /* Do not clear audioPreviewScheduledRef here — refill would stack new BufferSources
          on still-playing clips (louder each EQ move; stuck loud until Stop). Insert strip
          live-rewires the graph; scheduled clips keep using the same preStrip bus. */
@@ -7180,19 +7256,19 @@ export default function StudioEditor2Screen({
     (trackIndex: number, slot: 0 | 1 | 2, id: MixerEffectId) => {
       const prevRow = trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots();
       const prevId = prevRow[slot];
+      const nextRow: [MixerEffectId, MixerEffectId, MixerEffectId] = [...prevRow];
+      nextRow[slot] = id;
+      let nextRack = trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack();
       setTrackFxSlots((prev) => {
         const next = prev.slice();
-        const base = next[trackIndex] ?? emptyMixerFxSlots();
-        const row: [MixerEffectId, MixerEffectId, MixerEffectId] = [...base];
-        row[slot] = id;
-        next[trackIndex] = row;
+        next[trackIndex] = nextRow;
         return next;
       });
       if (id !== '' && id !== 'autotune' && id !== 'vocoder') {
+        nextRack = studioArmInsertFxRackForSlot(nextRack, id);
         setTrackInsertFxRacks((prev) => {
           const next = prev.slice();
-          const cur = next[trackIndex] ?? defaultStudioTrackInsertFxRack();
-          next[trackIndex] = studioArmInsertFxRackForSlot(cur, id);
+          next[trackIndex] = nextRack;
           return next;
         });
       }
@@ -7203,10 +7279,32 @@ export default function StudioEditor2Screen({
         prevId === 'vocoder'
       ) {
         invalidateStudioTrackVocalFxInsert(trackIndex);
+        clearAudioPreviewForTrack(trackIndex);
       }
       clearStudioVocalFxPlaybackCache();
+      const ctx = ctxRef.current;
+      const bus = midiPreviewBusRef.current;
+      if (ctx && bus && ctx.state !== 'closed') {
+        se2TrackPlaybackInput(
+          ctx,
+          bus,
+          trackIndex,
+          nextRow,
+          nextRack,
+          bpmRef.current,
+          studioMasterOutRef.current ?? ctx.destination,
+        );
+      }
+      if (
+        id === 'autotune' ||
+        id === 'vocoder' ||
+        prevId === 'autotune' ||
+        prevId === 'vocoder'
+      ) {
+        void syncSe2TrackVocalFxNow(trackIndex);
+      }
     },
-    [clearStudioVocalFxPlaybackCache],
+    [clearAudioPreviewForTrack, clearStudioVocalFxPlaybackCache, syncSe2TrackVocalFxNow],
   );
 
   const onMasterFxSlotChange = useCallback((slot: 0 | 1 | 2, id: MixerEffectId) => {
@@ -7994,10 +8092,6 @@ export default function StudioEditor2Screen({
       }
       const bus = midiPreviewBusRef.current;
       if (!bus) return;
-      if (runningRef.current) {
-        reconnectStudioVocalLiveMicIfCached(monitorTi);
-        return;
-      }
       ensureSe2MixerStrips(ctx, bus, studioMasterOutRef.current ?? ctx.destination);
 
       const rawFx = trackVocalFxRef.current[monitorTi] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
@@ -8066,7 +8160,6 @@ export default function StudioEditor2Screen({
       resetStudioTrackVocalFxInserts();
       return;
     }
-    if (runningRef.current) return;
     let cancelled = false;
     void (async () => {
       const ctx = await ensureCtx();
@@ -8142,7 +8235,6 @@ export default function StudioEditor2Screen({
       resetStudioTrackInsertFxStrips();
       return;
     }
-    if (runningRef.current) return;
     let cancelled = false;
     void (async () => {
       const ctx = await ensureCtx();
@@ -8984,20 +9076,19 @@ export default function StudioEditor2Screen({
       const tr = tracks[ti];
       if (!studioTrackOutputsMidi(tr)) continue;
       if (se2EffectiveTrackMuted(ti, trackMutesRef.current, trackSolosRef.current)) continue;
-      let stripIn: GainNode | null;
-      if (isStudioMixerStripGraphPlaybackLocked()) {
-        stripIn = getStudioMixerStripInput(ti);
-        if (!stripIn) {
-          healStudioTrackPlaybackRouteIfStale(
-            ctx,
-            bus,
-            ti,
-            getStudioMixerStripCountHint(),
-            studioMasterOutRef.current ?? ctx.destination,
-          );
-          stripIn = getStudioMixerStripInput(ti);
-        }
-      } else {
+      /* Always feed MIDI/synth through the insert preStrip bus — never strip.input —
+         so DA FX Suite on the channel is audible during transport lock. */
+      let stripIn: GainNode | null = getStudioTrackClipPlaybackBus(ti);
+      if (!stripIn && isStudioMixerStripGraphPlaybackLocked()) {
+        stripIn = healStudioTrackPlaybackRouteIfStale(
+          ctx,
+          bus,
+          ti,
+          getStudioMixerStripCountHint(),
+          studioMasterOutRef.current ?? ctx.destination,
+        );
+      }
+      if (!stripIn) {
         stripIn = se2TrackPlaybackInput(
           ctx,
           bus,
@@ -9546,20 +9637,16 @@ export default function StudioEditor2Screen({
           }
         }
         if (!playbackBus) {
-          if (isStudioMixerStripGraphPlaybackLocked()) {
-            continue;
-          } else {
-            se2TrackPlaybackInput(
-              ctx,
-              bus,
-              ti,
-              trackFxSlotsRef.current[ti] ?? emptyMixerFxSlots(),
-              trackInsertFxRacksRef.current[ti] ?? defaultStudioTrackInsertFxRack(),
-              bpmRef.current,
-              studioMasterOutRef.current ?? ctx.destination,
-            );
-            playbackBus = getStudioTrackClipPlaybackBus(ti);
-          }
+          se2TrackPlaybackInput(
+            ctx,
+            bus,
+            ti,
+            trackFxSlotsRef.current[ti] ?? emptyMixerFxSlots(),
+            trackInsertFxRacksRef.current[ti] ?? defaultStudioTrackInsertFxRack(),
+            bpmRef.current,
+            studioMasterOutRef.current ?? ctx.destination,
+          );
+          playbackBus = getStudioTrackClipPlaybackBus(ti);
         }
         if (!playbackBus) continue;
 
@@ -14002,6 +14089,50 @@ export default function StudioEditor2Screen({
     [applyTracksMutation],
   );
 
+  /** Beat Pads mini 808 Lab — new standalone 808 Lab lane with piano-roll notes (not the Beat Pads drum grid). */
+  const exportBeatPads808LabToNewLab808Track = useCallback(
+    (notes: Se2Lab808ToneGridRollNote[]) => {
+      const prev = studioTracksRef.current;
+      if (prev.length >= MAX_STUDIO_TRACKS) return;
+      const ti = prev.length;
+      const initVoice = se2Lab808DefaultVoice();
+      const loopStart = loopStartBeatRef.current;
+      const rollNotes = notes.map((n) => ({
+        ...n,
+        startBeat: loopStart + n.startBeat,
+      }));
+      const newTrack: MockMusioTrack = {
+        id: newTrackId(),
+        name: nextLab808TrackName(prev),
+        laneNumber: se2NextStudioLaneNumber(prev),
+        colorHex: '#E8784A',
+        kind: 'lab808',
+        midiChannel: studioNextMidiChannel(prev),
+        lab808SoundLane: initVoice.soundLane,
+        lab808KickPresetId: initVoice.kickPresetId,
+        lab808BassPresetId: initVoice.bassPresetId,
+        lab808TonePadBaseMidi: initVoice.tonePadBaseMidi,
+        lab808ToneGridLoopBars: initVoice.toneGridLoopBars,
+        lab808ToneGridSteps: initVoice.toneGridSteps.map((row) => [...row]),
+        notes: rollNotes.sort((a, b) => a.startBeat - b.startBeat || a.pitch - b.pitch),
+        audioClips: [],
+      };
+      setSe2Lab808Voices((voices) => {
+        const next = [...voices];
+        next[ti] = initVoice;
+        return next;
+      });
+      const next = [...prev, newTrack];
+      setStudioTracks(next);
+      setSelectedTrackIndex(ti);
+      setSelectedPianoNoteIndex(null);
+      setSelectedPianoNoteIndexes(new Set());
+      setLab808PanelOpen(true);
+      openPianoRollEditor();
+    },
+    [openPianoRollEditor],
+  );
+
   const exportBeatPadsSpreadMidiToTrack = useCallback(
     (
       targetTrackIndex: number,
@@ -17019,6 +17150,12 @@ export default function StudioEditor2Screen({
                     }
                     onExportBeatPadsLanesToTracks={({ lanes }) =>
                       exportBeatPadsLanesToTracks(ti, { lanes })
+                    }
+                    onExportBeatPads808LabToPianoRoll={(notes) =>
+                      exportBeatPads808LabToNewLab808Track(notes)
+                    }
+                    onExportBeatPads808LabWavToTrack={(args) =>
+                      exportBeatPadsToAudioTrack(ti, args)
                     }
                   />
                 </Suspense>

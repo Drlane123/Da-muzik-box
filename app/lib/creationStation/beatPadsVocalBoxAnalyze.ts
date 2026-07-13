@@ -221,11 +221,12 @@ function frameRms(frame: Float32Array): number {
 }
 
 function adaptiveRmsGate(rmses: number[]): number {
-  if (rmses.length === 0) return 0.006;
+  if (rmses.length === 0) return 0.005;
   const sorted = [...rmses].sort((a, b) => a - b);
   const med = sorted[Math.floor(sorted.length * 0.5)] ?? 0;
   const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? med;
-  return Math.max(0.0016, med * 1.06 + (p90 - med) * 0.08);
+  // Slightly more sensitive so quiet "ka" / snare mouth hits still cross the gate.
+  return Math.max(0.0012, med * 1.02 + (p90 - med) * 0.06);
 }
 
 function frameBrightness(samples: Float32Array, start: number): number {
@@ -346,27 +347,27 @@ function classifyKickSnareFromBands(
   const attackScore = attack / (rms * rms + 1e-8);
 
   // Sharp slap/clop — almost always snare, not kick
-  if (attackScore >= 52 && !(boom >= 0.52 && high < 0.14)) return 'snare';
+  if (attackScore >= 42 && !(boom >= 0.55 && high < 0.12)) return 'snare';
 
   // Kick = low-frequency boom, soft attack, not much snap
   const kickLike =
-    boom >= 0.4 &&
-    boom > snap * 1.12 &&
-    high <= 0.28 &&
-    attackScore < 95;
+    boom >= 0.42 &&
+    boom > snap * 1.18 &&
+    high <= 0.24 &&
+    attackScore < 85;
 
-  // Snare = slap / clop / ka — sharp transient + mid/high energy
+  // Snare = slap / clop / ka — sharp transient + mid/high energy (tuned for quieter "ka")
   const snareLike =
-    snap >= 0.24 &&
-    (attackScore >= 28 || high >= 0.16 || (snap >= boom * 0.92 && attackScore >= 16));
+    snap >= 0.18 &&
+    (attackScore >= 20 || high >= 0.12 || (snap >= boom * 0.82 && attackScore >= 10));
 
   if (kickLike && !snareLike) return 'kick';
   if (snareLike) return 'snare';
   if (kickLike) return 'kick';
 
-  if (attackScore >= 45 || high >= 0.2) return 'snare';
-  if (boom >= 0.45 && high < 0.22) return 'kick';
-  return snap >= boom ? 'snare' : 'kick';
+  if (attackScore >= 36 || high >= 0.16) return 'snare';
+  if (boom >= 0.48 && high < 0.18) return 'kick';
+  return snap >= boom * 0.9 ? 'snare' : 'kick';
 }
 
 /**
@@ -401,12 +402,13 @@ function classifyKickSnareAdaptive(
   feats: readonly VocalBoxHitFeatures[],
 ): (VocalBoxDrumRole | null)[] {
   const absolute = () => feats.map((f) => classifyKickSnareFromBands(f.bands, f.rms));
-  if (feats.length < 3) return absolute();
+  // Two hits is enough to split boom vs ka on a take.
+  if (feats.length < 2) return absolute();
 
   const discs = feats.map((f) => vocalBoxSnareBrightness(f.bands, f.bright, f.centroid));
   let cLo = Math.min(...discs);
   let cHi = Math.max(...discs);
-  if (cHi - cLo < 0.1) return absolute();
+  if (cHi - cLo < 0.08) return absolute();
 
   for (let iter = 0; iter < 16; iter += 1) {
     let sumLo = 0;
@@ -431,7 +433,7 @@ function classifyKickSnareAdaptive(
   }
 
   // Clusters too close → almost certainly one drum type; trust absolute classifier.
-  if (cHi - cLo < 0.12) return absolute();
+  if (cHi - cLo < 0.09) return absolute();
 
   const thr = (cLo + cHi) / 2;
   return discs.map((d) => (d >= thr ? 'snare' : 'kick'));
@@ -493,11 +495,11 @@ function detectOnsetFrames(rmses: number[], gate: number, hopSec: number): numbe
     thr = Math.max(gate, thr * decay);
     const cur = rmses[i] ?? 0;
     const prev = rmses[i - 1] ?? 0;
-    const rising = cur >= prev * 1.05;
-    if (cur > gate * 1.15 && cur > thr && rising && i - lastOnset >= refractoryFrames) {
+    const rising = cur >= prev * 1.04;
+    if (cur > gate * 1.08 && cur > thr && rising && i - lastOnset >= refractoryFrames) {
       onsets.push(i);
       lastOnset = i;
-      thr = cur * 1.18;
+      thr = cur * 1.12;
     }
   }
   return onsets;
@@ -581,10 +583,8 @@ export function mergeVocalBoxOnsetBursts(
         if (hit.velocity > last.velocity) out[out.length - 1] = hit;
         continue;
       }
-      if (hit.startSec - last.startSec < 0.048) {
-        if (hit.velocity > last.velocity) out[out.length - 1] = hit;
-        continue;
-      }
+      // Different roles (kick + snare): always keep both. Dropping the quieter "ka"
+      // next to a louder boom was the main "only kicks / snare missing" failure mode.
     }
     out.push(hit);
   }

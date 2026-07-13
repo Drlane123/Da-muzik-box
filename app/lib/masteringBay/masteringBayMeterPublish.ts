@@ -1,7 +1,8 @@
 import type { MultiMeterSnap, NugenMeterSnap } from '@/app/lib/masteringBay/masteringBayMeterIdle';
 
-const DB_EPS = 0.35;
-const PCT_EPS = 1.5;
+const DB_EPS = 0.25;
+/** Slightly tighter so idle decay still animates smoothly. */
+const PCT_EPS = 0.75;
 
 function dbChanged(a: number, b: number): boolean {
   const aOk = Number.isFinite(a);
@@ -11,7 +12,7 @@ function dbChanged(a: number, b: number): boolean {
   return Math.abs(a - b) > DB_EPS;
 }
 
-/** Skip React meter pushes when nothing moved enough to matter visually. */
+/** Skip meter bus publishes when nothing moved enough to matter visually. */
 export function shouldPublishMeterSnaps(
   prevMulti: MultiMeterSnap | null,
   nextMulti: MultiMeterSnap,

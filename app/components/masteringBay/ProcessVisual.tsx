@@ -4,6 +4,7 @@ import {
   IDLE_PROCESS_LIVE,
   type ProcessLiveFeed,
 } from '@/app/lib/masteringBay/masteringBayProcessLive';
+import { getMasteringBayProcessLive } from '@/app/lib/masteringBay/masteringBayMeterStore';
 import { useEffect, useRef } from 'react';
 
 export type ProcessKind =
@@ -528,8 +529,10 @@ export function ProcessVisual({
       const parent = canvas.parentElement;
       const w = parent?.clientWidth ?? 120;
       const h = parent?.clientHeight ?? 56;
-      const p = { ...paramsRef.current, _grLive: liveRef.current.reduction };
-      paintFrame(ctx, w, h, kindRef.current, p, liveRef.current, poweredRef.current);
+      const liveNow = getMasteringBayProcessLive() ?? liveRef.current;
+      liveRef.current = liveNow;
+      const p = { ...paramsRef.current, _grLive: liveNow.reduction };
+      paintFrame(ctx, w, h, kindRef.current, p, liveNow, poweredRef.current);
       if (labelRef.current) {
         labelRef.current.textContent = labelFor(kindRef.current, p);
       }

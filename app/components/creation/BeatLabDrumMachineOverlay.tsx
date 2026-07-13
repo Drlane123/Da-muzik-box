@@ -21,6 +21,12 @@ import { pointerStrikeVelocity } from '@/app/lib/creationStation/eightZeroEightV
 import { BeatLabDrumMachineSequencer } from '@/app/components/creation/BeatLabDrumMachineSequencer';
 import { BeatPadsPatternBankSidebar } from '@/app/components/creation/BeatPadsPatternBankSidebar';
 import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TAGLINE, BEAT_PADS_VOCALBOX_PANEL_H_PX } from '@/app/components/creation/BeatPadsVocalBoxPanel';
+import { BeatPads808LabPanel, BEAT_PADS_808_LAB_ACCENT } from '@/app/components/creation/BeatPads808LabPanel';
+import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808ChordLock';
+import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
+import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
+import { SE2_LAB808_DOCK_TECH_LABEL } from '@/app/lib/studio/se2Lab808UiTheme';
+import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import {
   BeatLabDrumMachineFxPanel,
 } from '@/app/components/creation/BeatLabDrumMachinePadSidePanels';
@@ -189,7 +195,7 @@ export type BeatLabDrumMachineOverlayProps = {
   /** Crew / producer flagship kits. */
   producerKitId?: BeatLabProducerKitId;
   onProducerKitIdChange?: (id: BeatLabProducerKitId) => void;
-  onLoadProducerKit?: () => void;
+  onLoadProducerKit?: () => void | Promise<void>;
   producerKitLoading?: boolean;
   producerKitTribute?: string | null;
   onLoadDefaultKitToBank?: (kitId: BeatLabProducerKitId, bankIndex: number) => void;
@@ -261,6 +267,25 @@ export type BeatLabDrumMachineOverlayProps = {
   getAudioContext?: () => AudioContext | null;
   /** Master / track output for VocalBox count-in clicks. */
   getAudioOutput?: () => AudioNode | null;
+  /** SE2 embedded — miniature 808 Lab (piano roll) beside VocalBox. */
+  beatPads808Lab?: {
+    trackId: string;
+    trackName?: string;
+    songKeyRoot: number;
+    songKeyMode: ChordMode;
+    studioTracks: readonly Se2Lab808ChordLockHarmonyTrack[];
+    lanePad?: number;
+    voice: Se2Lab808VoiceParams;
+    onVoiceChange: (voice: Se2Lab808VoiceParams) => void;
+    getPreviewDestination: (ctx: AudioContext) => AudioNode | null;
+    onExportToneGridToPianoRoll?: (notes: Se2Lab808ToneGridRollNote[]) => void;
+    onExportToneGridWavToTrack?: (args: {
+      buffer: AudioBuffer;
+      loopBars: number;
+      bpm: number;
+      sourceTrackName: string;
+    }) => void;
+  } | null;
   /** Beat Lab mixer (CH 1–16 pads) — toggle from top bar while overlay stays open. */
   beatLabMixerOpen?: boolean;
   onBeatLabMixerToggle?: () => void;
@@ -411,6 +436,7 @@ export function BeatLabDrumMachineOverlay({
   sessionBpm = 120,
   getAudioContext,
   getAudioOutput,
+  beatPads808Lab = null,
   beatLabMixerOpen = false,
   onBeatLabMixerToggle,
   beatLabMixerSpreadActive = false,
@@ -454,6 +480,8 @@ export function BeatLabDrumMachineOverlay({
   const [gridExpanded, setGridExpanded] = useState(false);
   /** SE2 Beat Pads — VocalBox tab above the pad FX column (mouth → kick/snare/hat). */
   const [vocalBoxOpen, setVocalBoxOpen] = useState(false);
+  /** SE2 Beat Pads — miniature 808 Lab piano-roll tab (next to VocalBox). */
+  const [lab808Open, setLab808Open] = useState(false);
   const [internalLoopBars, setInternalLoopBars] = useState(BEAT_PADS_DEFAULT_LOOP_BARS);
   const [internalPattern, setInternalPattern] = useState<BeatPadsDrumPattern>(() =>
     emptyBeatPadsPattern(BEAT_PADS_DEFAULT_LOOP_BARS),
@@ -1594,7 +1622,10 @@ export function BeatLabDrumMachineOverlay({
                   <button
                     type="button"
                     disabled={patternActionsDisabled}
-                    onClick={() => setVocalBoxOpen((o) => !o)}
+                    onClick={() => {
+                      setVocalBoxOpen((o) => !o);
+                      setLab808Open(false);
+                    }}
                     title={
                       vocalBoxOpen
                         ? 'Close VocalBox — return to pad FX'
@@ -1643,6 +1674,60 @@ export function BeatLabDrumMachineOverlay({
                   >
                     {BEAT_PADS_VOCALBOX_TAGLINE}
                   </span>
+                  {beatPads808Lab ? (
+                    <button
+                      type="button"
+                      disabled={patternActionsDisabled}
+                      onClick={() => {
+                        setLab808Open((o) => !o);
+                        setVocalBoxOpen(false);
+                      }}
+                      title={
+                        lab808Open
+                          ? 'Close 808 Lab — return to pad FX'
+                          : '808 Lab — piano-roll 808s (Preview, then export to SE2)'
+                      }
+                      aria-label="808 Lab — piano-roll 808s inside Beat Pads"
+                      className="beat-pads-808lab-tab"
+                      style={{
+                        ...miniBtn,
+                        height: 32,
+                        minHeight: 32,
+                        padding: '0 10px',
+                        gap: 4,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        borderColor: lab808Open
+                          ? 'rgba(0, 229, 255, 0.75)'
+                          : 'rgba(0, 229, 255, 0.42)',
+                        color: lab808Open ? '#b8f7ff' : BEAT_PADS_808_LAB_ACCENT,
+                        background: lab808Open
+                          ? 'rgba(0, 229, 255, 0.22)'
+                          : 'rgba(0, 229, 255, 0.08)',
+                        opacity: patternActionsDisabled ? 0.5 : 1,
+                      }}
+                    >
+                      <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.03em' }}>
+                        808 Lab
+                      </span>
+                    </button>
+                  ) : null}
+                  {beatPads808Lab ? (
+                    <span
+                      className="se2-beat-pads-electric-title beat-pads-808lab-chord-lock pointer-events-none select-none shrink-0"
+                      title="Chord Lock Technology — 808 roots follow your harmony"
+                      aria-hidden
+                      style={{
+                        fontSize: 7,
+                        letterSpacing: '0.08em',
+                        marginLeft: 2,
+                      }}
+                    >
+                      <span className="se2-beat-pads-electric-title-word">
+                        {SE2_LAB808_DOCK_TECH_LABEL}
+                      </span>
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               {exportStatus ? (
@@ -1676,7 +1761,21 @@ export function BeatLabDrumMachineOverlay({
             </div>
           </div>
         ) : null}
+        </div>
+        ) : null}
 
+        <div
+          className="beat-pads-808lab-stage"
+          style={{
+            position: 'relative',
+            flex: '1 1 auto',
+            minHeight: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+        {showEmbeddedMachineChrome ? (
         <div
           className="beat-pads-pad-fx-row"
           style={{
@@ -1876,6 +1975,11 @@ export function BeatLabDrumMachineOverlay({
                   getAudioContext={getAudioContext}
                   getAudioOutput={getAudioOutput}
                   warmAudio={onWarmAudio}
+                  onEnsurePadSamples={
+                    typeof onLoadProducerKit === 'function'
+                      ? () => Promise.resolve(onLoadProducerKit())
+                      : undefined
+                  }
                   disabled={patternActionsDisabled}
                 />
               </div>
@@ -1977,10 +2081,50 @@ export function BeatLabDrumMachineOverlay({
             )}
           </div>
         </div>
-        </div>
+        ) : null}
+
+        {embedded && lab808Open && beatPads808Lab ? (
+          <div
+            className="beat-pads-808lab-drop"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 80,
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '0 6px 6px',
+              boxSizing: 'border-box',
+              pointerEvents: 'auto',
+              background: 'rgba(4, 12, 18, 0.94)',
+            }}
+          >
+            <BeatPads808LabPanel
+              bpm={localBpm}
+              trackId={beatPads808Lab.trackId}
+              trackName={beatPads808Lab.trackName}
+              accentHex={BEAT_PADS_808_LAB_ACCENT}
+              disabled={patternActionsDisabled}
+              songKeyRoot={beatPads808Lab.songKeyRoot}
+              songKeyMode={beatPads808Lab.songKeyMode}
+              studioTracks={beatPads808Lab.studioTracks}
+              lanePad={beatPads808Lab.lanePad}
+              voice={beatPads808Lab.voice}
+              onVoiceChange={beatPads808Lab.onVoiceChange}
+              getAudioContext={getAudioContext ?? (() => null)}
+              getPreviewDestination={beatPads808Lab.getPreviewDestination}
+              warmAudio={onWarmAudio}
+              onExportToneGridToPianoRoll={beatPads808Lab.onExportToneGridToPianoRoll}
+              onExportToneGridWavToTrack={beatPads808Lab.onExportToneGridWavToTrack}
+              fullBleed
+            />
+          </div>
         ) : null}
 
         {renderSequencerPane()}
+        </div>
       </div>
     </div>
   );

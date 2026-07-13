@@ -1,29 +1,42 @@
-/** Master export: offline render → tag → Save As / download. */
+/** Master export: offline render → encode format → tag → Save As / download. */
 
 import type { MasteringBayClipEditState } from '@/app/lib/masteringBay/masteringBayClipEdit';
+import { encodeMasterAudioBuffer, formatMimeType } from '@/app/lib/masteringBay/masteringBayEncode';
 import { buildId3v23Tag, prependId3ToFile } from '@/app/lib/masteringBay/masteringBayId3Tag';
 import {
   masterExportFilename,
   metadataToTagMap,
   validateMasterMetadata,
+  type MasterExportFormat,
   type MasterExportRequest,
 } from '@/app/lib/masteringBay/masteringBayMetadata';
 import { renderMasteringBayOffline } from '@/app/lib/masteringBay/masteringBayOfflineRender';
 import type { MasteringBayRackState } from '@/app/lib/masteringBay/masteringBayPresets';
-import { encodeWavPcm24 } from '@/app/lib/masteringBay/masteringBayWavEncode';
 
 export type MasterExportProgress = (message: string) => void;
+
+const FORMAT_ACCEPT: Record<MasterExportFormat, { description: string; mime: string; ext: string }> = {
+  wav: { description: 'WAV audio', mime: 'audio/wav', ext: '.wav' },
+  aiff: { description: 'AIFF audio', mime: 'audio/aiff', ext: '.aiff' },
+  flac: { description: 'FLAC audio', mime: 'audio/flac', ext: '.flac' },
+  caf: { description: 'CAF audio', mime: 'audio/x-caf', ext: '.caf' },
+  m4a: { description: 'M4A audio', mime: 'audio/mp4', ext: '.m4a' },
+  ogg: { description: 'OGG Vorbis', mime: 'audio/ogg', ext: '.ogg' },
+  opus: { description: 'Opus audio', mime: 'audio/ogg', ext: '.opus' },
+  mp3: { description: 'MP3 audio', mime: 'audio/mpeg', ext: '.mp3' },
+};
 
 async function saveBytesWithPicker(
   bytes: Uint8Array,
   filename: string,
-  mimeType: string,
+  format: MasterExportFormat,
 ): Promise<void> {
+  const accept = FORMAT_ACCEPT[format];
+  const mimeType = accept.mime || formatMimeType(format);
   const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)], {
     type: mimeType,
   });
 
-  // Native Save As when available (Chromium).
   const w = window as Window & {
     showSaveFilePicker?: (opts: {
       suggestedName?: string;
@@ -32,13 +45,12 @@ async function saveBytesWithPicker(
   };
 
   if (typeof w.showSaveFilePicker === 'function') {
-    const ext = filename.toLowerCase().endsWith('.mp3') ? '.mp3' : '.wav';
     const handle = await w.showSaveFilePicker({
       suggestedName: filename,
       types: [
         {
-          description: ext === '.mp3' ? 'MP3 audio' : 'WAV audio',
-          accept: { [mimeType]: [ext] },
+          description: accept.description,
+          accept: { [mimeType]: [accept.ext] },
         },
       ],
     });
@@ -48,7 +60,6 @@ async function saveBytesWithPicker(
     return;
   }
 
-  // Fallback: browser download.
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -61,7 +72,7 @@ async function saveBytesWithPicker(
 }
 
 /**
- * Render mastered audio, embed ID3 metadata (incl. TSRC + APIC), then Save As.
+ * Render mastered audio, encode to the chosen format, embed ID3 when supported, then Save As.
  */
 export async function exportMasteredTrack(args: {
   clipEdit: MasteringBayClipEditState;
@@ -76,17 +87,23 @@ export async function exportMasteredTrack(args: {
   onProgress?.('Rendering master…');
   const rendered = await renderMasteringBayOffline(clipEdit, rackState, request.sampleRate);
 
-  onProgress?.('Encoding WAV…');
-  // Primary deliverable: 24-bit PCM WAV. MP3 option falls back to WAV until an encoder is added.
-  const wavBytes = encodeWavPcm24(rendered);
+  onProgress?.(`Encoding ${request.format.toUpperCase()}…`);
+  const encoded = await encodeMasterAudioBuffer(
+    rendered,
+    request.format,
+    request.bitrateKbps ?? 320,
+  );
 
-  onProgress?.('Embedding metadata…');
-  const tags = metadataToTagMap(request.metadata);
-  const id3 = buildId3v23Tag(tags, request.coverArt);
-  const tagged = prependId3ToFile(id3, wavBytes);
+  let outBytes = encoded.bytes;
+  if (encoded.allowId3Prefix) {
+    onProgress?.('Embedding metadata…');
+    const tags = metadataToTagMap(request.metadata);
+    const id3 = buildId3v23Tag(tags, request.coverArt);
+    outBytes = prependId3ToFile(id3, encoded.bytes);
+  }
 
-  const filename = masterExportFilename(request.metadata, 'wav');
+  const filename = masterExportFilename(request.metadata, request.format);
   onProgress?.('Saving…');
-  await saveBytesWithPicker(tagged, filename, 'audio/wav');
+  await saveBytesWithPicker(outBytes, filename, request.format);
   return filename;
 }

@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import type { MutableRefObject } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, ZoomIn, ZoomOut, Maximize2, Minimize2, Zap, ChevronUp, ChevronDown, Volume2, Play, Pause, Square, Circle, SkipBack, Repeat, Save, Cable, Upload, FolderOpen, X, Download, Plus, SlidersHorizontal, Music2, Waves, Copy, Undo2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Minimize2, Zap, ChevronUp, ChevronDown, Volume2, Play, Pause, Square, Circle, SkipBack, Repeat, Save, Cable, Upload, FolderOpen, X, Download, Plus, SlidersHorizontal, Music2, Waves, Copy, Undo2 } from 'lucide-react';
 
 import {
   useMasterClock,
@@ -15218,32 +15218,6 @@ function CreationStationScreenBody({
                 }}
               >
                 FOLLOW
-              </button>
-              <button
-                type="button"
-                disabled={CREATION_BACKEND_BLANK}
-                title="Arrange — open Studio / master arranger export"
-                onClick={() => {
-                  if (CREATION_BACKEND_BLANK) return;
-                  onExport('master-arranger');
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 3,
-                  fontSize: 9,
-                  fontWeight: 800,
-                  letterSpacing: 0.3,
-                  color: CREATION_BACKEND_BLANK ? '#5c5c68' : '#7cf4c6',
-                  background: 'rgba(124, 244, 198, 0.10)',
-                  border: `1px solid ${CREATION_BACKEND_BLANK ? '#2a2a32' : 'rgba(124,244,198,0.35)'}`,
-                  borderRadius: 4,
-                  padding: '3px 7px',
-                  cursor: CREATION_BACKEND_BLANK ? 'not-allowed' : 'pointer',
-                  opacity: CREATION_BACKEND_BLANK ? 0.45 : 1,
-                }}
-              >
-                <Send size={10} strokeWidth={2.5} /> ARRANGE
               </button>
             </div>
             {beatLabPianoRollExpanded ? (

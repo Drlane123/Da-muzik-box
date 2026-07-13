@@ -8,6 +8,10 @@
 
 export const METER_DB_FLOOR = -60;
 export const METER_DB_CEIL = 3;
+
+/** Analyzer grid — 0 dBFS at top, −60 at bottom (matches MultiMeterPanel labels). */
+export const SPECTRUM_DB_FLOOR = -60;
+export const SPECTRUM_DB_CEIL = 0;
 /** Classic VU integration time (rise and fall). */
 export const VU_INTEGRATION_SEC = 0.3;
 /** Peak-hold fall rate (dB per second). */
@@ -86,15 +90,17 @@ function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): 
 /**
  * 4× oversampled true-peak from a time-domain window (ITU-R BS.1770 style).
  * Catmull-Rom is a practical real-time stand-in for the BS.1770 FIR phases.
+ * `stride` > 1 thins intermediate samples for live UI (still catches inter-sample peaks).
  */
-export function truePeakFromSamples(buf: Float32Array, n: number): number {
+export function truePeakFromSamples(buf: Float32Array, n: number, stride = 1): number {
   if (n < 2) return 0;
   let peak = 0;
   for (let i = 0; i < n; i++) {
     const v = Math.abs(buf[i] ?? 0);
     if (v > peak) peak = v;
   }
-  for (let i = 0; i < n - 1; i++) {
+  const step = Math.max(1, Math.floor(stride));
+  for (let i = 0; i < n - 1; i += step) {
     const p0 = buf[i === 0 ? 0 : i - 1] ?? 0;
     const p1 = buf[i] ?? 0;
     const p2 = buf[i + 1] ?? 0;
@@ -107,7 +113,11 @@ export function truePeakFromSamples(buf: Float32Array, n: number): number {
   return peak;
 }
 
-export function readChannelMeter(analyser: AnalyserNode, buf: Float32Array): ChannelMeterSample {
+export function readChannelMeter(
+  analyser: AnalyserNode,
+  buf: Float32Array,
+  opts?: { truePeak?: boolean; truePeakStride?: number },
+): ChannelMeterSample {
   const n = analyser.fftSize;
   if (buf.length < n) {
     return {
@@ -128,7 +138,10 @@ export function readChannelMeter(analyser: AnalyserNode, buf: Float32Array): Cha
     if (v > peak) peak = v;
   }
   const rmsLin = Math.sqrt(sum / Math.max(1, n));
-  const truePeakLin = truePeakFromSamples(buf, n);
+  const wantTp = opts?.truePeak !== false;
+  const truePeakLin = wantTp
+    ? truePeakFromSamples(buf, n, opts?.truePeakStride ?? 2)
+    : peak;
   return {
     peakLin: peak,
     rmsLin,

@@ -203,7 +203,8 @@ export function shouldHoldSharedAudioGraphForCreationModules(): boolean {
     isPianoRollTransportRunning() ||
     isGenoUltraArpPreviewRunning() ||
     isGenoUltraSynthPanelActive() ||
-    se2EditorHoldsSharedAudioGraph()
+    se2EditorHoldsSharedAudioGraph() ||
+    masteringBayHoldsSharedAudioGraph()
   );
 }
 
@@ -235,6 +236,41 @@ export function isSe2EditorScreenActive(): boolean {
     (window as unknown as { __daMusicSe2EditorScreenActive?: boolean }).__daMusicSe2EditorScreenActive ===
     true
   );
+}
+
+/** Mastering Bay transport playing — master pause/stop must not suspend the shared graph. */
+export function setMasteringBayTransportRunning(running: boolean): void {
+  if (typeof window === 'undefined') return;
+  (
+    window as unknown as { __daMusicMasteringBayTransportRunning?: boolean }
+  ).__daMusicMasteringBayTransportRunning = running;
+}
+
+export function isMasteringBayTransportRunning(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicMasteringBayTransportRunning?: boolean })
+      .__daMusicMasteringBayTransportRunning === true
+  );
+}
+
+/** Mastering Bay screen visible — keep shared AudioContext alive for meters + playback. */
+export function setMasteringBayScreenActive(active: boolean): void {
+  if (typeof window === 'undefined') return;
+  (window as unknown as { __daMusicMasteringBayScreenActive?: boolean }).__daMusicMasteringBayScreenActive =
+    active;
+}
+
+export function isMasteringBayScreenActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    (window as unknown as { __daMusicMasteringBayScreenActive?: boolean })
+      .__daMusicMasteringBayScreenActive === true
+  );
+}
+
+function masteringBayHoldsSharedAudioGraph(): boolean {
+  return isMasteringBayTransportRunning() || isMasteringBayScreenActive();
 }
 
 /** Beat Lab local transport is playing — master `pause`/`stop` must not suspend the shared graph. */

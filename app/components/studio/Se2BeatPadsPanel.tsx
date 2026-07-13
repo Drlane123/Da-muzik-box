@@ -49,6 +49,13 @@ import { se2BeatPadsHarmonyKey, se2ResolveBeatPadsHarmonyTrack } from '@/app/lib
 import { se2BeatPadsKickKeySemiForTrack } from '@/app/lib/studio/se2BeatPadsTransportPlayback';
 import { se2BeatPadsPadLabelsForTrack } from '@/app/lib/studio/se2BeatPadsPianoRoll';
 import type { Se2BeatPadsTrack, Se2BeatPadsSe2SyncMode } from '@/app/lib/studio/se2BeatPadsTrack';
+import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808ChordLock';
+import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
+import {
+  se2Lab808DefaultVoice,
+  type Se2Lab808VoiceParams,
+} from '@/app/lib/studio/se2Lab808Types';
+import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 
 export type Se2BeatPadsTimelineNote = {
   pitch: number;
@@ -138,6 +145,15 @@ export type Se2BeatPadsPanelProps = {
   onBeatPadsSpreadChange?: (
     snap: import('@/app/lib/studio/se2BeatPadsSpreadStore').Se2BeatPadsSpreadSnapshot | null,
   ) => void;
+  /** Beat Pads mini 808 Lab — send tone grid to a new 808 Lab piano-roll lane. */
+  onExportBeatPads808LabToPianoRoll?: (notes: Se2Lab808ToneGridRollNote[]) => void;
+  /** Beat Pads mini 808 Lab — bounce tone grid WAV to a new audio track. */
+  onExportBeatPads808LabWavToTrack?: (args: {
+    buffer: AudioBuffer;
+    loopBars: number;
+    bpm: number;
+    sourceTrackName: string;
+  }) => void | Promise<void>;
 };
 
 export function Se2BeatPadsPanel({
@@ -184,10 +200,15 @@ export function Se2BeatPadsPanel({
   onExportBeatPadsSpreadWavToTrack,
   onExportBeatPadsLanesToTracks,
   onBeatPadsSpreadChange,
+  onExportBeatPads808LabToPianoRoll,
+  onExportBeatPads808LabWavToTrack,
 }: Se2BeatPadsPanelProps) {
   const [loadingPattern, setLoadingPattern] = useState(false);
   const [regeneratingPad, setRegeneratingPad] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [beatPads808LabVoice, setBeatPads808LabVoice] = useState<Se2Lab808VoiceParams>(() =>
+    se2Lab808DefaultVoice(),
+  );
   const exportStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loopBars = track.beatPadsLoopBars ?? 8;
   const stepsPerBar = track.beatPadsStepsPerBar ?? 16;
@@ -717,6 +738,39 @@ export function Se2BeatPadsPanel({
         getSe2TransportOriginBeat={getSe2TransportOriginBeat}
         onSe2TransportToggle={onSe2TransportToggle}
         se2BeatsPerBar={se2BeatsPerBar}
+        beatPads808Lab={
+          harmonyTracks
+            ? {
+                trackId: track.id,
+                trackName: `${track.name ?? 'Beat Pads'} 808 Lab`,
+                songKeyRoot,
+                songKeyMode: songKeyMode as ChordMode,
+                studioTracks: harmonyTracks as readonly Se2Lab808ChordLockHarmonyTrack[],
+                lanePad: Math.max(2, String(harmonyTracks.length).length),
+                voice: beatPads808LabVoice,
+                onVoiceChange: setBeatPads808LabVoice,
+                getPreviewDestination: (ctx) =>
+                  getTrackStripInput?.() ?? getMasterOutput?.() ?? ctx.destination,
+                onExportToneGridToPianoRoll: onExportBeatPads808LabToPianoRoll,
+                onExportToneGridWavToTrack:
+                  onExportBeatPads808LabWavToTrack ?? onExportBeatPadsToAudioTrack,
+              }
+            : {
+                trackId: track.id,
+                trackName: `${track.name ?? 'Beat Pads'} 808 Lab`,
+                songKeyRoot,
+                songKeyMode: songKeyMode as ChordMode,
+                studioTracks: [],
+                lanePad: 2,
+                voice: beatPads808LabVoice,
+                onVoiceChange: setBeatPads808LabVoice,
+                getPreviewDestination: (ctx) =>
+                  getTrackStripInput?.() ?? getMasterOutput?.() ?? ctx.destination,
+                onExportToneGridToPianoRoll: onExportBeatPads808LabToPianoRoll,
+                onExportToneGridWavToTrack:
+                  onExportBeatPads808LabWavToTrack ?? onExportBeatPadsToAudioTrack,
+              }
+        }
       />
       </div>
     </div>

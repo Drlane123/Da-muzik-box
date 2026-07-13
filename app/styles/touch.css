@@ -601,12 +601,30 @@ html.touch-coarse .cs-pad-hit {
 }
 
 [data-studio-beat-pads-dock] .beat-pads-vocalbox-promo {
-  transform: translateX(2in);
+  transform: translateX(0.35in);
+}
+
+[data-studio-beat-pads-dock] .beat-pads-808lab-tab {
+  margin-left: 2px;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-808lab-stage {
+  position: relative;
+  min-height: 0;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-808lab-drop {
+  z-index: 80;
 }
 
 [data-studio-beat-pads-dock] .beat-pads-vocalbox-tagline {
   font-size: 15px !important;
   line-height: 1.25 !important;
+}
+
+[data-studio-beat-pads-dock] .beat-pads-808lab-chord-lock {
+  font-size: 7px !important;
+  letter-spacing: 0.08em !important;
 }
 
 [data-studio-beat-pads-dock] .beat-pads-pad-grid {

@@ -9,6 +9,8 @@ import {
 import {
   METER_DB_CEIL,
   METER_DB_FLOOR,
+  SPECTRUM_DB_CEIL,
+  SPECTRUM_DB_FLOOR,
   dbToVuPct,
   grToMeterPct,
   peakHoldStep,
@@ -40,8 +42,16 @@ export function dbToMeterPct(db: number, floorDb = METER_DB_FLOOR): number {
   return dbToVuPct(db, floorDb, METER_DB_CEIL);
 }
 
-function dbToSpectrumHeight(db: number): number {
-  return dbToVuPct(db, -72, -3);
+/** Spectrum bar height — 0% = SPECTRUM_DB_FLOOR, 100% = SPECTRUM_DB_CEIL. */
+export function dbToSpectrumHeight(db: number): number {
+  return dbToVuPct(db, SPECTRUM_DB_FLOOR, SPECTRUM_DB_CEIL);
+}
+
+/** Invert analyzer bar height % back to dBFS for the Top readout. */
+export function spectrumHeightToDb(pct: number): number {
+  if (!Number.isFinite(pct) || pct <= 0) return Number.NEGATIVE_INFINITY;
+  const t = Math.max(0, Math.min(100, pct)) / 100;
+  return SPECTRUM_DB_FLOOR + t * (SPECTRUM_DB_CEIL - SPECTRUM_DB_FLOOR);
 }
 
 function readSpectrumBands(
@@ -67,12 +77,17 @@ function readSpectrumBands(
     const hz1 = 10 ** (logMin + (logMax - logMin) * t1);
     const bin0 = Math.max(0, Math.floor(hz0 / binHz));
     const bin1 = Math.min(freqBuf.length - 1, Math.max(bin0, Math.ceil(hz1 / binHz)));
-    let peakDb = -120;
+    /** Power-average bins in the band (accurate vs peak-bin exaggeration). */
+    let sumPow = 0;
+    let count = 0;
     for (let b = bin0; b <= bin1; b++) {
       const db = freqBuf[b] ?? -120;
-      if (db > peakDb) peakDb = db;
+      if (!Number.isFinite(db) || db < -200) continue;
+      sumPow += 10 ** (db / 10);
+      count += 1;
     }
-    const h = dbToSpectrumHeight(peakDb);
+    const bandDb = count > 0 ? 10 * Math.log10(sumPow / count) : -120;
+    const h = dbToSpectrumHeight(bandDb);
     const prev = bandHold[i] ?? 0;
     const next = active ? Math.max(h, prev * decay) : prev * decay;
     bandHold[i] = next;
@@ -214,12 +229,12 @@ export function analyseMasteringBayMeters(
   const multi = idleMultiMeterSnap();
   const nugen = idleNugenMeterSnap();
 
-  const inL = readChannelMeter(taps.inputL, bufs.inL);
-  const inR = readChannelMeter(taps.inputR, bufs.inR);
-  const preL = readChannelMeter(taps.preLimiterL, bufs.preL);
-  const preR = readChannelMeter(taps.preLimiterR, bufs.preR);
-  const masterL = readChannelMeter(taps.masterL, bufs.masterL);
-  const masterR = readChannelMeter(taps.masterR, bufs.masterR);
+  const inL = readChannelMeter(taps.inputL, bufs.inL, { truePeakStride: 3 });
+  const inR = readChannelMeter(taps.inputR, bufs.inR, { truePeakStride: 3 });
+  const preL = readChannelMeter(taps.preLimiterL, bufs.preL, { truePeakStride: 3 });
+  const preR = readChannelMeter(taps.preLimiterR, bufs.preR, { truePeakStride: 3 });
+  const masterL = readChannelMeter(taps.masterL, bufs.masterL, { truePeakStride: 2 });
+  const masterR = readChannelMeter(taps.masterR, bufs.masterR, { truePeakStride: 2 });
 
   const signalActive =
     playing ||
@@ -363,8 +378,8 @@ export function analyseMasteringBayMeters(
     hold.tpHistory[idx] = tpHistVal;
     hold.historyIdx += 1;
   }
-  nugen.history = [...hold.history];
-  nugen.tpHistory = [...hold.tpHistory];
+  nugen.history = hold.history;
+  nugen.tpHistory = hold.tpHistory;
   // 0–100% band heights (same scale as the analyzer bars).
   nugen.histogram = multi.bands.slice(0, 12);
 

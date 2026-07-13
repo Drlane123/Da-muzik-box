@@ -319,7 +319,7 @@ export function studioInsertFxSuitePowered(rack: StudioTrackInsertFxRack): boole
   return rack.suiteOn === true;
 }
 
-/** Master power off — bypass suite and disarm every module (gate, comp, drive, …). */
+/** Master power off — hard bypass only. Keep module params / armed flags for A/B recall. */
 export function studioInsertFxSuiteMasterPowerOff(
   rack: StudioTrackInsertFxRack,
 ): StudioTrackInsertFxRack {
@@ -327,17 +327,6 @@ export function studioInsertFxSuiteMasterPowerOff(
   return {
     ...base,
     suiteOn: false,
-    analogSaturation: { level: 0 },
-    eq: { ...base.eq, enabled: false },
-    deEsser: { ...base.deEsser, enabled: false },
-    gate: { ...base.gate, enabled: false },
-    compressor: { ...base.compressor, enabled: false },
-    saturation: { ...base.saturation, enabled: false },
-    filter: { ...base.filter, enabled: false },
-    chorus: { ...base.chorus, enabled: false },
-    delay: { ...base.delay, enabled: false },
-    reverb: { ...base.reverb, enabled: false },
-    limiter: { ...base.limiter, enabled: false },
   };
 }
 
