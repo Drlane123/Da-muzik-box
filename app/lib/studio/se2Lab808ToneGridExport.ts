@@ -1,5 +1,6 @@
 /**
  * SE2 808 Lab — tone step grid → MIDI / WAV / piano-roll notes.
+ * Snare/clap timing strip is intentionally excluded — export is kick/bass tone grid only.
  */
 import type { Lab808ToneExportNote, Lab808ToneRenderOpts } from '@/app/lib/creationStation/lab808Export';
 import {

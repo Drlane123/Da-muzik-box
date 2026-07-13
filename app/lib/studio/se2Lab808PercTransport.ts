@@ -44,7 +44,7 @@ export function refillSe2Lab808PercOnTransport(args: {
   const bpb = Math.max(1, beatsPerBar);
   const stepBeats = bpb / SE2_LAB808_PERC_STEPS_PER_BAR;
   const beatNow = originBeat + Math.max(0, ctSnap - sessionStart) / spb;
-  const velocity = Math.max(0.08, Math.min(1.2, voice.percLevel * voice.output));
+  const velocity = Math.max(0.15, Math.min(1.35, (voice.percLevel ?? 1) * (voice.output ?? 1) * 1.15));
 
   const startK = Math.floor((beatNow - 0.25) / stepBeats);
   const endK = Math.ceil((beatNow + (horizon - ctSnap) / spb) / stepBeats);
@@ -65,8 +65,20 @@ export function refillSe2Lab808PercOnTransport(args: {
       const key = `lab808:${trackId}:perc:clap:${k}`;
       if (!scheduled.has(key)) {
         scheduled.add(key);
-        playSe2Lab808Clap(ctx, stripIn, when, velocity * 0.95);
+        playSe2Lab808Clap(ctx, stripIn, when, velocity);
       }
+    }
+  }
+
+  // Drop old keys so long sessions don't grow the set forever (no re-fire of recent k).
+  if (scheduled.size > 4000) {
+    const keepAfter = startK - SE2_LAB808_PERC_STEPS_PER_BAR * 4;
+    for (const key of [...scheduled]) {
+      if (!key.includes(`:${trackId}:perc:`)) continue;
+      const m = /:perc:(?:snare|clap):(-?\d+)$/.exec(key);
+      if (!m) continue;
+      const idx = Number(m[1]);
+      if (Number.isFinite(idx) && idx < keepAfter) scheduled.delete(key);
     }
   }
 }

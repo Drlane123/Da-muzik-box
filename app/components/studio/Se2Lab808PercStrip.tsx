@@ -164,10 +164,10 @@ export function Se2Lab808PercStrip({
     >
       <div className="flex items-center justify-between gap-2 min-w-0">
         <span className="text-[9px] font-black uppercase tracking-wide" style={{ color: accent }}>
-          Snare / Clap · 1-bar loop (16 steps)
+          Snare / Clap · timing only
         </span>
         <span className="text-[7px] font-semibold" style={{ color: '#9a9aac' }}>
-          Repeats every bar · click Snare/Clap to audition · 2&amp;4 for backbeat
+          1-bar loop · not in MIDI/WAV/To roll export · 2&amp;4 backbeat
         </span>
       </div>
       {row('snare', pattern.snare, snareColor, 'Snare')}

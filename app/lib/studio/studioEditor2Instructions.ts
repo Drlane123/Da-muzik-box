@@ -177,7 +177,7 @@ export const STUDIO_EDITOR2_HELP_SECTIONS: readonly StudioEditor2HelpSection[] =
       '**Generate roots** writes harmony roots onto the **tone grid**; **Regenerate** keeps the same key/roots but rolls a new pocket for the selected **Genre** (sparse kicks + breathing 808 root hits — not melodic runs).',
       '**Genre** — Trap · R&B · K-pop · Dance · Hip-hop · Drill — changes kick/808 pocket feel. Picking a genre also sets a sensible default **Quantize**.',
       '**Quantize** (1/4 · 1/8 · 1/16 · 1/32) next to Loop — Generate/Regenerate snap to that grid. Default **1/8** for Trap; Dance defaults to **1/4** four-on-the-floor.',
-      '**Snare / Clap** — sticky **1-bar (16-step)** strip at the **top** of the 808 Lab panel. Place a snappy 808 snare or clap (try **2&4**); it repeats every bar for your 4 / 8 / 16-bar tone grid and plays on Preview and SE2 transport.',
+      '**Snare / Clap** — sticky **timing-only** 1-bar strip at the top (Preview / SE2 play). Louder snappy 808 snare + clap for groove while you work — **not** included in MIDI / WAV / To roll / To track exports (kick/bass tone grid only).',
       '**Tone grid** — 16 piano-key lanes, 16th-note steps, **4 / 8 / 16-bar** loop. Tools: **Select** (drag steps), **Draw**, **Erase**, **Clear**. **Play / Stop** previews the loop; scrub bar numbers to move the playhead.',
       '**Grid** slider zooms the step grid in and out without changing your pattern.',
       '**Export** — **MIDI** or **WAV** download; **To roll** sends the grid to this track’s piano roll; **To track** bounces a WAV loop onto a new audio lane.',

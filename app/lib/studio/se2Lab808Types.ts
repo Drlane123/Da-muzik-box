@@ -86,7 +86,7 @@ export function se2Lab808DefaultVoice(): Se2Lab808VoiceParams {
     rootGenGenre: 'trap',
     percSnareSteps: emptySe2Lab808PercBar(),
     percClapSteps: emptySe2Lab808PercBar(),
-    percLevel: 0.88,
+    percLevel: 1,
   };
 }
 
