@@ -77,7 +77,7 @@ function AppBootFallback({ moduleName }: { moduleName?: string }) {
         gap: 10,
         minWidth: 0,
         minHeight: 0,
-        background: '#303030',
+        background: '#0a0a0a',
         color: '#9a9ab0',
       }}
     >

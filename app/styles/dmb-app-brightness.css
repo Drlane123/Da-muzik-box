@@ -41,8 +41,9 @@ body {
   scrollbar-color: #6e6e6e var(--dmb-cursor-panel) !important;
 }
 
-#boot-splash.muzik-boot-overlay {
-  /* Loading page only — keep darker than the lightened app shell */
+#boot-splash.muzik-boot-overlay,
+.muzik-boot-overlay {
+  /* Boot / loading pages only — darker than the lightened app shell */
   background: #0a0a0a !important;
 }
 
