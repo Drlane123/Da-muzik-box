@@ -27,6 +27,18 @@ export function se2Lab808PercTwoAndFourPattern(): Se2Lab808PercPattern {
   return { snare, clap };
 }
 
+/** Single hit on step 9 (1-based) = index 8 (beat 3). */
+export function se2Lab808PercStepNineBar(): boolean[] {
+  const bar = emptySe2Lab808PercBar();
+  bar[8] = true;
+  return bar;
+}
+
+export function se2Lab808PercStepNinePattern(): Se2Lab808PercPattern {
+  const bar = se2Lab808PercStepNineBar();
+  return { snare: [...bar], clap: [...bar] };
+}
+
 export function normalizeSe2Lab808PercBar(raw: readonly boolean[] | undefined): boolean[] {
   const out = emptySe2Lab808PercBar();
   if (!raw) return out;

@@ -4,6 +4,7 @@ import type { CSSProperties, PointerEvent } from 'react';
 import {
   SE2_LAB808_PERC_STEPS_PER_BAR,
   normalizeSe2Lab808PercPattern,
+  se2Lab808PercStepNineBar,
   se2Lab808PercToggleStep,
   se2Lab808PercTwoAndFourPattern,
   type Se2Lab808PercLane,
@@ -90,6 +91,14 @@ export function Se2Lab808PercStrip({
     preview(lane);
   };
 
+  const applyStepNine = (lane: Se2Lab808PercLane) => {
+    if (disabled) return;
+    const bar = se2Lab808PercStepNineBar();
+    if (lane === 'snare') onVoiceChange({ ...voice, percSnareSteps: bar });
+    else onVoiceChange({ ...voice, percClapSteps: bar });
+    preview(lane);
+  };
+
   const clearLane = (lane: Se2Lab808PercLane) => {
     if (disabled) return;
     if (lane === 'snare') onVoiceChange({ ...voice, percSnareSteps: pattern.snare.map(() => false) });
@@ -129,9 +138,19 @@ export function Se2Lab808PercStrip({
         className="rounded border px-1 text-[7px] font-bold uppercase shrink-0"
         style={{ borderColor: '#333340', color: '#8a8a98', minHeight: 18 }}
         onClick={() => applyTwoAndFour(lane)}
-        title={`Place ${title} on beats 2 & 4`}
+        title={`Place ${title} on beats 2 & 4 (steps 5 & 13)`}
       >
         2&4
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        className="rounded border px-1 text-[7px] font-bold uppercase shrink-0"
+        style={{ borderColor: '#333340', color: '#8a8a98', minHeight: 18 }}
+        onClick={() => applyStepNine(lane)}
+        title={`Place ${title} on step 9 (beat 3)`}
+      >
+        9
       </button>
       <button
         type="button"
@@ -167,7 +186,7 @@ export function Se2Lab808PercStrip({
           Snare / Clap · timing only
         </span>
         <span className="text-[7px] font-semibold" style={{ color: '#9a9aac' }}>
-          1-bar loop · not in MIDI/WAV/To roll export · 2&amp;4 backbeat
+          1-bar loop · not in export · presets 2&amp;4 · 9
         </span>
       </div>
       {row('snare', pattern.snare, snareColor, 'Snare')}

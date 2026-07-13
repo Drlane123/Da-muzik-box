@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   normalizeSe2Lab808PercPattern,
   se2Lab808PercHasHits,
+  se2Lab808PercStepNineBar,
   se2Lab808PercTwoAndFourPattern,
 } from '@/app/lib/studio/se2Lab808PercPattern';
 import { refillSe2Lab808PercOnTransport } from '@/app/lib/studio/se2Lab808PercTransport';
@@ -13,6 +14,12 @@ describe('se2Lab808 perc 1-bar loop', () => {
     expect(p.snare[4]).toBe(true);
     expect(p.snare[12]).toBe(true);
     expect(se2Lab808PercHasHits(p)).toBe(true);
+  });
+
+  test('step 9 preset hits index 8 only', () => {
+    const bar = se2Lab808PercStepNineBar();
+    expect(bar[8]).toBe(true);
+    expect(bar.filter(Boolean)).toHaveLength(1);
   });
 
   test('normalize pads short arrays to 16', () => {
