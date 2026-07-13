@@ -1,28 +1,8 @@
-import { lazy, Suspense } from 'react';
 import { Sparkles } from 'lucide-react';
 
+import AiMusicMatchTab from '@/app/components/aiMusicMatch/AiMusicMatchTab';
+
 const MINT = '#7cf4c6';
-
-const AiMusicMatchTab = lazy(() => import('@/app/components/aiMusicMatch/AiMusicMatchTab'));
-
-function MatchTabFallback() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center">
-      <div
-        className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin"
-        style={{ borderColor: `${MINT}44`, borderTopColor: MINT }}
-      />
-      <p className="text-sm font-bold" style={{ color: '#ccc' }}>
-        Opening AI Music Match…
-      </p>
-      <p className="text-[11px] max-w-sm leading-relaxed" style={{ color: '#666' }}>
-        First open in dev mode compiles this module once (often 30–90s). After that it opens instantly.
-        For immediate load, run <code className="text-[#888]">npm run build</code> then{' '}
-        <code className="text-[#888]">npm run preview</code>.
-      </p>
-    </div>
-  );
-}
 
 /** Standalone Music Match module — separate from AI Song Generator. */
 export default function AiMusicMatchScreen({
@@ -54,15 +34,10 @@ export default function AiMusicMatchScreen({
             </p>
           </div>
         </div>
-        <span className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded" style={{ color: MINT, background: `${MINT}15`, border: `1px solid ${MINT}33` }}>
-          Shell OK
-        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto overflow-x-hidden p-5 min-h-0 w-full">
-        <Suspense fallback={<MatchTabFallback />}>
-          <AiMusicMatchTab onOpenGrooveLab={onOpenGrooveLab} onExportStudio={onExportStudio} />
-        </Suspense>
+        <AiMusicMatchTab onOpenGrooveLab={onOpenGrooveLab} onExportStudio={onExportStudio} />
       </div>
     </div>
   );
