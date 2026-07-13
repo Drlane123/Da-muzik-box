@@ -27,6 +27,7 @@ import TitleBar from '@/app/components/TitleBar';
 import { MusicBoxOverviewModal } from '@/app/components/MusicBoxOverviewHub';
 import TouchDeviceBootstrap from '@/app/components/TouchDeviceBootstrap';
 import UiScaleBootstrap from '@/app/components/UiScaleBootstrap';
+import UiBrightnessBootstrap from '@/app/components/UiBrightnessBootstrap';
 import KeyboardShortcutsBootstrap from '@/app/components/KeyboardShortcutsBootstrap';
 import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
@@ -447,6 +448,7 @@ function AppContent() {
     <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#303030', color: '#f0f0f0' }}>
       <TouchDeviceBootstrap />
       <UiScaleBootstrap />
+      <UiBrightnessBootstrap />
       <KeyboardShortcutsBootstrap
         activeScreen={activeScreen}
         onOpenSettings={() => setShowSettings(true)}

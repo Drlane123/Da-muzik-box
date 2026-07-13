@@ -37,6 +37,13 @@ import {
   UI_SCALE_STEP,
   type UiScaleMode,
 } from '@/app/lib/uiScale';
+import {
+  clampUiBrightness,
+  UI_BRIGHTNESS_DEFAULT,
+  UI_BRIGHTNESS_MAX,
+  UI_BRIGHTNESS_MIN,
+  UI_BRIGHTNESS_STEP,
+} from '@/app/lib/uiBrightness';
 
 const CYAN = '#00E5FF';
 const PANEL_BG = '#0a0a10';
@@ -397,6 +404,72 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <option value="dark" style={{ background: INPUT_BG, color: '#e8e8f0' }}>Dark</option>
               <option value="light" style={{ background: INPUT_BG, color: '#e8e8f0' }}>Light</option>
             </select>
+
+            <label style={fieldLabel}>
+              Brightness — {Math.round(settings.uiBrightness * 100)}%
+              {Math.abs(settings.uiBrightness - UI_BRIGHTNESS_DEFAULT) < 0.001 ? ' (default)' : ''}
+            </label>
+            <input
+              type="range"
+              min={UI_BRIGHTNESS_MIN}
+              max={UI_BRIGHTNESS_MAX}
+              step={UI_BRIGHTNESS_STEP}
+              value={settings.uiBrightness}
+              onChange={(e) =>
+                updateSetting('uiBrightness', clampUiBrightness(parseFloat(e.target.value)))
+              }
+              style={{ width: '100%', marginBottom: 8, accentColor: CYAN }}
+            />
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              {(
+                [
+                  {
+                    label: 'Darker',
+                    onClick: () =>
+                      updateSetting(
+                        'uiBrightness',
+                        clampUiBrightness(settings.uiBrightness - UI_BRIGHTNESS_STEP),
+                      ),
+                  },
+                  {
+                    label: 'Default',
+                    onClick: () => updateSetting('uiBrightness', UI_BRIGHTNESS_DEFAULT),
+                  },
+                  {
+                    label: 'Brighter',
+                    onClick: () =>
+                      updateSetting(
+                        'uiBrightness',
+                        clampUiBrightness(settings.uiBrightness + UI_BRIGHTNESS_STEP),
+                      ),
+                  },
+                ] as const
+              ).map((btn) => (
+                <button
+                  key={btn.label}
+                  type="button"
+                  onClick={btn.onClick}
+                  style={{
+                    flex: 1,
+                    padding: '7px 8px',
+                    borderRadius: 6,
+                    border: `1px solid ${INPUT_BORDER}`,
+                    background: INPUT_BG,
+                    color: LABEL,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    letterSpacing: 0.4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {btn.label}
+                </button>
+              ))}
+            </div>
+            <p style={{ ...hint, marginTop: 0, marginBottom: 14 }}>
+              Soft lighten / darken for the whole app. Default matches the current chrome — accents stay the
+              same hue.
+            </p>
 
             <label style={fieldLabel}>Display size</label>
             <select

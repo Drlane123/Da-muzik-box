@@ -1,6 +1,6 @@
 /**
  * App shell — Cursor-style neutrals, lightened (~+16 luminance). Same grays, not a hue shift.
- * No brightness filter (that washed modules to light gray).
+ * User brightness lives in Settings (`uiBrightness` → body filter via UiBrightnessBootstrap).
  */
 :root {
   --dmb-cursor-editor: #303030;
@@ -42,7 +42,8 @@ body {
 }
 
 #boot-splash.muzik-boot-overlay {
-  background: var(--dmb-cursor-editor) !important;
+  /* Loading page only — keep darker than the lightened app shell */
+  background: #0a0a0a !important;
 }
 
 /* Geno Build 1 / 2 fullscreen — hide Modules (returns on Minimize) */

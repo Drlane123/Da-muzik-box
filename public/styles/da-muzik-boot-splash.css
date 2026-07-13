@@ -10,7 +10,7 @@
   justify-content: flex-start;
   padding: clamp(14px, 3.5vh, 32px) 16px clamp(20px, 5vh, 48px);
   gap: 0;
-  background: #090a0f;
+  background: #0a0a0a;
   transition: opacity 0.55s ease, visibility 0.55s ease;
   overflow: hidden;
 }

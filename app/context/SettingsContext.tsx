@@ -7,6 +7,10 @@ import type { AudioLatencyHint, AudioSampleRateSetting } from '@/app/lib/audioDe
 import type { MidiPortRoutingMap } from '@/app/lib/midi/midiDevices';
 import type { UiScaleMode } from '@/app/lib/uiScale';
 import { clampUiScale } from '@/app/lib/uiScale';
+import {
+  clampUiBrightness,
+  UI_BRIGHTNESS_DEFAULT,
+} from '@/app/lib/uiBrightness';
 
 export interface Settings {
   masterVolume: number;
@@ -39,6 +43,11 @@ export interface Settings {
   uiScaleMode: UiScaleMode;
   /** Manual scale 0.70–1.00 (70%–100%). Ignored when `uiScaleMode` is `auto`. */
   uiScale: number;
+  /**
+   * Soft UI brighten / darken (1.0 = current lightened chrome).
+   * Range ~0.75–1.35 — does not replace Theme.
+   */
+  uiBrightness: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -58,6 +67,7 @@ const DEFAULT_SETTINGS: Settings = {
   touchInput: 'auto',
   uiScaleMode: 'auto',
   uiScale: 0.85,
+  uiBrightness: UI_BRIGHTNESS_DEFAULT,
 };
 
 interface SettingsContextType {
@@ -85,6 +95,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (parsed.uiScaleMode !== 'auto' && parsed.uiScaleMode !== 'manual') {
           merged.uiScaleMode = DEFAULT_SETTINGS.uiScaleMode;
         }
+        merged.uiBrightness = clampUiBrightness(
+          typeof parsed.uiBrightness === 'number'
+            ? parsed.uiBrightness
+            : DEFAULT_SETTINGS.uiBrightness,
+        );
         setSettings(merged);
       } catch (e) {
         console.error('Failed to load settings:', e);
