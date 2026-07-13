@@ -24,6 +24,10 @@ import {
   type Se2Lab808ToneGridLoopBars,
   type Se2Lab808ToneGridPattern,
 } from '@/app/lib/studio/se2Lab808DrumPattern';
+import {
+  emptySe2Lab808PercBar,
+  normalizeSe2Lab808PercBar,
+} from '@/app/lib/studio/se2Lab808PercPattern';
 import { se2Lab808NormalizeToneGridZoom } from '@/app/lib/studio/se2Lab808ToneGridLayout';
 
 export type { Se2Lab808ChordLock, Se2Lab808ChordLockSourceKind } from '@/app/lib/studio/se2Lab808ChordLock';
@@ -46,6 +50,12 @@ export type Se2Lab808VoiceParams = {
   toneGridZoom: number;
   /** Seed for regenerate root grid variations. */
   rootGenSeed?: number;
+  /** 1-bar snare steps (16ths) — repeats every bar for any tone-grid length. */
+  percSnareSteps: boolean[];
+  /** 1-bar clap steps (16ths) — repeats every bar. */
+  percClapSteps: boolean[];
+  /** Snare/clap level (× output). */
+  percLevel: number;
 };
 
 export function se2Lab808DefaultVoice(): Se2Lab808VoiceParams {
@@ -62,6 +72,9 @@ export function se2Lab808DefaultVoice(): Se2Lab808VoiceParams {
     toneGridLevel: 0.9,
     toneGridZoom: 1,
     rootGenSeed: 1,
+    percSnareSteps: emptySe2Lab808PercBar(),
+    percClapSteps: emptySe2Lab808PercBar(),
+    percLevel: 0.88,
   };
 }
 
@@ -101,6 +114,9 @@ export function se2Lab808VoiceFromTrackFields(tr: {
   lab808ChordLockKeyMode?: string;
   lab808RootGenSeed?: number;
   lab808ToneGridZoom?: number;
+  lab808PercSnareSteps?: readonly boolean[];
+  lab808PercClapSteps?: readonly boolean[];
+  lab808PercLevel?: number;
   /** @deprecated Old MPC grid — migrated to tone grid shape. */
   lab808DrumSteps?: readonly (readonly boolean[])[];
 }): Se2Lab808VoiceParams {
@@ -124,5 +140,11 @@ export function se2Lab808VoiceFromTrackFields(tr: {
         ? Math.max(1, Math.round(tr.lab808RootGenSeed))
         : base.rootGenSeed,
     toneGridZoom: se2Lab808NormalizeToneGridZoom(tr.lab808ToneGridZoom ?? base.toneGridZoom),
+    percSnareSteps: normalizeSe2Lab808PercBar(tr.lab808PercSnareSteps),
+    percClapSteps: normalizeSe2Lab808PercBar(tr.lab808PercClapSteps),
+    percLevel:
+      typeof tr.lab808PercLevel === 'number' && Number.isFinite(tr.lab808PercLevel)
+        ? Math.max(0.2, Math.min(1, tr.lab808PercLevel))
+        : base.percLevel,
   };
 }

@@ -19,6 +19,7 @@ import {
   type Se2Lab808ToneGridPattern,
 } from '@/app/lib/studio/se2Lab808DrumPattern';
 import { refillSe2Lab808DrumOnTransport } from '@/app/lib/studio/se2Lab808DrumTransport';
+import { refillSe2Lab808PercOnTransport } from '@/app/lib/studio/se2Lab808PercTransport';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 
@@ -140,6 +141,20 @@ export function useSe2Lab808ToneGridTransport({
       bpm: bpmRef.current,
       beatsPerBar: 4,
       trackVolume127: 127,
+      scheduled: scheduledRef.current,
+    });
+    refillSe2Lab808PercOnTransport({
+      ctx,
+      ctSnap,
+      horizon,
+      chainFloor: SE2_AUDIO_START_FLOOR_SEC,
+      trackId: LAB808_LOCAL_TRACK_ID,
+      voice: v,
+      stripIn: getPreviewDestination(ctx),
+      originBeat: originBeatRef.current,
+      sessionStart,
+      spb,
+      beatsPerBar: 4,
       scheduled: scheduledRef.current,
     });
   }, [getAudioContext, getPreviewDestination]);

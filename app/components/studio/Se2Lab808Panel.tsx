@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BASS_LOW_BASS_ORDER,
   BASS_LOW_BASS_PRESETS,
@@ -316,18 +316,33 @@ export function Se2Lab808Panel({
   }, []);
 
   const canGenerate = progressionRoots.length > 0;
+  const voiceRef = useRef(voice);
+  const rootsRef = useRef(progressionRoots);
+  const lockKeyRef = useRef(lockKey);
+  const seedRef = useRef(voice.rootGenSeed ?? 1);
+  voiceRef.current = voice;
+  rootsRef.current = progressionRoots;
+  lockKeyRef.current = lockKey;
+  useEffect(() => {
+    seedRef.current = voice.rootGenSeed ?? 1;
+  }, [voice.rootGenSeed]);
 
   const applyGeneratedGrid = useCallback(
     (seed: number) => {
+      const v = voiceRef.current;
+      const roots = rootsRef.current;
+      const key = lockKeyRef.current;
       const result = se2Lab808GenerateRootGridPattern({
-        roots: progressionRoots,
-        loopBars: voice.toneGridLoopBars,
-        soundLane: voice.soundLane,
-        tonePadBaseMidi: voice.tonePadBaseMidi,
+        roots,
+        loopBars: v.toneGridLoopBars,
+        soundLane: v.soundLane,
         seed,
+        keyRoot: key.keyRoot,
+        keyMode: key.keyMode === 'minor' ? 'minor' : 'major',
       });
+      seedRef.current = seed;
       onVoiceChange({
-        ...voice,
+        ...v,
         toneGridSteps: result.pattern,
         tonePadBaseMidi: result.tonePadBaseMidi,
         rootGenSeed: seed,
@@ -335,18 +350,19 @@ export function Se2Lab808Panel({
       setGridStatus(result.status);
       window.setTimeout(() => setGridStatus(null), 4500);
     },
-    [onVoiceChange, progressionRoots, voice],
+    [onVoiceChange],
   );
 
   const handleGenerateRoots = useCallback(() => {
     if (!canGenerate) return;
-    applyGeneratedGrid(voice.rootGenSeed ?? 1);
-  }, [applyGeneratedGrid, canGenerate, voice.rootGenSeed]);
+    applyGeneratedGrid(seedRef.current || 1);
+  }, [applyGeneratedGrid, canGenerate]);
 
   const handleRegenerateRoots = useCallback(() => {
     if (!canGenerate) return;
-    applyGeneratedGrid((voice.rootGenSeed ?? 1) + 1);
-  }, [applyGeneratedGrid, canGenerate, voice.rootGenSeed]);
+    // Always advance seed (ref-backed) so each click lands a new in-key pocket.
+    applyGeneratedGrid((seedRef.current || 1) + 1);
+  }, [applyGeneratedGrid, canGenerate]);
 
   const tonePadsShared = {
     voice,
@@ -424,8 +440,8 @@ export function Se2Lab808Panel({
                   <div className="flex flex-col gap-1 shrink-0 items-stretch">
                     <button
                       type="button"
-                      disabled={disabled || !canGenerate}
-                      style={genBtn('#ca8a04', canGenerate && !disabled, true)}
+                      disabled={!canGenerate}
+                      style={genBtn('#ca8a04', canGenerate, true)}
                       onClick={handleGenerateRoots}
                       title="Write chord / key roots onto the tone grid"
                     >
@@ -433,10 +449,10 @@ export function Se2Lab808Panel({
                     </button>
                     <button
                       type="button"
-                      disabled={disabled || !canGenerate}
-                      style={genBtn(accent, canGenerate && !disabled, true)}
+                      disabled={!canGenerate}
+                      style={genBtn(accent, canGenerate, true)}
                       onClick={handleRegenerateRoots}
-                      title="Try a new trap pocket for the same roots"
+                      title="Roll a new trap pocket + in-key fills (same key / roots)"
                     >
                       Regenerate
                     </button>

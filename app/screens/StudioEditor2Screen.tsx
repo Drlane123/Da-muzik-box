@@ -453,6 +453,7 @@ import {
   scheduleSe2Lab808Note,
 } from '@/app/lib/studio/se2Lab808Preview';
 import { refillSe2Lab808DrumOnTransport } from '@/app/lib/studio/se2Lab808DrumTransport';
+import { refillSe2Lab808PercOnTransport } from '@/app/lib/studio/se2Lab808PercTransport';
 import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
 import { se2Lab808ChordLockTrackFields } from '@/app/lib/studio/se2Lab808ChordLock';
 import {
@@ -1154,6 +1155,9 @@ type MockMusioTrack = {
   lab808ToneGridLoopBars?: number;
   lab808ToneGridSteps?: boolean[][];
   lab808ToneGridZoom?: number;
+  lab808PercSnareSteps?: boolean[];
+  lab808PercClapSteps?: boolean[];
+  lab808PercLevel?: number;
   lab808ChordLockEnabled?: boolean;
   lab808ChordLockSourceKind?: string;
   lab808ChordLockHarmonyTrackId?: string;
@@ -9166,6 +9170,7 @@ export default function StudioEditor2Screen({
 
       if (studioTrackIsLab808Channel(tr)) {
         const voice = se2Lab808VoicesRef.current[ti] ?? se2Lab808VoiceFromTrack(tr, undefined);
+        const strip = stripIn ?? ctx.destination;
         refillSe2Lab808DrumOnTransport({
           ctx,
           ctSnap,
@@ -9174,13 +9179,27 @@ export default function StudioEditor2Screen({
           trackId: tr.id,
           voice,
           toneGridSteps: voice.toneGridSteps,
-          stripIn: stripIn ?? ctx.destination,
+          stripIn: strip,
           originBeat: origin,
           sessionStart,
           spb,
           bpm: bpmRef.current,
           beatsPerBar: beatsPerBarRef.current,
           trackVolume127: trackVolumesRef.current[ti] ?? MIXER_UNITY_VOL,
+          scheduled,
+        });
+        refillSe2Lab808PercOnTransport({
+          ctx,
+          ctSnap,
+          horizon,
+          chainFloor,
+          trackId: tr.id,
+          voice,
+          stripIn: strip,
+          originBeat: origin,
+          sessionStart,
+          spb,
+          beatsPerBar: beatsPerBarRef.current,
           scheduled,
         });
       }
@@ -10847,6 +10866,9 @@ export default function StudioEditor2Screen({
               lab808ToneGridSteps: voice.toneGridSteps.map((row) => [...row]),
               lab808ToneGridZoom: voice.toneGridZoom,
               lab808RootGenSeed: voice.rootGenSeed,
+              lab808PercSnareSteps: Array.from({ length: 16 }, (_, i) => !!voice.percSnareSteps?.[i]),
+              lab808PercClapSteps: Array.from({ length: 16 }, (_, i) => !!voice.percClapSteps?.[i]),
+              lab808PercLevel: typeof voice.percLevel === 'number' ? voice.percLevel : 0.88,
               ...se2Lab808ChordLockTrackFields(voice.chordLock),
             }
           : t,
@@ -14114,6 +14136,9 @@ export default function StudioEditor2Screen({
         lab808TonePadBaseMidi: initVoice.tonePadBaseMidi,
         lab808ToneGridLoopBars: initVoice.toneGridLoopBars,
         lab808ToneGridSteps: initVoice.toneGridSteps.map((row) => [...row]),
+        lab808PercSnareSteps: [...initVoice.percSnareSteps],
+        lab808PercClapSteps: [...initVoice.percClapSteps],
+        lab808PercLevel: initVoice.percLevel,
         notes: rollNotes.sort((a, b) => a.startBeat - b.startBeat || a.pitch - b.pitch),
         audioClips: [],
       };
@@ -17402,6 +17427,9 @@ export default function StudioEditor2Screen({
       lab808TonePadBaseMidi: initVoice.tonePadBaseMidi,
       lab808ToneGridLoopBars: initVoice.toneGridLoopBars,
       lab808ToneGridSteps: initVoice.toneGridSteps.map((row) => [...row]),
+      lab808PercSnareSteps: [...initVoice.percSnareSteps],
+      lab808PercClapSteps: [...initVoice.percClapSteps],
+      lab808PercLevel: initVoice.percLevel,
       notes: [],
       audioClips: [],
     };
@@ -17708,6 +17736,10 @@ export default function StudioEditor2Screen({
                     lab808ChordLockKeyRoot: src.lab808ChordLockKeyRoot,
                     lab808ChordLockKeyMode: src.lab808ChordLockKeyMode,
                     lab808RootGenSeed: src.lab808RootGenSeed,
+                    lab808ToneGridZoom: src.lab808ToneGridZoom,
+                    lab808PercSnareSteps: src.lab808PercSnareSteps ? [...src.lab808PercSnareSteps] : undefined,
+                    lab808PercClapSteps: src.lab808PercClapSteps ? [...src.lab808PercClapSteps] : undefined,
+                    lab808PercLevel: src.lab808PercLevel,
                     trackKeyRoot: src.trackKeyRoot,
                     trackKeyMode: src.trackKeyMode,
                   }

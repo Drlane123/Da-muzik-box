@@ -7,6 +7,7 @@ import {
   normalizeSe2Lab808ToneGridPattern,
   se2Lab808NormalizeToneGridLoopBars,
 } from '@/app/lib/studio/se2Lab808DrumPattern';
+import { normalizeSe2Lab808PercBar } from '@/app/lib/studio/se2Lab808PercPattern';
 import {
   se2Lab808DefaultVoice,
   se2Lab808PatchLabel,
@@ -31,6 +32,10 @@ export type Se2Lab808TrackFields = {
   lab808ChordLockKeyMode?: string;
   lab808RootGenSeed?: number;
   lab808ToneGridZoom?: number;
+  /** 1-bar snare / clap (16ths) — repeats every bar. */
+  lab808PercSnareSteps?: boolean[];
+  lab808PercClapSteps?: boolean[];
+  lab808PercLevel?: number;
   /** @deprecated Migrated to tone grid — still read for old sessions. */
   lab808DrumSteps?: boolean[][];
 };
@@ -56,6 +61,9 @@ export function se2Lab808VoiceFromTrack(
     toneGridSteps: normalizeSe2Lab808ToneGridPattern(storedVoice.toneGridSteps ?? base.toneGridSteps, loopBars),
     toneGridZoom: storedVoice.toneGridZoom ?? base.toneGridZoom,
     rootGenSeed: storedVoice.rootGenSeed ?? base.rootGenSeed,
+    percSnareSteps: normalizeSe2Lab808PercBar(storedVoice.percSnareSteps ?? base.percSnareSteps),
+    percClapSteps: normalizeSe2Lab808PercBar(storedVoice.percClapSteps ?? base.percClapSteps),
+    percLevel: storedVoice.percLevel ?? base.percLevel,
   };
 }
 
@@ -92,6 +100,9 @@ export function se2DefaultLab808Track(partial?: {
     lab808TonePadBaseMidi: voice.tonePadBaseMidi,
     lab808ToneGridLoopBars: voice.toneGridLoopBars,
     lab808ToneGridSteps: voice.toneGridSteps.map((row) => [...row]),
+    lab808PercSnareSteps: [...voice.percSnareSteps],
+    lab808PercClapSteps: [...voice.percClapSteps],
+    lab808PercLevel: voice.percLevel,
     midiChannel: partial?.midiChannel,
     notes: [],
     audioClips: [],

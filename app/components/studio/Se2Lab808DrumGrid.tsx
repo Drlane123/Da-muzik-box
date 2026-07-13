@@ -40,6 +40,7 @@ import {
 } from '@/app/components/studio/Se2Lab808ToneGridPianoKeys';
 import { GrooveLabExportStrip } from '@/app/components/creation/GrooveLabExportStrip';
 import { Se2Lab808ToneGridZoomControl } from '@/app/components/studio/Se2Lab808ToneGridZoomControl';
+import { Se2Lab808PercStrip } from '@/app/components/studio/Se2Lab808PercStrip';
 import { GENO_LOOP_PIANO_GRID } from '@/app/lib/studio/se2SynthGenoLoopPianoRoll';
 import {
   SE2_LAB808_TONE_GRID_HEADER_H_BASE,
@@ -527,8 +528,26 @@ export function Se2Lab808DrumGrid({
             {Math.floor(playheadCol) + 1}/{stepCount}
           </span>
         </div>
+        <Se2Lab808ToneGridZoomControl
+          zoom={voice.toneGridZoom}
+          disabled={disabled}
+          onZoomChange={(toneGridZoom) => onVoiceChange({ ...voice, toneGridZoom })}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-start gap-2 min-w-0 mb-1">
+        <div className="min-w-0 grow" style={{ flexBasis: 280, maxWidth: '100%' }}>
+          <Se2Lab808PercStrip
+            voice={voice}
+            accent={accent}
+            disabled={false}
+            getAudioContext={getAudioContext}
+            getPreviewDestination={getPreviewDestination}
+            onVoiceChange={onVoiceChange}
+          />
+        </div>
         {toneGridExport ? (
-          <div className="flex items-center shrink-0" style={{ gap: 10 }}>
+          <div className="flex items-center shrink-0 self-end" style={{ gap: 10 }}>
             <GrooveLabExportStrip
               busy={toneGridExport.busy}
               status={toneGridExport.status}
@@ -571,11 +590,6 @@ export function Se2Lab808DrumGrid({
             ) : null}
           </div>
         ) : null}
-        <Se2Lab808ToneGridZoomControl
-          zoom={voice.toneGridZoom}
-          disabled={disabled}
-          onZoomChange={(toneGridZoom) => onVoiceChange({ ...voice, toneGridZoom })}
-        />
       </div>
 
       <div
