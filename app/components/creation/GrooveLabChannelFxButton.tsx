@@ -158,7 +158,7 @@ export function GrooveLabChannelFxButton({
             zIndex: FX_PANEL_Z,
             isolation: 'isolate',
             boxSizing: 'border-box',
-            background: '#0c0c12',
+            background: '#1e1e26',
             borderColor: 'rgba(129, 140, 248, 0.35)',
             boxShadow: '0 12px 40px rgba(0,0,0,0.92), 0 0 0 1px rgba(255,255,255,0.04)',
           }}

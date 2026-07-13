@@ -12,8 +12,8 @@ export const GENO_LOOP_PIANO_RULER_H_PX = 22;
 
 /** Piano-roll grid tokens — muted; bar/beat lines readable without competing with notes. */
 export const GENO_LOOP_PIANO_GRID = {
-  rowWhite: '#0c0c10',
-  rowBlack: '#08080c',
+  rowWhite: '#1e1e24',
+  rowBlack: '#18181e',
   rowBorder: 'rgba(255,255,255,0.028)',
   rowBorderC: 'rgba(255,255,255,0.058)',
   barLine: 'rgba(255,255,255,0.058)',

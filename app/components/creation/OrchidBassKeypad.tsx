@@ -269,9 +269,9 @@ export function OrchidBassKeypad({
             onClick={onRegenerateSubGuide}
             title="New in-key sub path for your chord columns — lights keys only (roll unchanged)"
             style={{
-              background: subGuideStepCount === 0 ? '#111' : '#1a2744',
+              background: subGuideStepCount === 0 ? '#242424' : '#1a2744',
               color: subGuideStepCount === 0 ? '#4b5563' : '#93c5fd',
-              border: `1px solid ${subGuideStepCount === 0 ? '#1a1a1a' : '#3b82f688'}`,
+              border: `1px solid ${subGuideStepCount === 0 ? '#2c2c2c' : '#3b82f688'}`,
               borderRadius: 5,
               padding: '2px 8px',
               fontSize: 8,
@@ -289,9 +289,9 @@ export function OrchidBassKeypad({
             onClick={onAuditionSubGuide}
             title="Hear the suggested sub roots across your chord columns"
             style={{
-              background: subGuideStepCount === 0 ? '#111' : '#0e2838',
+              background: subGuideStepCount === 0 ? '#242424' : '#0e2838',
               color: subGuideStepCount === 0 ? '#4b5563' : '#67e8f9',
-              border: `1px solid ${subGuideStepCount === 0 ? '#1a1a1a' : '#22d3ee55'}`,
+              border: `1px solid ${subGuideStepCount === 0 ? '#2c2c2c' : '#22d3ee55'}`,
               borderRadius: 5,
               padding: '2px 8px',
               fontSize: 8,
@@ -327,9 +327,9 @@ export function OrchidBassKeypad({
             onClick={onPushSubGuideToRoll}
             title="Write the lit sub path to the blue piano-roll lane"
             style={{
-              background: subGuideStepCount === 0 ? '#111' : '#2a1411',
+              background: subGuideStepCount === 0 ? '#242424' : '#2a1411',
               color: subGuideStepCount === 0 ? '#4b5563' : '#fdba74',
-              border: `1px solid ${subGuideStepCount === 0 ? '#1a1a1a' : '#ea580c'}`,
+              border: `1px solid ${subGuideStepCount === 0 ? '#2c2c2c' : '#ea580c'}`,
               borderRadius: 5,
               padding: '2px 8px',
               fontSize: 8,
@@ -360,9 +360,9 @@ export function OrchidBassKeypad({
             onClick={onClearAllSubRoots}
             title={`Remove all blue ${GROOVE_LAB_808_SUBROOTS_BANK_LABEL} notes from the piano roll — keeps green chords and amber melody`}
             style={{
-              background: subRootNoteCount === 0 ? '#111' : '#2a1411',
+              background: subRootNoteCount === 0 ? '#242424' : '#2a1411',
               color: subRootNoteCount === 0 ? '#4b5563' : '#fb923c',
-              border: `1px solid ${subRootNoteCount === 0 ? '#1a1a1a' : '#7c2d12'}`,
+              border: `1px solid ${subRootNoteCount === 0 ? '#2c2c2c' : '#7c2d12'}`,
               borderRadius: 5,
               padding: '2px 8px',
               fontSize: 8,
@@ -379,9 +379,9 @@ export function OrchidBassKeypad({
           onClick={() => onWriteToPianoRollChange(!writeToPianoRoll)}
           title="Write 808 sub roots to the piano roll (click a grid column first, or turn ADVANCE on)"
           style={{
-            background: writeToPianoRoll ? '#0e2838' : '#111',
+            background: writeToPianoRoll ? '#0e2838' : '#242424',
             color: writeToPianoRoll ? '#67e8f9' : '#6b7280',
-            border: `1px solid ${writeToPianoRoll ? '#3b82f688' : '#1a1a1a'}`,
+            border: `1px solid ${writeToPianoRoll ? '#3b82f688' : '#2c2c2c'}`,
             borderRadius: 5,
             padding: '2px 8px',
             fontSize: 8,
@@ -416,9 +416,9 @@ export function OrchidBassKeypad({
             onClick={() => onBassDrawNotesChange(!bassDrawNotes)}
             title="Paint blue 808 sub roots on the piano roll grid"
             style={{
-              background: bassDrawNotes ? '#1e3a8a' : '#111',
+              background: bassDrawNotes ? '#1e3a8a' : '#242424',
               color: bassDrawNotes ? '#bfdbfe' : '#6b7280',
-              border: `1px solid ${bassDrawNotes ? '#60a5fa' : '#1a1a1a'}`,
+              border: `1px solid ${bassDrawNotes ? '#60a5fa' : '#2c2c2c'}`,
               borderRadius: 5,
               padding: '2px 8px',
               fontSize: 8,
@@ -435,9 +435,9 @@ export function OrchidBassKeypad({
             onClick={() => onBassAutoAdvanceChange(!bassAutoAdvance)}
             title="After each sub key, move the edit column to the next step"
             style={{
-              background: bassAutoAdvance ? '#1a2e4a' : '#111',
+              background: bassAutoAdvance ? '#1a2e4a' : '#242424',
               color: bassAutoAdvance ? '#93c5fd' : '#6b7280',
-              border: `1px solid ${bassAutoAdvance ? '#3b82f688' : '#1a1a1a'}`,
+              border: `1px solid ${bassAutoAdvance ? '#3b82f688' : '#2c2c2c'}`,
               borderRadius: 5,
               padding: '2px 8px',
               fontSize: 8,
@@ -522,10 +522,10 @@ export function OrchidBassKeypad({
                   : suggested
                     ? 'linear-gradient(180deg,#431407 0%,#1c0a04 100%)'
                     : k.isBlack
-                      ? 'linear-gradient(180deg,#121218 0%,#08080c 100%)'
+                      ? 'linear-gradient(180deg,#121218 0%,#18181e 100%)'
                       : k.isDiatonic
                         ? 'linear-gradient(180deg,#1a2744 0%,#111827 100%)'
-                        : 'linear-gradient(180deg,#181818 0%,#0e0e0e 100%)',
+                        : 'linear-gradient(180deg,#2a2a2a 0%,#0e0e0e 100%)',
                 color: on || auditioning ? '#f0f9ff' : suggested ? '#fdba74' : k.isDiatonic ? '#93c5fd' : '#6b7280',
                 fontSize: k.isBlack ? 8 : 10,
                 fontWeight: 900,

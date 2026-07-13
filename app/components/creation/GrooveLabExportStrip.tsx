@@ -35,7 +35,7 @@ function exportBtn(
 ): CSSProperties {
   const lit = enabled || active;
   return {
-    background: active ? `${accent}28` : lit ? '#0c1520' : '#111',
+    background: active ? `${accent}28` : lit ? '#0c1520' : '#242424',
     color: lit ? accent : '#444',
     border: `1px solid ${active ? accent : lit ? accent + '66' : '#222'}`,
     borderRadius: 6,

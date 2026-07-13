@@ -762,7 +762,7 @@ export function StudioAllInOneFxPanel({
             borderBottom: `1px solid ${CHROME.bezel}`,
             background: dragging
               ? 'linear-gradient(180deg, #282832 0%, #181820 60%, #101018 100%)'
-              : 'linear-gradient(180deg, #1e1e28 0%, #12121a 60%, #0c0c12 100%)',
+              : 'linear-gradient(180deg, #1e1e28 0%, #12121a 60%, #1e1e26 100%)',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)',
           }}
         >
@@ -935,7 +935,7 @@ export function StudioAllInOneFxPanel({
           style={{
             height: SUITE_MODULE_BAY_H,
             border: `1px solid ${modAccent}33`,
-            background: 'linear-gradient(180deg, #0c0c12 0%, #06060c 100%)',
+            background: 'linear-gradient(180deg, #1e1e26 0%, #06060c 100%)',
             boxShadow: `inset 0 4px 16px rgba(0,0,0,0.5), 0 0 24px ${modAccent}0a`,
           }}
         >
@@ -972,7 +972,7 @@ export function StudioAllInOneFxPanel({
           className="shrink-0 px-3 py-1.5 flex items-center justify-between border-t"
           style={{
             borderColor: CHROME.bezel,
-            background: 'linear-gradient(0deg, #08080e 0%, #0c0c12 100%)',
+            background: 'linear-gradient(0deg, #08080e 0%, #1e1e26 100%)',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
           }}
         >

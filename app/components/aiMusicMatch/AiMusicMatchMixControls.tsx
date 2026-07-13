@@ -29,7 +29,7 @@ function MixChannel({
   return (
     <div
       className="flex flex-col gap-2 rounded-lg p-3 min-w-[160px] flex-1"
-      style={{ background: '#111', border: `1px solid ${color}44` }}
+      style={{ background: '#242424', border: `1px solid ${color}44` }}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-black uppercase tracking-widest" style={{ color }}>

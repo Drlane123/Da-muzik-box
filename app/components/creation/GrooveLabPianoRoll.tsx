@@ -1858,7 +1858,7 @@ export function GrooveLabPianoRoll({
             <button
               type="button"
               onClick={() => setPxPerCol(clampZoom(Math.round(pxPerCol * 1.35)))}
-              style={actionBtn('#111', '#a5f3fc', '#1a2e3a')}
+              style={actionBtn('#242424', '#a5f3fc', '#1a2e3a')}
               title="Zoom in quickly"
             >
               +
@@ -1909,15 +1909,15 @@ export function GrooveLabPianoRoll({
             type="button"
             onClick={selectAllNotes}
             disabled={allHits.length === 0}
-            style={actionBtn('#111', '#fde68a', '#3a3410')}
+            style={actionBtn('#242424', '#fde68a', '#3a3410')}
             title="Select every note (Ctrl+A) · Shift+click notes to add/remove from selection"
           >
             SEL ALL
           </button>
-          <button type="button" onClick={handleCopy} disabled={allHits.length === 0} style={actionBtn('#111', '#c4b5fd', '#3b2f5c')}>
+          <button type="button" onClick={handleCopy} disabled={allHits.length === 0} style={actionBtn('#242424', '#c4b5fd', '#3b2f5c')}>
             COPY
           </button>
-          <button type="button" onClick={handlePaste} disabled={!clipboard?.length} style={actionBtn('#111', '#86efac', '#1f3a29')}>
+          <button type="button" onClick={handlePaste} disabled={!clipboard?.length} style={actionBtn('#242424', '#86efac', '#1f3a29')}>
             PASTE
           </button>
           {onPreview ? (
@@ -1957,7 +1957,7 @@ export function GrooveLabPianoRoll({
               }
               clearSelection();
             }}
-            style={actionBtn('#111', '#f87171', '#3a1f1f')}
+            style={actionBtn('#242424', '#f87171', '#3a1f1f')}
           >
             CLR ALL
           </button>
@@ -2027,7 +2027,7 @@ export function GrooveLabPianoRoll({
               <button
                 type="button"
                 onClick={() => nudgeSelectedOctave(-1)}
-                style={actionBtn('#111', '#93c5fd', '#1a2e3a')}
+                style={actionBtn('#242424', '#93c5fd', '#1a2e3a')}
                 title="Down one octave"
               >
                 ◀ 8va
@@ -2035,7 +2035,7 @@ export function GrooveLabPianoRoll({
               <button
                 type="button"
                 onClick={() => nudgeSelectedOctave(1)}
-                style={actionBtn('#111', '#93c5fd', '#1a2e3a')}
+                style={actionBtn('#242424', '#93c5fd', '#1a2e3a')}
                 title="Up one octave"
               >
                 8va ▶
@@ -2065,7 +2065,7 @@ export function GrooveLabPianoRoll({
               <button
                 type="button"
                 onClick={deleteSelectedNotes}
-                style={actionBtn('#111', '#fca5a5', '#3a1f1f')}
+                style={actionBtn('#242424', '#fca5a5', '#3a1f1f')}
               >
                 DEL {selectedHits.length > 1 ? 'SEL' : 'NOTE'}
               </button>
@@ -2080,7 +2080,7 @@ export function GrooveLabPianoRoll({
                   }
                   disabled={primarySelected.sustainSlots < snapStep * 2}
                   style={{
-                    ...actionBtn('#111', '#fde68a', '#3a3410'),
+                    ...actionBtn('#242424', '#fde68a', '#3a3410'),
                     opacity: primarySelected.sustainSlots < snapStep * 2 ? 0.45 : 1,
                     cursor: primarySelected.sustainSlots < snapStep * 2 ? 'not-allowed' : 'pointer',
                   }}
@@ -2612,7 +2612,7 @@ export function GrooveLabPianoRoll({
                 width: gridWidth,
                 height: VEL_LANE_H,
                 borderTop: `1px solid ${CB_PIANO_MINT_BORDER}`,
-                background: '#08080c',
+                background: '#18181e',
                 boxSizing: 'border-box',
               }}
             >
@@ -2697,7 +2697,7 @@ export function GrooveLabPianoRoll({
 
 function toolBtn(on: boolean, color: string, bg: string): CSSProperties {
   return {
-    background: on ? bg : '#111',
+    background: on ? bg : '#242424',
     color: on ? color : '#6b7280',
     border: `1px solid ${on ? color + '66' : '#222'}`,
     borderRadius: 5,
@@ -2725,7 +2725,7 @@ function zoomIconBtn(): CSSProperties {
 
 function quantizeBtn(on: boolean): CSSProperties {
   return {
-    background: on ? '#0e2838' : '#111',
+    background: on ? '#0e2838' : '#242424',
     color: on ? '#67e8f9' : '#6b7280',
     border: `1px solid ${on ? '#22d3ee66' : '#222'}`,
     borderRadius: 4,

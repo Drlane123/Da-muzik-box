@@ -95,7 +95,7 @@ function PowerToggle({
         borderColor: on ? `${accent}88` : '#2a2a38',
         background: on
           ? `linear-gradient(145deg, ${accent}18 0%, #12121a 55%, #0a0a10 100%)`
-          : 'linear-gradient(145deg, #14141c 0%, #0c0c12 100%)',
+          : 'linear-gradient(145deg, #14141c 0%, #1e1e26 100%)',
         boxShadow: on ? `0 0 18px ${glow}, inset 0 1px 0 rgba(255,255,255,0.06)` : 'none',
       }}
     >

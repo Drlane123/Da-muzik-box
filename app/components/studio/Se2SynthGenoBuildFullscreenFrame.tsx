@@ -94,7 +94,7 @@ export function Se2SynthGenoBuildFullscreenFrame({
       data-studio-synth-geno-build-fullscreen
       className="fixed inset-0 z-[99900] flex flex-col w-screen h-[100dvh] max-w-none overflow-hidden"
       style={{
-        background: 'linear-gradient(165deg, #0c0c12 0%, #07070b 55%, #060609 100%)',
+        background: 'linear-gradient(165deg, #1e1e26 0%, #07070b 55%, #060609 100%)',
         color: '#dcdce8',
       }}
     >

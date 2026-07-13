@@ -148,9 +148,9 @@ export default function WaveformEditor({
   const selMax = selStart !== null && selEnd !== null ? Math.max(selStart, selEnd) : null;
 
   return (
-    <div className="flex flex-col flex-1" style={{ background: '#050505', border: '1px solid #1e1e1e', borderRadius: 8, minHeight: 0 }}>
+    <div className="flex flex-col flex-1" style={{ background: '#2a2a2a', border: '1px solid #303030', borderRadius: 8, minHeight: 0 }}>
       {/* Editor toolbar */}
-      <div className="flex items-center gap-2 px-3 py-2 shrink-0 flex-wrap" style={{ background: '#080808', borderBottom: '1px solid #1a1a1a', borderRadius: '8px 8px 0 0', gap: '8px' }}>
+      <div className="flex items-center gap-2 px-3 py-2 shrink-0 flex-wrap" style={{ background: '#2c2c2c', borderBottom: '1px solid #2c2c2c', borderRadius: '8px 8px 0 0', gap: '8px' }}>
         <div className="w-2 h-2 rounded-full shrink-0" style={{ background: trackColor }} />
         <span className="text-xs font-bold" style={{ color: trackColor }}>{trackName} — Waveform Editor</span>
 
@@ -158,11 +158,11 @@ export default function WaveformEditor({
 
         {/* Tool selector */}
         <button onClick={() => setTool('pointer')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-          style={{ background: tool === 'pointer' ? '#1a1a2a' : '#111', color: tool === 'pointer' ? '#00E5FF' : '#555', border: `1px solid ${tool === 'pointer' ? '#00E5FF44' : '#222'}` }}>
+          style={{ background: tool === 'pointer' ? '#1a1a2a' : '#242424', color: tool === 'pointer' ? '#00E5FF' : '#555', border: `1px solid ${tool === 'pointer' ? '#00E5FF44' : '#222'}` }}>
           <MousePointer size={10} /> Select
         </button>
         <button onClick={() => setTool('razor')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-          style={{ background: tool === 'razor' ? '#ff444422' : '#111', color: tool === 'razor' ? '#ff4444' : '#555', border: `1px solid ${tool === 'razor' ? '#ff444444' : '#222'}` }}>
+          style={{ background: tool === 'razor' ? '#ff444422' : '#242424', color: tool === 'razor' ? '#ff4444' : '#555', border: `1px solid ${tool === 'razor' ? '#ff444444' : '#222'}` }}>
           <Scissors size={10} /> Razor
         </button>
 
@@ -170,15 +170,15 @@ export default function WaveformEditor({
 
         {/* H Zoom */}
         <span className="text-xs" style={{ color: '#555' }}>H</span>
-        <button onClick={() => setHZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#111', color: '#666' }}><ZoomOut size={10} /></button>
+        <button onClick={() => setHZoom(z => Math.max(0.5, +(z - 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#242424', color: '#666' }}><ZoomOut size={10} /></button>
         <span className="text-xs font-mono w-8 text-center" style={{ color: '#00E5FF' }}>{hZoom.toFixed(1)}x</span>
-        <button onClick={() => setHZoom(z => Math.min(8, +(z + 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#111', color: '#666' }}><ZoomIn size={10} /></button>
+        <button onClick={() => setHZoom(z => Math.min(8, +(z + 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#242424', color: '#666' }}><ZoomIn size={10} /></button>
 
         {/* V Zoom */}
         <span className="text-xs ml-1" style={{ color: '#555' }}>V</span>
-        <button onClick={() => setVZoom(z => Math.max(1, +(z - 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#111', color: '#666' }}><ZoomOut size={10} /></button>
+        <button onClick={() => setVZoom(z => Math.max(1, +(z - 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#242424', color: '#666' }}><ZoomOut size={10} /></button>
         <span className="text-xs font-mono w-8 text-center" style={{ color: '#D500F9' }}>{vZoom.toFixed(1)}x</span>
-        <button onClick={() => setVZoom(z => Math.min(8, +(z + 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#111', color: '#666' }}><ZoomIn size={10} /></button>
+        <button onClick={() => setVZoom(z => Math.min(8, +(z + 0.25).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#242424', color: '#666' }}><ZoomIn size={10} /></button>
 
         {/* Loop from selection */}
         {selMin !== null && selMax !== null && (
@@ -198,11 +198,11 @@ export default function WaveformEditor({
       </div>
 
       {/* Timeline area */}
-      <div className="flex-1 overflow-auto min-h-0" style={{ background: '#050505' }}
+      <div className="flex-1 overflow-auto min-h-0" style={{ background: '#2a2a2a' }}
         onMouseMove={onRulerMouseMove} onMouseUp={onRulerMouseUp}>
         <div ref={timelineRef} style={{ width: timelineW, position: 'relative' }}>
           {/* Ruler with drag-select */}
-          <div className="sticky top-0 z-10 flex relative" style={{ height: 28, background: '#0a0a0a', borderBottom: '1px solid #1a1a1a' }}
+          <div className="sticky top-0 z-10 flex relative" style={{ height: 28, background: '#1c1c1c', borderBottom: '1px solid #2c2c2c' }}
             onMouseDown={onRulerMouseDown}>
             {Array.from({ length: totalBars }, (_, i) => {
               const bar = i + 1;
@@ -212,7 +212,7 @@ export default function WaveformEditor({
                   style={{
                     left: i * barW, width: barW, height: 28,
                     background: inSel ? 'rgba(0,229,255,0.18)' : 'transparent',
-                    borderLeft: `1px solid ${i % 4 === 0 ? '#2a2a2a' : '#111'}`,
+                    borderLeft: `1px solid ${i % 4 === 0 ? '#2a2a2a' : '#242424'}`,
                     color: inSel ? '#00E5FF' : '#444',
                     fontSize: 9, fontFamily: 'monospace', fontWeight: 'bold',
                     cursor: tool === 'pointer' ? 'col-resize' : 'default',
@@ -247,7 +247,7 @@ export default function WaveformEditor({
           >
             {/* Grid lines */}
             {Array.from({ length: totalBars }, (_, i) => (
-              <div key={i} className="absolute top-0 h-full" style={{ left: i * barW, width: 1, background: i % 4 === 0 ? '#1a1a1a' : '#0d0d0d' }} />
+              <div key={i} className="absolute top-0 h-full" style={{ left: i * barW, width: 1, background: i % 4 === 0 ? '#2c2c2c' : '#0d0d0d' }} />
             ))}
 
             <LoopVerticalGuides
@@ -332,7 +332,7 @@ export default function WaveformEditor({
               style={{ left: playheadLeftPx, width: 1.5, background: '#D500F9', boxShadow: '0 0 8px #D500F9', zIndex: 20 }} />
           </div>
 
-          <div className="px-3 py-1" style={{ background: '#060606', borderTop: '1px solid #111' }}>
+          <div className="px-3 py-1" style={{ background: '#060606', borderTop: '1px solid #242424' }}>
             <span className="text-[9px] font-mono" style={{ color: '#555' }}>
               Clip blocks · Razor tool adds cut markers
             </span>

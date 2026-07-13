@@ -41,14 +41,14 @@ export default function Goniometer({ size = 80, masterLevel }: GoniometerProps) 
       ctx.fillRect(0, 0, W, H);
 
       // Background circle
-      ctx.strokeStyle = '#1a1a1a';
+      ctx.strokeStyle = '#2c2c2c';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
       ctx.stroke();
 
       // Center crosshair
-      ctx.strokeStyle = '#1e1e1e';
+      ctx.strokeStyle = '#303030';
       ctx.lineWidth = 0.5;
       ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx, H - 2); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(2, cy); ctx.lineTo(W - 2, cy); ctx.stroke();
@@ -106,7 +106,7 @@ export default function Goniometer({ size = 80, masterLevel }: GoniometerProps) 
       // Correlation bar at bottom
       const corr = transport === 'playing' ? (0.5 + masterLevel * 0.5) : 0.5;
       const corrW = (W - 8) * corr;
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = '#242424';
       ctx.fillRect(4, H - 7, W - 8, 4);
       ctx.fillStyle = corr > 0.7 ? '#00e676' : corr > 0.4 ? '#ffcc00' : '#ff2222';
       ctx.fillRect(4, H - 7, corrW, 4);
@@ -121,7 +121,7 @@ export default function Goniometer({ size = 80, masterLevel }: GoniometerProps) 
   return (
     <div className="flex flex-col items-center gap-0.5">
       <canvas ref={canvasRef} width={size} height={size}
-        style={{ display: 'block', borderRadius: '50%', border: '1px solid #1e1e1e', background: '#000' }} />
+        style={{ display: 'block', borderRadius: '50%', border: '1px solid #303030', background: '#000' }} />
       <span style={{ fontSize: 7, color: '#444', fontFamily: 'monospace' }}>GONIO</span>
     </div>
   );

@@ -195,7 +195,7 @@ export function BeatLabMelodicSynthView({
           display: 'flex',
           flexDirection: 'column',
           borderRight: '1px solid #1e1e24',
-          background: '#08080c',
+          background: '#18181e',
           overflowY: 'auto',
         }}
       >
@@ -210,7 +210,7 @@ export function BeatLabMelodicSynthView({
             fontSize: 7,
             fontWeight: 800,
             color: '#5a5a68',
-            borderBottom: '1px solid #1e1e1e',
+            borderBottom: '1px solid #303030',
           }}
         >
           CH
@@ -343,7 +343,7 @@ export function BeatLabMelodicSynthView({
                 height: BEAT_LAB_SYNTH_HEADER_H,
                 background: '#0a0a0e',
                 borderRight: '1px solid #2a2a36',
-                borderBottom: '1px solid #1e1e1e',
+                borderBottom: '1px solid #303030',
                 display: 'flex',
                 alignItems: 'flex-end',
                 justifyContent: 'center',
@@ -364,8 +364,8 @@ export function BeatLabMelodicSynthView({
                 marginLeft: BEAT_LAB_SYNTH_KEY_W,
                 height: BEAT_LAB_SYNTH_RULER_H,
                 display: 'flex',
-                background: '#080808',
-                borderBottom: '1px solid #1e1e1e',
+                background: '#2c2c2c',
+                borderBottom: '1px solid #303030',
               }}
             >
               {Array.from({ length: patternCols }, (_, col) => {
@@ -394,7 +394,7 @@ export function BeatLabMelodicSynthView({
                         ? 'rgba(124, 244, 198, 0.18)'
                         : isBarStart
                           ? '#101018'
-                          : '#080808',
+                          : '#2c2c2c',
                       color: lit ? '#7cf4c6' : '#4a4a58',
                       fontSize: 7,
                       fontWeight: 700,

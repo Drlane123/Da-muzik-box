@@ -605,7 +605,7 @@ export function ChordBuilderPianoRoll({
                 boxSizing: 'border-box',
                 width: PIANO_LABEL_W,
                 flexShrink: 0,
-                background: '#08080c',
+                background: '#18181e',
                 borderRight: '1px solid rgba(124,244,198,0.18)',
                 position: 'sticky',
                 left: 0,
@@ -836,7 +836,7 @@ export function ChordBuilderPianoRoll({
                   display: 'flex',
                   alignItems: 'stretch',
                   height: PIANO_ROW_H,
-                  background: isBlack ? '#08080c' : '#0c0c10',
+                  background: isBlack ? '#18181e' : '#1e1e24',
                   borderBottom: isC
                     ? '1px solid rgba(124,244,198,0.10)'
                     : '1px solid rgba(255,255,255,0.02)',

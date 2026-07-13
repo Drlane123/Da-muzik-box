@@ -76,7 +76,7 @@ function AppBootFallback({ moduleName }: { moduleName?: string }) {
         gap: 10,
         minWidth: 0,
         minHeight: 0,
-        background: '#1e1e1e',
+        background: '#303030',
         color: '#9a9ab0',
       }}
     >
@@ -134,7 +134,7 @@ class LazyScreenErrorBoundary extends React.Component<
             gap: 12,
             height: '100%',
             padding: 24,
-            background: '#252526',
+            background: '#383839',
             color: '#e8e8f0',
             textAlign: 'center',
           }}
@@ -202,7 +202,7 @@ class StudioEditor2ErrorBoundary extends React.Component<
             gap: 12,
             height: '100%',
             padding: 24,
-            background: '#252526',
+            background: '#383839',
             color: '#e8e8f0',
             textAlign: 'center',
           }}
@@ -444,7 +444,7 @@ function AppContent() {
   }
 
   return (
-    <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#1e1e1e', color: '#e8e8e8' }}>
+    <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#303030', color: '#f0f0f0' }}>
       <TouchDeviceBootstrap />
       <UiScaleBootstrap />
       <KeyboardShortcutsBootstrap
@@ -471,7 +471,7 @@ function AppContent() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <main
           className="flex-1 min-w-0 min-h-0 overflow-hidden relative w-full"
-          style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', background: '#1e1e1e' }}
+          style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', background: '#303030' }}
         >
           <LazyScreenMount active={activeScreen === 'vocal-lab'} moduleName="Vocal Lab">
             {activeScreen === 'vocal-lab' ? (

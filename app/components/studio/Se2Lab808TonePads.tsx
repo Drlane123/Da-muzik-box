@@ -52,7 +52,7 @@ function tonePadSurface(
   const accent = playing ? '#fde68a' : lockedChord ? '#7cf4c6' : lane === 'kick' ? '#ca8a04' : '#22c55e';
   const mix = playing ? 88 : blackKey ? 42 : 62;
   const base = blackKey ? '#0a0a0e' : '#14141c';
-  return `linear-gradient(165deg, color-mix(in srgb, ${accent} ${mix}%, ${base}) 0%, #0c0c10 100%)`;
+  return `linear-gradient(165deg, color-mix(in srgb, ${accent} ${mix}%, ${base}) 0%, #1e1e24 100%)`;
 }
 
 function tonePadBorder(lane: Lab808SoundLane, playing: boolean, lockedChord: boolean): string {

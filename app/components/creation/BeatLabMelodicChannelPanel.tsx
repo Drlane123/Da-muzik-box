@@ -217,7 +217,7 @@ export function BeatLabMelodicChannelPanel({
           position: 'relative',
           height: 52,
           borderRadius: 6,
-          background: 'linear-gradient(180deg, #121218 0%, #08080c 100%)',
+          background: 'linear-gradient(180deg, #121218 0%, #18181e 100%)',
           border: '1px solid #1e1e28',
           padding: '4px 6px 6px',
           userSelect: 'none',

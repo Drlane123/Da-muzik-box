@@ -161,7 +161,7 @@ export function Lab808DualPadDeck({
         display: 'flex',
         flexDirection: 'column',
         borderBottom: bank === 'drums' ? 'none' : '1px solid rgba(124, 244, 198, 0.18)',
-        background: 'linear-gradient(180deg, #14141c 0%, #0c0c10 100%)',
+        background: 'linear-gradient(180deg, #14141c 0%, #1e1e24 100%)',
         overflow: 'hidden',
       }}
     >

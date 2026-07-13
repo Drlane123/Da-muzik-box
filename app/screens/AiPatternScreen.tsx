@@ -775,9 +775,9 @@ export default function AiPatternScreen({
   }, []);
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}>
+    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
+      <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="p-1.5 rounded hover:bg-slate-800 transition-colors" style={{ color: '#888' }}>
             <SkipBack size={18} />
@@ -803,29 +803,29 @@ export default function AiPatternScreen({
         </div>
         <div className="flex gap-2 items-center">
           {/* Pattern Playback Controls */}
-          <div className="flex gap-1 px-3 py-1.5 rounded" style={{ background: '#1a1a1a', border: '1px solid #333' }}>
+          <div className="flex gap-1 px-3 py-1.5 rounded" style={{ background: '#2c2c2c', border: '1px solid #333' }}>
             {/* Reverse */}
             <button onClick={reversePattern} className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-all hover:scale-110"
-              style={{ background: '#111', color: '#666', cursor: 'pointer' }}>
+              style={{ background: '#242424', color: '#666', cursor: 'pointer' }}>
               <Rewind size={14} />
             </button>
 
             {/* Play/Stop */}
             <button onClick={() => patternPlaying ? stopPattern() : playPattern()} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold transition-all"
-              style={{ background: patternPlaying ? '#ff6b3522' : '#111', color: patternPlaying ? '#ff6b35' : '#666', cursor: 'pointer' }}>
+              style={{ background: patternPlaying ? '#ff6b3522' : '#242424', color: patternPlaying ? '#ff6b35' : '#666', cursor: 'pointer' }}>
               {patternPlaying ? <Pause size={14} /> : <Play size={14} />}
             </button>
 
             {/* Fast Forward */}
             <button onClick={fastForwardPattern} className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-all hover:scale-110"
-              style={{ background: '#111', color: '#666', cursor: 'pointer' }}>
+              style={{ background: '#242424', color: '#666', cursor: 'pointer' }}>
               <FastForward size={14} />
             </button>
 
           </div>
 
           {/* Tempo Selector - Neon Arrows Only */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded" style={{ background: '#1a1a1a', border: '1px solid #333' }}>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded" style={{ background: '#2c2c2c', border: '1px solid #333' }}>
             <label className="text-xs" style={{ color: '#666' }}>
               AI Local: {patternTempo} BPM
             </label>
@@ -866,7 +866,7 @@ export default function AiPatternScreen({
                 disabled={padExportBusy}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
                 style={{
-                  background: padExportBusy ? '#1a1a1a' : 'linear-gradient(135deg, #7cf4c6, #00E5FF)',
+                  background: padExportBusy ? '#2c2c2c' : 'linear-gradient(135deg, #7cf4c6, #00E5FF)',
                   color: padExportBusy ? '#555' : '#000',
                   border: `1px solid ${padExportBusy ? '#222' : 'transparent'}`,
                   cursor: padExportBusy ? 'not-allowed' : 'pointer',
@@ -955,7 +955,7 @@ export default function AiPatternScreen({
 
           {/* Export Button */}
           <button onClick={() => setShowExportModal(true)} disabled={selectedTracksForExport.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold" 
-            style={{ background: selectedTracksForExport.length === 0 ? '#1a1a1a' : 'linear-gradient(135deg, #00E5FF, #D500F9)', color: selectedTracksForExport.length === 0 ? '#555' : '#000', border: `1px solid ${selectedTracksForExport.length === 0 ? '#222' : 'transparent'}`, cursor: selectedTracksForExport.length === 0 ? 'not-allowed' : 'pointer' }}>
+            style={{ background: selectedTracksForExport.length === 0 ? '#2c2c2c' : 'linear-gradient(135deg, #00E5FF, #D500F9)', color: selectedTracksForExport.length === 0 ? '#555' : '#000', border: `1px solid ${selectedTracksForExport.length === 0 ? '#222' : 'transparent'}`, cursor: selectedTracksForExport.length === 0 ? 'not-allowed' : 'pointer' }}>
             <Download size={11} /> Export ({selectedTracksForExport.length})
           </button>
         </div>
@@ -964,7 +964,7 @@ export default function AiPatternScreen({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
         {/* Section 1: AI Engine Info */}
-        <div className="rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>AI Pattern Engine</span>
             <button onClick={() => setShowModelInfo(!showModelInfo)} className="p-1 rounded hover:bg-slate-800" style={{ color: '#888' }}>
@@ -972,7 +972,7 @@ export default function AiPatternScreen({
             </button>
           </div>
           {showModelInfo && (
-            <div className="mb-3 p-3 rounded-lg text-xs" style={{ background: '#111', border: '1px solid #1a1a1a', color: '#999', lineHeight: 1.5 }}>
+            <div className="mb-3 p-3 rounded-lg text-xs" style={{ background: '#242424', border: '1px solid #2c2c2c', color: '#999', lineHeight: 1.5 }}>
               <p style={{ marginBottom: 8 }}>
                 <strong>Magenta MusicRNN</strong> (official <code>drum_kit_rnn</code> + <code>basic_rnn</code> checkpoints) loads in the background when you open this screen, then generates drums and melody first. A fast <strong>procedural fallback</strong> runs if a model fails or times out (~2 min). Styles bias priming and lanes; tempo follows the AI local clock in this screen. Up to 3 versions per lane, then export to Studio.
               </p>
@@ -984,7 +984,7 @@ export default function AiPatternScreen({
         </div>
 
         {/* Section 2: Track Selector with Volume */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a78bfa' }}>Select lane (session CH)</span>
             <button
@@ -993,7 +993,7 @@ export default function AiPatternScreen({
               disabled={tracks.length >= MAX_AI_PATTERN_LANES}
               className="flex items-center gap-1 px-2 py-1 rounded text-10px font-bold"
               style={{
-                background: tracks.length >= MAX_AI_PATTERN_LANES ? '#1a1a1a' : '#00E5FF18',
+                background: tracks.length >= MAX_AI_PATTERN_LANES ? '#2c2c2c' : '#00E5FF18',
                 color: tracks.length >= MAX_AI_PATTERN_LANES ? '#444' : '#00E5FF',
                 border: `1px solid ${tracks.length >= MAX_AI_PATTERN_LANES ? '#222' : '#00E5FF44'}`,
                 cursor: tracks.length >= MAX_AI_PATTERN_LANES ? 'not-allowed' : 'pointer',
@@ -1007,7 +1007,7 @@ export default function AiPatternScreen({
                 <span className="text-10px font-mono" style={{ color: '#00ff88' }}>{currentTrack.volume}%</span>
                 <div className="flex gap-0.5">
                   {Array.from({ length: 10 }, (_, i) => (
-                    <div key={i} className="w-1 rounded-sm transition-all" style={{ height: 12, background: i < Math.round(currentTrack.volume / 10) ? (currentTrack.volume < 30 ? '#0066ff' : currentTrack.volume < 70 ? '#00ff88' : '#ffcc00') : '#1a1a1a', boxShadow: i < Math.round(currentTrack.volume / 10) ? `0 0 4px ${currentTrack.volume < 30 ? '#0066ff' : currentTrack.volume < 70 ? '#00ff88' : '#ffcc00'}` : 'none' }} />
+                    <div key={i} className="w-1 rounded-sm transition-all" style={{ height: 12, background: i < Math.round(currentTrack.volume / 10) ? (currentTrack.volume < 30 ? '#0066ff' : currentTrack.volume < 70 ? '#00ff88' : '#ffcc00') : '#2c2c2c', boxShadow: i < Math.round(currentTrack.volume / 10) ? `0 0 4px ${currentTrack.volume < 30 ? '#0066ff' : currentTrack.volume < 70 ? '#00ff88' : '#ffcc00'}` : 'none' }} />
                   ))}
                 </div>
               </div>
@@ -1024,7 +1024,7 @@ export default function AiPatternScreen({
               return (
                 <div key={idx} className="flex flex-col gap-1">
                   <button onClick={() => setCurrentTrackIdx(idx)} className="p-2 rounded text-10px font-semibold flex flex-col gap-1.5"
-                    style={{ background: currentTrackIdx === idx ? '#a78bfa22' : '#111', color: currentTrackIdx === idx ? '#a78bfa' : '#555', border: `1px solid ${currentTrackIdx === idx ? '#a78bfa44' : '#222'}`, cursor: 'pointer', minHeight: 80, flex: 1 }}>
+                    style={{ background: currentTrackIdx === idx ? '#a78bfa22' : '#242424', color: currentTrackIdx === idx ? '#a78bfa' : '#555', border: `1px solid ${currentTrackIdx === idx ? '#a78bfa44' : '#222'}`, cursor: 'pointer', minHeight: 80, flex: 1 }}>
                     <div className="font-mono text-8px" style={{ color: '#666' }}>CH{sessionCh}</div>
                     <div className="font-bold">{name.includes('(') ? name.split('(')[0].trim() : name}</div>
                     
@@ -1033,8 +1033,8 @@ export default function AiPatternScreen({
                       {Array.from({ length: 10 }, (_, i) => (
                         <div key={i} className="flex-1 rounded-sm transition-all" 
                           style={{ 
-                            background: i < meterLevel ? ledColor : '#0a0a0a', 
-                            border: `1px solid ${i < meterLevel ? ledColor + '66' : '#1a1a1a'}`,
+                            background: i < meterLevel ? ledColor : '#1c1c1c', 
+                            border: `1px solid ${i < meterLevel ? ledColor + '66' : '#2c2c2c'}`,
                             boxShadow: i < meterLevel ? `0 0 3px ${ledColor}` : 'none',
                             height: 3
                           }} />
@@ -1056,7 +1056,7 @@ export default function AiPatternScreen({
                         return updated;
                       });
                     }} className="flex-1 py-1 rounded text-8px font-bold transition-colors hover:bg-slate-800"
-                      style={{ background: '#1a1a1a', color: '#666', border: '1px solid #333', cursor: 'pointer' }}>
+                      style={{ background: '#2c2c2c', color: '#666', border: '1px solid #333', cursor: 'pointer' }}>
                       −
                     </button>
                     <button onClick={e => {
@@ -1067,7 +1067,7 @@ export default function AiPatternScreen({
                         return updated;
                       });
                     }} className="flex-1 py-1 rounded text-8px font-bold transition-colors hover:bg-slate-800"
-                      style={{ background: '#1a1a1a', color: '#666', border: '1px solid #333', cursor: 'pointer' }}>
+                      style={{ background: '#2c2c2c', color: '#666', border: '1px solid #333', cursor: 'pointer' }}>
                       +
                     </button>
                   </div>
@@ -1090,7 +1090,7 @@ export default function AiPatternScreen({
         </div>
 
         {/* Section 2b: Sequencing Mode */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#f472b6' }}>Sequencing Mode</span>
           <div className="flex gap-2">
             <button onClick={() => setTracks(prev => {
@@ -1098,7 +1098,7 @@ export default function AiPatternScreen({
               updated[currentTrackIdx].sequenceMode = 'steps';
               return updated;
             })} className="flex-1 py-2 rounded text-sm font-bold"
-              style={{ background: currentTrack.sequenceMode === 'steps' ? '#f472b622' : '#111', color: currentTrack.sequenceMode === 'steps' ? '#f472b6' : '#555', border: `1px solid ${currentTrack.sequenceMode === 'steps' ? '#f472b644' : '#222'}`, cursor: 'pointer' }}>
+              style={{ background: currentTrack.sequenceMode === 'steps' ? '#f472b622' : '#242424', color: currentTrack.sequenceMode === 'steps' ? '#f472b6' : '#555', border: `1px solid ${currentTrack.sequenceMode === 'steps' ? '#f472b644' : '#222'}`, cursor: 'pointer' }}>
               Step Grid
             </button>
             <button onClick={() => setTracks(prev => {
@@ -1106,7 +1106,7 @@ export default function AiPatternScreen({
               updated[currentTrackIdx].sequenceMode = 'bars';
               return updated;
             })} className="flex-1 py-2 rounded text-sm font-bold"
-              style={{ background: currentTrack.sequenceMode === 'bars' ? '#f472b622' : '#111', color: currentTrack.sequenceMode === 'bars' ? '#f472b6' : '#555', border: `1px solid ${currentTrack.sequenceMode === 'bars' ? '#f472b644' : '#222'}`, cursor: 'pointer' }}>
+              style={{ background: currentTrack.sequenceMode === 'bars' ? '#f472b622' : '#242424', color: currentTrack.sequenceMode === 'bars' ? '#f472b6' : '#555', border: `1px solid ${currentTrack.sequenceMode === 'bars' ? '#f472b644' : '#222'}`, cursor: 'pointer' }}>
               Bar Mode
             </button>
           </div>
@@ -1116,12 +1116,12 @@ export default function AiPatternScreen({
         </div>
 
         {/* Section 2c: Loop Length */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffcc00' }}>Pattern Length</span>
           <div className="flex gap-2">
             {LOOP_LENGTHS.map(len => (
               <button key={len} onClick={() => setLoopLength(len)} className="flex-1 py-2 rounded text-sm font-bold"
-                style={{ background: loopLength === len ? '#ffcc0022' : '#111', color: loopLength === len ? '#ffcc00' : '#555', border: `1px solid ${loopLength === len ? '#ffcc0044' : '#222'}`, cursor: 'pointer' }}>
+                style={{ background: loopLength === len ? '#ffcc0022' : '#242424', color: loopLength === len ? '#ffcc00' : '#555', border: `1px solid ${loopLength === len ? '#ffcc0044' : '#222'}`, cursor: 'pointer' }}>
                 {len} Bar{len > 1 ? 's' : ''}
               </button>
             ))}
@@ -1133,7 +1133,7 @@ export default function AiPatternScreen({
 
         {/* Section 3: Instrument & Style */}
         <div className="grid gap-4" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>Instrument</span>
               {sampleBankStatus === 'loading' && (
@@ -1149,19 +1149,19 @@ export default function AiPatternScreen({
             <div className="flex flex-wrap gap-2">
               {INSTRUMENTS.map(i => (
                 <button key={i} onClick={() => setInstrument(i)} className="px-2 py-1 rounded text-10px font-semibold"
-                  style={{ background: instrument === i ? '#00E5FF22' : '#111', color: instrument === i ? '#00E5FF' : '#555', border: `1px solid ${instrument === i ? '#00E5FF44' : '#222'}`, cursor: 'pointer' }}>
+                  style={{ background: instrument === i ? '#00E5FF22' : '#242424', color: instrument === i ? '#00E5FF' : '#555', border: `1px solid ${instrument === i ? '#00E5FF44' : '#222'}`, cursor: 'pointer' }}>
                   {i}
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#D500F9' }}>Style</span>
             <div className="flex flex-wrap gap-2">
               {STYLES.map(s => (
                 <button key={s} onClick={() => setStyle(s)} className="px-2 py-1 rounded text-10px font-semibold"
-                  style={{ background: style === s ? '#D500F922' : '#111', color: style === s ? '#D500F9' : '#555', border: `1px solid ${style === s ? '#D500F944' : '#222'}`, cursor: 'pointer' }}>
+                  style={{ background: style === s ? '#D500F922' : '#242424', color: style === s ? '#D500F9' : '#555', border: `1px solid ${style === s ? '#D500F944' : '#222'}`, cursor: 'pointer' }}>
                   {s}
                 </button>
               ))}
@@ -1170,15 +1170,15 @@ export default function AiPatternScreen({
         </div>
 
         {/* Section 3b: Description */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#60a5fa' }}>Pattern Description (Optional)</span>
           <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="E.g., 'tight kick with swinging hi-hats' or 'fast arpeggios with chord changes'" className="w-full px-3 py-2 rounded text-xs outline-none resize-none"
-            style={{ background: '#111', color: '#ccc', border: '1px solid #333', fontFamily: 'monospace', height: 60, lineHeight: 1.4 }} />
+            style={{ background: '#242424', color: '#ccc', border: '1px solid #333', fontFamily: 'monospace', height: 60, lineHeight: 1.4 }} />
           <p className="text-10px" style={{ color: '#666' }}>Describe what you want the pattern to sound like for better results</p>
         </div>
 
         {/* Section 3c: Generation Tempo */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00ff88' }}>Generation Tempo</span>
           <div className="flex items-center gap-2">
             <label className="text-xs" style={{ color: '#666' }}>Gen Tempo:</label>
@@ -1214,7 +1214,7 @@ export default function AiPatternScreen({
             bass/melody pitch mapping (rowToMidi). Bass + melody tracks
             generate notes from this key's diatonic scale and resolve to
             its tonic, so all tracks sound like the same song. */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffcc00' }}>Song Key</span>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Key root buttons (C…B). Compact 12-button row so the user
@@ -1225,7 +1225,7 @@ export default function AiPatternScreen({
                 onClick={() => setSongKey(i)}
                 className="px-2 py-1 rounded text-10px font-bold"
                 style={{
-                  background: songKey === i ? '#ffcc0022' : '#111',
+                  background: songKey === i ? '#ffcc0022' : '#242424',
                   color: songKey === i ? '#ffcc00' : '#666',
                   border: `1px solid ${songKey === i ? '#ffcc0066' : '#222'}`,
                   cursor: 'pointer',
@@ -1242,7 +1242,7 @@ export default function AiPatternScreen({
               onClick={() => setSongMode('minor')}
               className="px-3 py-1 rounded text-10px font-bold"
               style={{
-                background: songMode === 'minor' ? '#7cf4c622' : '#111',
+                background: songMode === 'minor' ? '#7cf4c622' : '#242424',
                 color: songMode === 'minor' ? '#7cf4c6' : '#666',
                 border: `1px solid ${songMode === 'minor' ? '#7cf4c666' : '#222'}`,
                 cursor: 'pointer',
@@ -1254,7 +1254,7 @@ export default function AiPatternScreen({
               onClick={() => setSongMode('major')}
               className="px-3 py-1 rounded text-10px font-bold"
               style={{
-                background: songMode === 'major' ? '#7cf4c622' : '#111',
+                background: songMode === 'major' ? '#7cf4c622' : '#242424',
                 color: songMode === 'major' ? '#7cf4c6' : '#666',
                 border: `1px solid ${songMode === 'major' ? '#7cf4c666' : '#222'}`,
                 cursor: 'pointer',
@@ -1272,7 +1272,7 @@ export default function AiPatternScreen({
               onClick={() => setLockToDrums((v) => !v)}
               className="px-3 py-1 rounded text-10px font-bold"
               style={{
-                background: lockToDrums ? '#D500F922' : '#111',
+                background: lockToDrums ? '#D500F922' : '#242424',
                 color: lockToDrums ? '#D500F9' : '#666',
                 border: `1px solid ${lockToDrums ? '#D500F966' : '#222'}`,
                 cursor: 'pointer',
@@ -1286,7 +1286,7 @@ export default function AiPatternScreen({
         </div>
 
         {/* Section 4: Variation */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffcc00' }}>Variation</span>
             <span className="text-xs px-2 py-1 rounded" style={{ background: '#ffcc0022', color: '#ffcc00' }}>{variation}</span>
@@ -1298,7 +1298,7 @@ export default function AiPatternScreen({
               { id: 'creative', label: 'Creative', temp: 1.3, desc: 'Experimental, risky' },
             ].map(opt => (
               <button key={opt.id} onClick={() => { setVariation(opt.id); setTemperature(opt.temp); }}
-                className="flex-1 p-2 rounded text-10px text-center" style={{ background: variation === opt.id ? `${opt.id === 'conservative' ? '#0066ff' : opt.id === 'balanced' ? '#00ff88' : '#ff6b35'}33` : '#111', color: variation === opt.id ? (opt.id === 'conservative' ? '#0066ff' : opt.id === 'balanced' ? '#00ff88' : '#ff6b35') : '#555', border: `1px solid ${variation === opt.id ? '#333' : '#222'}`, cursor: 'pointer' }}>
+                className="flex-1 p-2 rounded text-10px text-center" style={{ background: variation === opt.id ? `${opt.id === 'conservative' ? '#0066ff' : opt.id === 'balanced' ? '#00ff88' : '#ff6b35'}33` : '#242424', color: variation === opt.id ? (opt.id === 'conservative' ? '#0066ff' : opt.id === 'balanced' ? '#00ff88' : '#ff6b35') : '#555', border: `1px solid ${variation === opt.id ? '#333' : '#222'}`, cursor: 'pointer' }}>
                 <div style={{ fontWeight: 600 }}>{opt.label}</div>
                 <div style={{ fontSize: 8, marginTop: 2 }}>{opt.desc}</div>
               </button>
@@ -1307,7 +1307,7 @@ export default function AiPatternScreen({
         </div>
 
         {/* Section 5: Status & Generate */}
-        <div className="rounded-xl p-4 flex items-center gap-4 flex-wrap" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex items-center gap-4 flex-wrap" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           {modelLoading ? (
             <div className="flex items-center gap-2" style={{ color: '#00E5FF' }}>
               <RefreshCw size={12} className="animate-spin" />
@@ -1328,7 +1328,7 @@ export default function AiPatternScreen({
         {/* Section 6: Generate Button + Presets toggle */}
         <div className="flex gap-2">
           <button onClick={generatePattern} disabled={currentTrack.generating || modelLoading} className="flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
-            style={{ background: currentTrack.generating || modelLoading ? '#1a1a1a' : 'linear-gradient(135deg, #00E5FF, #D500F9)', color: currentTrack.generating || modelLoading ? '#444' : '#000', cursor: currentTrack.generating || modelLoading ? 'not-allowed' : 'pointer' }}>
+            style={{ background: currentTrack.generating || modelLoading ? '#2c2c2c' : 'linear-gradient(135deg, #00E5FF, #D500F9)', color: currentTrack.generating || modelLoading ? '#444' : '#000', cursor: currentTrack.generating || modelLoading ? 'not-allowed' : 'pointer' }}>
             {currentTrack.generating ? (
               <><RefreshCw size={14} className="animate-spin" /> Generating…</>
             ) : modelLoading ? (
@@ -1344,7 +1344,7 @@ export default function AiPatternScreen({
             onClick={() => setPresetsOpen((v) => !v)}
             className="px-4 py-3 rounded-xl text-sm font-bold flex items-center gap-1"
             style={{
-              background: presetsOpen ? '#00ff8833' : '#111',
+              background: presetsOpen ? '#00ff8833' : '#242424',
               color: presetsOpen ? '#00ff88' : '#888',
               border: `1px solid ${presetsOpen ? '#00ff8866' : '#333'}`,
               cursor: 'pointer',
@@ -1383,7 +1383,7 @@ export default function AiPatternScreen({
                     onClick={() => setPresetGenreFilter(g)}
                     className="px-2 py-0.5 rounded text-10px font-bold"
                     style={{
-                      background: presetGenreFilter === g ? '#00ff8822' : '#111',
+                      background: presetGenreFilter === g ? '#00ff8822' : '#242424',
                       color: presetGenreFilter === g ? '#00ff88' : '#555',
                       border: `1px solid ${presetGenreFilter === g ? '#00ff8855' : '#222'}`,
                       cursor: 'pointer',
@@ -1411,12 +1411,12 @@ export default function AiPatternScreen({
                       className="text-left rounded-lg p-3 flex flex-col gap-1"
                       style={{
                         background: '#0d0d0d',
-                        border: '1px solid #1a1a1a',
+                        border: '1px solid #2c2c2c',
                         cursor: 'pointer',
                         transition: 'border-color 0.15s',
                       }}
                       onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#00ff8855'; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#1a1a1a'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#2c2c2c'; }}
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold" style={{ color: '#e0e0e0' }}>{preset.name}</span>
@@ -1437,7 +1437,7 @@ export default function AiPatternScreen({
                               key={s}
                               style={{
                                 flex: 1,
-                                background: hit ? '#00ff8866' : '#1a1a1a',
+                                background: hit ? '#00ff8866' : '#2c2c2c',
                                 borderRadius: 1,
                               }}
                             />
@@ -1457,7 +1457,7 @@ export default function AiPatternScreen({
 
         {/* Section 7: Version History */}
         {currentTrack.versions.length > 0 && (
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a78bfa' }}>Pattern Versions</span>
             <div className="flex gap-2 flex-wrap">
               {currentTrack.versions.map((version, idx) => (
@@ -1467,7 +1467,7 @@ export default function AiPatternScreen({
                   return updated;
                 })}
                   className="px-3 py-2 rounded text-xs font-semibold flex items-center gap-2"
-                  style={{ background: currentTrack.selectedVersionId === version.id ? '#a78bfa22' : '#111', color: currentTrack.selectedVersionId === version.id ? '#a78bfa' : '#666', border: `1px solid ${currentTrack.selectedVersionId === version.id ? '#a78bfa44' : '#222'}`, cursor: 'pointer' }}>
+                  style={{ background: currentTrack.selectedVersionId === version.id ? '#a78bfa22' : '#242424', color: currentTrack.selectedVersionId === version.id ? '#a78bfa' : '#666', border: `1px solid ${currentTrack.selectedVersionId === version.id ? '#a78bfa44' : '#222'}`, cursor: 'pointer' }}>
                   {currentTrack.selectedVersionId === version.id && <Check size={12} />}
                   v{idx + 1}
                 </button>
@@ -1478,14 +1478,14 @@ export default function AiPatternScreen({
 
         {/* Section 8: Pattern Grid */}
         {selectedPattern && selectedPattern.length > 0 && (
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <div className="flex items-center justify-between mb-2">
               <div>
                 <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>AI Generated Pattern ({currentTrack.sequenceMode === 'steps' ? 'Step Grid' : 'Bar Mode'})</span>
                 <p style={{ fontSize: 9, color: '#888', marginTop: 2, fontFamily: 'monospace' }}>Lane CH{AI_PATTERN_SESSION_BASE + currentTrackIdx} · Studio / mixer same channel</p>
                 <p style={{ fontSize: 10, color: '#666', marginTop: 4 }}>Variation: <strong>{variation}</strong> • Temp: <strong>{temperature.toFixed(1)}</strong> • {bpm} BPM{description && <span> • <strong style={{ color: '#60a5fa' }}>"{description.substring(0, 30)}{description.length > 30 ? '...' : ''}"</strong></span>}</p>
               </div>
-              <button onClick={generatePattern} className="flex items-center gap-1 px-2 py-1 rounded text-xs" style={{ background: '#111', color: '#666', border: '1px solid #222', cursor: 'pointer' }}>
+              <button onClick={generatePattern} className="flex items-center gap-1 px-2 py-1 rounded text-xs" style={{ background: '#242424', color: '#666', border: '1px solid #222', cursor: 'pointer' }}>
                 <RefreshCw size={10} /> Regenerate
               </button>
             </div>
@@ -1528,7 +1528,7 @@ export default function AiPatternScreen({
                             });
                           }}
                           className="flex-1 h-6 rounded-sm transition-all"
-                          style={{ background: on ? (activeBeat === bi ? NOTE_COLORS[ri] : `${NOTE_COLORS[ri]}cc`) : (activeBeat === bi ? '#1e1a1e' : '#0f0f0f'), boxShadow: on && activeBeat === bi ? `0 0 10px ${NOTE_COLORS[ri]}` : 'none', border: `1px solid ${bi % 4 === 0 ? '#2a2a2a' : '#141414'}`, cursor: 'pointer' }} />
+                          style={{ background: on ? (activeBeat === bi ? NOTE_COLORS[ri] : `${NOTE_COLORS[ri]}cc`) : (activeBeat === bi ? '#1e1a1e' : '#222222'), boxShadow: on && activeBeat === bi ? `0 0 10px ${NOTE_COLORS[ri]}` : 'none', border: `1px solid ${bi % 4 === 0 ? '#2a2a2a' : '#141414'}`, cursor: 'pointer' }} />
                       ))}
                     </div>
                   </div>
@@ -1570,7 +1570,7 @@ export default function AiPatternScreen({
                             });
                           }}
                           className="flex-1 min-h-10 rounded transition-all flex items-center justify-center"
-                          style={{ background: selectedPattern[ri][bi] ? (activeBeat === bi ? NOTE_COLORS[ri] : `${NOTE_COLORS[ri]}cc`) : (activeBeat === bi ? '#1e1a1e' : '#111'), boxShadow: selectedPattern[ri][bi] && activeBeat === bi ? `0 0 10px ${NOTE_COLORS[ri]}` : 'none', border: `1px solid ${activeBeat === bi ? '#D500F944' : '#222'}`, cursor: 'pointer' }}>
+                          style={{ background: selectedPattern[ri][bi] ? (activeBeat === bi ? NOTE_COLORS[ri] : `${NOTE_COLORS[ri]}cc`) : (activeBeat === bi ? '#1e1a1e' : '#242424'), boxShadow: selectedPattern[ri][bi] && activeBeat === bi ? `0 0 10px ${NOTE_COLORS[ri]}` : 'none', border: `1px solid ${activeBeat === bi ? '#D500F944' : '#222'}`, cursor: 'pointer' }}>
                           {selectedPattern[ri][bi] && <span style={{ fontSize: 8, color: '#fff', fontWeight: 'bold' }}>●</span>}
                         </button>
                       ))}
@@ -1585,7 +1585,7 @@ export default function AiPatternScreen({
         {/* Empty state */}
         {currentTrack.versions.length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: '#333' }}>
-            <Cpu size={32} style={{ color: '#1a1a1a' }} />
+            <Cpu size={32} style={{ color: '#2c2c2c' }} />
             <p className="text-sm">Select instrument & style, then generate</p>
             <p className="text-xs">Track: {currentTrack.name}</p>
           </div>
@@ -1595,12 +1595,12 @@ export default function AiPatternScreen({
       {/* Export Modal */}
       {showExportModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="rounded-xl p-6 max-w-md w-full" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-6 max-w-md w-full" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <h3 className="text-sm font-bold mb-4" style={{ color: '#fff' }}>Export Selected Tracks</h3>
             
             <div className="flex flex-col gap-2 mb-4 max-h-64 overflow-y-auto">
               {tracks.map((track, idx) => (
-                <label key={idx} className="flex items-center gap-3 p-2 rounded cursor-pointer" style={{ background: '#111', border: '1px solid #222' }}>
+                <label key={idx} className="flex items-center gap-3 p-2 rounded cursor-pointer" style={{ background: '#242424', border: '1px solid #222' }}>
                   <input type="checkbox" checked={track.selected && track.selectedVersionId !== null} onChange={e => updateTrackSelection(idx, e.target.checked)} style={{ cursor: 'pointer' }} />
                   <div className="flex-1">
                     <div className="text-xs font-semibold" style={{ color: track.selectedVersionId ? '#00E5FF' : '#666' }}>{track.name}</div>
@@ -1611,7 +1611,7 @@ export default function AiPatternScreen({
             </div>
 
             <div className="flex gap-2">
-              <button onClick={() => setShowExportModal(false)} className="flex-1 py-2 rounded text-xs font-bold" style={{ background: '#111', color: '#666', border: '1px solid #222', cursor: 'pointer' }}>
+              <button onClick={() => setShowExportModal(false)} className="flex-1 py-2 rounded text-xs font-bold" style={{ background: '#242424', color: '#666', border: '1px solid #222', cursor: 'pointer' }}>
                 Cancel
               </button>
               <button onClick={() => { onExport('creation-station'); setShowExportModal(false); }} className="flex-1 py-2 rounded text-xs font-bold" style={{ background: '#D500F922', color: '#D500F9', border: '1px solid #D500F944', cursor: 'pointer' }}>

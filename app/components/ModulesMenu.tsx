@@ -30,10 +30,10 @@ import {
   type VocalLabSubScreenId,
 } from '@/app/lib/vocalLab/vocalLabSubScreens';
 
-const MENU_BG = '#0a0a0a';
-const MENU_BORDER = '#333333';
-const MENU_ROW = '#0a0a0a';
-const MENU_HOVER = '#1a1a1a';
+const MENU_BG = '#1c1c1c';
+const MENU_BORDER = '#484848';
+const MENU_ROW = '#1c1c1c';
+const MENU_HOVER = '#333333';
 const MENU_ACTIVE = '#0a1a22';
 const MENU_Z = 10000;
 /** Gen-DAW cyan — matches Da Muzik Box / Gen-DAW title bar */

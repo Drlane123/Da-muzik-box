@@ -1,14 +1,14 @@
 /**
- * App shell — Cursor chat/editor backdrop (#1e1e1e / #181818 modules).
+ * App shell — Cursor-style neutrals, lightened (~+16 luminance). Same grays, not a hue shift.
  * No brightness filter (that washed modules to light gray).
  */
 :root {
-  --dmb-cursor-editor: #1e1e1e;
-  --dmb-cursor-sidebar: #181818;
-  --dmb-cursor-panel: #2d2d2d;
-  --dmb-cursor-border: #3c3c3c;
-  --dmb-shell-text: #e8e8e8;
-  --dmb-shell-muted: #a0a0a0;
+  --dmb-cursor-editor: #303030;
+  --dmb-cursor-sidebar: #2a2a2a;
+  --dmb-cursor-panel: #404040;
+  --dmb-cursor-border: #505050;
+  --dmb-shell-text: #f0f0f0;
+  --dmb-shell-muted: #b0b0b0;
 }
 
 html,
@@ -30,15 +30,15 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #5a5a5a !important;
-}
-
-::-webkit-scrollbar-thumb:hover {
   background: #6e6e6e !important;
 }
 
+::-webkit-scrollbar-thumb:hover {
+  background: #828282 !important;
+}
+
 * {
-  scrollbar-color: #5a5a5a var(--dmb-cursor-panel) !important;
+  scrollbar-color: #6e6e6e var(--dmb-cursor-panel) !important;
 }
 
 #boot-splash.muzik-boot-overlay {

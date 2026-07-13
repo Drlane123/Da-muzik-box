@@ -336,7 +336,7 @@ export function OrchidStudioPianoRoll({
         ))}
       </select>
       <button type="button" onClick={onPreviewStep} style={actionBtn('#112015', '#86efac', '#1f3a29')}>▶</button>
-      <button type="button" onClick={onClearStep} style={actionBtn('#111', '#f87171', '#3a1f1f')}>CLR</button>
+      <button type="button" onClick={onClearStep} style={actionBtn('#242424', '#f87171', '#3a1f1f')}>CLR</button>
       <button
         type="button"
         onClick={() => onExpandedChange(false)}
@@ -402,7 +402,7 @@ export function OrchidStudioPianoRoll({
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  borderLeft: '1px solid #111',
+                  borderLeft: '1px solid #242424',
                 }}
               >
                 {s + 1}
@@ -503,7 +503,7 @@ export function OrchidStudioPianoRoll({
                     }}
                     style={{
                       flex: 1,
-                      borderLeft: '1px solid #0a0a0a',
+                      borderLeft: '1px solid #1c1c1c',
                       cursor: tool === 'erase' ? 'default' : 'crosshair',
                       background: isRoot ? 'rgba(253,230,138,0.03)' : undefined,
                       boxSizing: 'border-box',
@@ -593,7 +593,7 @@ export function OrchidStudioPianoRoll({
 
 function toolBtn(on: boolean, color: string, bg: string): CSSProperties {
   return {
-    background: on ? bg : '#111',
+    background: on ? bg : '#242424',
     color: on ? color : '#6b7280',
     border: `1px solid ${on ? color + '66' : '#222'}`,
     borderRadius: 5,
@@ -622,7 +622,7 @@ function actionBtn(bg: string, color: string, border: string): CSSProperties {
 
 function navBtn(disabled: boolean): CSSProperties {
   return {
-    background: '#111',
+    background: '#242424',
     color: disabled ? '#444' : '#93c5fd',
     border: '1px solid #1a2e3a',
     borderRadius: 4,

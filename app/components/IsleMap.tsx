@@ -74,8 +74,8 @@ export default function IsleMap() {
                   ? `${sec.color}30`
                   : selected
                     ? `${sec.color}20`
-                    : '#0a0a0a',
-                border: `1px solid ${active ? sec.color : selected ? sec.color + '88' : '#1e1e1e'}`,
+                    : '#1c1c1c',
+                border: `1px solid ${active ? sec.color : selected ? sec.color + '88' : '#303030'}`,
                 boxShadow: active ? `0 0 12px ${sec.color}66` : selected ? `0 0 6px ${sec.color}44` : 'none',
               }}>
 

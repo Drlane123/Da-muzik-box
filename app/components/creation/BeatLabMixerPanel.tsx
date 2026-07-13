@@ -283,7 +283,7 @@ function BeatLabChannelStrip({
         padding: '6px 5px 8px',
         borderRadius: 6,
         border: `1px solid ${group === 'pad' ? 'rgba(124, 244, 198, 0.24)' : 'rgba(0, 229, 255, 0.32)'}`,
-        background: 'linear-gradient(180deg, #0e0e16 0%, #08080c 100%)',
+        background: 'linear-gradient(180deg, #0e0e16 0%, #18181e 100%)',
         boxSizing: 'border-box',
       }}
       title={`${title} — ${subtitle}`}

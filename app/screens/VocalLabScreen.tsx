@@ -60,11 +60,11 @@ export default function VocalLabScreen({
 
   return (
     <VocalLabHelpProvider autoIntro introTab="hum-capture" introStorageKey={VOCAL_LAB_HELP_INTRO_STORAGE}>
-    <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}>
+    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}>
       {/* Header */}
       <div
         className="flex items-center justify-between px-5 py-3 shrink-0"
-        style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}
+        style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#D500F922', color: '#D500F9' }}>
@@ -94,7 +94,7 @@ export default function VocalLabScreen({
           <button
             onClick={() => onExport('master-arranger')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold"
-            style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F955' }}
+            style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F955' }}
           >
             <Send size={11} /> Arranger
           </button>
@@ -104,7 +104,7 @@ export default function VocalLabScreen({
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 min-h-0">
 
         <div className="flex flex-col gap-4">
-          <div className="rounded-xl p-4 flex flex-col gap-3 min-w-0" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3 min-w-0" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <NeuralHumPanel
               onCaptureBlobChange={handleCaptureBlobChange}
               onNeuralHumToStudio={onNeuralHumToStudio}
@@ -112,26 +112,26 @@ export default function VocalLabScreen({
             />
           </div>
 
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
             <RVCSingingConverterPanel />
           </div>
         </div>
 
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <VoiceSwapPanel audioBlob={captureBlob} />
         </div>
 
-        <div className="rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <EnhancementSuite audioBlob={captureBlob} />
         </div>
 
-        <div className="rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+        <div className="rounded-xl p-4" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
           <VocalTracksPanel />
         </div>
 
         <div
           className="flex flex-wrap items-center gap-3 p-4 rounded-xl"
-          style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}
+          style={{ background: '#1c1c1c', border: '1px solid #303030' }}
         >
           <span className="text-xs font-bold uppercase tracking-widest mr-2" style={{ color: '#555' }}>Export</span>
           <button
@@ -142,7 +142,7 @@ export default function VocalLabScreen({
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all"
             style={{
-              background: hasAudio ? '#00ff8818' : '#111',
+              background: hasAudio ? '#00ff8818' : '#242424',
               color: hasAudio ? '#00ff88' : '#333',
               border: `1px solid ${hasAudio ? '#00ff8844' : '#222'}`,
               cursor: hasAudio ? 'pointer' : 'not-allowed',
@@ -159,7 +159,7 @@ export default function VocalLabScreen({
             title={canExportMp3 ? 'Download MP3' : 'Import an MP3 file to enable MP3 download'}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all"
             style={{
-              background: canExportMp3 ? '#00ff8818' : '#111',
+              background: canExportMp3 ? '#00ff8818' : '#242424',
               color: canExportMp3 ? '#00ff88' : '#333',
               border: `1px solid ${canExportMp3 ? '#00ff8844' : '#222'}`,
               cursor: canExportMp3 ? 'pointer' : 'not-allowed',
@@ -177,14 +177,14 @@ export default function VocalLabScreen({
           <button
             onClick={() => onExport('groove-lab', exportAudioBlob())}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
-            style={{ background: '#1a1a1a', color: '#7cf4c6', border: '1px solid #7cf4c644' }}
+            style={{ background: '#2c2c2c', color: '#7cf4c6', border: '1px solid #7cf4c644' }}
           >
             <Send size={11} /> To Groove Lab
           </button>
           <button
             onClick={() => onExport('new-synth', exportAudioBlob())}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
-            style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}
+            style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F944' }}
           >
             <Send size={11} /> To NEW SYNTH
           </button>

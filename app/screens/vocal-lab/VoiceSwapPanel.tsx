@@ -214,7 +214,7 @@ export default function VoiceSwapPanel({ audioBlob = null }: VoiceSwapPanelProps
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
-                style={{ background: '#111', color: '#D500F9', border: '1px solid #D500F944', cursor: 'pointer' }}
+                style={{ background: '#242424', color: '#D500F9', border: '1px solid #D500F944', cursor: 'pointer' }}
               >
                 <Upload size={12} /> Import WAV / MP3
               </button>
@@ -223,7 +223,7 @@ export default function VoiceSwapPanel({ audioBlob = null }: VoiceSwapPanelProps
                   type="button"
                   onClick={clearImport}
                   className="px-2 py-1.5 rounded text-9px font-bold"
-                  style={{ background: '#1a1a1a', color: '#888', border: '1px solid #333' }}
+                  style={{ background: '#2c2c2c', color: '#888', border: '1px solid #333' }}
                 >
                   Clear import
                 </button>
@@ -260,7 +260,7 @@ export default function VoiceSwapPanel({ audioBlob = null }: VoiceSwapPanelProps
                 }}
                 className="py-2.5 rounded-lg text-xs font-bold transition-all text-left px-2"
                 style={{
-                  background: selectedStyle === s.id ? `${s.color}22` : '#111',
+                  background: selectedStyle === s.id ? `${s.color}22` : '#242424',
                   border: '1px solid',
                   borderColor: selectedStyle === s.id ? s.color : '#222',
                   color: selectedStyle === s.id ? s.color : '#555',
@@ -305,7 +305,7 @@ export default function VoiceSwapPanel({ audioBlob = null }: VoiceSwapPanelProps
             disabled={!selectedStyle || !hasSource || isProcessing}
             className="py-2 rounded text-xs font-bold transition-all"
             style={{
-              background: selectedStyle && hasSource && !isProcessing ? '#D500F9' : '#1a1a1a',
+              background: selectedStyle && hasSource && !isProcessing ? '#D500F9' : '#2c2c2c',
               color: selectedStyle && hasSource && !isProcessing ? '#000' : '#444',
               cursor: selectedStyle && hasSource && !isProcessing ? 'pointer' : 'not-allowed',
             }}
@@ -335,7 +335,7 @@ export default function VoiceSwapPanel({ audioBlob = null }: VoiceSwapPanelProps
                   onClick={() => void togglePlay()}
                   className="flex items-center justify-center gap-1 px-3 py-1.5 rounded text-xs font-bold transition-all"
                   style={{
-                    background: isPlaying ? '#D500F9' : '#1a1a1a',
+                    background: isPlaying ? '#D500F9' : '#2c2c2c',
                     color: isPlaying ? '#000' : '#D500F9',
                     border: '1px solid #D500F944',
                     cursor: 'pointer',
@@ -380,7 +380,7 @@ export default function VoiceSwapPanel({ audioBlob = null }: VoiceSwapPanelProps
                     {Array.from({ length: 16 }).map((_, i) => {
                       const threshold = (i / 16) * 100;
                       const isActive = meterLevel > threshold;
-                      let color = '#1a1a1a';
+                      let color = '#2c2c2c';
                       if (isActive) {
                         color = threshold > 85 ? '#ff4444' : threshold > 70 ? '#ffaa00' : '#D500F9';
                       }

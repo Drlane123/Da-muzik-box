@@ -43,7 +43,7 @@ const SEQUENCER = {
   accent: '#86efac',
   accentDim: '#22c55e44',
   accentBg: '#0d1210',
-  panelBg: 'linear-gradient(180deg, rgba(34, 197, 94, 0.06) 0%, #080808 100%)',
+  panelBg: 'linear-gradient(180deg, rgba(34, 197, 94, 0.06) 0%, #2c2c2c 100%)',
   border: '#1f3a29',
   text: '#d1d5db',
   muted: '#6b7280',

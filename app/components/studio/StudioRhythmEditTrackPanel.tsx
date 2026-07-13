@@ -519,7 +519,7 @@ export function StudioRhythmEditTrackPanel({
             className="ml-auto"
             style={{
               ...smallBtnStyle,
-              background: applyReady ? '#15321e' : '#111',
+              background: applyReady ? '#15321e' : '#242424',
               color: applyReady ? '#4ade80' : '#444',
               border: `1px solid ${applyReady ? '#22c55e88' : '#222'}`,
               padding: '2px 10px',
@@ -540,8 +540,8 @@ export function StudioRhythmEditTrackPanel({
               placeholder="C Am F G"
               className="flex-1 min-w-0 rounded px-1.5 font-mono"
               style={{
-                background: '#0a0a0a',
-                border: '1px solid #1a1a1a',
+                background: '#1c1c1c',
+                border: '1px solid #2c2c2c',
                 color: '#e5e7eb',
                 fontSize: 9,
                 lineHeight: 1.2,

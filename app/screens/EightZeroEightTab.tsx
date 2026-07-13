@@ -2043,7 +2043,7 @@ export default function EightZeroEightTab({
                     <button
                       type="button"
                       onClick={clearToneRoll}
-                      style={rollBtn('#111', '#f87171', '#3a1f1f')}
+                      style={rollBtn('#242424', '#f87171', '#3a1f1f')}
                       title="Clear all notes on this roll"
                     >
                       Clear

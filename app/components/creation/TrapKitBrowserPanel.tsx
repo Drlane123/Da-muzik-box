@@ -73,7 +73,7 @@ export function TrapKitBrowserPanel({
           maxHeight: 'min(640px, 90vh)',
           display: 'flex',
           flexDirection: 'column',
-          background: '#0c0c12',
+          background: '#1e1e26',
           border: '1px solid rgba(255, 200, 80, 0.35)',
           borderRadius: 10,
           boxShadow: '0 24px 64px rgba(0,0,0,0.65)',
@@ -88,7 +88,7 @@ export function TrapKitBrowserPanel({
             gap: 8,
             padding: '10px 12px',
             borderBottom: '1px solid #1e1e28',
-            background: 'linear-gradient(180deg, #14120c 0%, #0c0c12 100%)',
+            background: 'linear-gradient(180deg, #14120c 0%, #1e1e26 100%)',
           }}
         >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 900, color: '#ffd966', letterSpacing: 0.5 }}>
@@ -155,7 +155,7 @@ export function TrapKitBrowserPanel({
                 padding: '4px 8px',
                 borderRadius: 4,
                 border: '1px solid rgba(124, 244, 198, 0.35)',
-                background: '#0c0c12',
+                background: '#1e1e26',
                 color: '#7cf4c6',
                 fontSize: 9,
                 fontWeight: 800,

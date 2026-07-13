@@ -73,7 +73,7 @@ export default function ProMeter({
     ctx.clearRect(0, 0, W, H);
 
     // Background
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = '#1c1c1c';
     ctx.fillRect(0, 0, W, H);
 
     if (vertical) {
@@ -151,7 +151,7 @@ export default function ProMeter({
       ctx.globalAlpha = 1;
 
       // Border
-      ctx.strokeStyle = '#1e1e1e';
+      ctx.strokeStyle = '#303030';
       ctx.lineWidth = 1;
       ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
 

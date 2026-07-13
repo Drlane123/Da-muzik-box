@@ -546,9 +546,9 @@ export function OrchidChordStrip({
               onClick={() => onChordAutoAdvanceChange(!chordAutoAdvance)}
               title="After + CHORD TO GRID, move playhead to the next column"
               style={{
-                background: chordAutoAdvance ? '#0e2838' : '#111',
+                background: chordAutoAdvance ? '#0e2838' : '#242424',
                 color: chordAutoAdvance ? '#67e8f9' : '#6b7280',
-                border: `1px solid ${chordAutoAdvance ? '#3b82f666' : '#1a1a1a'}`,
+                border: `1px solid ${chordAutoAdvance ? '#3b82f666' : '#2c2c2c'}`,
                 borderRadius: 5,
                 padding: '3px 8px',
                 fontSize: 8,
@@ -588,7 +588,7 @@ export function OrchidChordStrip({
               disabled={pinDisabled}
               title="Store this voicing on the selected chord pad"
               style={{
-                background: pinDisabled ? '#111' : '#1a1408',
+                background: pinDisabled ? '#242424' : '#1a1408',
                 color: pinDisabled ? '#555' : '#fde68a',
                 border: `1px solid ${pinDisabled ? '#222' : '#4a3c1a'}`,
                 borderRadius: 5,
@@ -675,7 +675,7 @@ export function OrchidChordStrip({
               style={{
                 background: on ? '#15321e' : '#0d0d0d',
                 color: on ? '#4ade80' : '#6b7280',
-                border: `1px solid ${on ? '#22c55e88' : '#1a1a1a'}`,
+                border: `1px solid ${on ? '#22c55e88' : '#2c2c2c'}`,
                 borderRadius: 5,
                 padding: '3px 10px',
                 fontSize: 9,
@@ -702,7 +702,7 @@ export function OrchidChordStrip({
               style={{
                 background: on ? '#0e2838' : '#0d0d0d',
                 color: on ? '#67e8f9' : '#6b7280',
-                border: `1px solid ${on ? '#3b82f688' : '#1a1a1a'}`,
+                border: `1px solid ${on ? '#3b82f688' : '#2c2c2c'}`,
                 borderRadius: 5,
                 padding: '3px 8px',
                 fontSize: 9,
@@ -729,7 +729,7 @@ export function OrchidChordStrip({
               style={{
                 background: on ? '#112015' : '#0d0d0d',
                 color: on ? '#22c55e' : '#7a7a7a',
-                border: `1px solid ${on ? '#1f3a29' : '#1a1a1a'}`,
+                border: `1px solid ${on ? '#1f3a29' : '#2c2c2c'}`,
                 borderRadius: 5,
                 padding: '2px 8px',
                 fontSize: 10,
@@ -749,7 +749,7 @@ export function OrchidChordStrip({
           type="button"
           onClick={() => onInversionChange(Math.max(0, inversion - 1))}
           style={{
-            background: '#111',
+            background: '#242424',
             color: '#86efac',
             border: '1px solid #1f3a29',
             borderRadius: 4,
@@ -768,7 +768,7 @@ export function OrchidChordStrip({
           type="button"
           onClick={() => onInversionChange(Math.min(maxInversion, inversion + 1))}
           style={{
-            background: '#111',
+            background: '#242424',
             color: '#86efac',
             border: '1px solid #1f3a29',
             borderRadius: 4,
@@ -818,9 +818,9 @@ export function OrchidChordStrip({
                     onClick={() => onChordVoiceChange(v.id)}
                     title={v.describe}
                     style={{
-                      background: on ? '#112015' : '#0a0a0a',
+                      background: on ? '#112015' : '#1c1c1c',
                       color: on ? '#86efac' : '#6b7280',
-                      border: `1px solid ${on ? '#22c55e66' : '#1a1a1a'}`,
+                      border: `1px solid ${on ? '#22c55e66' : '#2c2c2c'}`,
                       borderRadius: 4,
                       padding: '2px 6px',
                       fontSize: 7,
@@ -877,9 +877,9 @@ export function OrchidChordStrip({
                       onClick={() => onGuitarSoundChange(v.id)}
                       title={v.describe}
                       style={{
-                        background: on ? '#2a2410' : '#0a0a0a',
+                        background: on ? '#2a2410' : '#1c1c1c',
                         color: on ? '#fbbf24' : '#6b7280',
-                        border: `1px solid ${on ? '#f59e0b88' : '#1a1a1a'}`,
+                        border: `1px solid ${on ? '#f59e0b88' : '#2c2c2c'}`,
                         borderRadius: 4,
                         padding: '2px 5px',
                         fontSize: 7,
@@ -945,9 +945,9 @@ export function OrchidChordStrip({
                         : `Stamp ${orchestraHitDef?.label ?? 'orch hit'} on CH ${sampleChannel} at each chord root`
                     }
                     style={{
-                      background: chordColumnCount === 0 ? '#0a0a0a' : '#2a1a38',
+                      background: chordColumnCount === 0 ? '#1c1c1c' : '#2a1a38',
                       color: chordColumnCount === 0 ? '#4b5563' : '#c4b5fd',
-                      border: `1px solid ${chordColumnCount === 0 ? '#1a1a1a' : '#a78bfa66'}`,
+                      border: `1px solid ${chordColumnCount === 0 ? '#2c2c2c' : '#a78bfa66'}`,
                       borderRadius: 4,
                       padding: '2px 5px',
                       fontSize: 7,
@@ -986,7 +986,7 @@ export function OrchidChordStrip({
               style={{
                 background: on ? '#15321e' : '#0d0d0d',
                 color: on ? '#4ade80' : '#6b7280',
-                border: `1px solid ${on ? '#22c55e66' : '#1a1a1a'}`,
+                border: `1px solid ${on ? '#22c55e66' : '#2c2c2c'}`,
                 borderRadius: 5,
                 padding: '2px 8px',
                 fontSize: 8,

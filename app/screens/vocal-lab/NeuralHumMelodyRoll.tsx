@@ -377,7 +377,7 @@ export default function NeuralHumMelodyRoll({
     <div
       ref={rootRef}
       className="flex flex-col gap-2 rounded-md p-3"
-      style={{ background: '#0a0a0a', border: `1px solid ${NH_SCALE.borderHi}` }}
+      style={{ background: '#1c1c1c', border: `1px solid ${NH_SCALE.borderHi}` }}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-bold uppercase tracking-wide" style={{ color: NH_SCALE.primary }}>
@@ -391,7 +391,7 @@ export default function NeuralHumMelodyRoll({
             onRollNotesChange(clampRollNotesToBars(rollNotes, next));
           }}
           className="text-xs rounded px-2 py-1"
-          style={{ background: '#111', color: '#ccc', border: '1px solid #333' }}
+          style={{ background: '#242424', color: '#ccc', border: '1px solid #333' }}
           title="Max length — 4 or 8 bars only"
         >
           <option value={4}>4 bars</option>
@@ -401,7 +401,7 @@ export default function NeuralHumMelodyRoll({
           value={quantize}
           onChange={(e) => onQuantizeChange(e.target.value as NeuralHumRollQuantize)}
           className="text-xs rounded px-2 py-1"
-          style={{ background: '#111', color: '#ccc', border: '1px solid #333' }}
+          style={{ background: '#242424', color: '#ccc', border: '1px solid #333' }}
           title="Snap notes to this grid"
         >
           {NEURAL_HUM_QUANTIZE_OPTIONS.map((q) => (
@@ -423,7 +423,7 @@ export default function NeuralHumMelodyRoll({
             disabled={rollNotes.length === 0}
             className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
             style={{
-              background: isAuditioning ? '#00ff8833' : '#111',
+              background: isAuditioning ? '#00ff8833' : '#242424',
               color: isAuditioning ? '#00ff88' : '#aaa',
               border: '1px solid #333',
             }}
@@ -435,7 +435,7 @@ export default function NeuralHumMelodyRoll({
             type="button"
             onClick={handleSave}
             className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-            style={{ background: '#111', color: savedFlash ? '#00ff88' : '#aaa', border: '1px solid #333' }}
+            style={{ background: '#242424', color: savedFlash ? '#00ff88' : '#aaa', border: '1px solid #333' }}
           >
             <Save size={12} />
             {savedFlash ? 'Saved' : 'Save'}
@@ -444,7 +444,7 @@ export default function NeuralHumMelodyRoll({
             type="button"
             onClick={handleLoadDraft}
             className="px-2 py-1 rounded text-xs font-bold"
-            style={{ background: '#111', color: '#888', border: '1px solid #333' }}
+            style={{ background: '#242424', color: '#888', border: '1px solid #333' }}
           >
             Load
           </button>
@@ -455,7 +455,7 @@ export default function NeuralHumMelodyRoll({
             title="Delete selected note"
             className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
             style={{
-              background: selectedId ? '#2a1010' : '#111',
+              background: selectedId ? '#2a1010' : '#242424',
               color: selectedId ? '#f87171' : '#444',
               border: `1px solid ${selectedId ? '#7f1d1d' : '#333'}`,
               cursor: selectedId ? 'pointer' : 'not-allowed',
@@ -471,7 +471,7 @@ export default function NeuralHumMelodyRoll({
             title="Clear entire roll and all captured MIDI"
             className="px-2 py-1 rounded text-xs font-bold"
             style={{
-              background: '#111',
+              background: '#242424',
               color: canClearAll || rollNotes.length > 0 ? '#888' : '#444',
               border: '1px solid #333',
               cursor: canClearAll || rollNotes.length > 0 ? 'pointer' : 'not-allowed',
@@ -499,7 +499,7 @@ export default function NeuralHumMelodyRoll({
             {/* Bar ruler — sticky top so labels stay visible while scrolling vertically */}
             <div
               className="sticky top-0 z-20 flex"
-              style={{ background: '#111', borderBottom: '1px solid #222' }}
+              style={{ background: '#242424', borderBottom: '1px solid #222' }}
             >
               <div
                 className="sticky left-0 z-30 shrink-0"
@@ -600,7 +600,7 @@ export default function NeuralHumMelodyRoll({
                 style={{
                   width: gridW,
                   height: pitchRows.length * ROW_H,
-                  background: '#050505',
+                  background: '#2a2a2a',
                   cursor: 'crosshair',
                   touchAction: 'none',
                 }}
@@ -634,7 +634,7 @@ export default function NeuralHumMelodyRoll({
                       : isBlack
                         ? '#121212'
                         : '#1a1a18',
-                  borderBottom: '1px solid #1e1e1e',
+                  borderBottom: '1px solid #303030',
                   pointerEvents: 'none',
                 }}
               />
@@ -666,7 +666,7 @@ export default function NeuralHumMelodyRoll({
                   top: 0,
                   bottom: 0,
                   width: 1,
-                  background: '#1a1a1a',
+                  background: '#2c2c2c',
                   pointerEvents: 'none',
                 }}
               />
@@ -756,7 +756,7 @@ export default function NeuralHumMelodyRoll({
               type="button"
               onClick={onExportGroove}
               className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-              style={{ background: '#1a1a1a', color: '#7cf4c6', border: '1px solid #7cf4c644' }}
+              style={{ background: '#2c2c2c', color: '#7cf4c6', border: '1px solid #7cf4c644' }}
             >
               <Send size={11} /> Groove Lab
             </button>
@@ -766,7 +766,7 @@ export default function NeuralHumMelodyRoll({
               type="button"
               onClick={onExportSynth}
               className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-              style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}
+              style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F944' }}
             >
               <Send size={11} /> NEW SYNTH
             </button>
@@ -786,7 +786,7 @@ export default function NeuralHumMelodyRoll({
               type="button"
               onClick={onDownloadMidi}
               className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-              style={{ background: '#111', color: '#D500F9', border: '1px solid #D500F944' }}
+              style={{ background: '#242424', color: '#D500F9', border: '1px solid #D500F944' }}
             >
               <Download size={11} /> .mid
             </button>

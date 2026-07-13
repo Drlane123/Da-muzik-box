@@ -2776,7 +2776,7 @@ export function ChordBuilderTab({
         position: 'absolute',
         inset: 0,
         zIndex: 3500,
-        background: '#050505',
+        background: '#2a2a2a',
         color: '#c8c8d0',
         display: 'flex',
         flexDirection: 'column',
@@ -3763,7 +3763,7 @@ function TopToolbar({
           onClick={() => onChordOctaveShift(Math.max(-2, chordOctaveShift - 1))}
           disabled={chordOctaveShift <= -2}
           style={{
-            background: '#111',
+            background: '#242424',
             color: chordOctaveShift <= -2 ? '#444' : MINT,
             border: '1px solid rgba(124,244,198,0.25)',
             borderRadius: 3,
@@ -3792,7 +3792,7 @@ function TopToolbar({
           onClick={() => onChordOctaveShift(Math.min(2, chordOctaveShift + 1))}
           disabled={chordOctaveShift >= 2}
           style={{
-            background: '#111',
+            background: '#242424',
             color: chordOctaveShift >= 2 ? '#444' : MINT,
             border: '1px solid rgba(124,244,198,0.25)',
             borderRadius: 3,

@@ -480,7 +480,7 @@ export function GrooveLabMidiToVocalBoxPanel({
           <button
             type="button"
             onClick={addManualNote}
-            style={miniBtn('#111', '#d1d5db', '#333')}
+            style={miniBtn('#242424', '#d1d5db', '#333')}
           >
             + NOTE
           </button>
@@ -738,9 +738,9 @@ export function GrooveLabMidiToVocalBoxPanel({
         onClick={() => setOpen((v) => !v)}
         title="MIDI melody + lyrics → VocalBox auto-tune (tempo-locked preview)"
         style={{
-          background: open ? '#1a0f28' : '#111',
+          background: open ? '#1a0f28' : '#242424',
           color: open ? VOCAL_ACCENT_HI : '#a78bfa',
-          border: `1px solid ${open ? `${VOCAL_ACCENT}88` : '#1a1a1a'}`,
+          border: `1px solid ${open ? `${VOCAL_ACCENT}88` : '#2c2c2c'}`,
           borderRadius: 5,
           padding: '3px 8px',
           fontSize: 8,

@@ -491,7 +491,7 @@ export function BeatLabSynthPianoRoll({
           display: 'flex',
           flexDirection: 'column',
           borderRight: '1px solid #1e1e24',
-          background: '#08080c',
+          background: '#18181e',
           overflowY: 'auto',
         }}
       >
@@ -506,7 +506,7 @@ export function BeatLabSynthPianoRoll({
             fontSize: 7,
             fontWeight: 800,
             color: '#5a5a68',
-            borderBottom: '1px solid #1e1e1e',
+            borderBottom: '1px solid #303030',
           }}
         >
           CH

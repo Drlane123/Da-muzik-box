@@ -801,7 +801,7 @@ export function BeatLabPianoRoll({
           flex: 1,
           minHeight: 0,
           overflow: 'auto',
-          background: '#050505',
+          background: '#2a2a2a',
         }}
       >
         <div
@@ -836,15 +836,15 @@ export function BeatLabPianoRoll({
               zIndex: 20,
               height: BEAT_LAB_ROLL_RULER_H,
               display: 'flex',
-              background: '#080808',
-              borderBottom: '1px solid #1e1e1e',
+              background: '#2c2c2c',
+              borderBottom: '1px solid #303030',
             }}
           >
             <div
               style={{
                 width: BEAT_LAB_ROLL_LABEL_W,
                 flexShrink: 0,
-                borderRight: '1px solid #1e1e1e',
+                borderRight: '1px solid #303030',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -872,13 +872,13 @@ export function BeatLabPianoRoll({
                       height: BEAT_LAB_ROLL_RULER_H,
                       padding: 0,
                       border: 'none',
-                      borderLeft: `1px solid ${columnBorder(ci, '#080808')}`,
+                      borderLeft: `1px solid ${columnBorder(ci, '#2c2c2c')}`,
                       borderRight: 'none',
                       background: lit
                         ? 'rgba(124, 244, 198, 0.18)'
                         : (ci + snapOff) % Math.max(1, snapQpb * snapSub) === 0
                           ? '#101018'
-                          : '#080808',
+                          : '#2c2c2c',
                       color: lit ? '#7cf4c6' : '#4a4a58',
                       fontSize: 7,
                       fontFamily: 'monospace',

@@ -33,10 +33,10 @@ export default function AiMusicMatchScreen({
   onExportStudio: (payload: import('@/app/lib/aiMusicMatch/aiMusicMatchStudioExport').PendingAiMatchStudioImport) => void;
 }) {
   return (
-    <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}>
+    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}>
       <div
         className="flex items-center justify-between px-5 py-3 shrink-0 flex-wrap gap-3"
-        style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}
+        style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}
       >
         <div className="flex items-center gap-3">
           <div

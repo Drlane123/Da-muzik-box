@@ -174,7 +174,7 @@ export default function MyProjectsScreen({ onOpenStudioWithCloudProject, onNavig
   const tip = TIPS[tipIdx]
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#07070a', color: '#ccc' }}>
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: '#16161c', color: '#ccc' }}>
 
       {/* ── Header / Hero ──────────────────────────────────────────────── */}
       <div
@@ -262,7 +262,7 @@ export default function MyProjectsScreen({ onOpenStudioWithCloudProject, onNavig
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search…"
                   className="px-2.5 py-1 rounded text-[11px] outline-none"
-                  style={{ background: '#111', color: '#aaa', border: '1px solid #222', width: 140 }}
+                  style={{ background: '#242424', color: '#aaa', border: '1px solid #222', width: 140 }}
                 />
               </div>
 

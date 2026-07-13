@@ -79,7 +79,7 @@ export function AiMusicMatchVocalStrip({
     canvas.height = Math.floor(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = '#1c1c1c';
     ctx.fillRect(0, 0, w, h);
     const mid = h / 2;
     const barW = w / Math.max(1, peaks.length);
@@ -114,7 +114,7 @@ export function AiMusicMatchVocalStrip({
   return (
     <div
       className="rounded-lg overflow-hidden flex flex-col"
-      style={{ border: '1px solid #2a2a38', background: '#080808' }}
+      style={{ border: '1px solid #2a2a38', background: '#2c2c2c' }}
     >
       <div
         className="px-2.5 py-1 text-[9px] font-black uppercase tracking-widest border-b"

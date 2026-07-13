@@ -192,7 +192,7 @@ function toneLaneSurface(soundLane: Lab808SoundLane, blackKey: boolean, on: bool
   const accent = toneLaneAccent(soundLane, blackKey);
   const mix = on ? 78 : blackKey ? 38 : 52;
   const base = blackKey ? '#0a0a0e' : '#14141c';
-  return `linear-gradient(165deg, color-mix(in srgb, ${accent} ${mix}%, ${base}) 0%, #0c0c10 100%)`;
+  return `linear-gradient(165deg, color-mix(in srgb, ${accent} ${mix}%, ${base}) 0%, #1e1e24 100%)`;
 }
 
 export function Se2Lab808DrumGrid({

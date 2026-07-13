@@ -557,7 +557,7 @@ export function Se2SynthGenoLiveDualKeyboard({
                           ? `linear-gradient(180deg, ${accentHex}cc 0%, ${accentHex}33 100%)`
                           : enabled
                             ? 'linear-gradient(180deg, #3a4458 0%, #1a2230 100%)'
-                            : 'linear-gradient(180deg, #1a1c24 0%, #0c0c12 100%)',
+                            : 'linear-gradient(180deg, #1a1c24 0%, #1e1e26 100%)',
                         color: lit ? '#0c0c14' : enabled ? '#ececf4' : '#5a5a68',
                         cursor: disabled || !enabled ? 'default' : 'pointer',
                         padding: '3px 1px 5px',

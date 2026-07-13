@@ -46,7 +46,7 @@ export default function MasterVU({ masterLevel, barWidth = 120 }: MasterVUProps)
       }
 
       ctx.clearRect(0, 0, W, H);
-      ctx.fillStyle = '#0a0a0a';
+      ctx.fillStyle = '#1c1c1c';
       ctx.fillRect(0, 0, W, H);
 
       const db = linToDb(masterLevel);

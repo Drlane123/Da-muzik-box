@@ -209,7 +209,7 @@ function paintFrame(
       ctx.fillStyle = `rgba(220, 140, 90, ${0.15 + (bands[i] ?? 0) / 100 * 0.5})`;
       ctx.fillRect(bx, y0 + barH - bh, Math.max(1, sideW / bands.length - 0.5), bh);
     }
-    ctx.fillStyle = '#08080c';
+    ctx.fillStyle = '#18181e';
     ctx.fillRect(x0, y0, barW, barH);
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.strokeRect(x0 + 0.5, y0 + 0.5, barW - 1, barH - 1);
@@ -232,7 +232,7 @@ function paintFrame(
     const ceiling = params.ceiling ?? -1;
     const ceilPct = clamp01((ceiling + 3) / 3);
     const ceilY = 6 + (h - 12) * (1 - ceilPct);
-    ctx.fillStyle = '#08080c';
+    ctx.fillStyle = '#18181e';
     ctx.fillRect(8, 6, w - 16, h - 12);
     drawLiveSpectrum(
       ctx,

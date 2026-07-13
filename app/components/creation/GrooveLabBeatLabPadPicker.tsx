@@ -127,7 +127,7 @@ export function GrooveLabBeatLabPadPicker({
             disabled={busy}
             onClick={onCancel}
             style={{
-              background: '#1a1a1a',
+              background: '#2c2c2c',
               color: '#9ca3af',
               border: '1px solid #333',
               borderRadius: 6,

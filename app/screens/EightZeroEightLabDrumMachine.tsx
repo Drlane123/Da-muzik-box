@@ -1981,7 +1981,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           scrollbarGutter: 'stable',
           borderRadius: embedCompact ? 0 : 10,
           border: embedCompact ? 'none' : '1px solid #2a2a32',
-          background: embedCompact ? CB_PIANO_BG : '#08080c',
+          background: embedCompact ? CB_PIANO_BG : '#18181e',
         }}
       >
         <div
@@ -2335,7 +2335,7 @@ const EightZeroEightLabDrumMachine = forwardRef(function EightZeroEightLabDrumMa
           padding: '4px 8px',
           borderRadius: 8,
           border: '1px solid #27272f',
-          background: '#0c0c12',
+          background: '#1e1e26',
           flexShrink: 0,
         }}
       >

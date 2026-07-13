@@ -212,8 +212,8 @@ export default function TitleBar({
     <div
       className="select-none w-full min-w-0 shrink-0 px-3 py-1"
       style={{
-        background: '#0a0a0a',
-        borderBottom: '2px solid #1a1a1a',
+        background: '#1c1c1c',
+        borderBottom: '2px solid #2c2c2c',
         minHeight: 72,
         display: 'grid',
         gridTemplateColumns: '1fr auto 1fr',
@@ -347,7 +347,7 @@ export default function TitleBar({
           title={disableMasterTransport ? 'Use transport in Studio Editor 2 (footer)' : 'Return to start'}
           className={transportIconBtn}
           style={{
-            background: '#1a1a1a',
+            background: '#2c2c2c',
             color: '#888',
             border: '1px solid #333',
             opacity: disableMasterTransport ? 0.45 : 1,
@@ -367,7 +367,7 @@ export default function TitleBar({
           title={disableMasterTransport ? 'Use transport in Studio Editor 2 (footer)' : 'Stop'}
           className={transportIconBtn}
           style={{
-            background: isRunning ? '#ef4444' : '#1a1a1a',
+            background: isRunning ? '#ef4444' : '#2c2c2c',
             color: isRunning ? '#000' : '#888',
             border: `1px solid ${isRunning ? '#ef4444' : '#333'}`,
             opacity: disableMasterTransport ? 0.45 : 1,
@@ -408,7 +408,7 @@ export default function TitleBar({
               cursor: disableMasterTransport ? ('not-allowed' as const) : undefined,
             };
             if (disableMasterTransport) {
-              return { ...faded, background: '#1a1a1a', color: '#555', border: '1px solid #333' };
+              return { ...faded, background: '#2c2c2c', color: '#555', border: '1px solid #333' };
             }
             if (isRecording) {
               return {
@@ -484,7 +484,7 @@ export default function TitleBar({
           aria-pressed={isRecording}
           className={transportIconBtn}
           style={{
-            background: isRecording ? '#ef4444' : '#1a1a1a',
+            background: isRecording ? '#ef4444' : '#2c2c2c',
             color: isRecording ? '#000' : '#888',
             border: `1px solid ${isRecording ? '#ef4444' : '#333'}`,
             opacity: disableMasterTransport ? 0.45 : 1,
@@ -507,7 +507,7 @@ export default function TitleBar({
           disabled={topLoopDisabled}
           className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold transition-all active:scale-90 active:opacity-70 disabled:opacity-45 disabled:cursor-not-allowed"
           style={{
-            background: topLoopDisabled ? '#0d0d0d' : loopEnabled ? '#00E5FF22' : '#111',
+            background: topLoopDisabled ? '#0d0d0d' : loopEnabled ? '#00E5FF22' : '#242424',
             color: topLoopDisabled ? '#444' : loopEnabled ? '#00E5FF' : '#555',
             border: `1px solid ${topLoopDisabled ? '#262626' : loopEnabled ? '#00E5FF44' : '#333'}`,
           }}
@@ -524,7 +524,7 @@ export default function TitleBar({
           disabled={topLoopDisabled}
           className="h-7 px-1.5 rounded text-xs font-bold outline-none transition-all active:scale-90 active:opacity-70 disabled:opacity-45 disabled:cursor-not-allowed"
           style={{
-            background: topLoopDisabled ? '#0d0d0d' : '#111',
+            background: topLoopDisabled ? '#0d0d0d' : '#242424',
             color: topLoopDisabled ? '#444' : loopEnabled ? '#00E5FF' : '#555',
             border: `1px solid ${topLoopDisabled ? '#262626' : loopEnabled ? '#00E5FF44' : '#333'}`,
           }}
@@ -537,7 +537,7 @@ export default function TitleBar({
         {loopSection != null && loopSection !== '' && (
           <span
             className="px-1.5 h-7 rounded text-xs font-bold flex items-center"
-            style={{ background: '#111', color: '#00E5FF', border: '1px solid #00E5FF44' }}
+            style={{ background: '#242424', color: '#00E5FF', border: '1px solid #00E5FF44' }}
             title="Loop section label"
           >
             {loopSection}
@@ -550,7 +550,7 @@ export default function TitleBar({
         <span className="text-xs font-bold" style={{ color: '#555' }}>Q</span>
         <select value={quantize} onChange={e => setQuantize(e.target.value as QuantizeValue)}
           className="h-7 px-1.5 rounded text-xs font-bold outline-none transition-all active:scale-90 active:opacity-70"
-          style={{ background: '#111', color: '#D500F9', border: '1px solid #D500F944' }}>
+          style={{ background: '#242424', color: '#D500F9', border: '1px solid #D500F944' }}>
           {QUANTIZE_OPTIONS.map(q => <option key={q} value={q}>{q}</option>)}
         </select>
       </div>
@@ -564,14 +564,14 @@ export default function TitleBar({
         onClick={() => setMetronomeEnabled(!metronomeEnabled)}
         title="Metronome: audible click track. Studio timeline playhead is cyan; this MET button is magenta for clicks only. Toolbar MET lamp = visual quarter pulse."
         className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
-        style={{ background: metronomeEnabled ? '#D500F9' : '#1a1a1a', color: metronomeEnabled ? '#000' : '#888', border: `1px solid ${metronomeEnabled ? '#D500F9' : '#2a2a2a'}` }}
+        style={{ background: metronomeEnabled ? '#D500F9' : '#2c2c2c', color: metronomeEnabled ? '#000' : '#888', border: `1px solid ${metronomeEnabled ? '#D500F9' : '#2a2a2a'}` }}
       >
         MET
       </button>
 
       <button onClick={() => setMidiClockEnabled(!midiClockEnabled)} title="Send MIDI clock to hardware"
         className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
-        style={{ background: midiClockEnabled ? '#00E5FF' : '#1a1a1a', color: midiClockEnabled ? '#000' : '#888', border: `1px solid ${midiClockEnabled ? '#00E5FF' : '#2a2a2a'}` }}>
+        style={{ background: midiClockEnabled ? '#00E5FF' : '#2c2c2c', color: midiClockEnabled ? '#000' : '#888', border: `1px solid ${midiClockEnabled ? '#00E5FF' : '#2a2a2a'}` }}>
         MIDI
       </button>
 
@@ -598,7 +598,7 @@ export default function TitleBar({
         </select>
         <button onClick={() => setCountInEnabled(!countInEnabled)} title={`Precount on/off (default ON): ${countInBeats} beat(s) before Record — same click as MET.`}
           className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
-          style={{ background: countInEnabled ? (transport === 'counting' ? '#ff6b6b' : '#ff9800') : '#1a1a1a', color: countInEnabled ? '#000' : '#888', border: `1px solid ${countInEnabled ? '#ff9800' : '#2a2a2a'}`, boxShadow: transport === 'counting' ? '0 0 12px #ff6b6b' : 'none' }}>
+          style={{ background: countInEnabled ? (transport === 'counting' ? '#ff6b6b' : '#ff9800') : '#2c2c2c', color: countInEnabled ? '#000' : '#888', border: `1px solid ${countInEnabled ? '#ff9800' : '#2a2a2a'}`, boxShadow: transport === 'counting' ? '0 0 12px #ff6b6b' : 'none' }}>
           {transport === 'counting' && countDownTicks > 0 ? Math.max(1, Math.ceil(countDownTicks / PPQ)) : 'PRE'}
         </button>
         
@@ -615,7 +615,7 @@ export default function TitleBar({
                     width: 14,
                     height: 14,
                     borderRadius: 4,
-                    background: isActive ? '#ff9800' : '#1a1a1a',
+                    background: isActive ? '#ff9800' : '#2c2c2c',
                     border: `2px solid ${isActive ? '#ff9800' : '#333'}`,
                     boxShadow: isActive ? '0 0 6px #ff9800' : 'none',
                     transition: 'all 0.15s',
@@ -636,7 +636,7 @@ export default function TitleBar({
 
       <button onClick={() => setPatternMode(!patternMode)}
         className="px-2 h-7 rounded text-xs font-bold shrink-0 transition-all active:scale-90 active:opacity-70"
-        style={{ background: '#1a1a1a', color: patternMode ? '#D500F9' : '#00E5FF', border: `1px solid ${patternMode ? '#D500F9' : '#00E5FF'}` }}>
+        style={{ background: '#2c2c2c', color: patternMode ? '#D500F9' : '#00E5FF', border: `1px solid ${patternMode ? '#D500F9' : '#00E5FF'}` }}>
         {patternMode ? 'PAT' : 'SONG'}
       </button>
 
@@ -697,7 +697,7 @@ export default function TitleBar({
           onClick={onOpenOverview}
           title="Da Music Box — product overview"
           className="h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90 gap-1 px-2"
-          style={{ background: '#1a1a1a', color: '#c8d0dc', border: '1px solid rgba(212, 220, 232, 0.25)' }}
+          style={{ background: '#2c2c2c', color: '#c8d0dc', border: '1px solid rgba(212, 220, 232, 0.25)' }}
         >
           <Sparkles size={14} />
           <span className="hidden sm:inline" style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4 }}>
@@ -711,7 +711,7 @@ export default function TitleBar({
           onClick={onOpenSettings}
           title="Settings — Audio I/O (Ctrl+,)"
           className="w-8 h-8 rounded flex items-center justify-center shrink-0 transition-all active:scale-90"
-          style={{ background: '#1a1a1a', color: '#888', border: '1px solid #333' }}
+          style={{ background: '#2c2c2c', color: '#888', border: '1px solid #333' }}
         >
           <Settings size={15} />
         </button>
@@ -725,7 +725,7 @@ export default function TitleBar({
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          background: '#0f0f0f',
+          background: '#222222',
           border: '2px solid #00ff88',
           borderRadius: 12,
           padding: 24,
@@ -751,7 +751,7 @@ export default function TitleBar({
               style={{
                 width: '100%',
                 padding: '10px 12px',
-                background: '#1a1a1a',
+                background: '#2c2c2c',
                 border: '1px solid #333',
                 borderRadius: 6,
                 color: '#00ff88',
@@ -794,7 +794,7 @@ export default function TitleBar({
               onClick={() => setShowSaveAsDialog(false)}
               style={{
                 padding: '10px 16px',
-                background: '#1a1a1a',
+                background: '#2c2c2c',
                 color: '#888',
                 border: '1px solid #444',
                 borderRadius: 6,
@@ -826,7 +826,7 @@ export default function TitleBar({
 
       {showNewProjectDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }} ref={menuRef}>
-          <div className="p-6 rounded-xl" style={{ background: '#0a0a0a', border: '1px solid #2a2a2a', minWidth: 300 }}>
+          <div className="p-6 rounded-xl" style={{ background: '#1c1c1c', border: '1px solid #2a2a2a', minWidth: 300 }}>
             <h2 className="text-sm font-bold mb-3" style={{ color: '#fff' }}>New Project</h2>
             <input
               type="text"
@@ -836,12 +836,12 @@ export default function TitleBar({
               onKeyDown={(e) => e.key === 'Enter' && handleNewProject()}
               autoFocus
               className="w-full px-3 py-2 rounded text-xs mb-4 outline-none"
-              style={{ background: '#1a1a1a', color: '#fff', border: '1px solid #2a2a2a' }}
+              style={{ background: '#2c2c2c', color: '#fff', border: '1px solid #2a2a2a' }}
             />
             <div className="flex gap-2">
               <button onClick={() => setShowNewProjectDialog(false)}
                 className="flex-1 px-3 py-2 rounded text-xs font-bold"
-                style={{ background: '#1a1a1a', color: '#888' }}>
+                style={{ background: '#2c2c2c', color: '#888' }}>
                 Cancel
               </button>
               <button onClick={handleNewProject}

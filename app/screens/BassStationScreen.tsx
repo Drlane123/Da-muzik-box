@@ -651,8 +651,8 @@ function VeloCell({ velocity, isCurrentStep, rowColor, beatStart, onToggle, onVe
         position: 'relative',
         background: isCurrentStep
           ? on ? 'transparent' : '#1e1828'
-          : beatStart ? '#0a0a0a' : '#060606',
-        border: `1px solid ${beatStart ? '#1a1a1a' : '#0f0f0f'}`,
+          : beatStart ? '#1c1c1c' : '#060606',
+        border: `1px solid ${beatStart ? '#2c2c2c' : '#222222'}`,
         cursor: 'pointer',
         padding: 0,
         overflow: 'hidden',
@@ -900,10 +900,10 @@ export default function BassStationScreen({
 
       {/* ── HEADER ── */}
       <div className="flex items-center gap-3 px-4 py-2.5 shrink-0"
-        style={{ background: 'linear-gradient(180deg,#0e0e0e,#080808)', borderBottom: '1px solid #1a1a1a' }}>
+        style={{ background: 'linear-gradient(180deg,#0e0e0e,#2c2c2c)', borderBottom: '1px solid #2c2c2c' }}>
         {embedded && onBack && (
           <button onClick={() => { stopPlayback(); onBack(); }}
-            style={{ background: '#111', color: '#666', border: '1px solid #222', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+            style={{ background: '#242424', color: '#666', border: '1px solid #222', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
             <X size={11} /> Close
           </button>
         )}
@@ -921,7 +921,7 @@ export default function BassStationScreen({
           </div>
         </div>
 
-        <div style={{ width: 1, height: 32, background: '#1a1a1a', margin: '0 4px' }} />
+        <div style={{ width: 1, height: 32, background: '#2c2c2c', margin: '0 4px' }} />
 
         {/* BPM inline */}
         <div className="flex items-center gap-1">
@@ -935,7 +935,7 @@ export default function BassStationScreen({
 
         {/* Transport */}
         <button onClick={() => { nextStepIdxRef.current = 0; setCurrentStep(-1); }}
-          style={{ background: '#111', color: '#444', border: '1px solid #1e1e1e', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}>
+          style={{ background: '#242424', color: '#444', border: '1px solid #303030', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}>
           <SkipBack size={13} />
         </button>
         <button onClick={playing ? stopPlayback : startPlayback}
@@ -955,16 +955,16 @@ export default function BassStationScreen({
         {onExportToPad && (
           <div style={{ position: 'relative' }}>
             <button onClick={() => setPadPickerOpen((v) => !v)} disabled={padExportBusy}
-              style={{ background: '#111', color: padExportBusy ? '#333' : '#a855f7', border: '1px solid #252525', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
+              style={{ background: '#242424', color: padExportBusy ? '#333' : '#a855f7', border: '1px solid #252525', borderRadius: 6, padding: '6px 12px', fontSize: 11, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.04em' }}>
               {padExportBusy ? '…' : '→ PAD'}
             </button>
             {padPickerOpen && (
-              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#111', border: '1px solid #2a2a2a', borderRadius: 10, padding: 12, zIndex: 50, width: 194 }}>
+              <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#242424', border: '1px solid #2a2a2a', borderRadius: 10, padding: 12, zIndex: 50, width: 194 }}>
                 <p style={{ fontSize: 9, color: '#555', marginBottom: 8, fontWeight: 700 }}>EXPORT TO PAD</p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4 }}>
                   {Array.from({ length: 16 }, (_, i) => (
                     <button key={i} onClick={() => { setPadPickerOpen(false); handleExportToPad(i); }}
-                      style={{ background: '#1a1a1a', color: '#a855f7', border: '1px solid #a855f733', borderRadius: 5, padding: '6px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      style={{ background: '#2c2c2c', color: '#a855f7', border: '1px solid #a855f733', borderRadius: 5, padding: '6px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                       {i + 1}
                     </button>
                   ))}
@@ -980,17 +980,17 @@ export default function BassStationScreen({
 
       {/* ── CONTROLS BAR ── */}
       <div className="shrink-0 px-4 py-2.5 flex items-center gap-3 flex-wrap"
-        style={{ background: '#050505', borderBottom: '1px solid #111' }}>
+        style={{ background: '#2a2a2a', borderBottom: '1px solid #242424' }}>
         {/* Genre */}
         <div className="flex items-center gap-1.5">
           <span style={{ fontSize: 9, fontWeight: 800, color: '#444', letterSpacing: '0.08em' }}>GENRE</span>
           <select value={genre} onChange={(e) => setGenre(e.target.value)}
-            style={{ background: '#111', color: '#d0d0d0', border: '1px solid #2a2a2a', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ background: '#242424', color: '#d0d0d0', border: '1px solid #2a2a2a', borderRadius: 6, padding: '4px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
             {GENRES.map((g) => <option key={g} value={g}>{g}</option>)}
           </select>
         </div>
 
-        <div style={{ width: 1, height: 20, background: '#1a1a1a' }} />
+        <div style={{ width: 1, height: 20, background: '#2c2c2c' }} />
 
         {/* Sound */}
         <div className="flex items-center gap-1">
@@ -1000,14 +1000,14 @@ export default function BassStationScreen({
               style={{
                 background: voice === v ? '#a855f722' : 'transparent',
                 color: voice === v ? '#c084fc' : '#3a3a3a',
-                border: `1px solid ${voice === v ? '#a855f755' : '#1a1a1a'}`,
+                border: `1px solid ${voice === v ? '#a855f755' : '#2c2c2c'}`,
                 borderRadius: 5, padding: '3px 8px', fontSize: 10, fontWeight: 700,
                 cursor: 'pointer', letterSpacing: '0.04em', textTransform: 'uppercase',
               }}>{v}</button>
           ))}
         </div>
 
-        <div style={{ width: 1, height: 20, background: '#1a1a1a' }} />
+        <div style={{ width: 1, height: 20, background: '#2c2c2c' }} />
 
         {/* Key */}
         <div className="flex items-center gap-1 flex-wrap">
@@ -1034,7 +1034,7 @@ export default function BassStationScreen({
           ))}
         </div>
 
-        <div style={{ width: 1, height: 20, background: '#1a1a1a' }} />
+        <div style={{ width: 1, height: 20, background: '#2c2c2c' }} />
 
         {/* Bars */}
         <div className="flex items-center gap-1">
@@ -1071,7 +1071,7 @@ export default function BassStationScreen({
       <div className="shrink-0 px-4 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid #0d0d0d' }}>
         <button onClick={handleGenerate} disabled={generating}
           style={{
-            background: generating ? '#111' : 'linear-gradient(135deg,#a855f7 0%,#7c3aed 100%)',
+            background: generating ? '#242424' : 'linear-gradient(135deg,#a855f7 0%,#7c3aed 100%)',
             color: generating ? '#333' : '#fff',
             border: 'none', borderRadius: 8,
             padding: '9px 24px', fontSize: 12, fontWeight: 900,
@@ -1088,7 +1088,7 @@ export default function BassStationScreen({
         </button>
 
         <button onClick={() => setGrid(emptyGrid(totalSteps))}
-          style={{ background: '#0d0d0d', color: '#333', border: '1px solid #1a1a1a', borderRadius: 8, padding: '9px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+          style={{ background: '#0d0d0d', color: '#333', border: '1px solid #2c2c2c', borderRadius: 8, padding: '9px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
           CLEAR
         </button>
 
@@ -1096,7 +1096,7 @@ export default function BassStationScreen({
           style={{
             background: followOpen ? '#a855f711' : '#0d0d0d',
             color: followOpen ? '#a855f7' : '#2e2e2e',
-            border: `1px solid ${followOpen ? '#a855f733' : '#1a1a1a'}`,
+            border: `1px solid ${followOpen ? '#a855f733' : '#2c2c2c'}`,
             borderRadius: 8, padding: '9px 14px', fontSize: 11, fontWeight: 700,
             display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer',
           }}>
@@ -1117,7 +1117,7 @@ export default function BassStationScreen({
             {/* Toggle */}
             <div onClick={() => setFollowEnabled((v) => !v)} style={{
               width: 32, height: 18, borderRadius: 9,
-              background: followEnabled ? '#a855f7' : '#1a1a1a',
+              background: followEnabled ? '#a855f7' : '#2c2c2c',
               border: '1px solid #2a2a2a',
               position: 'relative', cursor: 'pointer',
             }}>
@@ -1234,7 +1234,7 @@ export default function BassStationScreen({
             <div key={i} style={{
               flex: 1, textAlign: 'center',
               fontSize: 8, fontFamily: 'monospace', fontWeight: 700,
-              color: currentStep === i ? '#a855f7' : i % 4 === 0 ? '#333' : '#1a1a1a',
+              color: currentStep === i ? '#a855f7' : i % 4 === 0 ? '#333' : '#2c2c2c',
             }}>
               {i % 4 === 0 ? Math.floor(i / 4) + 1 : i % 2 === 0 ? '&' : '·'}
             </div>
@@ -1285,12 +1285,12 @@ export default function BassStationScreen({
 
         {/* Empty state */}
         {!hasNotes && (
-          <div style={{ textAlign: 'center', paddingTop: 32, color: '#1e1e1e' }}>
+          <div style={{ textAlign: 'center', paddingTop: 32, color: '#303030' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>🐉</div>
             <p style={{ fontSize: 13, fontWeight: 800, color: '#2a2a2a' }}>
               Hit <span style={{ color: '#a855f7' }}>GENERATE</span> for a {genre} bassline
             </p>
-            <p style={{ fontSize: 10, marginTop: 4, color: '#1a1a1a' }}>
+            <p style={{ fontSize: 10, marginTop: 4, color: '#2c2c2c' }}>
               Key: {KEY_LABELS[keyRoot]} {mode} · Sound: {voice} · {loopLength} bar{loopLength !== 1 ? 's' : ''}
             </p>
           </div>
@@ -1299,7 +1299,7 @@ export default function BassStationScreen({
 
       {/* Status bar */}
       <div style={{ borderTop: '1px solid #0d0d0d', padding: '4px 16px', display: 'flex', alignItems: 'center', gap: 12, background: '#030303' }}>
-        <span style={{ fontSize: 9, color: '#1e1e1e', fontWeight: 700, letterSpacing: '0.06em' }}>
+        <span style={{ fontSize: 9, color: '#303030', fontWeight: 700, letterSpacing: '0.06em' }}>
           BASS LOW · {KEY_LABELS[keyRoot]} {mode.toUpperCase()} · {voice.toUpperCase()} · {loopLength * STEPS_PER_BAR} STEPS · {localBpm} BPM
         </span>
         {playing && (

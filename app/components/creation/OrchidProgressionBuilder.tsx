@@ -1002,9 +1002,9 @@ export function OrchidProgressionBuilder({
                     : 'When OFF, keep your manual BPM while browsing packs'
                 }
                 style={{
-                  background: autoGenreTempo ? '#112015' : '#111',
+                  background: autoGenreTempo ? '#112015' : '#242424',
                   color: autoGenreTempo ? '#22c55e' : '#6b7280',
-                  border: `1px solid ${autoGenreTempo ? '#1f3a29' : '#1a1a1a'}`,
+                  border: `1px solid ${autoGenreTempo ? '#1f3a29' : '#2c2c2c'}`,
                   borderRadius: 5,
                   padding: '2px 8px',
                   fontSize: 8,
@@ -1311,7 +1311,7 @@ export function OrchidProgressionBuilder({
                 }
                 style={{
                   ...actionBtnStyle,
-                  background: dropStepsReady ? '#15321e' : '#111',
+                  background: dropStepsReady ? '#15321e' : '#242424',
                   color: dropStepsReady ? '#4ade80' : '#444',
                   border: `1px solid ${dropStepsReady ? '#22c55e88' : '#222'}`,
                   flex: 1,
@@ -1328,7 +1328,7 @@ export function OrchidProgressionBuilder({
                 title="Copy rhythm edit steps to the main builder below (hits per bar kept on each step)"
                 style={{
                   ...actionBtnStyle,
-                  background: editBoxReady ? '#0c1828' : '#111',
+                  background: editBoxReady ? '#0c1828' : '#242424',
                   color: editBoxReady ? '#93c5fd' : '#444',
                   border: `1px solid ${editBoxReady ? '#3b82f666' : '#222'}`,
                   flex: 1,
@@ -1349,7 +1349,7 @@ export function OrchidProgressionBuilder({
                   }
                   style={{
                     ...actionBtnStyle,
-                    background: dropStepsReady ? '#0c1828' : '#111',
+                    background: dropStepsReady ? '#0c1828' : '#242424',
                     color: dropStepsReady ? '#93c5fd' : '#444',
                     border: `1px solid ${dropStepsReady ? '#3b82f666' : '#222'}`,
                   }}
@@ -1793,7 +1793,7 @@ export function OrchidProgressionBuilder({
           }
           style={{
             ...actionBtnStyle,
-            background: dropStepsReady ? '#15321e' : '#111',
+            background: dropStepsReady ? '#15321e' : '#242424',
             color: dropStepsReady ? '#4ade80' : '#444',
             border: `1px solid ${dropStepsReady ? '#22c55e88' : '#222'}`,
             flex: 1,
@@ -1817,7 +1817,7 @@ export function OrchidProgressionBuilder({
             title="Chords on roll, then auto-generate blue bass pattern"
             style={{
               ...actionBtnStyle,
-              background: dropStepsReady ? '#0c1828' : '#111',
+              background: dropStepsReady ? '#0c1828' : '#242424',
               color: dropStepsReady ? '#93c5fd' : '#444',
               border: `1px solid ${dropStepsReady ? '#3b82f666' : '#222'}`,
             }}
@@ -2082,7 +2082,7 @@ function CandidateBar({
         onClick={onAdd}
         style={{
           ...smallBtnStyle,
-          background: valid ? '#15321e' : '#111',
+          background: valid ? '#15321e' : '#242424',
           color: valid ? '#4ade80' : '#444',
           border: `1px solid ${valid ? '#22c55e88' : '#222'}`,
           flex: 1,
@@ -2382,7 +2382,7 @@ function auditionBtnStyle(
   color: string,
 ): CSSProperties {
   return {
-    background: enabled ? bg : '#111',
+    background: enabled ? bg : '#242424',
     color: enabled ? color : '#444',
     border: `1px solid ${enabled ? '#1f3a29' : '#222'}`,
     borderRadius: 5,
@@ -2412,9 +2412,9 @@ const selectStyle: CSSProperties = {
 };
 
 const inputStyle: CSSProperties = {
-  background: '#0a0a0a',
+  background: '#1c1c1c',
   color: '#e5e7eb',
-  border: '1px solid #1a1a1a',
+  border: '1px solid #2c2c2c',
   borderRadius: 4,
   padding: '5px 8px',
   fontSize: 10,
@@ -2434,7 +2434,7 @@ const smallBtnStyle: CSSProperties = {
 
 function miniToggleStyle(on: boolean): CSSProperties {
   return {
-    background: on ? '#15321e' : '#111',
+    background: on ? '#15321e' : '#242424',
     color: on ? '#86efac' : '#6b7280',
     border: `1px solid ${on ? '#22c55e88' : '#222'}`,
     borderRadius: 4,
@@ -2447,7 +2447,7 @@ function miniToggleStyle(on: boolean): CSSProperties {
 
 function exportBtnStyle(enabled: boolean): CSSProperties {
   return {
-    background: enabled ? '#1a2438' : '#111',
+    background: enabled ? '#1a2438' : '#242424',
     color: enabled ? '#fde68a' : '#444',
     border: `1px solid ${enabled ? '#fde68a55' : '#222'}`,
     borderRadius: 4,

@@ -103,9 +103,9 @@ export default function MasterChain({ masterLevel }: { masterLevel: number }) {
   const isActive = transport === 'playing' || transport === 'recording';
 
   return (
-    <div className="flex flex-col gap-2" style={{ background: '#050505' }}>
+    <div className="flex flex-col gap-2" style={{ background: '#2a2a2a' }}>
       {/* Signal flow header */}
-      <div className="flex items-center gap-1 px-3 py-2 flex-wrap" style={{ background: '#080808', borderBottom: '1px solid #1a1a1a' }}>
+      <div className="flex items-center gap-1 px-3 py-2 flex-wrap" style={{ background: '#2c2c2c', borderBottom: '1px solid #2c2c2c' }}>
         <span className="text-xs font-bold tracking-widest" style={{ color: '#555' }}>MASTER CHAIN</span>
         <span className="text-xs mx-1" style={{ color: '#333' }}>·</span>
         {stages.map((s, si) => (
@@ -125,7 +125,7 @@ export default function MasterChain({ masterLevel }: { masterLevel: number }) {
         {/* Stage controls */}
         <div className="flex flex-col gap-2 flex-1" style={{ minWidth: 0 }}>
           {stages.map((stage) => (
-            <div key={stage.id} className="rounded-lg overflow-hidden" style={{ background: '#0a0a0a', border: `1px solid ${stage.enabled ? stage.color + '44' : '#1a1a1a'}` }}>
+            <div key={stage.id} className="rounded-lg overflow-hidden" style={{ background: '#1c1c1c', border: `1px solid ${stage.enabled ? stage.color + '44' : '#2c2c2c'}` }}>
               <div className="flex items-center gap-2 px-3 py-1.5 cursor-pointer"
                 style={{ background: '#0d0d0d', borderBottom: collapsed[stage.id] ? 'none' : `1px solid ${stage.color}22` }}
                 onClick={() => toggleCollapse(stage.id)}>
@@ -163,7 +163,7 @@ export default function MasterChain({ masterLevel }: { masterLevel: number }) {
         {/* Master Meters panel */}
         <div className="flex flex-col gap-3 shrink-0" style={{ width: 160 }}>
           {/* LUFS / RMS / TP readouts */}
-          <div className="rounded-lg p-2 flex flex-col gap-1" style={{ background: '#0a0a0a', border: '1px solid #1a1a1a' }}>
+          <div className="rounded-lg p-2 flex flex-col gap-1" style={{ background: '#1c1c1c', border: '1px solid #2c2c2c' }}>
             <span className="text-xs font-bold" style={{ color: '#555', fontSize: 9 }}>MASTER READOUTS</span>
             {[
               { label: 'LUFS',       value: lufs.toFixed(1),     color: lufs > -9 ? '#ff2222' : lufs > -14 ? '#ffcc00' : '#00e676' },
@@ -191,9 +191,9 @@ export default function MasterChain({ masterLevel }: { masterLevel: number }) {
           </div>
 
           {/* Compressor GR meter */}
-          <div className="rounded p-2 flex flex-col gap-1" style={{ background: '#0a0a0a', border: `1px solid ${stages.find(s=>s.id==='comp')?.color}33` }}>
+          <div className="rounded p-2 flex flex-col gap-1" style={{ background: '#1c1c1c', border: `1px solid ${stages.find(s=>s.id==='comp')?.color}33` }}>
             <span style={{ color: '#555', fontSize: 8, fontFamily: 'monospace' }}>GAIN REDUCTION</span>
-            <div className="h-2 rounded overflow-hidden" style={{ background: '#111' }}>
+            <div className="h-2 rounded overflow-hidden" style={{ background: '#242424' }}>
               <div className="h-full rounded" style={{
                 width: isActive ? `${Math.min(100, masterLevel * 35)}%` : '0%',
                 background: '#D500F9',

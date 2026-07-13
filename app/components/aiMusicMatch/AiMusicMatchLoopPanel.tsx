@@ -140,7 +140,7 @@ export default function AiMusicMatchLoopPanel({
   return (
     <div
       className="flex flex-col gap-4 rounded-xl p-4 w-full min-w-0"
-      style={{ background: '#0a0a0a', border: `2px solid ${MINT}44` }}
+      style={{ background: '#1c1c1c', border: `2px solid ${MINT}44` }}
     >
       <div>
         <p className="text-xs font-black uppercase tracking-widest" style={{ color: MINT }}>
@@ -173,7 +173,7 @@ export default function AiMusicMatchLoopPanel({
             type="button"
             onClick={exportStudio}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black"
-            style={{ background: '#111', color: CYAN, border: `1px solid ${CYAN}55` }}
+            style={{ background: '#242424', color: CYAN, border: `1px solid ${CYAN}55` }}
           >
             <ExternalLink size={12} />
             Send to Studio Editor 2
@@ -209,7 +209,7 @@ export default function AiMusicMatchLoopPanel({
                 onClick={() => onSelectCandidate(c.id)}
                 className="text-left px-3 py-2 rounded-lg text-xs max-w-full"
                 style={{
-                  background: active ? 'rgba(124, 244, 198, 0.12)' : '#111',
+                  background: active ? 'rgba(124, 244, 198, 0.12)' : '#242424',
                   border: `1px solid ${active ? MINT : '#333'}`,
                   color: active ? MINT : '#aaa',
                 }}

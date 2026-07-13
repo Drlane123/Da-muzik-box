@@ -81,7 +81,7 @@ export default function VocalTracksPanel() {
             {/* Waveform thumbnail placeholder */}
             <div
               className="w-20 h-6 rounded flex items-center justify-center shrink-0"
-              style={{ background: '#111', overflow: 'hidden' }}
+              style={{ background: '#242424', overflow: 'hidden' }}
             >
               {[...Array(20)].map((_, i) => (
                 <div
@@ -103,7 +103,7 @@ export default function VocalTracksPanel() {
                 value={track.channel}
                 onChange={e => updateChannel(track.id, Number(e.target.value))}
                 className="text-xs rounded px-1 py-0.5 outline-none"
-                style={{ background: '#1a1a1a', color: '#00E5FF', border: '1px solid #222', width: 44 }}
+                style={{ background: '#2c2c2c', color: '#00E5FF', border: '1px solid #222', width: 44 }}
               >
                 {Array.from({ length: 24 }, (_, i) => (
                   <option key={i + 1} value={i + 1}>{i + 1}</option>

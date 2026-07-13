@@ -1416,7 +1416,7 @@ function miniBtn(
   compactEmbed = false,
 ): CSSProperties {
   return {
-    background: enabled ? (active ? '#1a3a2a' : bg) : '#111',
+    background: enabled ? (active ? '#1a3a2a' : bg) : '#242424',
     color: enabled ? color : '#444',
     border: `1px solid ${enabled ? '#1f3a29' : '#222'}`,
     borderRadius: 5,

@@ -283,7 +283,7 @@ export function StudioPitchTuneMonitor({
   return (
     <div
       className="rounded-lg border p-2"
-      style={{ borderColor: '#262632', background: 'linear-gradient(180deg, #0c0c12 0%, #06060c 100%)' }}
+      style={{ borderColor: '#262632', background: 'linear-gradient(180deg, #1e1e26 0%, #06060c 100%)' }}
     >
       <div className="suite-type-label text-[6px] mb-1.5 tracking-widest" style={{ color: '#6a6a78' }}>
         Pitch scope · keyboard

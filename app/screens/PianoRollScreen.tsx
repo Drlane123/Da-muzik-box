@@ -557,7 +557,7 @@ export default function PianoRollScreen({
           style={{
             width: 32,
             height: 22,
-            background: metronomeEnabled ? 'rgba(124,244,198,0.14)' : '#111',
+            background: metronomeEnabled ? 'rgba(124,244,198,0.14)' : '#242424',
             color: metronomeEnabled ? CB_PIANO_MINT : '#666',
             border: `1px solid ${metronomeEnabled ? CB_PIANO_MINT_BORDER : '#333'}`,
           }}
@@ -576,7 +576,7 @@ export default function PianoRollScreen({
   }
 
   function cellBg(ci: number, isHead: boolean, isSelBar: boolean, isBlack = false): string {
-    const base = isBlack ? '#08080c' : '#0c0c10';
+    const base = isBlack ? '#18181e' : '#1e1e24';
     if (isHead) return 'rgba(124, 244, 198, 0.12)';
     if (isSelBar) return CB_PIANO_MINT_BG;
     return base;
@@ -600,8 +600,8 @@ export default function PianoRollScreen({
     return (
       <>
         {/* Row 1: Bar numbers */}
-        <div className="flex" style={{ height: 20, background: '#080808', borderBottom: `1px solid ${CB_PIANO_MINT_BORDER}` }}>
-          <div style={{ width: keyW, flexShrink: 0, borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`, background: '#08080c' }} />
+        <div className="flex" style={{ height: 20, background: '#2c2c2c', borderBottom: `1px solid ${CB_PIANO_MINT_BORDER}` }}>
+          <div style={{ width: keyW, flexShrink: 0, borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`, background: '#18181e' }} />
           {Array.from({ length: BARS }, (_, bi) => {
             const barNum = bi + 1;
             const isActive = barNum === currentBar && isPlaying;
@@ -626,7 +626,7 @@ export default function PianoRollScreen({
         </div>
         {/* Row 2: Beats 1–4 (quarters) — clip so digits don’t smear when zoomed out */}
         <div className="flex" style={{ height: 16, background: 'rgba(8, 8, 12, 0.98)', borderBottom: `1px solid ${CB_PIANO_MINT_BG}` }}>
-          <div style={{ width: keyW, flexShrink: 0, borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`, background: '#08080c' }} />
+          <div style={{ width: keyW, flexShrink: 0, borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`, background: '#18181e' }} />
           {Array.from({ length: COLS }, (_, ci) => {
             const stepInBar    = ci % PIANO_ROLL_STEPS_PER_BAR;
             const beatInBar1   = Math.floor(stepInBar / PIANO_ROLL_BEATS_PER_BAR) + 1;
@@ -641,7 +641,7 @@ export default function PianoRollScreen({
                 style={{
                   width: pxPer16th, flexShrink: 0, height: 16, minWidth: 0,
                   borderLeft: colBorderStyle(ci),
-                  background: isActive ? 'rgba(124, 244, 198, 0.18)' : isSelected ? CB_PIANO_MINT_BG : stepInBar % PIANO_ROLL_BEATS_PER_BAR === 0 ? '#101018' : '#080808',
+                  background: isActive ? 'rgba(124, 244, 198, 0.18)' : isSelected ? CB_PIANO_MINT_BG : stepInBar % PIANO_ROLL_BEATS_PER_BAR === 0 ? '#101018' : '#2c2c2c',
                   fontSize: beatRulerFontPx, fontFamily: 'monospace',
                   color: isActive ? CB_PIANO_MINT : '#4a4a58',
                   fontWeight: 'bold',
@@ -662,11 +662,11 @@ export default function PianoRollScreen({
     <div
       ref={containerRef}
       className="flex flex-col h-full min-h-0 overflow-hidden"
-      style={{ background: '#050505', color: '#ccc' }}
+      style={{ background: '#2a2a2a', color: '#ccc' }}
     >
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 py-2 shrink-0 flex-wrap gap-2"
-        style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
+        style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#00E5FF22', color: '#00E5FF' }}><Piano size={16} /></div>
           <h2 className="text-sm font-bold" style={{ color: '#fff' }}>Piano Roll</h2>
@@ -675,16 +675,16 @@ export default function PianoRollScreen({
             ⚡ {bpm} BPM
           </span>
           <span className="text-xs font-mono px-2 py-0.5 rounded"
-            style={{ background: '#000', border: '1px solid #1a1a1a', color: '#555' }}
+            style={{ background: '#000', border: '1px solid #2c2c2c', color: '#555' }}
             title="SE2 audio clock — BAR/BEAT from transport">
             BAR {currentBar} · BEAT {currentBeat}/4
           </span>
           <span data-piano-roll-bars-readout className="text-xs font-mono px-2 py-0.5 rounded"
-            style={{ background: '#000', border: '1px solid #1a1a1a', color: CB_PIANO_MINT }}>
+            style={{ background: '#000', border: '1px solid #2c2c2c', color: CB_PIANO_MINT }}>
             1.1.000
           </span>
           <span data-piano-roll-time-readout className="text-xs font-mono px-2 py-0.5 rounded"
-            style={{ background: '#000', border: '1px solid #1a1a1a', color: '#888' }}>
+            style={{ background: '#000', border: '1px solid #2c2c2c', color: '#888' }}>
             00:00.00
           </span>
           <span className="text-xs px-1.5 py-0.5 rounded font-bold"
@@ -699,11 +699,11 @@ export default function PianoRollScreen({
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={() => setAutoScroll(v => !v)} className="px-2 py-1 rounded text-xs font-bold"
-            style={{ background: autoScroll ? '#00ff8818' : '#111', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
+            style={{ background: autoScroll ? '#00ff8818' : '#242424', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
             ↔ Scroll
           </button>
           <button onClick={handleFit} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-bold"
-            style={{ background: '#1a1a1a', color: '#ffcc00', border: '1px solid #ffcc0044' }}>
+            style={{ background: '#2c2c2c', color: '#ffcc00', border: '1px solid #ffcc0044' }}>
             <Maximize2 size={10} /> Fit (F)
           </button>
           {/* Total bars */}
@@ -711,7 +711,7 @@ export default function PianoRollScreen({
             <span className="text-xs" style={{ color: '#555' }}>BARS</span>
             {[4, 8, 16, 32, 64, 128].map(n => (
               <button key={n} onClick={() => setTotalDisplayBars(n)} className="w-7 h-6 rounded text-xs font-bold"
-                style={{ background: BARS === n ? '#D500F922' : '#111', color: BARS === n ? '#D500F9' : '#444', border: `1px solid ${BARS === n ? '#D500F944' : '#222'}` }}>
+                style={{ background: BARS === n ? '#D500F922' : '#242424', color: BARS === n ? '#D500F9' : '#444', border: `1px solid ${BARS === n ? '#D500F944' : '#222'}` }}>
                 {n}
               </button>
             ))}
@@ -719,34 +719,34 @@ export default function PianoRollScreen({
           <div className="w-px h-5" style={{ background: '#2a2a2a' }} />
           {/* H zoom */}
           <span className="text-xs" style={{ color: '#555' }}>H</span>
-          <button onClick={() => setGlobalZoom(Math.max(0.1, +(zoom - 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomOut size={11} /></button>
+          <button onClick={() => setGlobalZoom(Math.max(0.1, +(zoom - 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomOut size={11} /></button>
           <span className="text-xs font-mono w-8 text-center" style={{ color: '#00E5FF' }}>{zoom.toFixed(1)}x</span>
-          <button onClick={() => setGlobalZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomIn size={11} /></button>
+          <button onClick={() => setGlobalZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomIn size={11} /></button>
           {/* V zoom */}
           <span className="text-xs" style={{ color: '#555' }}>V</span>
-          <button onClick={() => setGlobalVZoom(Math.max(1, +(globalVZoom - 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomOut size={11} /></button>
+          <button onClick={() => setGlobalVZoom(Math.max(1, +(globalVZoom - 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomOut size={11} /></button>
           <span className="text-xs font-mono w-7 text-center" style={{ color: '#D500F9' }}>{globalVZoom.toFixed(1)}x</span>
-          <button onClick={() => setGlobalVZoom(Math.min(8, +(globalVZoom + 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomIn size={11} /></button>
+          <button onClick={() => setGlobalVZoom(Math.min(8, +(globalVZoom + 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomIn size={11} /></button>
           <div className="w-px h-5 mx-1" style={{ background: '#2a2a2a' }} />
           <button onClick={() => onExport('studio-editor')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold" style={{ background: '#1a1a2a', color: '#00E5FF', border: '1px solid #00E5FF44' }}><Send size={10} /> Studio</button>
-          <button onClick={() => onExport('master-arranger')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold" style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}><Send size={10} /> Arrange</button>
+          <button onClick={() => onExport('master-arranger')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold" style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F944' }}><Send size={10} /> Arrange</button>
         </div>
       </div>
 
       {/* ── Mode toolbar ── */}
-      <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 flex-wrap" style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
+      <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 flex-wrap" style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
         <button onClick={() => setDrumMode(false)} className="px-3 py-1 rounded text-xs font-bold"
-          style={{ background: !drumMode ? color : '#111', color: !drumMode ? '#000' : '#666', border: `1px solid ${!drumMode ? color : '#333'}` }}>
+          style={{ background: !drumMode ? color : '#242424', color: !drumMode ? '#000' : '#666', border: `1px solid ${!drumMode ? color : '#333'}` }}>
           🎵 Notes
         </button>
         <button onClick={() => setDrumMode(true)} className="px-3 py-1 rounded text-xs font-bold"
-          style={{ background: drumMode ? '#D500F9' : '#111', color: drumMode ? '#000' : '#666', border: `1px solid ${drumMode ? '#D500F9' : '#333'}` }}>
+          style={{ background: drumMode ? '#D500F9' : '#242424', color: drumMode ? '#000' : '#666', border: `1px solid ${drumMode ? '#D500F9' : '#333'}` }}>
           🥁 Drums
         </button>
         <div className="w-px h-5 mx-1" style={{ background: '#2a2a2a' }} />
         {!drumMode && INSTRUMENTS.map((ins, i) => (
           <button key={ins} onClick={() => setInstrument(i)} className="px-2 py-1 rounded text-xs font-bold"
-            style={{ background: instrument === i ? `${INST_COLORS[i]}22` : '#111', color: instrument === i ? INST_COLORS[i] : '#555', border: `1px solid ${instrument === i ? INST_COLORS[i] : '#333'}` }}>
+            style={{ background: instrument === i ? `${INST_COLORS[i]}22` : '#242424', color: instrument === i ? INST_COLORS[i] : '#555', border: `1px solid ${instrument === i ? INST_COLORS[i] : '#333'}` }}>
             {ins}
           </button>
         ))}
@@ -765,7 +765,7 @@ export default function PianoRollScreen({
                 }}
                 className="px-2 py-1 rounded text-xs font-bold"
                 style={{
-                  background: drumCategory === cat ? '#D500F922' : '#111',
+                  background: drumCategory === cat ? '#D500F922' : '#242424',
                   color: drumCategory === cat ? '#D500F9' : '#666',
                   border: `1px solid ${drumCategory === cat ? '#D500F944' : '#333'}`,
                 }}
@@ -780,7 +780,7 @@ export default function PianoRollScreen({
                 if (preset) loadDrumPreset(preset);
               }}
               className="max-w-[220px] h-7 rounded px-2 text-xs font-bold truncate"
-              style={{ background: '#111', border: '1px solid #333', color: '#eee' }}
+              style={{ background: '#242424', border: '1px solid #333', color: '#eee' }}
               title={activeDrumPreset.desc ?? activeDrumPreset.name}
             >
               {drumBankPresets.map((p) => (
@@ -804,7 +804,7 @@ export default function PianoRollScreen({
       <div
         className="flex items-center gap-2 px-4 py-1.5 shrink-0 flex-wrap"
         style={{
-          borderBottom: '1px solid #1a1a1a',
+          borderBottom: '1px solid #2c2c2c',
           background: 'rgba(0,0,0,0.30)',
         }}
       >
@@ -814,7 +814,7 @@ export default function PianoRollScreen({
           onClick={() => (loopEnabled ? clearLoop() : setLoopEnabled(true))}
           className="px-2 py-1 rounded text-xs font-black font-mono"
           style={{
-            background: loopEnabled ? CB_PIANO_MINT_BG : '#111',
+            background: loopEnabled ? CB_PIANO_MINT_BG : '#242424',
             color: loopEnabled ? CB_PIANO_MINT : '#888',
             border: `1px solid ${loopEnabled ? CB_PIANO_MINT_BORDER_STRONG : '#333'}`,
           }}
@@ -835,7 +835,7 @@ export default function PianoRollScreen({
             setLoopRange(s, Math.min(BARS, s + loopBars - 1), loopSection ?? undefined);
           }}
           className="w-11 h-6 rounded px-1 text-center font-mono text-xs shrink-0"
-          style={{ background: '#111', border: '1px solid #333', color: '#eee' }}
+          style={{ background: '#242424', border: '1px solid #333', color: '#eee' }}
           title="Loop start bar"
         />
         <span className="text-[10px] font-mono shrink-0" style={{ color: '#666' }}>
@@ -849,7 +849,7 @@ export default function PianoRollScreen({
           }}
           className="h-6 px-1.5 rounded text-xs font-bold font-mono shrink-0"
           style={{
-            background: '#111',
+            background: '#242424',
             color: loopEnabled ? CB_PIANO_MINT : '#888',
             border: `1px solid ${loopEnabled ? CB_PIANO_MINT_BORDER : '#333'}`,
           }}
@@ -884,7 +884,7 @@ export default function PianoRollScreen({
                 zIndex={25}
               />
             </div>
-            <div style={{ position: 'relative', background: '#050505', minHeight: rollLoopGridH }}>
+            <div style={{ position: 'relative', background: '#2a2a2a', minHeight: rollLoopGridH }}>
               <PianoRollPlayheadMount ref={playheadRef} keyW={keyW} />
               {drumMode ? (
                 Array.from({ length: PIANO_ROLL_DRUM_PADS }, (_, ri) => {
@@ -1003,7 +1003,7 @@ export default function PianoRollScreen({
         className="shrink-0 border-t flex flex-wrap items-center gap-3 px-3 py-2"
         style={{
           borderColor: '#12121a',
-          background: 'linear-gradient(180deg, #0c0c10 0%, #08080c 100%)',
+          background: 'linear-gradient(180deg, #1e1e24 0%, #18181e 100%)',
           boxShadow: '0 -4px 24px rgba(0,0,0,0.45)',
           pointerEvents: 'auto',
           position: 'relative',
@@ -1089,7 +1089,7 @@ export default function PianoRollScreen({
           onClick={() => setMetronomeEnabled(!metronomeEnabled)}
           className="px-2.5 py-1 rounded text-xs font-black font-mono shrink-0"
           style={{
-            background: metronomeEnabled ? 'rgba(124,244,198,0.14)' : '#111',
+            background: metronomeEnabled ? 'rgba(124,244,198,0.14)' : '#242424',
             color: metronomeEnabled ? CB_PIANO_MINT : '#666',
             border: `1px solid ${metronomeEnabled ? CB_PIANO_MINT_BORDER : '#333'}`,
           }}

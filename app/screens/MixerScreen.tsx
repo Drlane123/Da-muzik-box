@@ -80,9 +80,9 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
   const selChEffects = drumEffects[selCh] || [];
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}>
+    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
+      <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#D500F922', color: '#D500F9' }}><Volume2 size={16} /></div>
           <h2 className="text-sm font-bold" style={{ color: '#fff' }}>Drum Mixer & Effects</h2>
@@ -95,12 +95,12 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
       </div>
 
       {/* Track Allocation Status */}
-      <div style={{ borderBottom: '1px solid #1a1a1a', background: '#080808', padding: '8px 12px' }}>
+      <div style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c', padding: '8px 12px' }}>
         <div className="text-xs font-bold mb-2" style={{ color: '#888' }}>TRACK ALLOCATION</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px' }}>
           {Object.entries(getAllAllocations()).map(([moduleId, tracks]) => 
             tracks.length > 0 && (
-              <div key={moduleId} style={{ fontSize: '11px', padding: '4px 6px', borderRadius: '4px', background: '#0a0a0a', border: '1px solid #1a1a1a' }}>
+              <div key={moduleId} style={{ fontSize: '11px', padding: '4px 6px', borderRadius: '4px', background: '#1c1c1c', border: '1px solid #2c2c2c' }}>
                 <div style={{ color: '#00E5FF', fontWeight: 'bold', marginBottom: '2px' }}>{moduleId}</div>
                 <div style={{ color: '#666' }}>{tracks.join(', ')}</div>
               </div>
@@ -115,8 +115,8 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
       {/* Main content */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Drum pad list */}
-        <div className="shrink-0" style={{ width: 140, background: '#080808', borderRight: '1px solid #1a1a1a', display: 'flex', flexDirection: 'column' }}>
-          <div className="text-xs text-center py-1 font-bold" style={{ borderBottom: '1px solid #1a1a1a', color: '#444', background: '#050505' }}>PADS</div>
+        <div className="shrink-0" style={{ width: 140, background: '#2c2c2c', borderRight: '1px solid #2c2c2c', display: 'flex', flexDirection: 'column' }}>
+          <div className="text-xs text-center py-1 font-bold" style={{ borderBottom: '1px solid #2c2c2c', color: '#444', background: '#2a2a2a' }}>PADS</div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2px', padding: '4px' }}>
             {DRUM_PAD_NAMES.map((name, i) => {
               const chId = DRUM_CHANNELS[i];
@@ -124,7 +124,7 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
               return (
                 <button key={chId} onClick={() => setSelected(i)}
                   className="rounded text-xs font-bold py-1 px-1 text-center"
-                  style={{ background: isSelected ? DRUM_PAD_COLORS[i] : '#0a0a0a', color: isSelected ? '#000' : DRUM_PAD_COLORS[i], border: `1px solid ${DRUM_PAD_COLORS[i]}${isSelected ? '' : '44'}`, cursor: 'pointer' }}>
+                  style={{ background: isSelected ? DRUM_PAD_COLORS[i] : '#1c1c1c', color: isSelected ? '#000' : DRUM_PAD_COLORS[i], border: `1px solid ${DRUM_PAD_COLORS[i]}${isSelected ? '' : '44'}`, cursor: 'pointer' }}>
                   <div style={{ fontSize: '9px', lineHeight: '1.2' }}>{name}</div>
                 </button>
               );
@@ -133,14 +133,14 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
         </div>
 
         {/* Drum pad editor */}
-        <div className="flex-1 overflow-y-auto" style={{ background: '#0a0a0a' }}>
-          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#1a1a1a' }}>
+        <div className="flex-1 overflow-y-auto" style={{ background: '#1c1c1c' }}>
+          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#2c2c2c' }}>
             <div className="text-sm font-bold" style={{ color: DRUM_PAD_COLORS[selected] }}>{DRUM_PAD_NAMES[selected]}</div>
             <div className="text-xs" style={{ color: '#888' }}>Channel {selCh}</div>
           </div>
 
           {/* Volume */}
-          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#1a1a1a' }}>
+          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#2c2c2c' }}>
             <div className="text-xs font-bold mb-3">VOLUME: {getVolume(selCh)}</div>
             <input type="range" min={0} max={100} value={getVolume(selCh)} onChange={e => setVolume(selCh, Number(e.target.value))}
               className="w-full" style={{ accentColor: DRUM_PAD_COLORS[selected] }} />
@@ -150,14 +150,14 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
           </div>
 
           {/* Pan */}
-          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#1a1a1a' }}>
+          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#2c2c2c' }}>
             <div className="text-xs font-bold mb-3">PAN: {drumPans[selCh] > 0 ? '+' : ''}{drumPans[selCh]}</div>
             <input type="range" min={-100} max={100} value={drumPans[selCh]} onChange={e => setPan(selCh, Number(e.target.value))}
               className="w-full" style={{ accentColor: DRUM_PAD_COLORS[selected] }} />
           </div>
 
           {/* Trigger button */}
-          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#1a1a1a' }}>
+          <div className="px-4 py-3 border-b" style={{ borderBottomColor: '#2c2c2c' }}>
             <button onClick={() => triggerChannel(selCh, 100)}
               className="w-full px-4 py-2 rounded font-bold text-sm"
               style={{ background: DRUM_PAD_COLORS[selected], color: '#000', cursor: 'pointer', boxShadow: '0 0 16px ' + DRUM_PAD_COLORS[selected] + '66' }}>
@@ -166,7 +166,7 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
           </div>
 
           {/* Effects */}
-          <div className="px-4 py-3" style={{ borderBottomColor: '#1a1a1a' }}>
+          <div className="px-4 py-3" style={{ borderBottomColor: '#2c2c2c' }}>
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold">PAD EFFECTS</span>
               <button onClick={() => setAddEffectOpen(v => !v)}
@@ -180,7 +180,7 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
               <div className="mb-3 p-2 rounded" style={{ background: '#1a1a2a', border: `1px solid ${DRUM_PAD_COLORS[selected]}` }}>
                 {EFFECTS.map(e => (
                   <button key={e} onClick={() => addEffectToDrum(selCh, e)} className="w-full text-left text-xs px-1.5 py-1 rounded mb-1"
-                    style={{ color: DRUM_PAD_COLORS[selected], background: '#0f0f0f', border: `1px solid ${DRUM_PAD_COLORS[selected]}44`, cursor: 'pointer' }}>
+                    style={{ color: DRUM_PAD_COLORS[selected], background: '#222222', border: `1px solid ${DRUM_PAD_COLORS[selected]}44`, cursor: 'pointer' }}>
                     {e}
                   </button>
                 ))}
@@ -195,13 +195,13 @@ export default function MixerScreen({ onExport }: { onExport: (dest: string) => 
 
             <div className="space-y-2">
               {selChEffects.map((fx, fi) => (
-                <div key={fi} className="text-xs p-2 rounded" style={{ background: fx.enabled ? '#1a1a2a' : '#0f0f0f', borderLeft: `2px solid ${fx.enabled ? DRUM_PAD_COLORS[selected] : '#333'}` }}>
+                <div key={fi} className="text-xs p-2 rounded" style={{ background: fx.enabled ? '#1a1a2a' : '#222222', borderLeft: `2px solid ${fx.enabled ? DRUM_PAD_COLORS[selected] : '#333'}` }}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="font-bold">{fx.type}</span>
                     <button onClick={() => removeEffectFromDrum(selCh, fi)} className="text-xs" style={{ color: '#666' }}><X size={12} /></button>
                   </div>
                   <button onClick={() => toggleEffectOnDrum(selCh, fi)} className="text-xs w-full px-1 py-0.5 rounded mb-1"
-                    style={{ background: fx.enabled ? DRUM_PAD_COLORS[selected] + '33' : '#111', color: fx.enabled ? DRUM_PAD_COLORS[selected] : '#666', border: `1px solid ${fx.enabled ? DRUM_PAD_COLORS[selected] : '#333'}` }}>
+                    style={{ background: fx.enabled ? DRUM_PAD_COLORS[selected] + '33' : '#242424', color: fx.enabled ? DRUM_PAD_COLORS[selected] : '#666', border: `1px solid ${fx.enabled ? DRUM_PAD_COLORS[selected] : '#333'}` }}>
                     {fx.enabled ? '✓ ON' : '○ OFF'}
                   </button>
                   {fx.params.map((p, pi) => (

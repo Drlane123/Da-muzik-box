@@ -1933,7 +1933,7 @@ function Ruler({
                         blendTo: '#0a0a0e',
                       })}`
                     : mi > 0
-                      ? '1px solid #181818'
+                      ? '1px solid #2a2a2a'
                       : 'none';
                 const beatCellSizing =
                   drumGridBeatBorders != null
@@ -2908,7 +2908,7 @@ function BeatLabDeckToolbar({
     padding: '5px 10px',
     borderRadius: 6,
     border: '1px solid #2a2a32',
-    background: '#0c0c12',
+    background: '#1e1e26',
     color: '#9dc6ff',
     cursor: 'pointer',
     fontSize: 10,
@@ -3063,7 +3063,7 @@ function BeatLabDeckToolbar({
                     padding: '4px 6px',
                     borderRadius: 4,
                     border: '1px solid #3a3020',
-                    background: '#0c0c12',
+                    background: '#1e1e26',
                     color: '#f0e6c8',
                     fontSize: 9,
                     fontWeight: 700,
@@ -3130,7 +3130,7 @@ function BeatLabDeckToolbar({
               padding: '5px 8px',
               borderRadius: 4,
               border: '1px solid rgba(167, 139, 250, 0.35)',
-              background: '#0c0c12',
+              background: '#1e1e26',
               color: '#e8e8f0',
               fontSize: 11,
               fontWeight: 700,
@@ -3418,7 +3418,7 @@ function BeatLabDeckToolbar({
                     padding: 10,
                     borderRadius: 8,
                     border: '1px solid rgba(167, 139, 250, 0.45)',
-                    background: '#0c0c12',
+                    background: '#1e1e26',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.55)',
                     maxHeight: 'min(70vh, 420px)',
                     overflowY: 'auto',
@@ -5057,7 +5057,7 @@ function BeatLabDeckToolbar({
                             efxDraft.delay.note === opt.id ? 'rgba(167, 139, 250, 0.6)' : '#3a3a44'
                           }`,
                           background:
-                            efxDraft.delay.note === opt.id ? 'rgba(167, 139, 250, 0.2)' : '#0c0c10',
+                            efxDraft.delay.note === opt.id ? 'rgba(167, 139, 250, 0.2)' : '#1e1e24',
                           color: efxDraft.delay.note === opt.id ? '#f3e8ff' : '#c8d0e0',
                         }}
                       >
@@ -13983,7 +13983,7 @@ function CreationStationScreenBody({
           display: 'flex',
           flexDirection: 'column',
           padding: '4px 10px 6px',
-          background: 'linear-gradient(180deg, #0b0b10 0%, #09090d 100%)',
+          background: 'linear-gradient(180deg, #1c1c24 0%, #1a1a20 100%)',
           borderBottom: '1px solid #141418',
           flexShrink: 0,
           gap: 6,
@@ -14944,7 +14944,7 @@ function CreationStationScreenBody({
             alignItems: 'center',
             justifyContent: 'center',
             padding: 32,
-            background: '#08080c',
+            background: '#18181e',
             color: '#8a8a9a',
             textAlign: 'center',
             gap: 12,
@@ -15066,7 +15066,7 @@ function CreationStationScreenBody({
             minHeight: tab === '808-lab' ? 0 : undefined,
             height: tab === '808-lab' ? undefined : 0,
             overflow: 'hidden',
-            background: '#07070a',
+            background: '#16161c',
             display: tab === '808-lab' ? 'flex' : 'none',
             flexDirection: 'column',
           }}
@@ -15097,7 +15097,7 @@ function CreationStationScreenBody({
             flexDirection: 'column',
             overflow: 'hidden',
             minHeight: 0,
-            background: '#050505',
+            background: '#2a2a2a',
           }}
         >
           <div
@@ -15401,7 +15401,7 @@ function CreationStationScreenBody({
             flexDirection: 'column',
             overflow: 'hidden',
             minHeight: 0,
-            background: '#050505',
+            background: '#2a2a2a',
           }}
         >
         <div
@@ -15462,7 +15462,7 @@ function CreationStationScreenBody({
               minWidth: 0,
               overflowY: 'auto',
               overflowX: 'hidden',
-              background: '#050505',
+              background: '#2a2a2a',
             }}
           >
             <div
@@ -15496,8 +15496,8 @@ function CreationStationScreenBody({
                 zIndex: 24,
                 height: DRUM_SEQ_MEASURES_ROW_H,
                 flexShrink: 0,
-                borderBottom: '1px solid #1e1e1e',
-                background: '#080808',
+                borderBottom: '1px solid #303030',
+                background: '#2c2c2c',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -15512,8 +15512,8 @@ function CreationStationScreenBody({
                 zIndex: 23,
                 height: DRUM_SEQ_QUANT_BAND_H,
                 flexShrink: 0,
-                borderBottom: '1px solid #1e1e1e',
-                background: '#050505',
+                borderBottom: '1px solid #303030',
+                background: '#2a2a2a',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'stretch',
@@ -15530,7 +15530,7 @@ function CreationStationScreenBody({
                   fontWeight: 900,
                   color: '#9ec7d4',
                   letterSpacing: 1,
-                  borderBottom: '1px solid #1e1e1e',
+                  borderBottom: '1px solid #303030',
                 }}
               >
                 BARS
@@ -15679,7 +15679,7 @@ function CreationStationScreenBody({
               flex: 1,
               overflowX: 'auto',
               overflowY: 'visible',
-              background: '#050505',
+              background: '#2a2a2a',
               minWidth: 0,
               isolation: 'isolate',
             }}
@@ -15731,7 +15731,7 @@ function CreationStationScreenBody({
                   width: drumGridW,
                   minWidth: drumGridW,
                   flexShrink: 0,
-                  borderBottom: '1px solid #1e1e1e',
+                  borderBottom: '1px solid #303030',
                   background: '#121212',
                 }}
               >
@@ -15821,7 +15821,7 @@ function CreationStationScreenBody({
                   display: 'flex',
                   height: DRUM_SEQ_QUANT_BAND_H,
                   overflow: 'visible',
-                  borderBottom: '1px solid #1e1e1e',
+                  borderBottom: '1px solid #303030',
                   background: '#0a0a0e',
                 }}
               >
@@ -16104,7 +16104,7 @@ function CreationStationScreenBody({
       {tab === 'piano' && (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0 }}>
           {/* Sub-tab + instruments */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', flexShrink: 0, background: '#080808', borderBottom: '1px solid #1a1a1a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', flexShrink: 0, background: '#2c2c2c', borderBottom: '1px solid #2c2c2c' }}>
             {(['notes','drums'] as const).map(st => (
               <button key={st} onClick={() => setPianoMode(st)} style={{ padding: '3px 10px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: pianoMode===st ? '#193025' : '#1a1a24', color: pianoMode===st ? '#7cf4c6' : '#6a6a78', border: `1px solid ${pianoMode===st ? 'rgba(124,244,198,0.45)' : '#2a2a32'}`, cursor: 'pointer' }}>
                 {st === 'notes' ? '?? Notes' : '?? Drums'}
@@ -16139,10 +16139,10 @@ function CreationStationScreenBody({
           </div>
 
           {/* Piano roll */}
-          <div style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minHeight: 0, borderTop: '2px solid #1a1a1a' }}>
+          <div style={{ flex: '1 1 0%', display: 'flex', overflow: 'hidden', minHeight: 0, borderTop: '2px solid #2c2c2c' }}>
             {/* Fixed keys */}
             <div style={{ width: KEY_W, flexShrink: 0, background: '#0c141a', borderRight: '1px solid #213646', display: 'flex', flexDirection: 'column' }}>
-              <div style={{ height: DRUM_SEQ_QUANT_BAND_H, flexShrink: 0, borderBottom: '1px solid #1e1e1e', background: '#050505' }} />
+              <div style={{ height: DRUM_SEQ_QUANT_BAND_H, flexShrink: 0, borderBottom: '1px solid #303030', background: '#2a2a2a' }} />
               <div style={{ overflowY: 'hidden', flex: 1 }}>
                 {(pianoMode === 'notes' ? displayNotes : [PAD_NAMES[activeDrumPadIndex]]).map((label, ri) => {
                   const padIndex = pianoMode === 'drums' ? activeDrumPadIndex : ri;

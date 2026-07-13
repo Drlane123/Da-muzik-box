@@ -311,7 +311,7 @@ export function BeatPadsGenoSyncBar({
                 padding: '0 6px',
                 borderRadius: 4,
                 border: `1px solid ${accent}55`,
-                background: '#0c0c12',
+                background: '#1e1e26',
                 color: lane ? accent : '#9aa3b0',
                 fontSize: 9,
                 fontWeight: 800,

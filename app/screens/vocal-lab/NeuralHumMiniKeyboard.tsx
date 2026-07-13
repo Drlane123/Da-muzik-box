@@ -79,7 +79,7 @@ function OctaveKeys({
     let keyOpacity = 1;
 
     if (outOfScale) {
-      bg = black ? '#0a0a0a' : '#1e1e1e';
+      bg = black ? '#1c1c1c' : '#303030';
       border = '#252525';
       labelColor = '#333';
       keyOpacity = black ? 0.28 : 0.32;
@@ -220,7 +220,7 @@ export default function NeuralHumMiniKeyboard({
       <div
         className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5"
         style={{
-          background: keyLockOff ? '#111' : NH_SCALE.bgTint,
+          background: keyLockOff ? '#242424' : NH_SCALE.bgTint,
           border: `1px solid ${keyLockOff ? '#222' : NH_SCALE.borderHi}`,
         }}
       >
@@ -247,7 +247,7 @@ export default function NeuralHumMiniKeyboard({
             type="button"
             onClick={() => onOctaveChange(Math.max(2, octave - 1))}
             className="px-1.5 py-0.5 rounded text-xs font-bold"
-            style={{ background: '#111', color: '#888', border: '1px solid #333' }}
+            style={{ background: '#242424', color: '#888', border: '1px solid #333' }}
           >
             −
           </button>
@@ -258,7 +258,7 @@ export default function NeuralHumMiniKeyboard({
             type="button"
             onClick={() => onOctaveChange(Math.min(5, octave + 1))}
             className="px-1.5 py-0.5 rounded text-xs font-bold"
-            style={{ background: '#111', color: '#888', border: '1px solid #333' }}
+            style={{ background: '#242424', color: '#888', border: '1px solid #333' }}
           >
             +
           </button>
@@ -290,7 +290,7 @@ export default function NeuralHumMiniKeyboard({
           <span className="flex items-center gap-1">
             <span
               className="inline-block rounded-sm"
-              style={{ width: 10, height: 10, background: '#1e1e1e', border: '1px solid #252525', opacity: 0.45 }}
+              style={{ width: 10, height: 10, background: '#303030', border: '1px solid #252525', opacity: 0.45 }}
             />
             Out of scale
           </span>

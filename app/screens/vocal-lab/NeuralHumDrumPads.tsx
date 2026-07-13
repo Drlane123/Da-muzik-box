@@ -133,7 +133,7 @@ export default function NeuralHumDrumPads({
         <div className="flex flex-wrap items-center gap-2">
           <div
             className="flex items-center rounded overflow-hidden"
-            style={{ border: '1px solid #333', background: '#111' }}
+            style={{ border: '1px solid #333', background: '#242424' }}
           >
             <button
               type="button"
@@ -174,7 +174,7 @@ export default function NeuralHumDrumPads({
 
           <div
             className="flex items-center rounded overflow-hidden"
-            style={{ border: '1px solid #333', background: '#111' }}
+            style={{ border: '1px solid #333', background: '#242424' }}
           >
           <button
             type="button"

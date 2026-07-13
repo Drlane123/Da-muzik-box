@@ -111,7 +111,7 @@ function SettingsSection({
         <span>{title}</span>
       </button>
       {open && (
-        <div style={{ padding: '12px 14px 14px', background: '#08080c' }}>
+        <div style={{ padding: '12px 14px 14px', background: '#18181e' }}>
           {children}
         </div>
       )}
@@ -340,7 +340,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             padding: '10px 12px',
             borderBottom: '1px solid #1e1e28',
             flexShrink: 0,
-            background: '#08080c',
+            background: '#18181e',
           }}
         >
           <span style={{ fontSize: 11, fontWeight: 900, color: CYAN, letterSpacing: 0.6 }}>
@@ -800,7 +800,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         alignItems: 'center',
                         padding: '8px',
                         borderTop: `1px solid ${INPUT_BORDER}`,
-                        background: connected ? '#08080c' : 'rgba(20,20,28,0.85)',
+                        background: connected ? '#18181e' : 'rgba(20,20,28,0.85)',
                         opacity: connected ? 1 : 0.55,
                       }}
                     >
@@ -877,7 +877,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             padding: '10px 12px',
             borderTop: '1px solid #1e1e28',
             flexShrink: 0,
-            background: '#08080c',
+            background: '#18181e',
           }}
         >
           <button

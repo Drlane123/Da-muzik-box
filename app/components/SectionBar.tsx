@@ -86,7 +86,7 @@ export default function SectionBar({ colW, totalBars }: SectionBarProps) {
   return (
     <div
       className="relative shrink-0 select-none"
-      style={{ height: 32, width: colW * totalBars, background: '#050505', borderBottom: '1px solid #1a1a1a' }}
+      style={{ height: 32, width: colW * totalBars, background: '#2a2a2a', borderBottom: '1px solid #2c2c2c' }}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
@@ -173,7 +173,7 @@ export default function SectionBar({ colW, totalBars }: SectionBarProps) {
         <button
           onClick={() => setShowAddMenu(v => !v)}
           className="h-8 px-2 flex items-center gap-1 font-bold transition-all active:scale-90"
-          style={{ background: '#111', color: '#555', fontSize: 9 }}
+          style={{ background: '#242424', color: '#555', fontSize: 9 }}
           title="Add any section type"
         >
           <Plus size={9} /> SEC
@@ -181,7 +181,7 @@ export default function SectionBar({ colW, totalBars }: SectionBarProps) {
         {showAddMenu && (
           <div
             className="absolute right-0 top-full mt-0.5 rounded-lg p-1 z-50 grid gap-0.5"
-            style={{ background: '#1a1a1a', border: '1px solid #333', gridTemplateColumns: '1fr 1fr', minWidth: 170 }}
+            style={{ background: '#2c2c2c', border: '1px solid #333', gridTemplateColumns: '1fr 1fr', minWidth: 170 }}
           >
             {SECTION_TYPES.map(type => (
               <button
@@ -205,7 +205,7 @@ export default function SectionBar({ colW, totalBars }: SectionBarProps) {
       {showDurationPicker && pickerType && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }}
           onClick={() => setShowDurationPicker(false)}>
-          <div className="rounded-lg p-6 z-51" style={{ background: '#1a1a1a', border: '1px solid #333', minWidth: 280 }}
+          <div className="rounded-lg p-6 z-51" style={{ background: '#2c2c2c', border: '1px solid #333', minWidth: 280 }}
             onClick={e => e.stopPropagation()}>
             <div className="text-sm font-bold mb-4" style={{ color: SECTION_TYPE_COLORS[pickerType] }}>
               Add {pickerType} — How many bars?
@@ -223,7 +223,7 @@ export default function SectionBar({ colW, totalBars }: SectionBarProps) {
                   value={pickerBars}
                   onChange={e => setPickerBars(Math.max(1, parseInt(e.target.value) || 4))}
                   className="w-16 text-center rounded px-2 py-1 font-bold text-lg"
-                  style={{ background: '#111', color: '#00E5FF', border: '1px solid #333' }}
+                  style={{ background: '#242424', color: '#00E5FF', border: '1px solid #333' }}
                 />
               </div>
               <button

@@ -2246,9 +2246,9 @@ export default function GrooveLabScreen({
               type="button"
               onClick={() => orchid.setKeyRoot(i)}
               style={{
-                background: orchid.keyRoot === i ? '#112015' : '#111',
+                background: orchid.keyRoot === i ? '#112015' : '#242424',
                 color: orchid.keyRoot === i ? '#22c55e' : '#7a7a7a',
-                border: `1px solid ${orchid.keyRoot === i ? '#1f3a29' : '#1a1a1a'}`,
+                border: `1px solid ${orchid.keyRoot === i ? '#1f3a29' : '#2c2c2c'}`,
                 borderRadius: 4,
                 padding: '2px 6px',
                 fontSize: 9,
@@ -2265,9 +2265,9 @@ export default function GrooveLabScreen({
               type="button"
               onClick={() => orchid.setMode(m)}
               style={{
-                background: orchid.mode === m ? '#112015' : '#111',
+                background: orchid.mode === m ? '#112015' : '#242424',
                 color: orchid.mode === m ? '#22c55e' : '#7a7a7a',
-                border: `1px solid ${orchid.mode === m ? '#1f3a29' : '#1a1a1a'}`,
+                border: `1px solid ${orchid.mode === m ? '#1f3a29' : '#2c2c2c'}`,
                 borderRadius: 4,
                 padding: '2px 7px',
                 fontSize: 9,

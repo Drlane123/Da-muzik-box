@@ -213,12 +213,12 @@ function BeatLabBarAutomationStrip({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRight: '1px solid #1e1e1e',
+          borderRight: '1px solid #303030',
           fontSize: 7,
           fontWeight: 800,
           color: labelColor,
           letterSpacing: 0.5,
-          background: '#08080c',
+          background: '#18181e',
           position: 'relative',
         }}
       >
@@ -509,7 +509,7 @@ export function BeatLabBarAutomationLanes(props: BeatLabBarAutomationLanesProps)
         display: 'flex',
         flexDirection: 'column',
         flexShrink: 0,
-        borderBottom: '1px solid #1e1e1e',
+        borderBottom: '1px solid #303030',
         background: '#050508',
       }}
     >

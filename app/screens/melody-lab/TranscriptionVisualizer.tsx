@@ -33,7 +33,7 @@ export function WaveformVisualizer({ analyzerNode, isRecording }: { analyzerNode
       analyzerNode.getByteFrequencyData(dataArray);
 
       // Clear canvas
-      ctx.fillStyle = '#0a0a0a';
+      ctx.fillStyle = '#1c1c1c';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw frequency bars
@@ -65,7 +65,7 @@ export function WaveformVisualizer({ analyzerNode, isRecording }: { analyzerNode
   }, [analyzerNode, isRecording]);
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e' }}>
+    <div className="rounded-lg overflow-hidden" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
       <canvas
         ref={canvasRef}
         width={800}
@@ -101,11 +101,11 @@ export function VolumeMeter({ analyzerNode, isRecording }: { analyzerNode: Analy
       levelRef.current = rms * 100;
 
       // Clear canvas
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = '#242424';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Draw background grid
-      ctx.fillStyle = '#1a1a1a';
+      ctx.fillStyle = '#2c2c2c';
       for (let i = 0; i < 10; i++) {
         const y = (canvas.height / 10) * i;
         ctx.fillRect(0, y, canvas.width, 1);
@@ -151,7 +151,7 @@ export function VolumeMeter({ analyzerNode, isRecording }: { analyzerNode: Analy
         ref={canvasRef}
         width={60}
         height={140}
-        style={{ display: 'block', border: '1px solid #1e1e1e', borderRadius: 4, background: '#0a0a0a' }}
+        style={{ display: 'block', border: '1px solid #303030', borderRadius: 4, background: '#1c1c1c' }}
       />
     </div>
   );
@@ -214,11 +214,11 @@ export function PianoRollEditor({
     }
 
     // Clear background
-    ctx.fillStyle = '#050505';
+    ctx.fillStyle = '#2a2a2a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw piano keys on left
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#242424';
     ctx.fillRect(0, 0, keyAreaWidth, canvas.height);
 
     // Draw octave labels and key dividers
@@ -233,12 +233,12 @@ export function PianoRollEditor({
       if (hasPitch) {
         ctx.fillStyle = isWhiteKey ? '#00FF8833' : '#00FF8822';
       } else {
-        ctx.fillStyle = isWhiteKey ? '#222' : '#111';
+        ctx.fillStyle = isWhiteKey ? '#222' : '#242424';
       }
       ctx.fillRect(0, y, keyAreaWidth, keyHeight);
 
       // Key border - bright for detected notes
-      ctx.strokeStyle = hasPitch ? '#00FF88' : '#1a1a1a';
+      ctx.strokeStyle = hasPitch ? '#00FF88' : '#2c2c2c';
       ctx.lineWidth = hasPitch ? 1.5 : 1;
       ctx.strokeRect(0, y, keyAreaWidth, keyHeight);
 
@@ -269,7 +269,7 @@ export function PianoRollEditor({
     }
 
     // Draw grid area background
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = '#1c1c1c';
     ctx.fillRect(keyAreaWidth, 0, canvas.width - keyAreaWidth, canvas.height);
 
     // Draw vertical beat grid lines
@@ -278,7 +278,7 @@ export function PianoRollEditor({
       if (x < keyAreaWidth || x > canvas.width) continue;
 
       const major = beat % 4 === 0;
-      ctx.strokeStyle = major ? '#2a2a2a' : '#1a1a1a';
+      ctx.strokeStyle = major ? '#2a2a2a' : '#2c2c2c';
       ctx.lineWidth = major ? 2 : 1;
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -300,7 +300,7 @@ export function PianoRollEditor({
       if (y < 0 || y > canvas.height) continue;
 
       const isWhiteKey = WHITE_KEYS.includes(i % 12);
-      ctx.strokeStyle = isWhiteKey ? '#1a1a1a' : '#0f0f0f';
+      ctx.strokeStyle = isWhiteKey ? '#2c2c2c' : '#222222';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(keyAreaWidth, y);
@@ -497,24 +497,24 @@ export function PianoRollEditor({
   };
 
   return (
-    <div ref={containerRef} className="rounded-xl overflow-hidden flex flex-col w-full" style={{ background: '#0a0a0a', border: '1px solid #1e1e1e', height: 650 }}>
+    <div ref={containerRef} className="rounded-xl overflow-hidden flex flex-col w-full" style={{ background: '#1c1c1c', border: '1px solid #303030', height: 650 }}>
       {/* Controls Top Bar */}
-      <div className="flex items-center justify-between gap-3 p-3 border-b" style={{ borderColor: '#1e1e1e', background: '#080808' }}>
+      <div className="flex items-center justify-between gap-3 p-3 border-b" style={{ borderColor: '#303030', background: '#2c2c2c' }}>
         {/* Zoom Controls */}
         <div className="flex items-center gap-1.5">
           <button onClick={() => setZoom(Math.max(0.5, zoom - 0.2))} className="p-1.5 rounded hover:bg-slate-800"
-            style={{ color: '#666', background: '#111', border: '1px solid #222', cursor: 'pointer' }}>
+            style={{ color: '#666', background: '#242424', border: '1px solid #222', cursor: 'pointer' }}>
             <ZoomOut size={14} />
           </button>
           <span className="text-10px font-mono" style={{ color: '#666', minWidth: 40 }}>{(zoom * 100).toFixed(0)}%</span>
           <button onClick={() => setZoom(Math.min(4, zoom + 0.2))} className="p-1.5 rounded hover:bg-slate-800"
-            style={{ color: '#666', background: '#111', border: '1px solid #222', cursor: 'pointer' }}>
+            style={{ color: '#666', background: '#242424', border: '1px solid #222', cursor: 'pointer' }}>
             <ZoomIn size={14} />
           </button>
         </div>
 
         {/* Transport Controls */}
-        <div className="flex items-center gap-0.5 px-2 py-1.5 rounded" style={{ background: '#111', border: '1px solid #222' }}>
+        <div className="flex items-center gap-0.5 px-2 py-1.5 rounded" style={{ background: '#242424', border: '1px solid #222' }}>
           <div className="flex items-center gap-1">
             <button 
               onClick={(e) => {
@@ -620,7 +620,7 @@ export function PianoRollEditor({
         </div>
 
         {/* BPM Control */}
-        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded" style={{ background: '#111', border: '1px solid #222' }}>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded" style={{ background: '#242424', border: '1px solid #222' }}>
           <span className="text-10px font-bold" style={{ color: '#888', minWidth: 30 }}>BPM</span>
           <button onClick={() => {
             const newBpm = Math.max(40, localBpm - 1);
@@ -637,7 +637,7 @@ export function PianoRollEditor({
             style={{
               width: 50,
               padding: '2px 4px',
-              background: '#0a0a0a',
+              background: '#1c1c1c',
               border: '1px solid #333',
               borderRadius: 3,
               color: '#00ff88',
@@ -662,9 +662,9 @@ export function PianoRollEditor({
       </div>
 
       {/* Piano Roll Canvas Container with Scrollbars */}
-      <div className="flex flex-col flex-1 overflow-hidden relative w-full" style={{ background: '#050505', touchAction: 'none' }}>
+      <div className="flex flex-col flex-1 overflow-hidden relative w-full" style={{ background: '#2a2a2a', touchAction: 'none' }}>
         {/* Main Canvas */}
-        <div className="flex-1 overflow-hidden relative" style={{ background: '#050505' }}
+        <div className="flex-1 overflow-hidden relative" style={{ background: '#2a2a2a' }}
           onWheel={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -694,7 +694,7 @@ export function PianoRollEditor({
         {/* Horizontal Scrollbar */}
         <div style={{
           height: 12,
-          background: '#111',
+          background: '#242424',
           borderTop: '1px solid #222',
           position: 'relative',
           cursor: 'pointer'
@@ -738,7 +738,7 @@ export function PianoRollEditor({
         {/* Vertical Scrollbar */}
         <div style={{
           width: 12,
-          background: '#111',
+          background: '#242424',
           borderLeft: '1px solid #222',
           position: 'absolute',
           right: 0,

@@ -466,7 +466,7 @@ export function Se2ChordGenieAiMidiPanel({
         className="px-2 py-1 overflow-y-auto shrink-0"
         style={{
           maxHeight: providerHelpOpen ? 220 : 52,
-          background: '#0c0c12',
+          background: '#1e1e26',
         }}
         aria-label={`${SE2_MIDI_COMPOSER_LABEL} chat`}
       >

@@ -165,7 +165,7 @@ export function DrumKitGeneratorModal({
                   padding: '6px 8px',
                   borderRadius: 6,
                   border: '1px solid #333',
-                  background: '#111',
+                  background: '#242424',
                   color: '#e9d5ff',
                   fontSize: 11,
                   fontWeight: 600,

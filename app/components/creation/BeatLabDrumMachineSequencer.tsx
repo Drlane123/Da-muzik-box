@@ -1255,7 +1255,7 @@ export function BeatLabDrumMachineSequencer({
                   padding: '0 6px',
                   borderRadius: 4,
                   border: '1px solid rgba(124, 244, 198, 0.35)',
-                  background: '#0c0c12',
+                  background: '#1e1e26',
                   color: '#e8eef4',
                   fontSize: 14,
                   fontWeight: 700,
@@ -1383,7 +1383,7 @@ export function BeatLabDrumMachineSequencer({
                 padding: '0 8px',
                 borderRadius: 4,
                 border: '1px solid rgba(124, 244, 198, 0.35)',
-                background: '#0c0c12',
+                background: '#1e1e26',
                 color: '#e8eef4',
                 fontSize: 12,
                 fontWeight: 700,
@@ -1723,7 +1723,7 @@ export function BeatLabDrumMachineSequencer({
             padding: '4px 0',
             borderRadius: 6,
             border: '1px solid rgba(124, 244, 198, 0.35)',
-            background: '#0c0c12',
+            background: '#1e1e26',
             boxShadow: '0 8px 24px rgba(0,0,0,0.55)',
           }}
           onClick={(e) => e.stopPropagation()}

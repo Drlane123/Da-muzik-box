@@ -75,7 +75,7 @@ export function Se2Lab808ToneGridPianoKeys({
               borderRadius: black ? '0 4px 4px 0' : 4,
               border: black ? '1px solid #0a0a0e' : '1px solid #6a6a62',
               background: black
-                ? 'linear-gradient(180deg, #3a3a44 0%, #121218 55%, #08080c 100%)'
+                ? 'linear-gradient(180deg, #3a3a44 0%, #121218 55%, #18181e 100%)'
                 : 'linear-gradient(180deg, #fffef8 0%, #e8e8e0 45%, #d4d4cc 100%)',
               boxShadow: black
                 ? 'inset 0 1px 0 rgba(255,255,255,0.12), 0 1px 2px rgba(0,0,0,0.5)'

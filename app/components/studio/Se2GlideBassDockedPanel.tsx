@@ -27,7 +27,7 @@ export function Se2GlideBassDockedPanel({
       style={{
         minHeight: 120,
         borderColor: `${accentHex}44`,
-        background: 'linear-gradient(180deg, #0c0c12 0%, #07070c 100%)',
+        background: 'linear-gradient(180deg, #1e1e26 0%, #07070c 100%)',
         boxShadow: `inset 0 1px 0 ${accentHex}33`,
       }}
     >

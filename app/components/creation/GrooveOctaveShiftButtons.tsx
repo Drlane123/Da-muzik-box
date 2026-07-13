@@ -16,9 +16,9 @@ const btnStyle = (
   border: string,
   disabled: boolean,
 ): CSSProperties => ({
-  background: disabled ? '#111' : '#0d1218',
+  background: disabled ? '#242424' : '#0d1218',
   color: disabled ? '#4b5563' : accent,
-  border: `1px solid ${disabled ? '#1a1a1a' : border}`,
+  border: `1px solid ${disabled ? '#2c2c2c' : border}`,
   borderRadius: 5,
   padding: '2px 7px',
   fontSize: 8,

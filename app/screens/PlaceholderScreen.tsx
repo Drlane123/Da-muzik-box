@@ -20,12 +20,12 @@ export default function PlaceholderScreen({
   return (
     <div
       className="flex flex-col h-full w-full"
-      style={{ background: '#050505', color: '#ccc' }}
+      style={{ background: '#2a2a2a', color: '#ccc' }}
     >
       {/* Screen header */}
       <div
         className="flex items-center justify-between px-5 py-3 shrink-0"
-        style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}
+        style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}
       >
         <div className="flex items-center gap-3">
           <div
@@ -53,7 +53,7 @@ export default function PlaceholderScreen({
             <button
               onClick={onExportToArranger}
               className="px-3 py-1.5 rounded text-xs font-semibold transition-colors"
-              style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F955' }}
+              style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F955' }}
             >
               → Arranger
             </button>

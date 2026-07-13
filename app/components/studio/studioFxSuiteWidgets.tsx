@@ -1058,7 +1058,7 @@ export function SuiteModuleRackTile({
           background: selected
             ? `linear-gradient(180deg, ${accent}20 0%, ${accent}08 50%, #0a0a10 100%)`
             : on
-              ? `linear-gradient(180deg, ${accent}10 0%, #0c0c12 100%)`
+              ? `linear-gradient(180deg, ${accent}10 0%, #1e1e26 100%)`
               : 'linear-gradient(180deg, #14141c 0%, #0a0a10 100%)',
           boxShadow: selected
             ? `0 0 16px ${accent}28, inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -2px 4px rgba(0,0,0,0.4)`

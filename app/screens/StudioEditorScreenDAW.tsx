@@ -435,11 +435,11 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}
+    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}
       onMouseMove={onGlobalMouseMove} onMouseUp={onGlobalMouseUp}>
 
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
+      <div className="flex items-center justify-between px-5 py-2 shrink-0" style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
         <div className="flex items-center gap-3 flex-wrap">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: '#00E5FF22', color: '#00E5FF' }}><Radio size={16} /></div>
           <h2 className="text-sm font-bold" style={{ color: '#fff' }}>Studio Editor</h2>
@@ -456,11 +456,11 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
         <div className="flex items-center gap-2 flex-wrap">
           {/* TOOL BUTTONS */}
           <button onClick={() => setTool('pointer')} className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold"
-            style={{ background: tool === 'pointer' ? '#1a1a2a' : '#111', color: tool === 'pointer' ? '#00E5FF' : '#555', border: `1px solid ${tool === 'pointer' ? '#00E5FF44' : '#333'}` }}>
+            style={{ background: tool === 'pointer' ? '#1a1a2a' : '#242424', color: tool === 'pointer' ? '#00E5FF' : '#555', border: `1px solid ${tool === 'pointer' ? '#00E5FF44' : '#333'}` }}>
             <MousePointer size={10} /> Select
           </button>
           <button onClick={() => setTool('razor')} className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold"
-            style={{ background: tool === 'razor' ? '#ff444422' : '#111', color: tool === 'razor' ? '#ff4444' : '#555', border: `1px solid ${tool === 'razor' ? '#ff444444' : '#333'}` }}>
+            style={{ background: tool === 'razor' ? '#ff444422' : '#242424', color: tool === 'razor' ? '#ff4444' : '#555', border: `1px solid ${tool === 'razor' ? '#ff444444' : '#333'}` }}>
             <Scissors size={10} /> Razor
           </button>
 
@@ -469,7 +469,7 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
           {/* EDITING BUTTONS */}
           <button onClick={() => selectedClips.size > 0 && copyClips(Array.from(selectedClips), tracks.find(t => t.clips.some(c => selectedClips.has(c.id)))?.id || 0)} 
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Ctrl+C"
-            style={{ background: selectedClips.size > 0 ? '#1a1a2a' : '#111', color: selectedClips.size > 0 ? '#00ff88' : '#555', border: `1px solid ${selectedClips.size > 0 ? '#00ff8844' : '#333'}` }}>
+            style={{ background: selectedClips.size > 0 ? '#1a1a2a' : '#242424', color: selectedClips.size > 0 ? '#00ff88' : '#555', border: `1px solid ${selectedClips.size > 0 ? '#00ff8844' : '#333'}` }}>
             <Copy size={10} /> Copy
           </button>
           <button onClick={() => {
@@ -478,27 +478,27 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
             deleteClips(Array.from(selectedClips), tracks.find(t => t.clips.some(c => selectedClips.has(c.id)))?.id || 0);
           }}
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Ctrl+X"
-            style={{ background: selectedClips.size > 0 ? '#1a1a2a' : '#111', color: selectedClips.size > 0 ? '#ff6b35' : '#555', border: `1px solid ${selectedClips.size > 0 ? '#ff6b3544' : '#333'}` }}>
+            style={{ background: selectedClips.size > 0 ? '#1a1a2a' : '#242424', color: selectedClips.size > 0 ? '#ff6b35' : '#555', border: `1px solid ${selectedClips.size > 0 ? '#ff6b3544' : '#333'}` }}>
             <Scissors size={10} /> Cut
           </button>
           <button onClick={() => clipboard && pasteClips(tracks[0]?.id || 0, currentBar)} 
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Ctrl+V"
-            style={{ background: clipboard && clipboard.clips.length > 0 ? '#1a1a2a' : '#111', color: clipboard && clipboard.clips.length > 0 ? '#a855f7' : '#555', border: `1px solid ${clipboard && clipboard.clips.length > 0 ? '#a855f744' : '#333'}` }}>
+            style={{ background: clipboard && clipboard.clips.length > 0 ? '#1a1a2a' : '#242424', color: clipboard && clipboard.clips.length > 0 ? '#a855f7' : '#555', border: `1px solid ${clipboard && clipboard.clips.length > 0 ? '#a855f744' : '#333'}` }}>
             <Clipboard size={10} /> Paste
           </button>
           <button onClick={() => selectedClips.size > 0 && duplicateClips(Array.from(selectedClips), tracks.find(t => t.clips.some(c => selectedClips.has(c.id)))?.id || 0)} 
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Ctrl+D"
-            style={{ background: selectedClips.size > 0 ? '#1a1a2a' : '#111', color: selectedClips.size > 0 ? '#ffaa00' : '#555', border: `1px solid ${selectedClips.size > 0 ? '#ffaa0044' : '#333'}` }}>
+            style={{ background: selectedClips.size > 0 ? '#1a1a2a' : '#242424', color: selectedClips.size > 0 ? '#ffaa00' : '#555', border: `1px solid ${selectedClips.size > 0 ? '#ffaa0044' : '#333'}` }}>
             <Repeat2 size={10} /> Duplicate
           </button>
           <button onClick={handleUndo} disabled={undoStack.length === 0}
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Ctrl+Z"
-            style={{ background: undoStack.length > 0 ? '#1a1a2a' : '#111', color: undoStack.length > 0 ? '#00E5FF' : '#555', border: `1px solid ${undoStack.length > 0 ? '#00E5FF44' : '#333'}` }}>
+            style={{ background: undoStack.length > 0 ? '#1a1a2a' : '#242424', color: undoStack.length > 0 ? '#00E5FF' : '#555', border: `1px solid ${undoStack.length > 0 ? '#00E5FF44' : '#333'}` }}>
             <RotateCcw size={10} /> Undo
           </button>
           <button onClick={handleRedo} disabled={redoStack.length === 0}
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Ctrl+Y"
-            style={{ background: redoStack.length > 0 ? '#1a1a2a' : '#111', color: redoStack.length > 0 ? '#00ff88' : '#555', border: `1px solid ${redoStack.length > 0 ? '#00ff8844' : '#333'}` }}>
+            style={{ background: redoStack.length > 0 ? '#1a1a2a' : '#242424', color: redoStack.length > 0 ? '#00ff88' : '#555', border: `1px solid ${redoStack.length > 0 ? '#00ff8844' : '#333'}` }}>
             <RotateCw size={10} /> Redo
           </button>
 
@@ -507,12 +507,12 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
           {/* GRID & SNAP */}
           <button onClick={() => setSnapEnabled(!snapEnabled)} 
             className="flex items-center gap-1 px-2 h-7 rounded text-xs font-bold" title="Toggle Snap to Grid"
-            style={{ background: snapEnabled ? '#1a1a2a' : '#111', color: snapEnabled ? '#ffaa00' : '#555', border: `1px solid ${snapEnabled ? '#ffaa0044' : '#333'}` }}>
+            style={{ background: snapEnabled ? '#1a1a2a' : '#242424', color: snapEnabled ? '#ffaa00' : '#555', border: `1px solid ${snapEnabled ? '#ffaa0044' : '#333'}` }}>
             <Grid3x3 size={10} /> Snap
           </button>
           {snapEnabled && (
             <select value={gridSize} onChange={e => setGridSize(parseFloat(e.target.value) as 0.5 | 1 | 2 | 4)}
-              className="px-2 h-7 rounded text-xs font-bold" style={{ background: '#1a1a1a', color: '#ffaa00', border: '1px solid #ffaa0044' }}>
+              className="px-2 h-7 rounded text-xs font-bold" style={{ background: '#2c2c2c', color: '#ffaa00', border: '1px solid #ffaa0044' }}>
               <option value="0.5">1/2 Bar</option>
               <option value="1">1 Bar</option>
               <option value="2">2 Bars</option>
@@ -523,7 +523,7 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
           <div className="w-px h-5" style={{ background: '#2a2a2a' }} />
 
           <button onClick={() => setAutoScroll(v => !v)} className="px-2 h-7 rounded text-xs font-bold"
-            style={{ background: autoScroll ? '#00ff8818' : '#111', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
+            style={{ background: autoScroll ? '#00ff8818' : '#242424', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
             ↔ Scroll
           </button>
           <div className="w-px h-5" style={{ background: '#2a2a2a' }} />
@@ -541,19 +541,19 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
 
           <div className="flex items-center gap-1">
             <span className="text-xs" style={{ color: '#555' }}>H</span>
-            <button onClick={() => setGlobalZoom(Math.max(0.2, +(zoom - 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomOut size={11} /></button>
+            <button onClick={() => setGlobalZoom(Math.max(0.2, +(zoom - 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomOut size={11} /></button>
             <span className="text-xs font-mono w-8 text-center" style={{ color: '#00E5FF' }}>{zoom.toFixed(1)}x</span>
-            <button onClick={() => setGlobalZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomIn size={11} /></button>
+            <button onClick={() => setGlobalZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomIn size={11} /></button>
           </div>
 
           <div className="flex items-center gap-1">
             <span className="text-xs" style={{ color: '#555' }}>V</span>
-            <button onClick={() => setGlobalVZoom(Math.max(1, +(globalVZoom - 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomOut size={11} /></button>
+            <button onClick={() => setGlobalVZoom(Math.max(1, +(globalVZoom - 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomOut size={11} /></button>
             <span className="text-xs font-mono w-7 text-center" style={{ color: '#D500F9' }}>{globalVZoom.toFixed(1)}x</span>
-            <button onClick={() => setGlobalVZoom(Math.min(8, +(globalVZoom + 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomIn size={11} /></button>
+            <button onClick={() => setGlobalVZoom(Math.min(8, +(globalVZoom + 0.5).toFixed(1)))} className="w-6 h-6 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomIn size={11} /></button>
           </div>
 
-          <button onClick={() => onExport('master-arranger')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold" style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}>
+          <button onClick={() => onExport('master-arranger')} className="flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold" style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F944' }}>
             <Send size={10} /> Arrange
           </button>
         </div>
@@ -566,13 +566,13 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
           <div className="flex flex-1 min-h-0 overflow-hidden flex-col" style={{ flex: 1 }}>
             <div className="flex flex-1 min-h-0 overflow-hidden">
               {/* Track list */}
-              <div className="shrink-0 overflow-y-auto" style={{ width: 160, borderRight: '1px solid #1a1a1a', background: '#080808' }}>
-                <div className="h-8" style={{ borderBottom: '1px solid #1a1a1a' }} />
+              <div className="shrink-0 overflow-y-auto" style={{ width: 160, borderRight: '1px solid #2c2c2c', background: '#2c2c2c' }}>
+                <div className="h-8" style={{ borderBottom: '1px solid #2c2c2c' }} />
                 {tracks.map(t => {
                   const dimmed = soloActive && !t.solo;
                   return (
                     <div key={t.id} className="flex flex-col gap-1 px-2 py-2 group hover:opacity-100 transition-opacity"
-                      style={{ height: TRACK_H, borderBottom: '1px solid #1a1a1a', cursor: 'pointer', background: editorTrack?.id === t.id ? `${t.color}18` : 'transparent', opacity: dimmed ? 0.35 : 1, borderLeft: `3px solid ${t.color}${editorTrack?.id === t.id ? '' : '33'}` }}
+                      style={{ height: TRACK_H, borderBottom: '1px solid #2c2c2c', cursor: 'pointer', background: editorTrack?.id === t.id ? `${t.color}18` : 'transparent', opacity: dimmed ? 0.35 : 1, borderLeft: `3px solid ${t.color}${editorTrack?.id === t.id ? '' : '33'}` }}
                       onClick={() => setEditorTrack(et => et?.id === t.id ? null : t)}>
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         <div className="w-2 h-2 rounded-full shrink-0" style={{ background: t.color, boxShadow: `0 0 4px ${t.color}` }} />
@@ -581,9 +581,9 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
                       <div className="flex items-center gap-0.5 flex-1 min-w-0">
                         <span className="text-7px font-mono truncate" style={{ color: '#666' }}>{t.type}</span>
                         <div className="flex gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity ml-auto">
-                          <button onClick={e => { e.stopPropagation(); toggleMute(t.id); }} className="w-4 h-4 rounded flex items-center justify-center" style={{ background: t.muted ? '#f4444433' : '#1a1a1a', color: t.muted ? '#ff6666' : '#666', border: `1px solid ${t.muted ? '#f44444' : '#333'}`, cursor: 'pointer', transition: 'all 0.1s', padding: '1px' }}><VolumeX size={6} /></button>
-                          <button onClick={e => { e.stopPropagation(); toggleSolo(t.id); }} className="w-4 h-4 rounded flex items-center justify-center text-4" style={{ background: t.solo ? '#ffcc0033' : '#1a1a1a', color: t.solo ? '#ffcc00' : '#666', border: `1px solid ${t.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', transition: 'all 0.1s', padding: '1px', fontSize: '9px', fontWeight: 'bold' }}>S</button>
-                          <button onClick={e => { e.stopPropagation(); toggleLock(t.id); }} className="w-4 h-4 rounded flex items-center justify-center text-4" style={{ background: t.locked ? '#00E5FF22' : '#1a1a1a', color: t.locked ? '#00E5FF' : '#666', border: `1px solid ${t.locked ? '#00E5FF' : '#333'}`, cursor: 'pointer', transition: 'all 0.1s', padding: '1px' }}><Lock size={6} /></button>
+                          <button onClick={e => { e.stopPropagation(); toggleMute(t.id); }} className="w-4 h-4 rounded flex items-center justify-center" style={{ background: t.muted ? '#f4444433' : '#2c2c2c', color: t.muted ? '#ff6666' : '#666', border: `1px solid ${t.muted ? '#f44444' : '#333'}`, cursor: 'pointer', transition: 'all 0.1s', padding: '1px' }}><VolumeX size={6} /></button>
+                          <button onClick={e => { e.stopPropagation(); toggleSolo(t.id); }} className="w-4 h-4 rounded flex items-center justify-center text-4" style={{ background: t.solo ? '#ffcc0033' : '#2c2c2c', color: t.solo ? '#ffcc00' : '#666', border: `1px solid ${t.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', transition: 'all 0.1s', padding: '1px', fontSize: '9px', fontWeight: 'bold' }}>S</button>
+                          <button onClick={e => { e.stopPropagation(); toggleLock(t.id); }} className="w-4 h-4 rounded flex items-center justify-center text-4" style={{ background: t.locked ? '#00E5FF22' : '#2c2c2c', color: t.locked ? '#00E5FF' : '#666', border: `1px solid ${t.locked ? '#00E5FF' : '#333'}`, cursor: 'pointer', transition: 'all 0.1s', padding: '1px' }}><Lock size={6} /></button>
                         </div>
                       </div>
                     </div>
@@ -596,7 +596,7 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
                 <div style={{ width: colW * BARS, position: 'relative' }}>
                   {/* Ruler */}
                   <div className="sticky top-0 z-20"
-                    style={{ background: '#0a0a0a', borderBottom: '1px solid #1a1a1a', height: 32, width: colW * BARS, position: 'relative', cursor: 'pointer', userSelect: 'none' }}
+                    style={{ background: '#1c1c1c', borderBottom: '1px solid #2c2c2c', height: 32, width: colW * BARS, position: 'relative', cursor: 'pointer', userSelect: 'none' }}
                     onClick={onRulerClick}>
                     {Array.from({ length: BARS }, (_, i) => {
                       const bar = i + 1;
@@ -604,7 +604,7 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
                       const isCurrent = bar === currentBar && (transport === 'playing' || transport === 'recording');
                       return (
                         <div key={i} className="absolute top-0 flex items-center justify-start pl-1"
-                          style={{ left: i * colW, width: colW, height: 32, color: isCurrent ? '#D500F9' : isSelected ? '#00ff88' : '#555', background: isCurrent ? 'rgba(213,0,249,0.06)' : isSelected ? 'rgba(0,255,136,0.12)' : 'transparent', borderLeft: `1px solid ${i % 4 === 0 ? '#1a1a1a' : '#0d0d0d'}`, fontSize: 9, fontFamily: 'monospace', fontWeight: 'bold' }}>
+                          style={{ left: i * colW, width: colW, height: 32, color: isCurrent ? '#D500F9' : isSelected ? '#00ff88' : '#555', background: isCurrent ? 'rgba(213,0,249,0.06)' : isSelected ? 'rgba(0,255,136,0.12)' : 'transparent', borderLeft: `1px solid ${i % 4 === 0 ? '#2c2c2c' : '#0d0d0d'}`, fontSize: 9, fontFamily: 'monospace', fontWeight: 'bold' }}>
                           {i + 1}
                         </div>
                       );
@@ -616,9 +616,9 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
                     const dimmed = soloActive && !t.solo;
                     return (
                       <div key={t.id} className="relative"
-                        style={{ height: TRACK_H, borderBottom: '1px solid #111', width: colW * BARS, opacity: dimmed ? 0.25 : 1 }}>
+                        style={{ height: TRACK_H, borderBottom: '1px solid #242424', width: colW * BARS, opacity: dimmed ? 0.25 : 1 }}>
                         {Array.from({ length: BARS }, (_, i) => (
-                          <div key={i} className="absolute top-0 h-full" style={{ left: i * colW, width: 1, background: i % 4 === 0 ? '#1e1e1e' : '#0d0d0d' }} />
+                          <div key={i} className="absolute top-0 h-full" style={{ left: i * colW, width: 1, background: i % 4 === 0 ? '#303030' : '#0d0d0d' }} />
                         ))}
                         {t.clips.map(clip => {
                           const clipW = Math.max(8, clip.len * colW - 2);
@@ -662,7 +662,7 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
             </div>
 
             {editorTrack && (
-              <div className="shrink-0" style={{ borderTop: '2px solid #1a1a1a', background: '#030303', minHeight: 280, maxHeight: 380, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', padding: '12px' }}>
+              <div className="shrink-0" style={{ borderTop: '2px solid #2c2c2c', background: '#030303', minHeight: 280, maxHeight: 380, flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', padding: '12px' }}>
                 <WaveformEditor
                   clips={editorTrack.clips.map(c => ({ id: c.id, bar: c.bar, len: c.len, label: c.label, trackColor: editorTrack.color, trackType: editorTrack.type }))}
                   colW={colW} totalBars={BARS} trackColor={editorTrack.color}
@@ -674,8 +674,8 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
         </ResizablePanel>
 
         {/* MIXER PANEL */}
-        <div style={{ borderTop: '1px solid #1a1a1a', background: '#080808', flexShrink: 0, display: 'flex', flexDirection: 'column', height: mixerOpen ? `${mixerHeight + 20}px` : '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', background: '#0a0a0a', borderBottom: '1px solid #1a1a1a', minHeight: '20px' }}>
+        <div style={{ borderTop: '1px solid #2c2c2c', background: '#2c2c2c', flexShrink: 0, display: 'flex', flexDirection: 'column', height: mixerOpen ? `${mixerHeight + 20}px` : '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', background: '#1c1c1c', borderBottom: '1px solid #2c2c2c', minHeight: '20px' }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: '#00E5FF' }}>🎚️ MIXER — Live Metering</span>
             <button onClick={() => setMixerOpen(!mixerOpen)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: '2px 4px' }}>
               {mixerOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -683,7 +683,7 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
           </div>
 
           {mixerOpen && (
-            <div style={{ display: 'flex', overflowX: 'auto', height: mixerHeight, background: '#050505' }}>
+            <div style={{ display: 'flex', overflowX: 'auto', height: mixerHeight, background: '#2a2a2a' }}>
               {tracks.map(track => {
                 const isPlaying = transport === 'playing' || transport === 'recording';
                 const volLevel = (channelVolumes[track.id] ?? track.volume) / 100;
@@ -694,16 +694,16 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
                 const clipping = dbLevel > 0;
 
                 return (
-                  <div key={track.id} style={{ display: 'flex', flexDirection: 'column', width: 100, flexShrink: 0, padding: '8px', borderRight: '1px solid #1a1a1a', gap: '8px' }}>
+                  <div key={track.id} style={{ display: 'flex', flexDirection: 'column', width: 100, flexShrink: 0, padding: '8px', borderRight: '1px solid #2c2c2c', gap: '8px' }}>
                     <div style={{ fontSize: 9, fontWeight: 700, color: track.color, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minHeight: 16 }}>
                       {track.name}
                     </div>
 
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'flex-end', gap: '1px', minHeight: 80, background: '#000', borderRadius: 3, padding: '4px 3px', border: '1px solid #1a1a1a' }}>
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'flex-end', gap: '1px', minHeight: 80, background: '#000', borderRadius: 3, padding: '4px 3px', border: '1px solid #2c2c2c' }}>
                       {Array.from({ length: 12 }, (_, i) => {
                         const threshold = i / 12;
                         const isLit = rmsLevel > threshold;
-                        const ledColor = clipping && i > 10 ? '#ff3333' : isLit ? (i > 9 ? '#ffaa00' : i > 6 ? '#00ff88' : track.color) : '#0a0a0a';
+                        const ledColor = clipping && i > 10 ? '#ff3333' : isLit ? (i > 9 ? '#ffaa00' : i > 6 ? '#00ff88' : track.color) : '#1c1c1c';
                         return (
                           <div key={i} style={{ height: '100%', borderRadius: 2, background: ledColor, boxShadow: isLit ? `0 0 4px ${ledColor}` : 'none', transition: 'all 0.05s' }} />
                         );
@@ -743,10 +743,10 @@ export default function StudioEditorScreen({ onExport }: { onExport: (dest: stri
                     </div>
 
                     <div style={{ display: 'flex', gap: '3px', fontSize: 9 }}>
-                      <button onClick={() => toggleMute(track.id)} style={{ flex: 1, padding: '4px', borderRadius: 3, background: track.muted ? '#f4444433' : '#1a1a1a', color: track.muted ? '#ff6666' : '#666', border: `1px solid ${track.muted ? '#f44444' : '#333'}`, cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
+                      <button onClick={() => toggleMute(track.id)} style={{ flex: 1, padding: '4px', borderRadius: 3, background: track.muted ? '#f4444433' : '#2c2c2c', color: track.muted ? '#ff6666' : '#666', border: `1px solid ${track.muted ? '#f44444' : '#333'}`, cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
                         M
                       </button>
-                      <button onClick={() => toggleSolo(track.id)} style={{ flex: 1, padding: '4px', borderRadius: 3, background: track.solo ? '#ffcc0033' : '#1a1a1a', color: track.solo ? '#ffcc00' : '#666', border: `1px solid ${track.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
+                      <button onClick={() => toggleSolo(track.id)} style={{ flex: 1, padding: '4px', borderRadius: 3, background: track.solo ? '#ffcc0033' : '#2c2c2c', color: track.solo ? '#ffcc00' : '#666', border: `1px solid ${track.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', fontWeight: 700, transition: 'all 0.1s' }}>
                         S
                       </button>
                     </div>

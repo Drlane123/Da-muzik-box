@@ -105,7 +105,7 @@ export function BeatLabAutomationLane({
         display: 'flex',
         height: BEAT_LAB_AUTOMATION_LANE_H,
         flexShrink: 0,
-        borderBottom: '1px solid #1e1e1e',
+        borderBottom: '1px solid #303030',
         background: '#060608',
         touchAction: 'none',
         cursor: disabled ? 'default' : 'crosshair',
@@ -119,12 +119,12 @@ export function BeatLabAutomationLane({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRight: '1px solid #1e1e1e',
+          borderRight: '1px solid #303030',
           fontSize: 7,
           fontWeight: 800,
           color: '#9ec7d4',
           letterSpacing: 0.4,
-          background: '#08080c',
+          background: '#18181e',
         }}
       >
         VOL

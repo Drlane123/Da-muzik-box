@@ -853,7 +853,7 @@ const StudioDawLockStatusReadout = memo(function StudioDawLockStatusReadout({
           color: '#6b7280',
           border: '1px solid #222',
           borderRadius: 4,
-          background: '#050505',
+          background: '#2a2a2a',
           padding: '2px 6px',
           minWidth: 160,
         }}
@@ -877,7 +877,7 @@ const StudioDawLockStatusReadout = memo(function StudioDawLockStatusReadout({
           color: '#6b7280',
           border: '1px solid #222',
           borderRadius: 4,
-          background: '#050505',
+          background: '#2a2a2a',
           padding: '2px 6px',
           minWidth: 160,
         }}
@@ -911,7 +911,7 @@ const StudioDawLockStatusReadout = memo(function StudioDawLockStatusReadout({
         fontWeight: 700,
         border: '1px solid #222',
         borderRadius: 4,
-        background: '#050505',
+        background: '#2a2a2a',
         padding: '2px 6px',
         minWidth: 168,
         flexShrink: 0,
@@ -1007,7 +1007,7 @@ const StudioRenderCadenceReadout = memo(function StudioRenderCadenceReadout({
         color: '#6b7280',
         border: '1px solid #222',
         borderRadius: 4,
-        background: '#050505',
+        background: '#2a2a2a',
         padding: '2px 6px',
         minWidth: 168,
         textAlign: 'left',
@@ -1139,7 +1139,7 @@ const StudioLiveSyncHud = memo(function StudioLiveSyncHud({
         style={{
           fontFamily: 'monospace',
           fontSize: 9,
-          background: '#050505',
+          background: '#2a2a2a',
           border: '1px solid #222',
           borderRadius: 4,
           padding: '2px 6px',
@@ -1158,7 +1158,7 @@ const StudioLiveSyncHud = memo(function StudioLiveSyncHud({
           padding: '1px 4px',
           borderRadius: 4,
           border: '1px solid #222',
-          background: '#050505',
+          background: '#2a2a2a',
           flexShrink: 0,
         }}
         title="Playhead beat in bar (1…N) — which quarter the transport is on; order matches MET clicks when MET is on"
@@ -1298,7 +1298,7 @@ const StudioVisualMetronomeLamp = memo(function StudioVisualMetronomeLamp({
         padding: '1px 5px',
         borderRadius: 4,
         border: '1px solid #2a2a2a',
-        background: '#0a0a0a',
+        background: '#1c1c1c',
       }}
       title="Visual metronome: flashes each grid quarter (same clock as playhead + MET schedule). Stronger pulse = downbeat."
     >
@@ -3463,11 +3463,11 @@ export default function StudioEditorScreen({
   }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#050505', color: '#ccc' }}
+    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}
       onMouseMove={onGlobalMouseMove} onMouseUp={onGlobalMouseUp}>
 
       {/* Header */}
-      <div className="flex flex-col shrink-0" style={{ borderBottom: '1px solid #1a1a1a', background: '#080808' }}>
+      <div className="flex flex-col shrink-0" style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
         {recordPathHint && (
           <div
             className="flex items-center justify-between gap-3 px-4 py-2"
@@ -3523,15 +3523,15 @@ export default function StudioEditorScreen({
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <button onClick={() => setTool('pointer')} className="flex items-center gap-1 px-2 h-5 rounded text-[10px] font-bold"
-            style={{ background: tool === 'pointer' ? '#1a1a2a' : '#111', color: tool === 'pointer' ? '#00E5FF' : '#555', border: `1px solid ${tool === 'pointer' ? '#00E5FF44' : '#333'}` }}>
+            style={{ background: tool === 'pointer' ? '#1a1a2a' : '#242424', color: tool === 'pointer' ? '#00E5FF' : '#555', border: `1px solid ${tool === 'pointer' ? '#00E5FF44' : '#333'}` }}>
             <MousePointer size={10} /> Select
           </button>
           <button onClick={() => setTool('razor')} className="flex items-center gap-1 px-2 h-5 rounded text-[10px] font-bold"
-            style={{ background: tool === 'razor' ? '#ff444422' : '#111', color: tool === 'razor' ? '#ff4444' : '#555', border: `1px solid ${tool === 'razor' ? '#ff444444' : '#333'}` }}>
+            style={{ background: tool === 'razor' ? '#ff444422' : '#242424', color: tool === 'razor' ? '#ff4444' : '#555', border: `1px solid ${tool === 'razor' ? '#ff444444' : '#333'}` }}>
             <Scissors size={10} /> Razor
           </button>
           <button onClick={() => setAutoScroll(v => !v)} className="px-2 h-5 rounded text-[10px] font-bold"
-            style={{ background: autoScroll ? '#00ff8818' : '#111', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
+            style={{ background: autoScroll ? '#00ff8818' : '#242424', color: autoScroll ? '#00ff88' : '#555', border: `1px solid ${autoScroll ? '#00ff8844' : '#333'}` }}>
             Γåö Scroll
           </button>
           <div className="w-px h-4" style={{ background: '#2a2a2a' }} />
@@ -3547,17 +3547,17 @@ export default function StudioEditorScreen({
           </button>
           <div className="flex items-center gap-2 ml-3">
             <span className="text-[10px]" style={{ color: '#555' }}>H</span>
-            <button onClick={() => setGlobalZoom(Math.max(0.2, +(zoom - 0.1).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomOut size={10} /></button>
+            <button onClick={() => setGlobalZoom(Math.max(0.2, +(zoom - 0.1).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomOut size={10} /></button>
             <span className="text-[10px] font-mono w-8 text-center" style={{ color: '#00E5FF' }}>{zoom.toFixed(1)}x</span>
-            <button onClick={() => setGlobalZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomIn size={10} /></button>
+            <button onClick={() => setGlobalZoom(Math.min(4, +(zoom + 0.1).toFixed(2)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomIn size={10} /></button>
           </div>
           <div className="flex items-center gap-2 ml-2">
             <span className="text-[10px]" style={{ color: '#555' }}>V</span>
-            <button onClick={() => setGlobalVZoom(Math.max(1, +(globalVZoom - 0.5).toFixed(1)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomOut size={10} /></button>
+            <button onClick={() => setGlobalVZoom(Math.max(1, +(globalVZoom - 0.5).toFixed(1)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomOut size={10} /></button>
             <span className="text-[10px] font-mono w-7 text-center" style={{ color: '#D500F9' }}>{globalVZoom.toFixed(1)}x</span>
-            <button onClick={() => setGlobalVZoom(Math.min(8, +(globalVZoom + 0.5).toFixed(1)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#1a1a1a', color: '#666' }}><ZoomIn size={10} /></button>
+            <button onClick={() => setGlobalVZoom(Math.min(8, +(globalVZoom + 0.5).toFixed(1)))} className="w-5 h-5 flex items-center justify-center rounded" style={{ background: '#2c2c2c', color: '#666' }}><ZoomIn size={10} /></button>
           </div>
-          <button onClick={() => onExport('master-arranger')} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ml-2" style={{ background: '#1a1a1a', color: '#D500F9', border: '1px solid #D500F944' }}>
+          <button onClick={() => onExport('master-arranger')} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold ml-2" style={{ background: '#2c2c2c', color: '#D500F9', border: '1px solid #D500F944' }}>
             <Send size={10} /> Arrange
           </button>
         </div>
@@ -3634,16 +3634,16 @@ export default function StudioEditorScreen({
                 style={{ scrollPaddingTop: RULER_H }}
               >
               {/* Track list ΓÇö same `tracks` order as timeline rows & mixer strips; no nested vertical scroll */}
-              <div className="shrink-0 self-start overflow-hidden flex flex-col" style={{ width: 248, borderRight: '1px solid #1a1a1a', background: '#080808' }}>
+              <div className="shrink-0 self-start overflow-hidden flex flex-col" style={{ width: 248, borderRight: '1px solid #2c2c2c', background: '#2c2c2c' }}>
                 <div
                   className="sticky top-0 z-20 flex items-center px-2 font-mono text-[9px] font-bold tracking-wide shrink-0"
                   style={{
                     height: RULER_H,
                     minHeight: RULER_H,
-                    borderBottom: '1px solid #1a1a1a',
+                    borderBottom: '1px solid #2c2c2c',
                     color: '#666',
                     letterSpacing: 0.5,
-                    background: '#080808',
+                    background: '#2c2c2c',
                   }}
                 >
                   TRACKS
@@ -3663,7 +3663,7 @@ export default function StudioEditorScreen({
                         minHeight: TRACK_H,
                         flexShrink: 0,
                         boxSizing: 'border-box',
-                        borderBottom: '1px solid #1a1a1a',
+                        borderBottom: '1px solid #2c2c2c',
                         cursor: 'pointer',
                         background: isEditorSelected ? `${t.color}22` : 'transparent',
                         opacity: dimmed ? 0.35 : 1,
@@ -3697,7 +3697,7 @@ export default function StudioEditorScreen({
                               }}
                               onClick={(e) => e.stopPropagation()}
                               className="text-[10px] font-semibold min-w-0 flex-1 leading-tight px-1 rounded"
-                              style={{ color: '#ccc', background: '#111', border: '1px solid #333' }}
+                              style={{ color: '#ccc', background: '#242424', border: '1px solid #333' }}
                             />
                           ) : (
                             <span
@@ -3829,15 +3829,15 @@ export default function StudioEditorScreen({
                           />
                         )}
                         <div className="flex gap-1 items-center opacity-80 group-hover:opacity-100">
-                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleMute(t.id); }} className="w-[26px] h-[26px] rounded flex items-center justify-center" style={{ background: t.muted ? '#f4444433' : '#1a1a1a', color: t.muted ? '#ff6666' : '#666', border: `1px solid ${t.muted ? '#f44444' : '#333'}`, cursor: 'pointer', padding: 0 }}><VolumeX size={12} /></button>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleSolo(t.id); }} className="w-[26px] h-[26px] rounded flex items-center justify-center" style={{ background: t.solo ? '#ffcc0033' : '#1a1a1a', color: t.solo ? '#ffcc00' : '#666', border: `1px solid ${t.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 'bold' }}>S</button>
-                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleLock(t.id); }} className="w-[26px] h-[26px] rounded flex items-center justify-center" style={{ background: t.locked ? '#00E5FF22' : '#1a1a1a', color: t.locked ? '#00E5FF' : '#666', border: `1px solid ${t.locked ? '#00E5FF' : '#333'}`, cursor: 'pointer', padding: 0 }}><Lock size={12} /></button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleMute(t.id); }} className="w-[26px] h-[26px] rounded flex items-center justify-center" style={{ background: t.muted ? '#f4444433' : '#2c2c2c', color: t.muted ? '#ff6666' : '#666', border: `1px solid ${t.muted ? '#f44444' : '#333'}`, cursor: 'pointer', padding: 0 }}><VolumeX size={12} /></button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleSolo(t.id); }} className="w-[26px] h-[26px] rounded flex items-center justify-center" style={{ background: t.solo ? '#ffcc0033' : '#2c2c2c', color: t.solo ? '#ffcc00' : '#666', border: `1px solid ${t.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 'bold' }}>S</button>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); toggleLock(t.id); }} className="w-[26px] h-[26px] rounded flex items-center justify-center" style={{ background: t.locked ? '#00E5FF22' : '#2c2c2c', color: t.locked ? '#00E5FF' : '#666', border: `1px solid ${t.locked ? '#00E5FF' : '#333'}`, cursor: 'pointer', padding: 0 }}><Lock size={12} /></button>
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); duplicateTrack(t.id); }}
                             title="Duplicate track (clips, mixer level, pan, FX)"
                             className="w-[26px] h-[26px] rounded flex items-center justify-center"
-                            style={{ background: '#1a1a1a', color: '#9ecbff', border: '1px solid #334455', cursor: 'pointer', padding: 0 }}
+                            style={{ background: '#2c2c2c', color: '#9ecbff', border: '1px solid #334455', cursor: 'pointer', padding: 0 }}
                           >
                             <Copy size={12} />
                           </button>
@@ -3846,7 +3846,7 @@ export default function StudioEditorScreen({
                             onClick={(e) => { e.stopPropagation(); deleteTrack(t.id); }}
                             title="Delete track"
                             className="w-[26px] h-[26px] rounded flex items-center justify-center"
-                            style={{ background: '#1a1a1a', color: '#ff6666', border: '1px solid #663333', cursor: 'pointer', padding: 0 }}
+                            style={{ background: '#2c2c2c', color: '#ff6666', border: '1px solid #663333', cursor: 'pointer', padding: 0 }}
                           >
                             <Trash2 size={12} />
                           </button>
@@ -3872,8 +3872,8 @@ export default function StudioEditorScreen({
                     className="sticky top-0 z-20"
                     title="Timeline ruler — cyan column & line = playhead. TitleBar MET (magenta) = audible clicks. Toolbar MET lamp = visual quarter flashes."
                     style={{
-                      background: '#0a0a0a',
-                      borderBottom: '1px solid #1a1a1a',
+                      background: '#1c1c1c',
+                      borderBottom: '1px solid #2c2c2c',
                       width: timelineMap.totalWidthPx,
                       position: 'relative',
                       cursor: 'pointer',
@@ -3900,7 +3900,7 @@ export default function StudioEditorScreen({
                               height: RULER_BAR_H,
                               color: isCurrent ? STUDIO_PLAYHEAD_LINE.barText : isBarActive ? '#00ff88' : '#555',
                               background: isCurrent ? STUDIO_PLAYHEAD_LINE.barBg : isBarActive ? 'rgba(0,255,136,0.08)' : 'transparent',
-                              borderLeft: `1px solid ${i % 4 === 0 ? '#1a1a1a' : '#0d0d0d'}`,
+                              borderLeft: `1px solid ${i % 4 === 0 ? '#2c2c2c' : '#0d0d0d'}`,
                               fontSize: Math.min(9, Math.max(7, colW * 0.2)),
                               fontFamily: 'monospace',
                               fontWeight: 'bold',
@@ -3939,7 +3939,7 @@ export default function StudioEditorScreen({
                               height: RULER_MEAS_H,
                               fontSize: beatRulerFontPx,
                               color: isSel ? '#00ff88' : isPlayheadBeat ? STUDIO_PLAYHEAD_LINE.measText : '#555',
-                              borderLeft: mi === 0 ? `1px solid ${bi % 4 === 0 ? '#1a1a1a' : '#0d0d0d'}` : '1px solid #1a1a1a',
+                              borderLeft: mi === 0 ? `1px solid ${bi % 4 === 0 ? '#2c2c2c' : '#0d0d0d'}` : '1px solid #2c2c2c',
                               background: isSel
                                 ? 'rgba(0,255,136,0.14)'
                                 : isPlayheadBeat
@@ -4011,7 +4011,7 @@ export default function StudioEditorScreen({
                         onMouseDown={(e) => onTimelineGridMouseDown(e, t)}
                         style={{
                           height: TRACK_H,
-                          borderBottom: '1px solid #111',
+                          borderBottom: '1px solid #242424',
                           width: timelineMap.totalWidthPx,
                           opacity: dimmed ? 0.25 : 1,
                           boxShadow: isArmed
@@ -4044,7 +4044,7 @@ export default function StudioEditorScreen({
                               style={{
                                 left,
                                 width: 1,
-                                background: isBarLine ? '#1e1e1e' : '#141414',
+                                background: isBarLine ? '#303030' : '#141414',
                               }}
                             />
                           );
@@ -4280,7 +4280,7 @@ export default function StudioEditorScreen({
         </ResizablePanel>
 
         {editorTrack && (
-          <div className="shrink-0 overflow-hidden flex flex-col" style={{ borderTop: '2px solid #1a1a1a', background: '#030303', minHeight: 200, maxHeight: 360, flex: '0 1 320px' }}>
+          <div className="shrink-0 overflow-hidden flex flex-col" style={{ borderTop: '2px solid #2c2c2c', background: '#030303', minHeight: 200, maxHeight: 360, flex: '0 1 320px' }}>
             <WaveformEditor
               clips={editorTrack.clips.map(c => ({ id: c.id, bar: c.bar, len: c.len, label: c.label, trackColor: editorTrack.color, trackType: editorTrack.type }))}
               colW={colW} totalBars={BARS} trackColor={editorTrack.color}
@@ -4296,7 +4296,7 @@ export default function StudioEditorScreen({
           className="w-full"
           style={{
             borderTop: '2px solid #2a2a2a',
-            background: '#080808',
+            background: '#2c2c2c',
             flexShrink: 0,
             display: 'flex',
             flexDirection: 'column',
@@ -4313,8 +4313,8 @@ export default function StudioEditorScreen({
               gap: 10,
               rowGap: 8,
               padding: '6px 10px',
-              background: '#0a0a0a',
-              borderBottom: '1px solid #1a1a1a',
+              background: '#1c1c1c',
+              borderBottom: '1px solid #2c2c2c',
             }}
           >
             <div
@@ -4332,7 +4332,7 @@ export default function StudioEditorScreen({
                   window.dispatchEvent(new CustomEvent(DMB_STUDIO_PRECOUNT_CANCEL));
                   stop();
                 }}
-                style={{ width: 24, height: 20, borderRadius: 3, border: '1px solid #333', background: '#111', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 24, height: 20, borderRadius: 3, border: '1px solid #333', background: '#242424', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Stop"
               >
                 <Square size={11} fill="currentColor" />
@@ -4342,7 +4342,7 @@ export default function StudioEditorScreen({
                 onClick={() => {
                   seekToTick(Math.max(0, positionTicks - ticksPerBar));
                 }}
-                style={{ width: 24, height: 20, borderRadius: 3, border: '1px solid #333', background: '#111', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 24, height: 20, borderRadius: 3, border: '1px solid #333', background: '#242424', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Rewind one bar"
               >
                 <SkipBack size={11} />
@@ -4371,7 +4371,7 @@ export default function StudioEditorScreen({
                   const isPlay = transport === 'playing';
                   const active = isRec || isCount || isPlay;
                   let border = '#333';
-                  let background = '#111';
+                  let background = '#242424';
                   let color = '#aaa';
                   let shadow: string | undefined;
                   if (isRec) {
@@ -4434,7 +4434,7 @@ export default function StudioEditorScreen({
                   const maxTick = Math.max(0, Math.round(songTotalBars * ticksPerBar));
                   seekToTick(Math.min(maxTick, positionTicks + ticksPerBar));
                 }}
-                style={{ width: 24, height: 20, borderRadius: 3, border: '1px solid #333', background: '#111', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 24, height: 20, borderRadius: 3, border: '1px solid #333', background: '#242424', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Fast forward one bar"
               >
                 <SkipForward size={11} />
@@ -4580,7 +4580,7 @@ export default function StudioEditorScreen({
                     height: 20,
                     borderRadius: 3,
                     border: '1px solid #333',
-                    background: syncCaptureRunning ? '#222' : '#111',
+                    background: syncCaptureRunning ? '#222' : '#242424',
                     color: syncCaptureRunning ? '#fbbf24' : '#aaa',
                     fontSize: 9,
                     padding: '0 6px',
@@ -4600,7 +4600,7 @@ export default function StudioEditorScreen({
                     minWidth: 78,
                     borderRadius: 3,
                     border: `1px solid ${performancePlaybackMode ? '#22c55e66' : '#333'}`,
-                    background: performancePlaybackMode ? '#0f2015' : '#111',
+                    background: performancePlaybackMode ? '#0f2015' : '#242424',
                     color: performancePlaybackMode ? '#86efac' : '#aaa',
                     fontSize: 9,
                     fontWeight: 800,
@@ -4658,7 +4658,7 @@ export default function StudioEditorScreen({
                   height: 20,
                   borderRadius: 3,
                   border: '1px solid #333',
-                  background: '#111',
+                  background: '#242424',
                   color: studioPrecountEnabled ? '#fbbf24' : '#555',
                   flexShrink: 0,
                   maxWidth: 56,
@@ -4775,7 +4775,7 @@ export default function StudioEditorScreen({
                   height: 22,
                   borderRadius: 4,
                   border: '1px solid #333',
-                  background: '#111',
+                  background: '#242424',
                   color: '#f3f4f6',
                   fontSize: 11,
                   padding: '0 6px',
@@ -4826,7 +4826,7 @@ export default function StudioEditorScreen({
           {mixerOpen && (
             <div
               ref={mixerScrollContainerRef}
-              style={{ display: 'flex', overflowX: 'auto', height: mixerHeight, background: '#050505' }}
+              style={{ display: 'flex', overflowX: 'auto', height: mixerHeight, background: '#2a2a2a' }}
             >
               {tracks.map(track => {
                 const sessionCh = mixerRoutingChannel(track);
@@ -4856,7 +4856,7 @@ export default function StudioEditorScreen({
                       width: 124,
                       flexShrink: 0,
                       padding: '10px 8px 12px',
-                      borderRight: '1px solid #1a1a1a',
+                      borderRight: '1px solid #2c2c2c',
                       gap: 8,
                       justifyContent: 'flex-start',
                       background: mixSel ? 'rgba(0,229,255,0.06)' : 'transparent',
@@ -4873,13 +4873,13 @@ export default function StudioEditorScreen({
 
                     {/* Meter + side volume fader */}
                     <div style={{ flex: 1, display: 'flex', gap: 4, minHeight: 116 }}>
-                      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 4, background: '#000', borderRadius: 3, padding: '4px 3px', border: '1px solid #1a1a1a' }}>
+                      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 4, background: '#000', borderRadius: 3, padding: '4px 3px', border: '1px solid #2c2c2c' }}>
                         {(stereoMode === 'stereo' ? [leftLevel, rightLevel] : [rmsLevel]).map((level, meterIdx) => (
                           <div key={meterIdx} style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'flex-end', gap: '1px' }}>
                             {Array.from({ length: 12 }, (_, i) => {
                               const threshold = i / 12;
                               const isLit = level > threshold;
-                              const ledColor = clipping && i > 10 ? '#ff3333' : isLit ? (i > 9 ? '#ffaa00' : i > 6 ? '#00ff88' : track.color) : '#0a0a0a';
+                              const ledColor = clipping && i > 10 ? '#ff3333' : isLit ? (i > 9 ? '#ffaa00' : i > 6 ? '#00ff88' : track.color) : '#1c1c1c';
                               return (
                                 <div key={i} style={{ height: '100%', borderRadius: 2, background: ledColor, boxShadow: isLit ? `0 0 4px ${ledColor}` : 'none', transition: 'all 0.05s' }} />
                               );
@@ -4890,7 +4890,7 @@ export default function StudioEditorScreen({
                           </div>
                         ))}
                       </div>
-                      <div style={{ width: 20, borderRadius: 3, border: '1px solid #1a1a1a', background: '#0b0b0b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4px 2px', gap: 4 }}>
+                      <div style={{ width: 20, borderRadius: 3, border: '1px solid #2c2c2c', background: '#0b0b0b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4px 2px', gap: 4 }}>
                         <input
                           type="range"
                           min={0}
@@ -4920,7 +4920,7 @@ export default function StudioEditorScreen({
                         width: '100%',
                         padding: '4px 0',
                         borderRadius: 3,
-                        background: stereoMode === 'stereo' ? '#1a1a1a' : '#111',
+                        background: stereoMode === 'stereo' ? '#2c2c2c' : '#242424',
                         color: stereoMode === 'stereo' ? '#00E5FF' : '#ffcc00',
                         border: `1px solid ${stereoMode === 'stereo' ? '#00E5FF44' : '#ffcc0044'}`,
                         cursor: 'pointer',
@@ -5040,7 +5040,7 @@ export default function StudioEditorScreen({
                                   fontSize: 7,
                                   color: '#525252',
                                   border: '1px dashed #404040',
-                                  background: '#0a0a0a',
+                                  background: '#1c1c1c',
                                 }}
                                 title="Mic on Audio / Vocal only"
                               >
@@ -5066,10 +5066,10 @@ export default function StudioEditorScreen({
 
                     {/* M/S ΓÇö same state as timeline */}
                     <div style={{ display: 'flex', gap: '4px', fontSize: 10 }}>
-                      <button onClick={() => toggleMute(track.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 3, background: track.muted ? '#f4444433' : '#1a1a1a', color: track.muted ? '#ff6666' : '#888', border: `1px solid ${track.muted ? '#f44444' : '#333'}`, cursor: 'pointer', fontWeight: 800, transition: 'all 0.1s' }}>
+                      <button onClick={() => toggleMute(track.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 3, background: track.muted ? '#f4444433' : '#2c2c2c', color: track.muted ? '#ff6666' : '#888', border: `1px solid ${track.muted ? '#f44444' : '#333'}`, cursor: 'pointer', fontWeight: 800, transition: 'all 0.1s' }}>
                         M
                       </button>
-                      <button onClick={() => toggleSolo(track.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 3, background: track.solo ? '#ffcc0033' : '#1a1a1a', color: track.solo ? '#ffcc00' : '#888', border: `1px solid ${track.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', fontWeight: 800, transition: 'all 0.1s' }}>
+                      <button onClick={() => toggleSolo(track.id)} style={{ flex: 1, padding: '6px 4px', borderRadius: 3, background: track.solo ? '#ffcc0033' : '#2c2c2c', color: track.solo ? '#ffcc00' : '#888', border: `1px solid ${track.solo ? '#ffcc00' : '#333'}`, cursor: 'pointer', fontWeight: 800, transition: 'all 0.1s' }}>
                         S
                       </button>
                     </div>
@@ -5279,7 +5279,7 @@ export default function StudioEditorScreen({
                         />
                         <span style={{ fontSize: 7, color: '#777', fontFamily: 'monospace' }}>R</span>
                       </div>
-                      <div style={{ width: 20, borderRadius: 3, border: '1px solid #1a1a1a', background: '#0b0b0b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4px 2px', gap: 4 }}>
+                      <div style={{ width: 20, borderRadius: 3, border: '1px solid #2c2c2c', background: '#0b0b0b', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4px 2px', gap: 4 }}>
                         <input
                           type="range"
                           min={0}
@@ -5312,7 +5312,7 @@ export default function StudioEditorScreen({
                         width: '100%',
                         padding: '4px 0',
                         borderRadius: 3,
-                        background: masterSolo ? '#ffcc0033' : '#1a1a1a',
+                        background: masterSolo ? '#ffcc0033' : '#2c2c2c',
                         color: masterSolo ? '#ffcc00' : '#888',
                         border: `1px solid ${masterSolo ? '#ffcc00' : '#333'}`,
                         cursor: 'pointer',

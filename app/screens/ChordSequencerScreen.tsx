@@ -1933,7 +1933,7 @@ function BottomKeyboard({ notes }: { notes: number[] }) {
   });
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: 56, background: '#0a0a0a' }}>
+    <div style={{ position: 'relative', width: '100%', height: 56, background: '#1c1c1c' }}>
       {/* White keys row */}
       <div style={{ display: 'flex', height: 56, width: '100%' }}>
         {whites.map((m) => {
@@ -1946,7 +1946,7 @@ function BottomKeyboard({ notes }: { notes: number[] }) {
                 flex: 1,
                 background: lit ? '#86efac' : '#e8ebe2',
                 borderRight: '1px solid #2a2a2a',
-                borderBottom: '1px solid #1a1a1a',
+                borderBottom: '1px solid #2c2c2c',
                 borderRadius: '0 0 2px 2px',
                 position: 'relative',
                 boxShadow: lit ? 'inset 0 -8px 8px -4px #22c55e88' : 'none',
@@ -3969,7 +3969,7 @@ export default function ChordSequencerScreen({
     >
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderBottom: '1px solid #151515', background: '#090909' }}>
         {embedded && onBack && (
-          <button onClick={() => { stopPlayback(); onBack(); }} style={{ background: '#111', color: '#999', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
+          <button onClick={() => { stopPlayback(); onBack(); }} style={{ background: '#242424', color: '#999', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
             <X size={12} />
           </button>
         )}
@@ -3984,7 +3984,7 @@ export default function ChordSequencerScreen({
           <button onClick={() => setLocalBpm((v) => Math.min(220, v + 1))} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer' }}><ChevronUp size={14} /></button>
         </div>
 
-        <button onClick={() => { setCurrentStep(-1); nextIdxRef.current = 0; }} style={{ marginLeft: 6, background: '#111', color: '#777', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}><SkipBack size={12} /></button>
+        <button onClick={() => { setCurrentStep(-1); nextIdxRef.current = 0; }} style={{ marginLeft: 6, background: '#242424', color: '#777', border: '1px solid #222', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}><SkipBack size={12} /></button>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <button
             onClick={playing ? stopPlayback : startPlayback}
@@ -4012,9 +4012,9 @@ export default function ChordSequencerScreen({
               ? 'No MIDI outputs detected. Connect a MIDI device or virtual MIDI port (e.g. loopMIDI on Windows, IAC Driver on macOS) and refresh.'
               : `Route playback to an external MIDI destination. Chords go to channel 1 (MIDI ch 0) and bass to channel 2 (MIDI ch 1).`}
             style={{
-              background: midiOutputId ? '#0a1a14' : '#0a0a0a',
+              background: midiOutputId ? '#0a1a14' : '#1c1c1c',
               color: midiOutputId ? '#86efac' : '#6b7280',
-              border: `1px solid ${midiOutputId ? '#22c55e66' : '#1a1a1a'}`,
+              border: `1px solid ${midiOutputId ? '#22c55e66' : '#2c2c2c'}`,
               borderRadius: 6,
               padding: '4px 6px',
               fontSize: 10,
@@ -4031,7 +4031,7 @@ export default function ChordSequencerScreen({
             ))}
           </select>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           <button
             type="button"
@@ -4046,7 +4046,7 @@ export default function ChordSequencerScreen({
             onClick={() => setPadPickerOpen((v) => !v)}
             disabled={!onExportToPad || exportBusy}
             title="Bake the chord progression to WAV and drop it into one of the chord pads as a sample."
-            style={{ background: '#111', color: '#22c55e', border: '1px solid #223', borderRadius: 6, padding: '5px 9px', cursor: 'pointer', fontWeight: 800, fontSize: 11 }}
+            style={{ background: '#242424', color: '#22c55e', border: '1px solid #223', borderRadius: 6, padding: '5px 9px', cursor: 'pointer', fontWeight: 800, fontSize: 11 }}
           >
             {exportBusy ? '...' : '▶ EXPORT PAD'}
           </button>
@@ -4054,7 +4054,7 @@ export default function ChordSequencerScreen({
             onClick={() => void handleExportWavFile()}
             disabled={exportBusy}
             title="Render the chord progression to a WAV audio file and save it to your Downloads folder."
-            style={{ background: '#111', color: '#86efac', border: '1px solid #1a3a2a', borderRadius: 6, padding: '5px 9px', cursor: exportBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 11 }}
+            style={{ background: '#242424', color: '#86efac', border: '1px solid #1a3a2a', borderRadius: 6, padding: '5px 9px', cursor: exportBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 11 }}
           >
             {exportBusy ? '...' : '💾 EXPORT WAV'}
           </button>
@@ -4062,7 +4062,7 @@ export default function ChordSequencerScreen({
             onClick={handleExportMidiFile}
             disabled={exportBusy}
             title="Export the chord progression + painted bass line as a Standard MIDI File (.mid). Opens in Logic, FL, Ableton, Pro Tools, Studio One, Reaper, etc."
-            style={{ background: '#111', color: '#fde68a', border: '1px solid #4a3c1a', borderRadius: 6, padding: '5px 9px', cursor: exportBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 11 }}
+            style={{ background: '#242424', color: '#fde68a', border: '1px solid #4a3c1a', borderRadius: 6, padding: '5px 9px', cursor: exportBusy ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 11 }}
           >
             🎼 EXPORT MIDI
           </button>
@@ -4086,20 +4086,20 @@ export default function ChordSequencerScreen({
           overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
-          borderBottom: '1px solid #111',
+          borderBottom: '1px solid #242424',
         }}
       >
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #111', background: '#050505', flexWrap: 'wrap' }}>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderBottom: '1px solid #242424', background: '#2a2a2a', flexWrap: 'wrap' }}>
         <ChordBassSequencerHelpTip tab="chords" title="Key, steps & chord pads" />
         <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>KEY</span>
         {KEY_LABELS.map((k, i) => (
-          <button key={k} onClick={() => setKeyRoot(i)} style={{ background: keyRoot === i ? '#112015' : '#111', color: keyRoot === i ? '#22c55e' : '#7a7a7a', border: `1px solid ${keyRoot === i ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 6px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{k}</button>
+          <button key={k} onClick={() => setKeyRoot(i)} style={{ background: keyRoot === i ? '#112015' : '#242424', color: keyRoot === i ? '#22c55e' : '#7a7a7a', border: `1px solid ${keyRoot === i ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '2px 6px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{k}</button>
         ))}
 
-        <div style={{ width: 1, height: 18, background: '#1a1a1a' }} />
+        <div style={{ width: 1, height: 18, background: '#2c2c2c' }} />
 
         {(['major', 'minor'] as const).map((m) => (
-          <button key={m} onClick={() => setMode(m)} style={{ background: mode === m ? '#112015' : '#111', color: mode === m ? '#22c55e' : '#7a7a7a', border: `1px solid ${mode === m ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '3px 8px', fontSize: 10, fontWeight: 800, cursor: 'pointer', textTransform: 'capitalize' }}>{m}</button>
+          <button key={m} onClick={() => setMode(m)} style={{ background: mode === m ? '#112015' : '#242424', color: mode === m ? '#22c55e' : '#7a7a7a', border: `1px solid ${mode === m ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '3px 8px', fontSize: 10, fontWeight: 800, cursor: 'pointer', textTransform: 'capitalize' }}>{m}</button>
         ))}
 
         <select value={genreId} onChange={(e) => setGenreId(e.target.value)} style={{ background: '#101010', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '3px 7px', fontSize: 10, fontWeight: 700 }}>
@@ -4108,18 +4108,18 @@ export default function ChordSequencerScreen({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {(['simple', 'rich', 'pro'] as const).map((v) => (
-            <button key={v} onClick={() => setVoicingComplexity(v)} style={{ background: voicingComplexity === v ? '#112015' : '#111', color: voicingComplexity === v ? '#22c55e' : '#7a7a7a', border: `1px solid ${voicingComplexity === v ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '3px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer', textTransform: 'capitalize' }}>{v}</button>
+            <button key={v} onClick={() => setVoicingComplexity(v)} style={{ background: voicingComplexity === v ? '#112015' : '#242424', color: voicingComplexity === v ? '#22c55e' : '#7a7a7a', border: `1px solid ${voicingComplexity === v ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '3px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer', textTransform: 'capitalize' }}>{v}</button>
           ))}
         </div>
 
-        <div style={{ width: 1, height: 18, background: '#1a1a1a' }} />
+        <div style={{ width: 1, height: 18, background: '#2c2c2c' }} />
 
         <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>STEPS</span>
         {STEP_COUNTS.map((n) => (
-          <button key={n} onClick={() => setStepCount(n)} style={{ background: stepCount === n ? '#112015' : '#111', color: stepCount === n ? '#22c55e' : '#7a7a7a', border: `1px solid ${stepCount === n ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '3px 7px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{n}</button>
+          <button key={n} onClick={() => setStepCount(n)} style={{ background: stepCount === n ? '#112015' : '#242424', color: stepCount === n ? '#22c55e' : '#7a7a7a', border: `1px solid ${stepCount === n ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '3px 7px', fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>{n}</button>
         ))}
 
-        <button onClick={() => setAutoGenreTempo((v) => !v)} style={{ marginLeft: 8, background: autoGenreTempo ? '#112015' : '#111', color: autoGenreTempo ? '#22c55e' : '#6b7280', border: `1px solid ${autoGenreTempo ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '3px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
+        <button onClick={() => setAutoGenreTempo((v) => !v)} style={{ marginLeft: 8, background: autoGenreTempo ? '#112015' : '#242424', color: autoGenreTempo ? '#22c55e' : '#6b7280', border: `1px solid ${autoGenreTempo ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '3px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
           TEMPO AUTO {autoGenreTempo ? 'ON' : 'OFF'}
         </button>
 
@@ -4127,7 +4127,7 @@ export default function ChordSequencerScreen({
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px 4px' }}>
-      <div style={{ padding: '0 0 4px', borderBottom: '1px solid #111' }}>
+      <div style={{ padding: '0 0 4px', borderBottom: '1px solid #242424' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
           <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>CHORD SOUND</span>
           {CHORD_VOICES.map((v) => {
@@ -4141,7 +4141,7 @@ export default function ChordSequencerScreen({
                 style={{
                   background: on ? '#112015' : '#0d0d0d',
                   color: on ? '#86efac' : '#6b7280',
-                  border: `1px solid ${on ? '#22c55e66' : '#1a1a1a'}`,
+                  border: `1px solid ${on ? '#22c55e66' : '#2c2c2c'}`,
                   borderRadius: 5,
                   padding: '2px 7px',
                   fontSize: 8,
@@ -4169,7 +4169,7 @@ export default function ChordSequencerScreen({
             {Math.round(chordVolume * 100)}%
           </span>
 
-          <div style={{ width: 1, height: 16, background: '#1a1a1a', marginLeft: 4 }} />
+          <div style={{ width: 1, height: 16, background: '#2c2c2c', marginLeft: 4 }} />
 
           <button
             type="button"
@@ -4208,34 +4208,34 @@ export default function ChordSequencerScreen({
             <ChordBassSequencerHelpTip tab="chords" title="Chord scale pads" />
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <button onClick={() => setShowChordOptionPanel((v) => !v)} style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '3px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
+            <button onClick={() => setShowChordOptionPanel((v) => !v)} style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '3px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
               {showChordOptionPanel ? 'HIDE PANEL' : 'OPEN PANEL'}
             </button>
             {/* Octave shift controls */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>OCT</span>
-              <button onClick={() => setOctaveShift((v) => Math.max(-2, v - 1))} style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>−</button>
+              <button onClick={() => setOctaveShift((v) => Math.max(-2, v - 1))} style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>−</button>
               <span style={{ fontSize: 9, color: octaveShift === 0 ? '#4b5563' : '#22c55e', fontWeight: 900, minWidth: 18, textAlign: 'center' }}>{octaveShift > 0 ? `+${octaveShift}` : octaveShift}</span>
-              <button onClick={() => setOctaveShift((v) => Math.min(2, v + 1))} style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>+</button>
+              <button onClick={() => setOctaveShift((v) => Math.min(2, v + 1))} style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 900, cursor: 'pointer' }}>+</button>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>PAGE</span>
               <button
                 onClick={() => setPadPage((v) => Math.max(0, v - 1))}
-                style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
+                style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
               >
                 ◀
               </button>
               <span style={{ fontSize: 9, color: '#86efac', fontWeight: 800, minWidth: 24, textAlign: 'center' }}>{padPage + 1}</span>
               <button
                 onClick={() => setPadPage((v) => Math.min(pageCount - 1, v + 1))}
-                style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
+                style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 4, padding: '1px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
               >
                 ▶
               </button>
             </div>
             {/* Single AUTO + C1..C9 control row */}
-            <button onClick={() => setFollowNextSlot((v) => !v)} style={{ background: followNextSlot ? '#112015' : '#111', color: followNextSlot ? '#22c55e' : '#6b7280', border: `1px solid ${followNextSlot ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 4, padding: '2px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
+            <button onClick={() => setFollowNextSlot((v) => !v)} style={{ background: followNextSlot ? '#112015' : '#242424', color: followNextSlot ? '#22c55e' : '#6b7280', border: `1px solid ${followNextSlot ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 4, padding: '2px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>
               AUTO {followNextSlot ? 'ON' : 'OFF'}
             </button>
             {panelCardSlots.map((_, i) => {
@@ -4279,7 +4279,7 @@ export default function ChordSequencerScreen({
                     ? '#0e1410'
                     : '#0d0d0d',
                   color: previewing ? '#fde047' : selected ? '#22c55e' : score > 0.5 ? '#a3e6b8' : '#d1d5db',
-                  border: `1px solid ${previewing ? '#facc15' : selected ? '#22c55e77' : score > 0.5 ? '#1f3a2988' : '#1a1a1a'}`,
+                  border: `1px solid ${previewing ? '#facc15' : selected ? '#22c55e77' : score > 0.5 ? '#1f3a2988' : '#2c2c2c'}`,
                   boxShadow: previewing ? '0 0 12px #facc1577' : 'none',
                   transition: 'background 80ms, box-shadow 80ms, color 80ms',
                   borderRadius: 8,
@@ -4305,7 +4305,7 @@ export default function ChordSequencerScreen({
       </div>
 
       {showChordOptionPanel && (
-        <div style={{ borderBottom: '1px solid #111', padding: '4px 12px 6px', background: '#060606' }}>
+        <div style={{ borderBottom: '1px solid #242424', padding: '4px 12px 6px', background: '#060606' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10, color: '#4b5563', fontWeight: 800 }}>
               {selPad
@@ -4332,15 +4332,15 @@ export default function ChordSequencerScreen({
               >
                 {lockOptionsAnchor ? '🔒 LOCK ON' : '🔓 LOCK OFF'}
               </button>
-              <button onClick={() => setPanelOptionMode('strict')} style={{ background: panelOptionMode === 'strict' ? '#112015' : '#111', color: panelOptionMode === 'strict' ? '#22c55e' : '#6b7280', border: `1px solid ${panelOptionMode === 'strict' ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>STRICT</button>
-              <button onClick={() => setPanelOptionMode('open')} style={{ background: panelOptionMode === 'open' ? '#112015' : '#111', color: panelOptionMode === 'open' ? '#22c55e' : '#6b7280', border: `1px solid ${panelOptionMode === 'open' ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>OPEN</button>
+              <button onClick={() => setPanelOptionMode('strict')} style={{ background: panelOptionMode === 'strict' ? '#112015' : '#242424', color: panelOptionMode === 'strict' ? '#22c55e' : '#6b7280', border: `1px solid ${panelOptionMode === 'strict' ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>STRICT</button>
+              <button onClick={() => setPanelOptionMode('open')} style={{ background: panelOptionMode === 'open' ? '#112015' : '#242424', color: panelOptionMode === 'open' ? '#22c55e' : '#6b7280', border: `1px solid ${panelOptionMode === 'open' ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>OPEN</button>
 
               <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>CHORD SLOT</span>
               {ensureSequenceLength(customPackChords, sectionChordCount).map((_, i) => (
                 <button
                   key={`slot-${i}`}
                   onClick={() => setTargetCustomSlot(i)}
-                  style={{ background: targetCustomSlot === i ? '#112015' : '#111', color: targetCustomSlot === i ? '#22c55e' : '#6b7280', border: `1px solid ${targetCustomSlot === i ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
+                  style={{ background: targetCustomSlot === i ? '#112015' : '#242424', color: targetCustomSlot === i ? '#22c55e' : '#6b7280', border: `1px solid ${targetCustomSlot === i ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '2px 6px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
                 >
                   {`Chord ${i + 1}`}
                 </button>
@@ -4350,8 +4350,8 @@ export default function ChordSequencerScreen({
                 {[2, 3, 4, 6, 8, 12, 16].map((n) => <option key={n} value={n}>{n} chords</option>)}
               </select>
 
-              <button onClick={() => previewChordSequence(customPackChords)} style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>PREVIEW</button>
-              <button onClick={loadCustomToSteps} style={{ background: '#111', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>USE TO STEPS</button>
+              <button onClick={() => previewChordSequence(customPackChords)} style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>PREVIEW</button>
+              <button onClick={loadCustomToSteps} style={{ background: '#242424', color: '#86efac', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>USE TO STEPS</button>
             </div>
           </div>
 
@@ -4405,7 +4405,7 @@ export default function ChordSequencerScreen({
                         ? '#22c55e55'
                         : opt.tier === 'good'
                         ? '#22c55e2a'
-                        : '#1a1a1a'
+                        : '#2c2c2c'
                     }`,
                     background: selected
                       ? '#15321e'
@@ -4417,7 +4417,7 @@ export default function ChordSequencerScreen({
                       ? '#0c1d10'
                       : opt.tier === 'good'
                       ? '#0d130e'
-                      : '#0f0f0f',
+                      : '#222222',
                     color: selected
                       ? '#4ade80'
                       : opt.isVariation
@@ -4448,7 +4448,7 @@ export default function ChordSequencerScreen({
         </div>
       )}
 
-      <div style={{ borderBottom: '1px solid #111', padding: songBuilderCollapsed ? '3px 12px' : '5px 12px', background: '#050505' }}>
+      <div style={{ borderBottom: '1px solid #242424', padding: songBuilderCollapsed ? '3px 12px' : '5px 12px', background: '#2a2a2a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: songBuilderCollapsed ? 0 : 6 }}>
           <button
             onClick={() => setSongBuilderCollapsed((v) => !v)}
@@ -4506,7 +4506,7 @@ export default function ChordSequencerScreen({
           </select>
           {!songBuilderCollapsed && (
             <>
-              <button onClick={() => setAllowSectionRepeats((v) => !v)} style={{ background: allowSectionRepeats ? '#112015' : '#111', color: allowSectionRepeats ? '#22c55e' : '#6b7280', border: `1px solid ${allowSectionRepeats ? '#1f3a29' : '#1a1a1a'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>REPEATS {allowSectionRepeats ? 'ON' : 'OFF'}</button>
+              <button onClick={() => setAllowSectionRepeats((v) => !v)} style={{ background: allowSectionRepeats ? '#112015' : '#242424', color: allowSectionRepeats ? '#22c55e' : '#6b7280', border: `1px solid ${allowSectionRepeats ? '#1f3a29' : '#2c2c2c'}`, borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>REPEATS {allowSectionRepeats ? 'ON' : 'OFF'}</button>
 
               <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>SECTION</span>
               <select
@@ -4570,9 +4570,9 @@ export default function ChordSequencerScreen({
                     disabled={activeLaneIndex === 0}
                     title="Move section earlier"
                     style={{
-                      background: activeLaneIndex === 0 ? '#0a0a0a' : '#101820',
+                      background: activeLaneIndex === 0 ? '#1c1c1c' : '#101820',
                       color: activeLaneIndex === 0 ? '#333' : '#93c5fd',
-                      border: `1px solid ${activeLaneIndex === 0 ? '#1a1a1a' : '#1e3a5f'}`,
+                      border: `1px solid ${activeLaneIndex === 0 ? '#2c2c2c' : '#1e3a5f'}`,
                       borderRadius: 5,
                       padding: '2px 6px',
                       fontSize: 9,
@@ -4588,9 +4588,9 @@ export default function ChordSequencerScreen({
                     disabled={activeLaneIndex >= songLane.length - 1}
                     title="Move section later"
                     style={{
-                      background: activeLaneIndex >= songLane.length - 1 ? '#0a0a0a' : '#101820',
+                      background: activeLaneIndex >= songLane.length - 1 ? '#1c1c1c' : '#101820',
                       color: activeLaneIndex >= songLane.length - 1 ? '#333' : '#93c5fd',
-                      border: `1px solid ${activeLaneIndex >= songLane.length - 1 ? '#1a1a1a' : '#1e3a5f'}`,
+                      border: `1px solid ${activeLaneIndex >= songLane.length - 1 ? '#2c2c2c' : '#1e3a5f'}`,
                       borderRadius: 5,
                       padding: '2px 6px',
                       fontSize: 9,
@@ -4605,7 +4605,7 @@ export default function ChordSequencerScreen({
 
               <button onClick={addCurrentPackToLane} style={{ background: '#112015', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>ADD TO ACTIVE</button>
               <button onClick={buildCompleteSong} style={{ background: '#112015', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}><Sparkles size={11} /> COMPLETE SONG</button>
-              <button onClick={clearLane} style={{ background: '#111', color: '#6b7280', border: '1px solid #1a1a1a', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>CLEAR LANE</button>
+              <button onClick={clearLane} style={{ background: '#242424', color: '#6b7280', border: '1px solid #2c2c2c', borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}>CLEAR LANE</button>
             </>
           )}
         </div>
@@ -4617,7 +4617,7 @@ export default function ChordSequencerScreen({
             Hidden when the Song Builder is collapsed to give the piano roll
             more room. ── */}
         {!songBuilderCollapsed && (
-        <div style={{ marginBottom: 6, borderTop: '1px solid #111', paddingTop: 6 }}>
+        <div style={{ marginBottom: 6, borderTop: '1px solid #242424', paddingTop: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 9, color: '#86efac', fontWeight: 800, letterSpacing: 0.5 }}>
               FIND CHORDS
@@ -4652,9 +4652,9 @@ export default function ChordSequencerScreen({
                   disabled={disabled}
                   title={disabled ? 'Type a song name first' : `Open ${site.label} search for "${q}" in a new tab`}
                   style={{
-                    background: disabled ? '#0a0a0a' : '#111',
+                    background: disabled ? '#1c1c1c' : '#242424',
                     color: disabled ? '#333' : site.color,
-                    border: `1px solid ${disabled ? '#1a1a1a' : '#262626'}`,
+                    border: `1px solid ${disabled ? '#2c2c2c' : '#262626'}`,
                     borderRadius: 5,
                     padding: '2px 7px',
                     fontSize: 9,
@@ -4678,14 +4678,14 @@ export default function ChordSequencerScreen({
               value={findChordsSongName}
               onChange={(e) => setFindChordsSongName(e.target.value)}
               placeholder="Song name (e.g. let it be)"
-              style={{ flex: '0 0 180px', background: '#0a0a0a', color: '#e5e7eb', border: '1px solid #1a1a1a', borderRadius: 5, padding: '4px 8px', fontSize: 10, fontWeight: 700 }}
+              style={{ flex: '0 0 180px', background: '#1c1c1c', color: '#e5e7eb', border: '1px solid #2c2c2c', borderRadius: 5, padding: '4px 8px', fontSize: 10, fontWeight: 700 }}
             />
             <input
               type="text"
               value={findChordsInput}
               onChange={(e) => setFindChordsInput(e.target.value)}
               placeholder="Paste chord names: C Am F G7 / Cmaj7 - Dm7 - G7 - Cmaj7"
-              style={{ flex: 1, background: '#0a0a0a', color: '#e5e7eb', border: '1px solid #1a1a1a', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, fontFamily: 'monospace' }}
+              style={{ flex: 1, background: '#1c1c1c', color: '#e5e7eb', border: '1px solid #2c2c2c', borderRadius: 5, padding: '4px 8px', fontSize: 11, fontWeight: 700, fontFamily: 'monospace' }}
             />
             <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>BPM</span>
             <input
@@ -4694,15 +4694,15 @@ export default function ChordSequencerScreen({
               max={240}
               value={findChordsBpm}
               onChange={(e) => setFindChordsBpm(Math.max(40, Math.min(240, Number(e.target.value) || 100)))}
-              style={{ width: 56, background: '#0a0a0a', color: '#86efac', border: '1px solid #1a1a1a', borderRadius: 5, padding: '4px 6px', fontSize: 10, fontWeight: 800, textAlign: 'center' }}
+              style={{ width: 56, background: '#1c1c1c', color: '#86efac', border: '1px solid #2c2c2c', borderRadius: 5, padding: '4px 6px', fontSize: 10, fontWeight: 800, textAlign: 'center' }}
             />
             <button
               onClick={playParsedFindChords}
               disabled={parsedFindChords.length === 0}
               style={{
-                background: parsedFindChords.length > 0 ? '#112015' : '#0a0a0a',
+                background: parsedFindChords.length > 0 ? '#112015' : '#1c1c1c',
                 color: parsedFindChords.length > 0 ? '#22c55e' : '#3a3a3a',
-                border: `1px solid ${parsedFindChords.length > 0 ? '#1f3a29' : '#1a1a1a'}`,
+                border: `1px solid ${parsedFindChords.length > 0 ? '#1f3a29' : '#2c2c2c'}`,
                 borderRadius: 5, padding: '4px 10px', fontSize: 10, fontWeight: 900,
                 cursor: parsedFindChords.length > 0 ? 'pointer' : 'not-allowed',
               }}
@@ -4713,9 +4713,9 @@ export default function ChordSequencerScreen({
               onClick={loadFindChordsToSteps}
               disabled={parsedFindChords.length === 0}
               style={{
-                background: parsedFindChords.length > 0 ? '#112015' : '#0a0a0a',
+                background: parsedFindChords.length > 0 ? '#112015' : '#1c1c1c',
                 color: parsedFindChords.length > 0 ? '#22c55e' : '#3a3a3a',
-                border: `1px solid ${parsedFindChords.length > 0 ? '#1f3a29' : '#1a1a1a'}`,
+                border: `1px solid ${parsedFindChords.length > 0 ? '#1f3a29' : '#2c2c2c'}`,
                 borderRadius: 5, padding: '4px 10px', fontSize: 10, fontWeight: 900,
                 cursor: parsedFindChords.length > 0 ? 'pointer' : 'not-allowed',
               }}
@@ -4724,7 +4724,7 @@ export default function ChordSequencerScreen({
             </button>
             <button
               onClick={() => { setFindChordsInput(''); setFindChordsSongName(''); }}
-              style={{ background: '#111', color: '#6b7280', border: '1px solid #1a1a1a', borderRadius: 5, padding: '4px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
+              style={{ background: '#242424', color: '#6b7280', border: '1px solid #2c2c2c', borderRadius: 5, padding: '4px 8px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
             >
               CLEAR
             </button>
@@ -4822,7 +4822,7 @@ export default function ChordSequencerScreen({
           flexGrow: 0,
           padding: stepSeqCollapsed ? '2px 10px 3px' : '3px 10px 4px',
           borderTop: '1px solid #1a2e22',
-          background: '#050505',
+          background: '#2a2a2a',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: stepSeqCollapsed ? 0 : 2, flexWrap: 'wrap', gap: 4 }}>
@@ -4882,9 +4882,9 @@ export default function ChordSequencerScreen({
                 onClick={() => setVariationLevel(v.id)}
                 title={v.desc}
                 style={{
-                  background: variationLevel === v.id ? '#112015' : '#111',
+                  background: variationLevel === v.id ? '#112015' : '#242424',
                   color: variationLevel === v.id ? '#22c55e' : '#7a7a7a',
-                  border: `1px solid ${variationLevel === v.id ? '#1f3a29' : '#1a1a1a'}`,
+                  border: `1px solid ${variationLevel === v.id ? '#1f3a29' : '#2c2c2c'}`,
                   borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer',
                 }}
               >
@@ -4900,7 +4900,7 @@ export default function ChordSequencerScreen({
               <Sparkles size={11} /> SUGGEST
             </button>
 
-            <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+            <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
             <button
               onClick={handleSavePreset}
@@ -4912,7 +4912,7 @@ export default function ChordSequencerScreen({
 
             <button
               onClick={() => setSteps(new Array(stepCount).fill(null))}
-              style={{ background: '#111', color: '#ef4444', border: '1px solid #3a1414', borderRadius: 5, padding: '3px 9px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
+              style={{ background: '#242424', color: '#ef4444', border: '1px solid #3a1414', borderRadius: 5, padding: '3px 9px', fontSize: 9, fontWeight: 800, cursor: 'pointer' }}
             >
               CLEAR
             </button>
@@ -5039,7 +5039,7 @@ export default function ChordSequencerScreen({
                     minHeight: stepCount <= 8 ? 26 : stepCount <= 16 ? 24 : 22,
                     maxHeight: stepCount <= 8 ? 26 : stepCount <= 16 ? 24 : 22,
                     borderRadius: 5,
-                    border: `1px solid ${active ? '#22c55e55' : dragOver ? '#22c55e33' : '#1a1a1a'}`,
+                    border: `1px solid ${active ? '#22c55e55' : dragOver ? '#22c55e33' : '#2c2c2c'}`,
                     background: active ? '#102014' : dragOver ? '#0f1a12' : '#0d0d0d',
                     color: pad ? '#d1d5db' : '#555',
                     padding: '2px 3px',
@@ -5080,7 +5080,7 @@ export default function ChordSequencerScreen({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          borderTop: '1px solid #1a1a1a',
+          borderTop: '1px solid #2c2c2c',
           background: '#070608',
         }}
       >
@@ -5117,9 +5117,9 @@ export default function ChordSequencerScreen({
             onClick={() => setBassEnabled((v) => !v)}
             title={bassEnabled ? 'Bass is playing along with chords. Click to mute the whole bass line.' : 'Bass is muted. Click to enable.'}
             style={{
-              background: bassEnabled ? '#1a1130' : '#111',
+              background: bassEnabled ? '#1a1130' : '#242424',
               color: bassEnabled ? '#c4b5fd' : '#6b7280',
-              border: `1px solid ${bassEnabled ? '#3b2a66' : '#1a1a1a'}`,
+              border: `1px solid ${bassEnabled ? '#3b2a66' : '#2c2c2c'}`,
               borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: 'pointer',
             }}
           >
@@ -5135,16 +5135,16 @@ export default function ChordSequencerScreen({
               ? 'Chords are muted — only the bass is playing. Click to bring chords back in.'
               : 'Mute the chord pads so you can solo the bass line. Bass keeps following the (silent) chord progression.'}
             style={{
-              background: chordsMuted ? '#2a1411' : '#111',
+              background: chordsMuted ? '#2a1411' : '#242424',
               color: chordsMuted ? '#fb923c' : '#7a7a7a',
-              border: `1px solid ${chordsMuted ? '#7c2d12' : '#1a1a1a'}`,
+              border: `1px solid ${chordsMuted ? '#7c2d12' : '#2c2c2c'}`,
               borderRadius: 5, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: 'pointer',
             }}
           >
             CHORDS {chordsMuted ? 'MUTED' : 'ON'}
           </button>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* VOICE */}
           <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>VOICE</span>
@@ -5154,9 +5154,9 @@ export default function ChordSequencerScreen({
               onClick={() => setBassVoice(v)}
               title={v === 'sub' ? 'Deep round sub-bass — trap, R&B, hip-hop' : v === 'electric' ? 'Finger-style electric/upright — soul, funk, rock' : 'Short percussive pluck — pop, dance, disco'}
               style={{
-                background: bassVoice === v ? '#1a1130' : '#111',
+                background: bassVoice === v ? '#1a1130' : '#242424',
                 color: bassVoice === v ? '#c4b5fd' : '#7a7a7a',
-                border: `1px solid ${bassVoice === v ? '#3b2a66' : '#1a1a1a'}`,
+                border: `1px solid ${bassVoice === v ? '#3b2a66' : '#2c2c2c'}`,
                 borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase',
               }}
             >
@@ -5164,7 +5164,7 @@ export default function ChordSequencerScreen({
             </button>
           ))}
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* PATTERN — grouped by category. ANCHOR = song-carrying root-locked
               grooves (R&B, trap, pop foundation). MOTION = melodic walking
@@ -5194,7 +5194,7 @@ export default function ChordSequencerScreen({
                     fontWeight: 900,
                     letterSpacing: 0.5,
                     paddingLeft: cat === 'anchor' ? 0 : 4,
-                    borderLeft: cat === 'anchor' ? 'none' : '1px solid #1a1a1a',
+                    borderLeft: cat === 'anchor' ? 'none' : '1px solid #2c2c2c',
                     paddingRight: 2,
                   }}
                   title={catTitle}
@@ -5210,9 +5210,9 @@ export default function ChordSequencerScreen({
                       onClick={() => setBassPattern(p.id)}
                       title={`${p.label} — ${p.describe}`}
                       style={{
-                        background: selected ? `${accent}1f` : '#111',
+                        background: selected ? `${accent}1f` : '#242424',
                         color: selected ? accent : '#7a7a7a',
-                        border: `1px solid ${selected ? `${accent}66` : '#1a1a1a'}`,
+                        border: `1px solid ${selected ? `${accent}66` : '#2c2c2c'}`,
                         borderRadius: 5,
                         padding: '2px 7px',
                         fontSize: 9,
@@ -5228,14 +5228,14 @@ export default function ChordSequencerScreen({
             );
           })}
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* OCTAVE */}
           <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>OCT</span>
           <button
             onClick={() => setBassOctaveShift((v) => Math.max(-2, v - 1))}
             disabled={bassOctaveShift <= -2}
-            style={{ background: '#111', color: bassOctaveShift <= -2 ? '#333' : '#c4b5fd', border: '1px solid #1a1a1a', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 900, cursor: bassOctaveShift <= -2 ? 'not-allowed' : 'pointer' }}
+            style={{ background: '#242424', color: bassOctaveShift <= -2 ? '#333' : '#c4b5fd', border: '1px solid #2c2c2c', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 900, cursor: bassOctaveShift <= -2 ? 'not-allowed' : 'pointer' }}
           >
             −
           </button>
@@ -5243,12 +5243,12 @@ export default function ChordSequencerScreen({
           <button
             onClick={() => setBassOctaveShift((v) => Math.min(1, v + 1))}
             disabled={bassOctaveShift >= 1}
-            style={{ background: '#111', color: bassOctaveShift >= 1 ? '#333' : '#c4b5fd', border: '1px solid #1a1a1a', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 900, cursor: bassOctaveShift >= 1 ? 'not-allowed' : 'pointer' }}
+            style={{ background: '#242424', color: bassOctaveShift >= 1 ? '#333' : '#c4b5fd', border: '1px solid #2c2c2c', borderRadius: 5, padding: '2px 7px', fontSize: 9, fontWeight: 900, cursor: bassOctaveShift >= 1 ? 'not-allowed' : 'pointer' }}
           >
             +
           </button>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* FILLS — probabilistic groove additions (passing tones, ghost notes,
               chromatic approaches). 0% = pattern stays strict, 100% = bass
@@ -5271,7 +5271,7 @@ export default function ChordSequencerScreen({
           />
           <span style={{ fontSize: 9, color: bassFillsLevel > 0 ? '#f472b6' : '#4b5563', fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{Math.round(bassFillsLevel * 100)}%</span>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* SWING — pushes off-beat 16th notes later for a triplet-leaning
               shuffle. 0% = straight 16ths, 100% = full shuffle (~67% triplet feel).
@@ -5294,7 +5294,7 @@ export default function ChordSequencerScreen({
           />
           <span style={{ fontSize: 9, color: bassSwing > 0 ? '#fbbf24' : '#4b5563', fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{Math.round(bassSwing * 100)}%</span>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* NOTE LENGTH — global sustain multiplier. <1 = staccato, >1 = legato.
               Reason calls this "Gate Length" on the Bassline Generator. */}
@@ -5316,7 +5316,7 @@ export default function ChordSequencerScreen({
           />
           <span style={{ fontSize: 9, color: bassNoteLength !== 1 ? '#34d399' : '#4b5563', fontWeight: 800, minWidth: 30, textAlign: 'right' }}>{bassNoteLength.toFixed(2)}x</span>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* SLIDE — TIE / portamento between adjacent close hits. The same
               feature that gives trap-808 bass its iconic pitch-glide. At 0
@@ -5341,7 +5341,7 @@ export default function ChordSequencerScreen({
           />
           <span style={{ fontSize: 9, color: bassSlide > 0 ? '#60a5fa' : '#4b5563', fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{Math.round(bassSlide * 100)}%</span>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           {/* VOLUME */}
           <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>VOL</span>
@@ -5356,7 +5356,7 @@ export default function ChordSequencerScreen({
           />
           <span style={{ fontSize: 9, color: '#c4b5fd', fontWeight: 800, minWidth: 26, textAlign: 'right' }}>{Math.round(bassVolume * 100)}%</span>
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a' }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c' }} />
 
           <button
             onClick={handleMaterializeChordSmartBassLine}
@@ -5429,7 +5429,7 @@ export default function ChordSequencerScreen({
           <button
             onClick={() => setBassStepMutes(new Array(stepCount).fill(false))}
             title="Un-mute every bass step"
-            style={{ background: '#111', color: '#9ca3af', border: '1px solid #1a1a1a', borderRadius: 5, padding: '3px 9px', fontSize: 9, fontWeight: 900, cursor: 'pointer' }}
+            style={{ background: '#242424', color: '#9ca3af', border: '1px solid #2c2c2c', borderRadius: 5, padding: '3px 9px', fontSize: 9, fontWeight: 900, cursor: 'pointer' }}
           >
             UNMUTE ALL
           </button>
@@ -5449,7 +5449,7 @@ export default function ChordSequencerScreen({
               chip in the top-left corner) to cycle through saved slots.
             Per-step slots let Verse play one kit and Chorus another with
             zero mid-playback action from the user. ───────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px 2px', borderTop: '1px dashed #1a1a1a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px 2px', borderTop: '1px dashed #2c2c2c' }}>
           <span style={{ fontSize: 9, color: '#9ca3af', fontWeight: 900, letterSpacing: 0.3, marginRight: 2, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             SLOTS
             <ChordBassSequencerHelpTip tab="slots" title="Bass slot bank A–H" />
@@ -5485,9 +5485,9 @@ export default function ChordSequencerScreen({
                   ? `SLOT ${id}: ${labelDetail}\n(click = load · shift+click = overwrite · right-click = clear)${hasLine ? '\n♪ This slot has a saved bass line — loading will restore the painted notes.' : ''}`
                   : `SLOT ${id} is empty\n(click to save current bass kit + painted line into it · shift+click does the same)`}
                 style={{
-                  background: filled ? (isActive ? c.fg : c.bg) : '#0a0a0a',
+                  background: filled ? (isActive ? c.fg : c.bg) : '#1c1c1c',
                   color: filled ? (isActive ? c.bg : c.fg) : '#3f3f46',
-                  border: `1px solid ${filled ? c.border : '#1a1a1a'}`,
+                  border: `1px solid ${filled ? c.border : '#2c2c2c'}`,
                   borderRadius: 5,
                   padding: '3px 8px',
                   fontSize: 10,
@@ -5521,7 +5521,7 @@ export default function ChordSequencerScreen({
             );
           })}
 
-          <div style={{ width: 1, height: 14, background: '#1a1a1a', marginLeft: 4 }} />
+          <div style={{ width: 1, height: 14, background: '#2c2c2c', marginLeft: 4 }} />
 
           <span style={{ fontSize: 8, color: '#4b5563', fontWeight: 700 }}>
             Click slot = load · Shift+click = save · Right-click = clear · Shift+click a STEP to assign · <span style={{ color: '#4ade80' }}>♪</span> = saved bass line
@@ -5639,7 +5639,7 @@ export default function ChordSequencerScreen({
                         ? '#a855f7aa'
                         : pad
                         ? '#2a1f4a'
-                        : '#1a1a1a'
+                        : '#2c2c2c'
                     }`,
                     background: bassStepMutes[si]
                       ? '#180a0a'
@@ -5647,7 +5647,7 @@ export default function ChordSequencerScreen({
                       ? (active ? '#0e2030' : '#08161e')
                       : pad
                       ? (active ? '#1f0f3a' : '#10081e')
-                      : '#0a0a0a',
+                      : '#1c1c1c',
                     color: pad ? (bassStepMutes[si] ? '#6b7280' : hasCustom ? '#67e8f9' : '#c4b5fd') : '#303030',
                     padding: '1px 3px',
                     cursor: pad ? 'pointer' : 'default',
@@ -5672,7 +5672,7 @@ export default function ChordSequencerScreen({
                         ? hasCustom
                           ? `rgba(103,232,249,${(0.35 + 0.65 * hit.vel) * (muted ? 0.4 : 1)})`
                           : `rgba(196,181,253,${(0.35 + 0.65 * hit.vel) * (muted ? 0.4 : 1)})`
-                        : '#1a1a1a';
+                        : '#2c2c2c';
                       return (
                         <div
                           key={slot}
@@ -5777,9 +5777,9 @@ export default function ChordSequencerScreen({
                         fontSize: 8,
                         borderRadius: 3,
                         cursor: 'pointer',
-                        background: c ? c.bg : '#0a0a0a',
+                        background: c ? c.bg : '#1c1c1c',
                         color: c ? c.fg : '#3f3f46',
-                        border: `1px solid ${c ? c.border : '#1a1a1a'}`,
+                        border: `1px solid ${c ? c.border : '#2c2c2c'}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -6352,7 +6352,7 @@ export default function ChordSequencerScreen({
                     : `▣ CUSTOM · ${currentHits.length} note${currentHits.length === 1 ? '' : 's'}`}
                 </span>
 
-                <div style={{ width: 1, height: 12, background: '#1a1a1a' }} />
+                <div style={{ width: 1, height: 12, background: '#2c2c2c' }} />
 
                 {/* ── TOOL PALETTE ── Paint vs Erase, same as a real DAW.
                     When ERASE is active the cursor turns red, paint-clicks
@@ -6366,7 +6366,7 @@ export default function ChordSequencerScreen({
                   style={{
                     background: pianoRollTool === 'paint' ? '#1a2438' : '#0a0e16',
                     color: pianoRollTool === 'paint' ? '#67e8f9' : '#4b5563',
-                    border: `1px solid ${pianoRollTool === 'paint' ? '#22d3ee66' : '#1a1a1a'}`,
+                    border: `1px solid ${pianoRollTool === 'paint' ? '#22d3ee66' : '#2c2c2c'}`,
                     borderRadius: 4,
                     padding: '2px 8px',
                     fontSize: 9,
@@ -6382,7 +6382,7 @@ export default function ChordSequencerScreen({
                   style={{
                     background: pianoRollTool === 'erase' ? '#3b0f10' : '#0a0e16',
                     color: pianoRollTool === 'erase' ? '#fca5a5' : '#4b5563',
-                    border: `1px solid ${pianoRollTool === 'erase' ? '#dc2626' : '#1a1a1a'}`,
+                    border: `1px solid ${pianoRollTool === 'erase' ? '#dc2626' : '#2c2c2c'}`,
                     borderRadius: 4,
                     padding: '2px 8px',
                     fontSize: 9,
@@ -6399,7 +6399,7 @@ export default function ChordSequencerScreen({
                   ⌫ ERASE
                 </button>
 
-                <div style={{ width: 1, height: 12, background: '#1a1a1a' }} />
+                <div style={{ width: 1, height: 12, background: '#2c2c2c' }} />
 
                 {/* New-note length picker. Determines how many sub-slots a
                     fresh click-to-add note will sustain for. */}
@@ -6416,7 +6416,7 @@ export default function ChordSequencerScreen({
                     style={{
                       background: pianoRollNoteLength === opt.v ? '#1a2438' : '#0a0e16',
                       color: pianoRollNoteLength === opt.v ? '#67e8f9' : '#4b5563',
-                      border: `1px solid ${pianoRollNoteLength === opt.v ? '#22d3ee66' : '#1a1a1a'}`,
+                      border: `1px solid ${pianoRollNoteLength === opt.v ? '#22d3ee66' : '#2c2c2c'}`,
                       borderRadius: 4,
                       padding: '2px 6px',
                       fontSize: 9,
@@ -6454,7 +6454,7 @@ export default function ChordSequencerScreen({
                     onClick={() => setPianoRollClipboard([...currentHits])}
                     disabled={currentHits.length === 0}
                     title="Copy this step's painted notes"
-                    style={{ background: '#0a0e16', color: currentHits.length === 0 ? '#1f2937' : '#9ca3af', border: '1px solid #1a1a1a', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: currentHits.length === 0 ? 'not-allowed' : 'pointer' }}
+                    style={{ background: '#0a0e16', color: currentHits.length === 0 ? '#1f2937' : '#9ca3af', border: '1px solid #2c2c2c', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: currentHits.length === 0 ? 'not-allowed' : 'pointer' }}
                   >
                     COPY
                   </button>
@@ -6470,7 +6470,7 @@ export default function ChordSequencerScreen({
                     )}
                     disabled={!pianoRollClipboard}
                     title="Paste copied notes onto this step"
-                    style={{ background: '#0a0e16', color: !pianoRollClipboard ? '#1f2937' : '#9ca3af', border: '1px solid #1a1a1a', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: !pianoRollClipboard ? 'not-allowed' : 'pointer' }}
+                    style={{ background: '#0a0e16', color: !pianoRollClipboard ? '#1f2937' : '#9ca3af', border: '1px solid #2c2c2c', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: !pianoRollClipboard ? 'not-allowed' : 'pointer' }}
                   >
                     PASTE
                   </button>
@@ -6478,7 +6478,7 @@ export default function ChordSequencerScreen({
                     onClick={() => setHits([])}
                     disabled={currentHits.length === 0}
                     title="Clear this step's painted notes (returns to the global pattern)"
-                    style={{ background: '#0a0e16', color: currentHits.length === 0 ? '#1f2937' : '#f87171', border: '1px solid #1a1a1a', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: currentHits.length === 0 ? 'not-allowed' : 'pointer' }}
+                    style={{ background: '#0a0e16', color: currentHits.length === 0 ? '#1f2937' : '#f87171', border: '1px solid #2c2c2c', borderRadius: 4, padding: '2px 8px', fontSize: 9, fontWeight: 900, cursor: currentHits.length === 0 ? 'not-allowed' : 'pointer' }}
                   >
                     CLEAR
                   </button>
@@ -6557,7 +6557,7 @@ export default function ChordSequencerScreen({
                       style={{
                         background: pianoRollAutoScroll ? '#052e1c' : '#0a0e16',
                         color: pianoRollAutoScroll ? '#86efac' : '#4b5563',
-                        border: `1px solid ${pianoRollAutoScroll ? '#22c55e66' : '#1a1a1a'}`,
+                        border: `1px solid ${pianoRollAutoScroll ? '#22c55e66' : '#2c2c2c'}`,
                         borderRadius: 4,
                         padding: '2px 8px',
                         fontSize: 9,
@@ -6569,7 +6569,7 @@ export default function ChordSequencerScreen({
                       {pianoRollAutoScroll ? '⟳ AUTO-SCROLL ON' : '⟳ AUTO-SCROLL OFF'}
                     </button>
 
-                    <div style={{ width: 1, height: 12, background: '#1a1a1a' }} />
+                    <div style={{ width: 1, height: 12, background: '#2c2c2c' }} />
 
                     {/* ── COPY LINE ── snapshots EVERY edited step into the
                         full-line clipboard, leaving the current notes alone. */}
@@ -6591,7 +6591,7 @@ export default function ChordSequencerScreen({
                       style={{
                         background: '#0a0e16',
                         color: editedCount === 0 ? '#1f2937' : '#86efac',
-                        border: `1px solid ${editedCount === 0 ? '#1a1a1a' : '#22c55e44'}`,
+                        border: `1px solid ${editedCount === 0 ? '#2c2c2c' : '#22c55e44'}`,
                         borderRadius: 4,
                         padding: '2px 8px',
                         fontSize: 9,
@@ -6629,7 +6629,7 @@ export default function ChordSequencerScreen({
                       style={{
                         background: '#0a0e16',
                         color: !bassLineClipboard ? '#1f2937' : '#86efac',
-                        border: `1px solid ${!bassLineClipboard ? '#1a1a1a' : '#22c55e44'}`,
+                        border: `1px solid ${!bassLineClipboard ? '#2c2c2c' : '#22c55e44'}`,
                         borderRadius: 4,
                         padding: '2px 8px',
                         fontSize: 9,
@@ -6662,7 +6662,7 @@ export default function ChordSequencerScreen({
                       style={{
                         background: '#0a0e16',
                         color: editedCount === 0 ? '#1f2937' : '#f87171',
-                        border: `1px solid ${editedCount === 0 ? '#1a1a1a' : '#7f1d1d'}`,
+                        border: `1px solid ${editedCount === 0 ? '#2c2c2c' : '#7f1d1d'}`,
                         borderRadius: 4,
                         padding: '2px 8px',
                         fontSize: 9,
@@ -6673,7 +6673,7 @@ export default function ChordSequencerScreen({
                       ✕ CLEAR LINE
                     </button>
 
-                    <div style={{ width: 1, height: 12, background: '#1a1a1a' }} />
+                    <div style={{ width: 1, height: 12, background: '#2c2c2c' }} />
 
                     {/* ── SAVE LINE → SLOT ── opens an inline picker of the
                         8 slots A–H. Clicking a letter persists the current
@@ -6719,9 +6719,9 @@ export default function ChordSequencerScreen({
                                 ? `OVERWRITE slot ${id} with the current bass kit + ${editedCount} step${editedCount === 1 ? '' : 's'} of painted notes${hasLine ? ' (existing slot ALSO has a saved bass line — will be replaced)' : ''}`
                                 : `Save current bass kit + ${editedCount} step${editedCount === 1 ? '' : 's'} of painted notes into empty slot ${id}`}
                               style={{
-                                background: filled ? c.bg : '#0a0a0a',
+                                background: filled ? c.bg : '#1c1c1c',
                                 color: filled ? c.fg : '#6b7280',
-                                border: `1px solid ${filled ? c.border : '#1a1a1a'}`,
+                                border: `1px solid ${filled ? c.border : '#2c2c2c'}`,
                                 borderRadius: 4,
                                 padding: '2px 7px',
                                 fontSize: 10,
@@ -6756,7 +6756,7 @@ export default function ChordSequencerScreen({
 
                     {/* Quick-load picker — mirror of the save picker that
                         loads a slot (kit + line) without scrolling away. */}
-                    <div style={{ width: 1, height: 12, background: '#1a1a1a' }} />
+                    <div style={{ width: 1, height: 12, background: '#2c2c2c' }} />
                     <span style={{ fontSize: 9, color: '#4b5563', fontWeight: 800 }}>LOAD</span>
                     {SLOT_IDS.map((id) => {
                       const slot = bassSlots[id];
@@ -6779,7 +6779,7 @@ export default function ChordSequencerScreen({
                             ? `Load slot ${id}: kit + ${hasLine ? `${Object.keys(slot!.customPatterns!).length}-step bass line` : 'no saved bass line (kit only)'}`
                             : `Slot ${id} is empty`}
                           style={{
-                            background: filled ? c.bg : '#080808',
+                            background: filled ? c.bg : '#2c2c2c',
                             color: filled ? c.fg : '#27272a',
                             border: `1px solid ${filled ? c.border : '#161616'}`,
                             borderRadius: 4,
@@ -7177,11 +7177,11 @@ export default function ChordSequencerScreen({
                   // when stepCount is large (16 or 32). The label column
                   // is sticky so it stays visible while the timeline scrolls.
                   overflowX: 'auto',
-                  border: '1px solid #1a1a1a',
+                  border: '1px solid #2c2c2c',
                   borderRadius: 4,
                   background: '#040406',
                   padding: 0,
-                  scrollbarColor: '#1a1a1a #040406',
+                  scrollbarColor: '#2c2c2c #040406',
                   scrollbarWidth: 'thin',
                 }}
                 onContextMenu={(e) => {
@@ -7323,7 +7323,7 @@ export default function ChordSequencerScreen({
                   top: 52,
                   zIndex: 9,
                   background: '#04060a',
-                  borderBottom: '1px solid #1a1a1a',
+                  borderBottom: '1px solid #2c2c2c',
                 }}>
                   <div style={{
                     width: 52,
@@ -7482,7 +7482,7 @@ export default function ChordSequencerScreen({
                           const noteName = cbPianoMidiToNoteName(cellMidi);
                           const isBlackKeyRow = cbPianoIsBlackKey(cellMidi);
                           const isCRow = cbPianoIsCRow(cellMidi);
-                          const pianoBase = isBlackKeyRow ? '#08080c' : '#0c0c10';
+                          const pianoBase = isBlackKeyRow ? '#18181e' : '#1e1e24';
                           let bgStack = pianoBase;
                           if (!isOnBeat) {
                             bgStack = `linear-gradient(0deg, rgba(0,0,0,0.20), rgba(0,0,0,0.20)), ${bgStack}`;
@@ -7528,11 +7528,11 @@ export default function ChordSequencerScreen({
                                   ? '2px solid #1a2438'
                                   : isOnBeat
                                   ? '1px solid #2a2418'
-                                  : '1px solid #0a0a0a',
-                                borderTop: '1px solid #0a0a0a',
+                                  : '1px solid #1c1c1c',
+                                borderTop: '1px solid #1c1c1c',
                                 borderBottom: isCRow
                                   ? '1px solid rgba(124,244,198,0.14)'
-                                  : '1px solid #0a0a0a',
+                                  : '1px solid #1c1c1c',
                                 borderRight: c === totalCols - 1 ? '1px solid #1a2438' : 'none',
                                 cursor: pianoRollTool === 'erase' ? 'default' : 'cell',
                                 boxSizing: 'border-box',
@@ -7830,7 +7830,7 @@ export default function ChordSequencerScreen({
                                   ? '2px solid #1a2438'
                                   : isOnBeat
                                   ? '1px solid #1a1812'
-                                  : '1px solid #0a0a0a',
+                                  : '1px solid #1c1c1c',
                                 borderRight: c === totalCols - 1 ? '1px solid #1a2438' : 'none',
                               }}
                             />
@@ -8136,7 +8136,7 @@ export default function ChordSequencerScreen({
       </div>
       </div>
 
-      <div style={{ flexShrink: 0, marginTop: 0, padding: 0, background: '#060606', borderTop: '1px solid #1a1a1a' }}>
+      <div style={{ flexShrink: 0, marginTop: 0, padding: 0, background: '#060606', borderTop: '1px solid #2c2c2c' }}>
         <BottomKeyboard
           notes={shiftedNotes(
             // During a song preview the keyboard follows the currently-sounding
@@ -8148,17 +8148,17 @@ export default function ChordSequencerScreen({
         />
       </div>
 
-      <div style={{ flexShrink: 0, borderTop: '1px solid #111', padding: '3px 10px', fontSize: 9, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flexShrink: 0, borderTop: '1px solid #242424', padding: '3px 10px', fontSize: 9, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 10 }}>
         <span>Chord/Bass Seq · {KEY_LABELS[keyRoot]} {mode} · {genreProfile.label} · {stepCount} steps</span>
         {playing && <span style={{ color: '#22c55e', fontWeight: 800 }}>PLAYING</span>}
       </div>
 
       {padPickerOpen && onExportToPad && (
-        <div style={{ position: 'absolute', right: 12, top: 44, zIndex: 80, background: '#111', border: '1px solid #262626', borderRadius: 9, padding: 10, width: 190 }}>
+        <div style={{ position: 'absolute', right: 12, top: 44, zIndex: 80, background: '#242424', border: '1px solid #262626', borderRadius: 9, padding: 10, width: 190 }}>
           <div style={{ fontSize: 9, color: '#6b7280', marginBottom: 6, fontWeight: 800 }}>EXPORT TO PAD</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4 }}>
             {Array.from({ length: 16 }, (_, i) => (
-              <button key={`export-${i}`} onClick={() => { setPadPickerOpen(false); void handleExport(i); }} style={{ background: '#1a1a1a', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '5px 0', fontWeight: 800, fontSize: 10, cursor: 'pointer' }}>{i + 1}</button>
+              <button key={`export-${i}`} onClick={() => { setPadPickerOpen(false); void handleExport(i); }} style={{ background: '#2c2c2c', color: '#22c55e', border: '1px solid #1f3a29', borderRadius: 5, padding: '5px 0', fontWeight: 800, fontSize: 10, cursor: 'pointer' }}>{i + 1}</button>
             ))}
           </div>
         </div>

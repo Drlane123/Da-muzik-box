@@ -262,8 +262,8 @@ export function cbPianoPitchRowStyle(midi: number, m: PianoRollMetrics = CB_PIAN
   };
 }
 
-const CB_PIANO_ROW_BLACK = '#08080c';
-const CB_PIANO_ROW_WHITE = '#0c0c10';
+const CB_PIANO_ROW_BLACK = '#18181e';
+const CB_PIANO_ROW_WHITE = '#1e1e24';
 
 export function cbPianoGridRowStyle(midi: number): CSSProperties {
   const isBlack = cbPianoIsBlackKey(midi);
@@ -307,7 +307,7 @@ export function cbPianoRulerLabelStyle(m: PianoRollMetrics = CB_PIANO_METRICS): 
     boxSizing: 'border-box',
     width: m.labelW,
     flexShrink: 0,
-    background: '#08080c',
+    background: '#18181e',
     borderRight: `1px solid ${CB_PIANO_MINT_BORDER}`,
     position: 'sticky',
     left: 0,

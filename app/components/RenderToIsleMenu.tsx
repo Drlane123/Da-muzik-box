@@ -54,7 +54,7 @@ export default function RenderToIsleMenu({ x, y, startBar, endBar, soloTracks, b
         style={{ left: Math.min(x, window.innerWidth - 300), top: Math.min(y, window.innerHeight - 400), width: 280, background: '#0d0d0d', border: '1px solid #2a2a2a', boxShadow: '0 8px 40px rgba(0,0,0,0.8)' }}>
 
         {/* Header */}
-        <div className="px-3 py-2 flex items-center gap-2" style={{ background: '#111', borderBottom: '1px solid #1a1a1a' }}>
+        <div className="px-3 py-2 flex items-center gap-2" style={{ background: '#242424', borderBottom: '1px solid #2c2c2c' }}>
           <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: '#00ff8822', color: '#00ff88' }}>
             <Download size={11} />
           </div>
@@ -77,7 +77,7 @@ export default function RenderToIsleMenu({ x, y, startBar, endBar, soloTracks, b
             return (
               <button key={sec.id} onClick={() => setTargetId(isSelected ? null : sec.id)}
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-all"
-                style={{ background: isSelected ? `${sec.color}22` : '#111', border: `1px solid ${isSelected ? sec.color : '#222'}` }}>
+                style={{ background: isSelected ? `${sec.color}22` : '#242424', border: `1px solid ${isSelected ? sec.color : '#222'}` }}>
 
                 {/* Rainbow indicator */}
                 {isRainbow ? (
@@ -123,7 +123,7 @@ export default function RenderToIsleMenu({ x, y, startBar, endBar, soloTracks, b
           <button onClick={startRender} disabled={targetId === null || rendering || done}
             className="w-full py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-all"
             style={{
-              background: done ? '#00ff8822' : targetId === null ? '#111' : rendering ? '#1a1a1a' : 'linear-gradient(135deg,#00ff88,#00E5FF)',
+              background: done ? '#00ff8822' : targetId === null ? '#242424' : rendering ? '#2c2c2c' : 'linear-gradient(135deg,#00ff88,#00E5FF)',
               color: done ? '#00ff88' : targetId === null ? '#444' : rendering ? '#555' : '#000',
               fontSize: 11, cursor: targetId === null ? 'not-allowed' : 'pointer',
               border: done ? '1px solid #00ff8844' : 'none',
