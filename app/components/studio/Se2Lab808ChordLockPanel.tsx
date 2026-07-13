@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Lock } from 'lucide-react';
 import { studioKeyLabel, type StudioDetectedKeyMode } from '@/app/lib/studio/studioAudioClipAnalysis';
@@ -64,6 +72,8 @@ export type Se2Lab808ChordLockPanelProps = {
   tracks: readonly Se2Lab808ChordLockHarmonyTrack[];
   lanePad: number;
   onLockChange: (lock: Se2Lab808ChordLock) => void;
+  /** Shown to the right of the key / source box (outside the narrow column). */
+  besideSource?: ReactNode;
 };
 
 export function Se2Lab808ChordLockPanel({
@@ -77,6 +87,7 @@ export function Se2Lab808ChordLockPanel({
   tracks,
   lanePad,
   onLockChange,
+  besideSource,
 }: Se2Lab808ChordLockPanelProps) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
@@ -274,27 +285,37 @@ export function Se2Lab808ChordLockPanel({
         {lock.enabled ? '● Lock on' : '○ Lock off'}
       </button>
 
-      <button
-        ref={btnRef}
-        type="button"
-        disabled={disabled}
-        onClick={toggleMenu}
-        className="w-full rounded border px-2 py-1.5 text-left outline-none touch-manipulation inline-flex items-center justify-between gap-1 min-w-0"
-        style={{
-          borderColor: '#333340',
-          background: '#0a0a10',
-          color: '#e0e0ea',
-          fontSize: 9,
-          cursor: disabled ? 'default' : 'pointer',
-          opacity: disabled ? 0.45 : 1,
-        }}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={sourceLabel}
-      >
-        <span className="truncate font-semibold">{sourceLabel}</span>
-        <ChevronDown size={12} className="shrink-0 opacity-70" />
-      </button>
+      <div className="relative min-w-0">
+        <button
+          ref={btnRef}
+          type="button"
+          disabled={disabled}
+          onClick={toggleMenu}
+          className="w-full rounded border px-2 py-1.5 text-left outline-none touch-manipulation inline-flex items-center justify-between gap-1 min-w-0"
+          style={{
+            borderColor: '#333340',
+            background: '#0a0a10',
+            color: '#e0e0ea',
+            fontSize: 9,
+            cursor: disabled ? 'default' : 'pointer',
+            opacity: disabled ? 0.45 : 1,
+          }}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          title={sourceLabel}
+        >
+          <span className="truncate font-semibold">{sourceLabel}</span>
+          <ChevronDown size={12} className="shrink-0 opacity-70" />
+        </button>
+        {besideSource ? (
+          <div
+            className="absolute left-full top-1/2 z-10 -translate-y-1/2 pl-1.5 pointer-events-none"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {besideSource}
+          </div>
+        ) : null}
+      </div>
 
       {menu}
     </div>

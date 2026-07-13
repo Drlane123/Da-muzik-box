@@ -435,7 +435,7 @@ export function Se2Lab808Panel({
             <Se2Lab808TonePads {...tonePadsShared} padsOnly size={miniature ? 'default' : 'large'} />
 
             <aside
-              className="flex flex-col gap-2.5 shrink-0 min-w-0"
+              className="flex flex-col gap-2.5 shrink-0 min-w-0 overflow-visible"
               style={{ width: miniature ? 156 : 172 }}
             >
               <div className="flex flex-col gap-1">
@@ -552,23 +552,24 @@ export function Se2Lab808Panel({
                 tracks={studioTracks}
                 lanePad={lanePad}
                 onLockChange={(chordLock) => onVoiceChange({ ...voice, chordLock })}
-              />
-
-              <span
-                className="block w-full text-[7px] font-semibold leading-none text-center truncate whitespace-nowrap"
-                style={{ color: '#8a8a98', height: 10 }}
-                title={
-                  gridStatus ??
-                  (canGenerate
-                    ? `${progressionRoots.length} roots · ${voice.toneGridLoopBars}-bar · ${keyLabel}`
-                    : 'Select key or chord lane')
+                besideSource={
+                  <span
+                    className="shrink-0 text-[7px] font-semibold leading-none whitespace-nowrap"
+                    style={{ color: '#8a8a98' }}
+                    title={
+                      gridStatus ??
+                      (canGenerate
+                        ? `${progressionRoots.length} roots · ${voice.toneGridLoopBars}-bar · ${keyLabel}`
+                        : 'Select key or chord lane')
+                    }
+                  >
+                    {gridStatus ??
+                      (canGenerate
+                        ? `${progressionRoots.length}r · ${voice.toneGridLoopBars}-bar`
+                        : 'Pick key')}
+                  </span>
                 }
-              >
-                {gridStatus ??
-                  (canGenerate
-                    ? `${progressionRoots.length}r · ${voice.toneGridLoopBars}-bar · ${keyLabel}`
-                    : 'Select key / chord')}
-              </span>
+              />
             </aside>
 
             {!miniature ? (
