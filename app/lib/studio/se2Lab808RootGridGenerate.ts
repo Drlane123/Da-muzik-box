@@ -154,6 +154,16 @@ export function se2Lab808LaneForRootMidi(baseMidi: number, rootMidi: number): nu
   return lane;
 }
 
+const MAJOR_PCS = [0, 2, 4, 5, 7, 9, 11] as const;
+const MINOR_PCS = [0, 2, 3, 5, 7, 8, 10] as const;
+
+/** Scale pitch classes for Root Scope dial highlighting (and any in-key helpers). */
+export function se2Lab808ScalePitchClasses(keyRoot: number, mode: 'major' | 'minor'): number[] {
+  const intervals = mode === 'minor' ? MINOR_PCS : MAJOR_PCS;
+  const root = ((Math.round(keyRoot) % 12) + 12) % 12;
+  return intervals.map((i) => (root + i) % 12);
+}
+
 function snapColToQuantize(col: number, stride: number, startCol: number, endCol: number): number | null {
   if (endCol <= startCol) return startCol;
   const rel = col - startCol;
