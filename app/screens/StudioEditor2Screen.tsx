@@ -1155,6 +1155,8 @@ type MockMusioTrack = {
   lab808ToneGridLoopBars?: number;
   lab808ToneGridSteps?: boolean[][];
   lab808ToneGridZoom?: number;
+  lab808RootGenQuantize?: string;
+  lab808RootGenGenre?: string;
   lab808PercSnareSteps?: boolean[];
   lab808PercClapSteps?: boolean[];
   lab808PercLevel?: number;
@@ -10866,6 +10868,8 @@ export default function StudioEditor2Screen({
               lab808ToneGridSteps: voice.toneGridSteps.map((row) => [...row]),
               lab808ToneGridZoom: voice.toneGridZoom,
               lab808RootGenSeed: voice.rootGenSeed,
+              lab808RootGenQuantize: voice.rootGenQuantize,
+              lab808RootGenGenre: voice.rootGenGenre,
               lab808PercSnareSteps: Array.from({ length: 16 }, (_, i) => !!voice.percSnareSteps?.[i]),
               lab808PercClapSteps: Array.from({ length: 16 }, (_, i) => !!voice.percClapSteps?.[i]),
               lab808PercLevel: typeof voice.percLevel === 'number' ? voice.percLevel : 0.88,
@@ -17737,6 +17741,8 @@ export default function StudioEditor2Screen({
                     lab808ChordLockKeyMode: src.lab808ChordLockKeyMode,
                     lab808RootGenSeed: src.lab808RootGenSeed,
                     lab808ToneGridZoom: src.lab808ToneGridZoom,
+                    lab808RootGenQuantize: src.lab808RootGenQuantize,
+                    lab808RootGenGenre: src.lab808RootGenGenre,
                     lab808PercSnareSteps: src.lab808PercSnareSteps ? [...src.lab808PercSnareSteps] : undefined,
                     lab808PercClapSteps: src.lab808PercClapSteps ? [...src.lab808PercClapSteps] : undefined,
                     lab808PercLevel: src.lab808PercLevel,

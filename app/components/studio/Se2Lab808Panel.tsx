@@ -340,6 +340,8 @@ export function Se2Lab808Panel({
         seed,
         keyRoot: key.keyRoot,
         keyMode: key.keyMode === 'minor' ? 'minor' : 'major',
+        quantize: v.rootGenQuantize ?? '1/8',
+        genre: v.rootGenGenre ?? 'trap',
       });
       seedRef.current = seed;
       onVoiceChange({

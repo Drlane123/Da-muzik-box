@@ -30,6 +30,15 @@ import {
   se2Lab808ToneMidiForLane,
   type Se2Lab808ToneGridLoopBars,
 } from '@/app/lib/studio/se2Lab808DrumPattern';
+import {
+  SE2_LAB808_ROOT_GEN_GENRES,
+  SE2_LAB808_ROOT_GEN_GENRE_ORDER,
+  SE2_LAB808_ROOT_GEN_QUANTIZE_OPTIONS,
+  se2Lab808RootGenGenreProfile,
+  se2NormalizeLab808RootGenGenre,
+  se2NormalizeLab808RootGenQuantize,
+  type Se2Lab808RootGenQuantize,
+} from '@/app/lib/studio/se2Lab808RootGridGenerate';
 import { previewSe2Lab808Note } from '@/app/lib/studio/se2Lab808Preview';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 import { SE2_LAB808_FILTER_VIZ_SURFACE } from '@/app/lib/studio/se2Lab808UiTheme';
@@ -458,6 +467,63 @@ export function Se2Lab808DrumGrid({
               {bars}b
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[8px] font-bold uppercase mr-0.5" style={{ color: '#6a6a78' }}>
+            Genre
+          </span>
+          <select
+            disabled={disabled}
+            value={se2NormalizeLab808RootGenGenre(voice.rootGenGenre)}
+            onChange={(e) => {
+              const genre = se2NormalizeLab808RootGenGenre(e.target.value);
+              const profile = se2Lab808RootGenGenreProfile(genre);
+              onVoiceChange({
+                ...voice,
+                rootGenGenre: genre,
+                rootGenQuantize: profile.defaultQuantize,
+              });
+            }}
+            className="rounded border px-1.5 py-1 text-[8px] font-bold outline-none"
+            style={{
+              borderColor: '#333340',
+              background: '#0a0a10',
+              color: accent,
+              maxWidth: 92,
+            }}
+            title="Kick / 808 pocket style for Generate and Regenerate"
+          >
+            {SE2_LAB808_ROOT_GEN_GENRE_ORDER.map((id) => (
+              <option key={id} value={id}>
+                {SE2_LAB808_ROOT_GEN_GENRES[id].label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[8px] font-bold uppercase mr-0.5" style={{ color: '#6a6a78' }}>
+            Quantize
+          </span>
+          {SE2_LAB808_ROOT_GEN_QUANTIZE_OPTIONS.map((q) => {
+            const active = se2NormalizeLab808RootGenQuantize(voice.rootGenQuantize) === q;
+            return (
+              <button
+                key={q}
+                type="button"
+                disabled={disabled}
+                style={loopBtn(active, accent)}
+                onClick={() =>
+                  onVoiceChange({
+                    ...voice,
+                    rootGenQuantize: q as Se2Lab808RootGenQuantize,
+                  })
+                }
+                title={`Generate / Regenerate snaps to ${q}`}
+              >
+                {q}
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button

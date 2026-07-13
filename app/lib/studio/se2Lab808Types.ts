@@ -28,6 +28,12 @@ import {
   emptySe2Lab808PercBar,
   normalizeSe2Lab808PercBar,
 } from '@/app/lib/studio/se2Lab808PercPattern';
+import {
+  se2NormalizeLab808RootGenGenre,
+  se2NormalizeLab808RootGenQuantize,
+  type Se2Lab808RootGenGenreId,
+  type Se2Lab808RootGenQuantize,
+} from '@/app/lib/studio/se2Lab808RootGridGenerate';
 import { se2Lab808NormalizeToneGridZoom } from '@/app/lib/studio/se2Lab808ToneGridLayout';
 
 export type { Se2Lab808ChordLock, Se2Lab808ChordLockSourceKind } from '@/app/lib/studio/se2Lab808ChordLock';
@@ -50,6 +56,10 @@ export type Se2Lab808VoiceParams = {
   toneGridZoom: number;
   /** Seed for regenerate root grid variations. */
   rootGenSeed?: number;
+  /** Generate/regenerate snap — 1/4, 1/8, 1/16, 1/32. */
+  rootGenQuantize: Se2Lab808RootGenQuantize;
+  /** Pocket style for Generate / Regenerate (trap, R&B, K-pop, dance…). */
+  rootGenGenre: Se2Lab808RootGenGenreId;
   /** 1-bar snare steps (16ths) — repeats every bar for any tone-grid length. */
   percSnareSteps: boolean[];
   /** 1-bar clap steps (16ths) — repeats every bar. */
@@ -72,6 +82,8 @@ export function se2Lab808DefaultVoice(): Se2Lab808VoiceParams {
     toneGridLevel: 0.9,
     toneGridZoom: 1,
     rootGenSeed: 1,
+    rootGenQuantize: '1/8',
+    rootGenGenre: 'trap',
     percSnareSteps: emptySe2Lab808PercBar(),
     percClapSteps: emptySe2Lab808PercBar(),
     percLevel: 0.88,
@@ -114,6 +126,8 @@ export function se2Lab808VoiceFromTrackFields(tr: {
   lab808ChordLockKeyMode?: string;
   lab808RootGenSeed?: number;
   lab808ToneGridZoom?: number;
+  lab808RootGenQuantize?: string;
+  lab808RootGenGenre?: string;
   lab808PercSnareSteps?: readonly boolean[];
   lab808PercClapSteps?: readonly boolean[];
   lab808PercLevel?: number;
@@ -139,6 +153,8 @@ export function se2Lab808VoiceFromTrackFields(tr: {
       typeof tr.lab808RootGenSeed === 'number' && Number.isFinite(tr.lab808RootGenSeed)
         ? Math.max(1, Math.round(tr.lab808RootGenSeed))
         : base.rootGenSeed,
+    rootGenQuantize: se2NormalizeLab808RootGenQuantize(tr.lab808RootGenQuantize),
+    rootGenGenre: se2NormalizeLab808RootGenGenre(tr.lab808RootGenGenre),
     toneGridZoom: se2Lab808NormalizeToneGridZoom(tr.lab808ToneGridZoom ?? base.toneGridZoom),
     percSnareSteps: normalizeSe2Lab808PercBar(tr.lab808PercSnareSteps),
     percClapSteps: normalizeSe2Lab808PercBar(tr.lab808PercClapSteps),

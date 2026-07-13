@@ -1,7 +1,14 @@
 /**
  * SE2 808 Lab — write chord-lock / key root progression hits onto the tone step grid.
- * Generate places roots; Regenerate (new seed) rolls a fresh pocket + in-key fills.
+ *
+ * Genre pockets drive kick / 808 density (trap sparse, dance four-on-floor, etc.).
+ * Quantize (1/4 … 1/32) snaps generate/regenerate placement on the 16th-note grid.
  */
+import {
+  LAB808_QUANTIZE_OPTIONS,
+  quantizeDivisionsPerBar,
+  type Lab808Quantize,
+} from '@/app/lib/creationStation/lab808RollQuantize';
 import { LAB808_BEATS_PER_BAR } from '@/app/lib/creationStation/lab808ChordRoots';
 import type { Lab808ProgressionRoot } from '@/app/lib/creationStation/lab808ChordRoots';
 import { lab808DefaultTonePadBaseMidi } from '@/app/lib/creationStation/lab808TonePads';
@@ -15,10 +22,114 @@ import {
   type Se2Lab808ToneGridPattern,
 } from '@/app/lib/studio/se2Lab808DrumPattern';
 
-const KICK_BLOCK_OFFSETS = [0, 4, 8, 12, 2, 6, 10, 14, 1, 5, 9, 13] as const;
-const BASS_BLOCK_OFFSETS = [0, 8, 4, 12, 2, 6, 10, 14] as const;
-const MAJOR_PCS = [0, 2, 4, 5, 7, 9, 11] as const;
-const MINOR_PCS = [0, 2, 3, 5, 7, 8, 10] as const;
+/** UI options for SE2 808 Lab generate/regenerate (no triplets / 64ths). */
+export const SE2_LAB808_ROOT_GEN_QUANTIZE_OPTIONS = ['1/4', '1/8', '1/16', '1/32'] as const satisfies readonly Lab808Quantize[];
+export type Se2Lab808RootGenQuantize = (typeof SE2_LAB808_ROOT_GEN_QUANTIZE_OPTIONS)[number];
+
+export function se2NormalizeLab808RootGenQuantize(raw: string | undefined): Se2Lab808RootGenQuantize {
+  const id = (raw ?? '').trim() as Se2Lab808RootGenQuantize;
+  return (SE2_LAB808_ROOT_GEN_QUANTIZE_OPTIONS as readonly string[]).includes(id) ? id : '1/8';
+}
+
+export const SE2_LAB808_ROOT_GEN_GENRES = {
+  trap: {
+    id: 'trap',
+    label: 'Trap',
+    defaultQuantize: '1/8' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.55,
+    kickEndRollChance: 0.42,
+    kickTripleChance: 0.35,
+    kickAdditiveOffsets: [8, 6, 10, 12, 4],
+    bassLateHitChance: 0.28,
+    bassOctaveFlipChance: 0.12,
+  },
+  rnb: {
+    id: 'rnb',
+    label: 'R&B',
+    defaultQuantize: '1/8' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.38,
+    kickEndRollChance: 0.18,
+    kickTripleChance: 0.12,
+    kickAdditiveOffsets: [8, 12, 6],
+    bassLateHitChance: 0.4,
+    bassOctaveFlipChance: 0.08,
+  },
+  kpop: {
+    id: 'kpop',
+    label: 'K-pop',
+    defaultQuantize: '1/16' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.62,
+    kickEndRollChance: 0.28,
+    kickTripleChance: 0.2,
+    kickAdditiveOffsets: [8, 4, 12, 10],
+    bassLateHitChance: 0.35,
+    bassOctaveFlipChance: 0.1,
+  },
+  dance: {
+    id: 'dance',
+    label: 'Dance',
+    defaultQuantize: '1/4' as Se2Lab808RootGenQuantize,
+    fourOnFloor: true,
+    kickAdditiveChance: 0.15,
+    kickEndRollChance: 0.12,
+    kickTripleChance: 0.08,
+    kickAdditiveOffsets: [8],
+    bassLateHitChance: 0.22,
+    bassOctaveFlipChance: 0.05,
+  },
+  hiphop: {
+    id: 'hiphop',
+    label: 'Hip-hop',
+    defaultQuantize: '1/8' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.7,
+    kickEndRollChance: 0.25,
+    kickTripleChance: 0.15,
+    kickAdditiveOffsets: [6, 10, 8, 14, 4],
+    bassLateHitChance: 0.3,
+    bassOctaveFlipChance: 0.1,
+  },
+  drill: {
+    id: 'drill',
+    label: 'Drill',
+    defaultQuantize: '1/16' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.72,
+    kickEndRollChance: 0.48,
+    kickTripleChance: 0.4,
+    kickAdditiveOffsets: [6, 10, 14, 2, 12],
+    bassLateHitChance: 0.2,
+    bassOctaveFlipChance: 0.06,
+  },
+} as const;
+
+export type Se2Lab808RootGenGenreId = keyof typeof SE2_LAB808_ROOT_GEN_GENRES;
+export const SE2_LAB808_ROOT_GEN_GENRE_ORDER = Object.keys(
+  SE2_LAB808_ROOT_GEN_GENRES,
+) as Se2Lab808RootGenGenreId[];
+
+export type Se2Lab808RootGenGenreProfile = (typeof SE2_LAB808_ROOT_GEN_GENRES)[Se2Lab808RootGenGenreId];
+
+export function se2NormalizeLab808RootGenGenre(raw: string | undefined): Se2Lab808RootGenGenreId {
+  const id = (raw ?? '').trim() as Se2Lab808RootGenGenreId;
+  return SE2_LAB808_ROOT_GEN_GENRE_ORDER.includes(id) ? id : 'trap';
+}
+
+export function se2Lab808RootGenGenreProfile(
+  id: Se2Lab808RootGenGenreId | string | undefined,
+): Se2Lab808RootGenGenreProfile {
+  return SE2_LAB808_ROOT_GEN_GENRES[se2NormalizeLab808RootGenGenre(id)];
+}
+
+/** Grid columns per quantize step on the fixed 16th-note tone grid. */
+export function se2Lab808QuantizeGridStride(q: Lab808Quantize): number {
+  const divs = quantizeDivisionsPerBar(q);
+  if (divs >= SE2_LAB808_TONE_GRID_STEPS_PER_BAR) return 1;
+  return Math.max(1, Math.round(SE2_LAB808_TONE_GRID_STEPS_PER_BAR / divs));
+}
 
 export function se2Lab808BeatToToneGridCol(beat: number): number {
   return Math.max(0, Math.round(beat * (SE2_LAB808_TONE_GRID_STEPS_PER_BAR / LAB808_BEATS_PER_BAR)));
@@ -43,65 +154,12 @@ export function se2Lab808LaneForRootMidi(baseMidi: number, rootMidi: number): nu
   return lane;
 }
 
-export function se2Lab808ScalePitchClasses(keyRoot: number, mode: 'major' | 'minor'): number[] {
-  const intervals = mode === 'minor' ? MINOR_PCS : MAJOR_PCS;
-  const root = ((Math.round(keyRoot) % 12) + 12) % 12;
-  return intervals.map((i) => (root + i) % 12);
-}
-
-function scaleLanesInWindow(baseMidi: number, keyRoot: number, mode: 'major' | 'minor'): number[] {
-  const pcs = new Set(se2Lab808ScalePitchClasses(keyRoot, mode));
-  const lanes: number[] = [];
-  for (let lane = 0; lane < 16; lane++) {
-    const midi = baseMidi + lane;
-    if (pcs.has(((midi % 12) + 12) % 12)) lanes.push(lane);
-  }
-  return lanes;
-}
-
-function pickColsInBlock(
-  startCol: number,
-  endCol: number,
-  rng: () => number,
-  offsets: readonly number[],
-  density: number,
-): number[] {
-  const blockLen = Math.max(1, endCol - startCol);
-  const hits = new Set<number>([startCol]);
-  const candidates = offsets
-    .map((o) => startCol + Math.min(o, blockLen - 1))
-    .filter((c) => c >= startCol && c < endCol);
-  for (const col of candidates) {
-    if (col === startCol) continue;
-    if (rng() < density) hits.add(col);
-  }
-  if (hits.size === 1 && blockLen > 4 && rng() < 0.8) {
-    hits.add(startCol + Math.min(8, blockLen - 1));
-  }
-  if (hits.size < 2 && blockLen > 8 && rng() < 0.55) {
-    hits.add(startCol + Math.min(4, blockLen - 1));
-  }
-  return [...hits].sort((a, b) => a - b);
-}
-
-function pickKickColsInBlock(startCol: number, endCol: number, rng: () => number): number[] {
-  return pickColsInBlock(startCol, endCol, rng, KICK_BLOCK_OFFSETS, 0.38 + rng() * 0.28);
-}
-
-function pickBassColsInBlock(startCol: number, endCol: number, rng: () => number): number[] {
-  return pickColsInBlock(startCol, endCol, rng, BASS_BLOCK_OFFSETS, 0.22 + rng() * 0.35);
-}
-
-function pickScaleLaneNear(
-  rootLane: number,
-  scaleLanes: readonly number[],
-  rng: () => number,
-): number | null {
-  if (scaleLanes.length === 0) return null;
-  const near = scaleLanes.filter((l) => Math.abs(l - rootLane) <= 7 && l !== rootLane);
-  const pool = near.length > 0 ? near : scaleLanes.filter((l) => l !== rootLane);
-  if (pool.length === 0) return rootLane;
-  return pool[Math.floor(rng() * pool.length)]!;
+function snapColToQuantize(col: number, stride: number, startCol: number, endCol: number): number | null {
+  if (endCol <= startCol) return startCol;
+  const rel = col - startCol;
+  const snapped = startCol + Math.round(rel / stride) * stride;
+  if (snapped < startCol || snapped >= endCol) return null;
+  return snapped;
 }
 
 function placeHit(pattern: Se2Lab808ToneGridPattern, lane: number, col: number, totalSteps: number): boolean {
@@ -109,6 +167,66 @@ function placeHit(pattern: Se2Lab808ToneGridPattern, lane: number, col: number, 
   if (pattern[lane]![col]) return false;
   pattern[lane]![col] = true;
   return true;
+}
+
+function pickKickColsInBlock(
+  startCol: number,
+  endCol: number,
+  rng: () => number,
+  stride: number,
+  genre: Se2Lab808RootGenGenreProfile,
+): number[] {
+  const blockLen = Math.max(1, endCol - startCol);
+  const hits = new Set<number>([startCol]);
+
+  if (genre.fourOnFloor) {
+    for (let o = stride; o < blockLen; o += Math.max(stride, 4)) {
+      const c = snapColToQuantize(startCol + o, stride, startCol, endCol);
+      if (c != null) hits.add(c);
+    }
+    return [...hits].sort((a, b) => a - b);
+  }
+
+  if (blockLen >= stride * 2 && rng() < genre.kickAdditiveChance) {
+    const candidates = genre.kickAdditiveOffsets
+      .map((o) => snapColToQuantize(startCol + o, stride, startCol, endCol))
+      .filter((c): c is number => c != null && c !== startCol);
+    if (candidates.length > 0) {
+      hits.add(candidates[Math.floor(rng() * candidates.length)]!);
+    }
+  }
+
+  if (blockLen >= stride * 3 && rng() < genre.kickEndRollChance) {
+    const endAnchor = Math.max(
+      startCol + stride,
+      endCol - stride * (rng() < genre.kickTripleChance ? 3 : 2),
+    );
+    const rollLen = rng() < genre.kickTripleChance ? 3 : 2;
+    for (let i = 0; i < rollLen; i++) {
+      const c = snapColToQuantize(endAnchor + i * stride, stride, startCol, endCol);
+      if (c != null) hits.add(c);
+    }
+  }
+
+  return [...hits].sort((a, b) => a - b);
+}
+
+function pickBassColsInBlock(
+  startCol: number,
+  endCol: number,
+  rng: () => number,
+  stride: number,
+  genre: Se2Lab808RootGenGenreProfile,
+): number[] {
+  const blockLen = Math.max(1, endCol - startCol);
+  const hits = new Set<number>([startCol]);
+
+  if (blockLen >= stride * 4 && rng() < genre.bassLateHitChance) {
+    const late = snapColToQuantize(startCol + Math.min(8, blockLen - stride), stride, startCol, endCol);
+    if (late != null && late !== startCol) hits.add(late);
+  }
+
+  return [...hits].sort((a, b) => a - b);
 }
 
 export type Se2Lab808GenerateRootGridResult = {
@@ -124,9 +242,10 @@ export function se2Lab808GenerateRootGridPattern(args: {
   soundLane: Lab808SoundLane;
   tonePadBaseMidi?: number;
   seed?: number;
-  /** When set, regenerate can sprinkle in-key scale fills around the roots. */
   keyRoot?: number;
   keyMode?: 'major' | 'minor';
+  quantize?: Lab808Quantize;
+  genre?: Se2Lab808RootGenGenreId | string;
 }): Se2Lab808GenerateRootGridResult {
   const roots = args.roots;
   if (roots.length === 0) {
@@ -138,69 +257,49 @@ export function se2Lab808GenerateRootGridPattern(args: {
     };
   }
 
+  const genre = se2Lab808RootGenGenreProfile(args.genre);
+  const quantize = se2NormalizeLab808RootGenQuantize(args.quantize ?? genre.defaultQuantize);
+  const stride = se2Lab808QuantizeGridStride(quantize);
   const baseMidi = se2Lab808BaseMidiForRoots(roots);
   const totalSteps = se2Lab808ToneGridStepCount(args.loopBars);
   const pattern = emptySe2Lab808ToneGridPattern(args.loopBars);
   const rng = mulberry32((args.seed ?? Date.now()) >>> 0);
   let hitCount = 0;
   const isKick = args.soundLane === 'kick';
-  const keyRoot = args.keyRoot ?? 0;
-  const keyMode = args.keyMode === 'minor' ? 'minor' : 'major';
-  const scaleLanes = scaleLanesInWindow(baseMidi, keyRoot, keyMode);
 
   for (const root of roots) {
     const rootLane = se2Lab808LaneForRootMidi(baseMidi, root.midi);
     if (rootLane == null) continue;
-    const startCol = se2Lab808BeatToToneGridCol(root.startBeat);
-    if (startCol >= totalSteps) continue;
-    const endCol = Math.min(
+    const rawStart = se2Lab808BeatToToneGridCol(root.startBeat);
+    if (rawStart >= totalSteps) continue;
+    const rawEnd = Math.min(
       totalSteps,
-      Math.max(startCol + 1, se2Lab808BeatToToneGridCol(root.startBeat + root.durBeats)),
+      Math.max(rawStart + 1, se2Lab808BeatToToneGridCol(root.startBeat + root.durBeats)),
     );
+    const startCol = snapColToQuantize(rawStart, stride, 0, totalSteps) ?? rawStart;
+    const endCol = Math.max(startCol + stride, rawEnd);
 
     const cols = isKick
-      ? pickKickColsInBlock(startCol, endCol, rng)
-      : pickBassColsInBlock(startCol, endCol, rng);
+      ? pickKickColsInBlock(startCol, endCol, rng, stride, genre)
+      : pickBassColsInBlock(startCol, endCol, rng, stride, genre);
 
     for (const col of cols) {
       let lane = rootLane;
-      // Occasional in-key neighbor (same key / scale) so regenerate feels like a new fill.
-      if (col !== startCol && scaleLanes.length > 1 && rng() < (isKick ? 0.28 : 0.42)) {
-        lane = pickScaleLaneNear(rootLane, scaleLanes, rng) ?? rootLane;
-      } else if (col === startCol && !isKick && rng() < 0.22) {
-        // Bass: sometimes drop/raise an octave within the 16-pad window.
+      if (!isKick && col === startCol && rng() < genre.bassOctaveFlipChance) {
         const oct = rootLane >= 12 ? rootLane - 12 : rootLane + 12;
-        if (oct >= 0 && oct <= 15 && scaleLanes.includes(oct)) lane = oct;
+        if (oct >= 0 && oct <= 15) lane = oct;
       }
-      if (placeHit(pattern, lane, col, totalSteps)) hitCount += 1;
-    }
-
-    // Pickup / approach note before the chord change (in-key).
-    if (scaleLanes.length > 1 && startCol > 0 && rng() < (isKick ? 0.35 : 0.48)) {
-      const approachLane = pickScaleLaneNear(rootLane, scaleLanes, rng);
-      const approachCol = Math.max(0, startCol - (rng() < 0.55 ? 1 : 2));
-      if (approachLane != null && placeHit(pattern, approachLane, approachCol, totalSteps)) {
-        hitCount += 1;
-      }
-    }
-  }
-
-  // Sparse mid-loop scale pepper so consecutive seeds never look identical on bass.
-  if (scaleLanes.length > 0 && rng() < 0.7) {
-    const pepperCount = 1 + Math.floor(rng() * (isKick ? 3 : 4));
-    for (let i = 0; i < pepperCount; i++) {
-      const lane = scaleLanes[Math.floor(rng() * scaleLanes.length)]!;
-      const col = Math.floor(rng() * totalSteps);
       if (placeHit(pattern, lane, col, totalSteps)) hitCount += 1;
     }
   }
 
   const bars = args.loopBars;
+  const laneLabel = isKick ? 'kick' : '808';
   return {
     pattern,
     tonePadBaseMidi: baseMidi,
     hitCount,
-    status: `${hitCount} hit${hitCount === 1 ? '' : 's'} · ${bars}-bar ${isKick ? 'kick' : 'bass'} · seed ${args.seed ?? 0}`,
+    status: `${hitCount} hit${hitCount === 1 ? '' : 's'} · ${bars}-bar ${laneLabel} · ${genre.label} · ${quantize}`,
   };
 }
 
@@ -212,3 +311,5 @@ export function se2Lab808RootIndexForPitchClass(
   const idx = roots.findIndex((r) => ((r.midi % 12) + 12) % 12 === pc);
   return idx >= 0 ? idx : null;
 }
+
+export { LAB808_QUANTIZE_OPTIONS };

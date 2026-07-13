@@ -9,6 +9,10 @@ import {
 } from '@/app/lib/studio/se2Lab808DrumPattern';
 import { normalizeSe2Lab808PercBar } from '@/app/lib/studio/se2Lab808PercPattern';
 import {
+  se2NormalizeLab808RootGenGenre,
+  se2NormalizeLab808RootGenQuantize,
+} from '@/app/lib/studio/se2Lab808RootGridGenerate';
+import {
   se2Lab808DefaultVoice,
   se2Lab808PatchLabel,
   se2Lab808VoiceFromTrackFields,
@@ -32,6 +36,8 @@ export type Se2Lab808TrackFields = {
   lab808ChordLockKeyMode?: string;
   lab808RootGenSeed?: number;
   lab808ToneGridZoom?: number;
+  lab808RootGenQuantize?: string;
+  lab808RootGenGenre?: string;
   /** 1-bar snare / clap (16ths) — repeats every bar. */
   lab808PercSnareSteps?: boolean[];
   lab808PercClapSteps?: boolean[];
@@ -61,6 +67,10 @@ export function se2Lab808VoiceFromTrack(
     toneGridSteps: normalizeSe2Lab808ToneGridPattern(storedVoice.toneGridSteps ?? base.toneGridSteps, loopBars),
     toneGridZoom: storedVoice.toneGridZoom ?? base.toneGridZoom,
     rootGenSeed: storedVoice.rootGenSeed ?? base.rootGenSeed,
+    rootGenQuantize: se2NormalizeLab808RootGenQuantize(
+      storedVoice.rootGenQuantize ?? base.rootGenQuantize,
+    ),
+    rootGenGenre: se2NormalizeLab808RootGenGenre(storedVoice.rootGenGenre ?? base.rootGenGenre),
     percSnareSteps: normalizeSe2Lab808PercBar(storedVoice.percSnareSteps ?? base.percSnareSteps),
     percClapSteps: normalizeSe2Lab808PercBar(storedVoice.percClapSteps ?? base.percClapSteps),
     percLevel: storedVoice.percLevel ?? base.percLevel,
@@ -100,6 +110,8 @@ export function se2DefaultLab808Track(partial?: {
     lab808TonePadBaseMidi: voice.tonePadBaseMidi,
     lab808ToneGridLoopBars: voice.toneGridLoopBars,
     lab808ToneGridSteps: voice.toneGridSteps.map((row) => [...row]),
+    lab808RootGenQuantize: voice.rootGenQuantize,
+    lab808RootGenGenre: voice.rootGenGenre,
     lab808PercSnareSteps: [...voice.percSnareSteps],
     lab808PercClapSteps: [...voice.percClapSteps],
     lab808PercLevel: voice.percLevel,
