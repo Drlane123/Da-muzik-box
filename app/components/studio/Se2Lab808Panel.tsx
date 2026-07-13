@@ -4,8 +4,10 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   BASS_LOW_BASS_ORDER,
   BASS_LOW_BASS_PRESETS,
+  EIGHT_ZERO_EIGHT_KICK_ROOT_MIDI,
   TRAP_HOLD_808_ORDER,
   TRAP_HOLD_808_PRESETS,
+  lab808MergePresetFilterHints,
   type BassLowBassPresetId,
   type TrapHold808PresetId,
 } from '@/app/lib/creationStation/eightZeroEightVoice';
@@ -449,10 +451,35 @@ export function Se2Lab808Panel({
                   value={presetId}
                   onChange={(e) => {
                     const id = e.target.value;
-                    if (isKick) {
-                      onVoiceChange({ ...voice, kickPresetId: id as TrapHold808PresetId });
-                    } else {
-                      onVoiceChange({ ...voice, bassPresetId: id as BassLowBassPresetId });
+                    const nextVoice = isKick
+                      ? {
+                          ...voice,
+                          kickPresetId: id as TrapHold808PresetId,
+                          filterFx: lab808MergePresetFilterHints(
+                            voice.filterFx,
+                            TRAP_HOLD_808_PRESETS[id as TrapHold808PresetId],
+                          ),
+                        }
+                      : {
+                          ...voice,
+                          bassPresetId: id as BassLowBassPresetId,
+                          filterFx: lab808MergePresetFilterHints(
+                            voice.filterFx,
+                            BASS_LOW_BASS_PRESETS[id as BassLowBassPresetId],
+                          ),
+                        };
+                    onVoiceChange(nextVoice);
+                    if (!disabled) {
+                      const ctx = getAudioContext();
+                      previewSe2Lab808Note(
+                        ctx,
+                        getPreviewDestination(ctx),
+                        Math.max(voice.tonePadBaseMidi, EIGHT_ZERO_EIGHT_KICK_ROOT_MIDI),
+                        100,
+                        nextVoice,
+                        bpm,
+                        isKick ? 0.35 : 0.75,
+                      );
                     }
                   }}
                   className="w-full rounded border px-2 py-1.5 text-[9px] outline-none"

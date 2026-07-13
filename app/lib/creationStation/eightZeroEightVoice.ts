@@ -27,6 +27,18 @@ export interface Lab808FilterFx {
 
 export const LAB808_FILTER_DEFAULT: Lab808FilterFx = { hpHz: 0, lpHz: 0 };
 
+/** Merge optional preset HP/LP hints into current filter (Creation Station / SE2 preset pickers). */
+export function lab808MergePresetFilterHints(
+  current: Lab808FilterFx,
+  preset: EightZeroEightPresetDef,
+): Lab808FilterFx {
+  const next: Lab808FilterFx = { ...current };
+  if (preset.filterHpHz != null && preset.filterHpHz >= 25) next.hpHz = preset.filterHpHz;
+  else if (preset.filterHpHz === 0) next.hpHz = 0;
+  if (preset.filterLpHz != null && preset.filterLpHz >= 200) next.lpHz = preset.filterLpHz;
+  return next;
+}
+
 /** All roll 808s are tuned from C1 (MIDI 36) — matches a C-root piano roll. */
 export const EIGHT_ZERO_EIGHT_KICK_ROOT_MIDI = 36;
 
@@ -544,12 +556,25 @@ export function playEightZeroEight(
   let clickGainMul: number;
 
   if (kickMap) {
-    /** Brief pitch drop into the played note, then a held tone at `hz0` (real keyboard pitch). */
-    hz1 = clamp(hz0 * 0.5, 12, ny * 0.2);
+    /**
+     * Chromatic hold at `hz0`. Kick lane: pitch *drop* into the note using
+     * `preset.sweepStartHz` (main timbral difference between trap presets).
+     * Bass lane: soft rise into the held sub (wave / filter / click carry character).
+     */
     hzEnd = clamp(hz0, 18, ny);
-    if (!(hz1 < hzEnd)) hz1 = hzEnd * 0.72;
     hzSub = hz0;
     includeSub = true;
+    const pitchRatio = clamp(hz0 / hzRef, 0.35, 2.4);
+    if (isBassLane) {
+      hz1 = clamp(preset.sweepStartHz * pitchRatio * 0.42, 12, Math.min(ny * 0.16, hzEnd * 0.88));
+      if (!(hz1 < hzEnd)) hz1 = hzEnd * 0.72;
+    } else {
+      const startHz = clamp(preset.sweepStartHz * pitchRatio, hzEnd * 1.15, ny * 0.42);
+      hz1 = startHz;
+      if (!(hz1 > hzEnd)) {
+        hz1 = clamp(hzEnd * (1.25 + (preset.sweepStartHz / 260) * 0.85), hzEnd * 1.1, ny * 0.4);
+      }
+    }
     const pitchMul = Math.sqrt(clamp(hz0 / hzRef, 0.45, 1.9));
     clickGainMul = isBassLane
       ? (0.06 + strike * 0.28) * pitchMul
