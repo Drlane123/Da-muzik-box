@@ -21,14 +21,14 @@ export type Se2Lab808PercStripProps = {
 };
 
 const labelBtn = (active: boolean, color: string): CSSProperties => ({
-  width: 36,
-  minHeight: 18,
-  padding: '0 4px',
-  borderRadius: 4,
-  border: `1px solid ${active ? `${color}aa` : '#333340'}`,
-  background: active ? `${color}22` : 'rgba(255,255,255,0.03)',
-  color: active ? color : '#9a9aac',
-  fontSize: 8,
+  width: 44,
+  minHeight: 22,
+  padding: '0 6px',
+  borderRadius: 5,
+  border: `1px solid ${active ? `${color}aa` : '#444450'}`,
+  background: active ? `${color}28` : 'rgba(255,255,255,0.04)',
+  color: active ? color : '#c8c8d4',
+  fontSize: 9,
   fontWeight: 800,
   letterSpacing: '0.04em',
   textTransform: 'uppercase',
@@ -37,13 +37,13 @@ const labelBtn = (active: boolean, color: string): CSSProperties => ({
 });
 
 const cellBtn = (on: boolean, color: string, beatMark: boolean): CSSProperties => ({
-  width: 14,
-  height: 14,
+  width: 18,
+  height: 18,
   padding: 0,
-  borderRadius: 3,
-  border: `1px solid ${on ? `${color}cc` : beatMark ? '#3a3a48' : '#2a2a34'}`,
-  background: on ? color : beatMark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-  boxShadow: on ? `0 0 6px ${color}66` : undefined,
+  borderRadius: 4,
+  border: `1px solid ${on ? `${color}ee` : beatMark ? '#4a4a58' : '#333340'}`,
+  background: on ? color : beatMark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+  boxShadow: on ? `0 0 8px ${color}88` : undefined,
   cursor: 'pointer',
   flexShrink: 0,
 });
@@ -153,19 +153,21 @@ export function Se2Lab808PercStrip({
 
   return (
     <div
-      className="flex flex-col gap-0.5 min-w-0 rounded border px-1.5 py-1"
+      className="flex flex-col gap-1 min-w-0 rounded-md border px-2 py-1.5"
       style={{
-        borderColor: `${accent}44`,
-        background: 'rgba(0,0,0,0.22)',
+        borderColor: `${accent}aa`,
+        background: 'linear-gradient(180deg, rgba(232,120,74,0.14) 0%, rgba(0,0,0,0.35) 100%)',
+        boxShadow: `inset 0 0 0 1px ${accent}33, 0 0 14px ${accent}22`,
       }}
       aria-label="808 Lab snare and clap 1-bar loop"
+      data-se2-lab808-perc-strip
     >
       <div className="flex items-center justify-between gap-2 min-w-0">
-        <span className="text-[7px] font-black uppercase tracking-wide" style={{ color: accent }}>
-          Snare / Clap · 1 bar loop
+        <span className="text-[9px] font-black uppercase tracking-wide" style={{ color: accent }}>
+          Snare / Clap · 1-bar loop (16 steps)
         </span>
-        <span className="text-[6px] font-semibold" style={{ color: '#6a6a78' }}>
-          Repeats every bar
+        <span className="text-[7px] font-semibold" style={{ color: '#9a9aac' }}>
+          Repeats every bar · click Snare/Clap to audition · 2&amp;4 for backbeat
         </span>
       </div>
       {row('snare', pattern.snare, snareColor, 'Snare')}

@@ -21,6 +21,7 @@ import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { previewSe2Lab808Note } from '@/app/lib/studio/se2Lab808Preview';
 import { Se2Lab808ChordLockPanel } from '@/app/components/studio/Se2Lab808ChordLockPanel';
 import { Se2Lab808DrumGrid } from '@/app/components/studio/Se2Lab808DrumGrid';
+import { Se2Lab808PercStrip } from '@/app/components/studio/Se2Lab808PercStrip';
 import { Se2Lab808RootScope } from '@/app/components/studio/Se2Lab808RootScope';
 import { Se2Lab808TonePads } from '@/app/components/studio/Se2Lab808TonePads';
 import {
@@ -395,6 +396,25 @@ export function Se2Lab808Panel({
             ? 'Piano-roll 808 — Preview alone, then export to any SE2 track'
             : 'Standalone lane — not linked to Creation Station'}
         </span>
+      </div>
+
+      {/* Sticky at top of dock scroll — was buried under pads before */}
+      <div
+        className="sticky top-0 z-30 shrink-0"
+        style={{
+          background: 'rgba(10, 10, 16, 0.96)',
+          paddingBottom: 4,
+          boxShadow: '0 6px 12px rgba(0,0,0,0.45)',
+        }}
+      >
+        <Se2Lab808PercStrip
+          voice={voice}
+          accent={accent}
+          disabled={false}
+          getAudioContext={getAudioContext}
+          getPreviewDestination={getPreviewDestination}
+          onVoiceChange={onVoiceChange}
+        />
       </div>
 
       <Se2Lab808DrumGrid

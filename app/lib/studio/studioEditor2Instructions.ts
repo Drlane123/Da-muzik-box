@@ -175,7 +175,7 @@ export const STUDIO_EDITOR2_HELP_SECTIONS: readonly StudioEditor2HelpSection[] =
       '**Chord lock** — follow **song key**, a chosen **key**, or a harmony **track** (Progression+, Rhythm Edit, Synth Geno, Glide Bass, Groove Lead, Geno Ultra, Chord Genie…).',
       '**Root scope** dial shows the active key and progression roots; pick a root to highlight it on the grid.',
       '**Generate roots** writes harmony roots onto the **tone grid**; **Regenerate** keeps the same key/roots but rolls a new trap pocket with in-key fills (works while transport is playing).',
-      '**Snare / Clap** — tiny 1-bar (16-step) strip above **To roll / To track**. Place a snappy 808 snare or clap (try **2&4**); it repeats every bar for your 4 / 8 / 16-bar tone grid and plays on Preview and SE2 transport.',
+      '**Snare / Clap** — sticky **1-bar (16-step)** strip at the **top** of the 808 Lab panel. Place a snappy 808 snare or clap (try **2&4**); it repeats every bar for your 4 / 8 / 16-bar tone grid and plays on Preview and SE2 transport.',
       '**Tone grid** — 16 piano-key lanes, 16th-note steps, **4 / 8 / 16-bar** loop. Tools: **Select** (drag steps), **Draw**, **Erase**, **Clear**. **Play / Stop** previews the loop; scrub bar numbers to move the playhead.',
       '**Grid** slider zooms the step grid in and out without changing your pattern.',
       '**Export** — **MIDI** or **WAV** download; **To roll** sends the grid to this track’s piano roll; **To track** bounces a WAV loop onto a new audio lane.',
