@@ -554,11 +554,20 @@ export function Se2Lab808Panel({
                 onLockChange={(chordLock) => onVoiceChange({ ...voice, chordLock })}
               />
 
-              <span className="text-[7px] font-semibold leading-tight text-center" style={{ color: '#8a8a98' }}>
+              <span
+                className="block w-full text-[7px] font-semibold leading-none text-center truncate whitespace-nowrap"
+                style={{ color: '#8a8a98', height: 10 }}
+                title={
+                  gridStatus ??
+                  (canGenerate
+                    ? `${progressionRoots.length} roots · ${voice.toneGridLoopBars}-bar · ${keyLabel}`
+                    : 'Select key or chord lane')
+                }
+              >
                 {gridStatus ??
                   (canGenerate
-                    ? `${voice.toneGridLoopBars}-bar grid · ${keyLabel}`
-                    : 'Select key or chord lane')}
+                    ? `${progressionRoots.length}r · ${voice.toneGridLoopBars}-bar · ${keyLabel}`
+                    : 'Select key / chord')}
               </span>
             </aside>
 

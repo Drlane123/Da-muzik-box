@@ -175,7 +175,7 @@ export const STUDIO_EDITOR2_HELP_SECTIONS: readonly StudioEditor2HelpSection[] =
       '**Chord lock** — follow **song key**, a chosen **key**, or a harmony **track** (Progression+, Rhythm Edit, Synth Geno, Glide Bass, Groove Lead, Geno Ultra, Chord Genie…).',
       '**Root scope** dial shows the active key and progression roots; pick a root to highlight it on the grid.',
       '**Generate roots** writes harmony roots onto the **tone grid**; **Regenerate** keeps the same key/roots but rolls a new pocket for the selected **Genre** (sparse kicks + breathing 808 root hits — not melodic runs).',
-      '**Genre** — Trap · R&B · K-pop · Dance · Hip-hop · Drill — changes kick/808 pocket feel. Picking a genre also sets a sensible default **Quantize**.',
+      '**Genre** — Trap · R&B · K-pop · Dance · Hip-hop · Drill · **Dark** · **Sci-fi** — changes kick/808 pocket feel (not the synth sound). Dark/Sci-fi use cinematic sparse hits and darker 808 interval moves. Picking a genre also sets a sensible default **Quantize**.',
       '**Quantize** (1/4 · 1/8 · 1/16 · 1/32) next to Loop — Generate/Regenerate snap to that grid. Default **1/8** for Trap; Dance defaults to **1/4** four-on-the-floor.',
       '**Snare / Clap** — sticky **timing-only** 1-bar strip at the top (Preview / SE2 play). Louder snappy 808 snare + clap for groove while you work — **not** included in MIDI / WAV / To roll / To track exports (kick/bass tone grid only).',
       '**Tone grid** — 16 piano-key lanes, 16th-note steps, **4 / 8 / 16-bar** loop. Tools: **Select** (drag steps), **Draw**, **Erase**, **Clear**. **Play / Stop** previews the loop; scrub bar numbers to move the playhead.',

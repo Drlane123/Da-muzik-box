@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { se2Lab808ProgressionRoots } from '@/app/lib/studio/se2Lab808ChordLock';
 import {
+  SE2_LAB808_ROOT_GEN_GENRE_ORDER,
   se2Lab808GenerateRootGridPattern,
+  se2Lab808LaneForRootMidi,
   se2Lab808QuantizeGridStride,
 } from '@/app/lib/studio/se2Lab808RootGridGenerate';
 
@@ -88,5 +90,60 @@ describe('se2Lab808GenerateRootGridPattern', () => {
       quantize: '1/4',
     });
     expect(dance.hitCount).toBeGreaterThanOrEqual(trap.hitCount);
+  });
+
+  test('dark and scifi genres are available and stay sparse', () => {
+    expect(SE2_LAB808_ROOT_GEN_GENRE_ORDER).toEqual(
+      expect.arrayContaining(['dark', 'scifi']),
+    );
+    for (const genre of ['dark', 'scifi'] as const) {
+      const kick = se2Lab808GenerateRootGridPattern({
+        roots,
+        loopBars: 8,
+        soundLane: 'kick',
+        seed: 42,
+        genre,
+        quantize: '1/4',
+      });
+      const bass = se2Lab808GenerateRootGridPattern({
+        roots,
+        loopBars: 8,
+        soundLane: 'bass',
+        seed: 42,
+        genre,
+        quantize: '1/8',
+      });
+      expect(kick.hitCount).toBeGreaterThan(0);
+      expect(kick.hitCount).toBeLessThanOrEqual(roots.length * 3);
+      expect(bass.hitCount).toBeGreaterThan(0);
+      expect(bass.hitCount).toBeLessThanOrEqual(roots.length * 3);
+      expect(kick.status).toContain(genre === 'dark' ? 'Dark' : 'Sci-fi');
+    }
+  });
+
+  test('dark / scifi bass uses non-root interval lanes', () => {
+    let sawNonRoot = false;
+    for (const genre of ['dark', 'scifi'] as const) {
+      for (const seed of [7, 19, 33, 55, 88]) {
+        const r = se2Lab808GenerateRootGridPattern({
+          roots,
+          loopBars: 8,
+          soundLane: 'bass',
+          seed,
+          genre,
+          quantize: '1/8',
+        });
+        const rootLanes = new Set(
+          roots
+            .map((root) => se2Lab808LaneForRootMidi(r.tonePadBaseMidi, root.midi))
+            .filter((l): l is number => l != null),
+        );
+        for (let lane = 0; lane < 16; lane++) {
+          if (!r.pattern[lane]?.some(Boolean)) continue;
+          if (!rootLanes.has(lane)) sawNonRoot = true;
+        }
+      }
+    }
+    expect(sawNonRoot).toBe(true);
   });
 });

@@ -43,6 +43,9 @@ export const SE2_LAB808_ROOT_GEN_GENRES = {
     kickAdditiveOffsets: [8, 6, 10, 12, 4],
     bassLateHitChance: 0.28,
     bassOctaveFlipChance: 0.12,
+    /** Extra 808 pitch colors as semitone offsets from the chord root (Dark / Sci-fi). */
+    darkIntervalOffsets: [] as readonly number[],
+    darkIntervalChance: 0,
   },
   rnb: {
     id: 'rnb',
@@ -55,6 +58,8 @@ export const SE2_LAB808_ROOT_GEN_GENRES = {
     kickAdditiveOffsets: [8, 12, 6],
     bassLateHitChance: 0.4,
     bassOctaveFlipChance: 0.08,
+    darkIntervalOffsets: [] as readonly number[],
+    darkIntervalChance: 0,
   },
   kpop: {
     id: 'kpop',
@@ -67,6 +72,8 @@ export const SE2_LAB808_ROOT_GEN_GENRES = {
     kickAdditiveOffsets: [8, 4, 12, 10],
     bassLateHitChance: 0.35,
     bassOctaveFlipChance: 0.1,
+    darkIntervalOffsets: [] as readonly number[],
+    darkIntervalChance: 0,
   },
   dance: {
     id: 'dance',
@@ -79,6 +86,8 @@ export const SE2_LAB808_ROOT_GEN_GENRES = {
     kickAdditiveOffsets: [8],
     bassLateHitChance: 0.22,
     bassOctaveFlipChance: 0.05,
+    darkIntervalOffsets: [] as readonly number[],
+    darkIntervalChance: 0,
   },
   hiphop: {
     id: 'hiphop',
@@ -91,6 +100,8 @@ export const SE2_LAB808_ROOT_GEN_GENRES = {
     kickAdditiveOffsets: [6, 10, 8, 14, 4],
     bassLateHitChance: 0.3,
     bassOctaveFlipChance: 0.1,
+    darkIntervalOffsets: [] as readonly number[],
+    darkIntervalChance: 0,
   },
   drill: {
     id: 'drill',
@@ -103,6 +114,38 @@ export const SE2_LAB808_ROOT_GEN_GENRES = {
     kickAdditiveOffsets: [6, 10, 14, 2, 12],
     bassLateHitChance: 0.2,
     bassOctaveFlipChance: 0.06,
+    darkIntervalOffsets: [] as readonly number[],
+    darkIntervalChance: 0,
+  },
+  /** Cinematic / horror — sparse kicks, 808s that lean m3 / b6 / b2. */
+  dark: {
+    id: 'dark',
+    label: 'Dark',
+    defaultQuantize: '1/4' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.22,
+    kickEndRollChance: 0.28,
+    kickTripleChance: 0.45,
+    kickAdditiveOffsets: [12, 8],
+    bassLateHitChance: 0.55,
+    bassOctaveFlipChance: 0.18,
+    darkIntervalOffsets: [3, 8, 1, 10, 6] as readonly number[], // m3, b6, b2, b7, tt
+    darkIntervalChance: 0.72,
+  },
+  /** Sci-fi / cold — wide jumps, delayed hits, tritone / M7 tension. */
+  scifi: {
+    id: 'scifi',
+    label: 'Sci-fi',
+    defaultQuantize: '1/8' as Se2Lab808RootGenQuantize,
+    fourOnFloor: false,
+    kickAdditiveChance: 0.35,
+    kickEndRollChance: 0.2,
+    kickTripleChance: 0.25,
+    kickAdditiveOffsets: [10, 14, 6],
+    bassLateHitChance: 0.62,
+    bassOctaveFlipChance: 0.28,
+    darkIntervalOffsets: [6, 11, 1, 8, 3] as readonly number[], // tt, M7, b2, b6, m3
+    darkIntervalChance: 0.78,
   },
 } as const;
 
@@ -231,12 +274,38 @@ function pickBassColsInBlock(
   const blockLen = Math.max(1, endCol - startCol);
   const hits = new Set<number>([startCol]);
 
+  const lateBias = genre.darkIntervalChance > 0 ? 10 : 8;
   if (blockLen >= stride * 4 && rng() < genre.bassLateHitChance) {
-    const late = snapColToQuantize(startCol + Math.min(8, blockLen - stride), stride, startCol, endCol);
+    const late = snapColToQuantize(
+      startCol + Math.min(lateBias, blockLen - stride),
+      stride,
+      startCol,
+      endCol,
+    );
     if (late != null && late !== startCol) hits.add(late);
   }
 
+  // Dark / sci-fi: one more sparse color hit mid-phrase (still not a melody run).
+  if (genre.darkIntervalChance > 0 && blockLen >= stride * 6 && rng() < genre.darkIntervalChance * 0.45) {
+    const mid = snapColToQuantize(startCol + Math.min(6, blockLen - stride * 2), stride, startCol, endCol);
+    if (mid != null && mid !== startCol) hits.add(mid);
+  }
+
   return [...hits].sort((a, b) => a - b);
+}
+
+function pickDarkLaneNearRoot(
+  rootLane: number,
+  offsets: readonly number[],
+  rng: () => number,
+): number {
+  if (offsets.length === 0) return rootLane;
+  const off = offsets[Math.floor(rng() * offsets.length)]!;
+  const candidates = [rootLane + off, rootLane - off, rootLane + off - 12, rootLane - off + 12].filter(
+    (l) => l >= 0 && l <= 15,
+  );
+  if (candidates.length === 0) return rootLane;
+  return candidates[Math.floor(rng() * candidates.length)]!;
 }
 
 export type Se2Lab808GenerateRootGridResult = {
@@ -286,18 +355,33 @@ export function se2Lab808GenerateRootGridPattern(args: {
       totalSteps,
       Math.max(rawStart + 1, se2Lab808BeatToToneGridCol(root.startBeat + root.durBeats)),
     );
-    const startCol = snapColToQuantize(rawStart, stride, 0, totalSteps) ?? rawStart;
+    let startCol = snapColToQuantize(rawStart, stride, 0, totalSteps) ?? rawStart;
     const endCol = Math.max(startCol + stride, rawEnd);
+
+    // Dark / sci-fi: sometimes delay the first kick for a cinematic drop-in.
+    if (isKick && genre.darkIntervalChance > 0 && rng() < 0.28) {
+      const delayed = snapColToQuantize(startCol + stride * (rng() < 0.5 ? 2 : 1), stride, startCol, endCol);
+      if (delayed != null) startCol = delayed;
+    }
 
     const cols = isKick
       ? pickKickColsInBlock(startCol, endCol, rng, stride, genre)
-      : pickBassColsInBlock(startCol, endCol, rng, stride, genre);
+      : pickBassColsInBlock(startCol, Math.max(endCol, startCol + stride), rng, stride, genre);
 
     for (const col of cols) {
       let lane = rootLane;
-      if (!isKick && col === startCol && rng() < genre.bassOctaveFlipChance) {
-        const oct = rootLane >= 12 ? rootLane - 12 : rootLane + 12;
-        if (oct >= 0 && oct <= 15) lane = oct;
+      if (!isKick) {
+        if (col === startCol && rng() < genre.bassOctaveFlipChance) {
+          const oct = rootLane >= 12 ? rootLane - 12 : rootLane + 12;
+          if (oct >= 0 && oct <= 15) lane = oct;
+        } else if (
+          genre.darkIntervalChance > 0 &&
+          genre.darkIntervalOffsets.length > 0 &&
+          (col !== startCol || rng() < genre.darkIntervalChance * 0.35) &&
+          rng() < genre.darkIntervalChance
+        ) {
+          lane = pickDarkLaneNearRoot(rootLane, genre.darkIntervalOffsets, rng);
+        }
       }
       if (placeHit(pattern, lane, col, totalSteps)) hitCount += 1;
     }
@@ -309,7 +393,7 @@ export function se2Lab808GenerateRootGridPattern(args: {
     pattern,
     tonePadBaseMidi: baseMidi,
     hitCount,
-    status: `${hitCount} hit${hitCount === 1 ? '' : 's'} · ${bars}-bar ${laneLabel} · ${genre.label} · ${quantize}`,
+    status: `${hitCount} · ${bars}b ${laneLabel} · ${genre.label} · ${quantize}`,
   };
 }
 

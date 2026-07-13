@@ -265,8 +265,8 @@ export function Se2Lab808ChordLockPanel({
         title={
           connected
             ? lock.enabled
-              ? 'Chord lock ON — pads play chord roots only'
-              : 'Lock pads to chord roots'
+              ? `Chord lock ON — ${rootCount} root${rootCount === 1 ? '' : 's'}`
+              : `Lock pads to chord roots (${rootCount})`
             : 'Pick a key or chord lane below first'
         }
       >
@@ -295,12 +295,6 @@ export function Se2Lab808ChordLockPanel({
         <span className="truncate font-semibold">{sourceLabel}</span>
         <ChevronDown size={12} className="shrink-0 opacity-70" />
       </button>
-
-      <span className="text-[7px] font-semibold leading-tight" style={{ color: connected ? '#8a8a98' : '#6a6a78' }}>
-        {connected
-          ? `${rootCount} root${rootCount === 1 ? '' : 's'} · pads play roots when locked`
-          : 'Choose a key or chord lane'}
-      </span>
 
       {menu}
     </div>
