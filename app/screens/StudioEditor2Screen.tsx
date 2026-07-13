@@ -23246,20 +23246,28 @@ export default function StudioEditor2Screen({
           </button>
         </div>
 
-        <div className="se2-transport-footer-island se2-transport-mixer-island flex items-end shrink-0">
+        <div className="se2-transport-footer-island se2-transport-mixer-island flex shrink-0">
+          <span
+            className="se2-transport-mixer-label se2-type-micro"
+            style={{ color: showMixer ? '#7cf4c6' : '#8a8a98' }}
+          >
+            Mixer
+          </span>
           <button
             type="button"
             title={showMixer ? 'Hide mixer' : 'Show audio channel mixer'}
+            aria-label={showMixer ? 'Hide mixer' : 'Show mixer'}
             aria-pressed={showMixer}
-            className={`${transportBtnBase} h-7 w-7 rounded border shrink-0`}
+            className={`${transportBtnBase} se2-transport-mixer-btn rounded border shrink-0 inline-flex items-center justify-center`}
             style={{
               borderColor: showMixer ? '#2a4a3c' : '#2a2a32',
-              color: showMixer ? '#7cf4c6' : '#6a6a78',
+              color: showMixer ? '#7cf4c6' : '#8a8a98',
               background: showMixer ? '#14221c' : 'transparent',
             }}
             onClick={toggleStudioMixerView}
           >
-            <SlidersHorizontal size={14} strokeWidth={2} />
+            <SlidersHorizontal size={13} strokeWidth={2} aria-hidden />
+            Mixer
           </button>
         </div>
 
@@ -23269,7 +23277,7 @@ export default function StudioEditor2Screen({
             role="switch"
             aria-checked={metroOn}
             title="Metronome"
-            className={`${transportBtnBase} h-7 min-w-[1.85rem] rounded border shrink-0 px-1.5 text-[9px] font-bold uppercase`}
+            className={`${transportBtnBase} se2-transport-metro-btn h-7 rounded border shrink-0 text-[9px] font-bold uppercase`}
             style={{
               borderColor: metroOn ? '#2a4a3c' : '#2a2a32',
               color: metroOn ? '#7cf4c6' : '#5c5c68',
