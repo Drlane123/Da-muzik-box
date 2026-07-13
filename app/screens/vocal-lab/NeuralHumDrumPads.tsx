@@ -133,7 +133,7 @@ export default function NeuralHumDrumPads({
         <div className="flex flex-wrap items-center gap-2">
           <div
             className="flex items-center rounded overflow-hidden"
-            style={{ border: '1px solid #333', background: '#242424' }}
+            style={{ border: '1px solid #333', background: '#121218' }}
           >
             <button
               type="button"
@@ -152,7 +152,7 @@ export default function NeuralHumDrumPads({
               <Undo2 size={14} />
               Undo
             </button>
-            <div style={{ width: 1, alignSelf: 'stretch', background: '#333' }} />
+            <div style={{ width: 1, alignSelf: 'stretch', background: '#1a1a24' }} />
             <button
               type="button"
               onClick={(e) => {
@@ -174,7 +174,7 @@ export default function NeuralHumDrumPads({
 
           <div
             className="flex items-center rounded overflow-hidden"
-            style={{ border: '1px solid #333', background: '#242424' }}
+            style={{ border: '1px solid #333', background: '#121218' }}
           >
           <button
             type="button"

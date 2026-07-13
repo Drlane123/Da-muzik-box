@@ -79,9 +79,9 @@ export function AiMusicMatchChordRoll({
             onClick={() => onLoopBarCountChange(n)}
             className="px-2 py-1 rounded text-[10px] font-black"
             style={{
-              background: loopBarCount === n ? `${MINT}22` : '#242424',
+              background: loopBarCount === n ? `${MINT}22` : '#121218',
               color: loopBarCount === n ? MINT : '#888',
-              border: `1px solid ${loopBarCount === n ? MINT : '#333'}`,
+              border: `1px solid ${loopBarCount === n ? MINT : '#1a1a24'}`,
             }}
           >
             {n} bars

@@ -830,7 +830,7 @@ export default function NeuralHumPanel({
 
       <div
         className="rounded-lg p-3 flex flex-col gap-3"
-        style={{ background: '#2c2c2c', border: '1px solid #00E5FF22' }}
+        style={{ background: '#0d0d14', border: '1px solid #00E5FF22' }}
       >
         <div className="flex flex-wrap gap-4 items-start justify-between">
           <div className="flex-1 min-w-[200px]">
@@ -860,7 +860,7 @@ export default function NeuralHumPanel({
 
         <div
           className="rounded-md p-3 flex flex-col gap-2"
-          style={{ background: '#1c1c1c', border: '1px solid #222' }}
+          style={{ background: '#0d0d14', border: '1px solid #222' }}
         >
           <div className="flex items-center gap-2">
             <Lock size={14} style={{ color: NH_SCALE.primary }} />
@@ -890,9 +890,9 @@ export default function NeuralHumPanel({
                 }}
                 className="px-2.5 py-1 rounded text-xs font-bold capitalize"
                 style={{
-                  background: keyLockMode === mode ? NH_SCALE.bgTintStrong : '#242424',
+                  background: keyLockMode === mode ? NH_SCALE.bgTintStrong : '#121218',
                   color: keyLockMode === mode ? NH_SCALE.primary : '#666',
-                  border: `1px solid ${keyLockMode === mode ? NH_SCALE.borderHi : '#222'}`,
+                  border: `1px solid ${keyLockMode === mode ? NH_SCALE.borderHi : '#1a1a24'}`,
                 }}
               >
                 {mode === 'auto' ? 'Auto detect' : mode === 'set' ? 'Set (pads)' : mode}
@@ -929,7 +929,7 @@ export default function NeuralHumPanel({
                       setResult(null);
                     }}
                     className="text-xs rounded px-2 py-1 flex-1"
-                    style={{ background: '#242424', color: '#ccc', border: '1px solid #333' }}
+                    style={{ background: '#121218', color: '#ccc', border: '1px solid #333' }}
                   >
                     {NEURAL_HUM_KEY_NAMES.map((name, i) => (
                       <option key={name} value={i}>
@@ -946,7 +946,7 @@ export default function NeuralHumPanel({
                   setResult(null);
                 }}
                 className="text-xs rounded px-2 py-1.5 w-full"
-                style={{ background: '#242424', color: '#ccc', border: '1px solid #333' }}
+                style={{ background: '#121218', color: '#ccc', border: '1px solid #333' }}
               >
                 {NEURAL_HUM_SCALES.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -992,7 +992,7 @@ export default function NeuralHumPanel({
 
       <div
         className="rounded-lg p-3 flex flex-col gap-2 shrink-0"
-        style={{ background: '#1c1c1c', border: `1px solid ${NH_SCALE.borderHi}`, minHeight: 280 }}
+        style={{ background: '#0d0d14', border: `1px solid ${NH_SCALE.borderHi}`, minHeight: 280 }}
       >
         <NeuralHumMelodyRoll
           rollNotes={rollNotes}
@@ -1026,7 +1026,7 @@ export default function NeuralHumPanel({
 
       <div
         className="rounded-lg p-3 flex flex-col gap-3"
-        style={{ background: '#1c1c1c', border: '1px solid #222' }}
+        style={{ background: '#0d0d14', border: '1px solid #222' }}
       >
         <div className="flex flex-col gap-1">
           <span className="text-xs font-bold uppercase tracking-wide" style={{ color: '#888' }}>
@@ -1042,7 +1042,7 @@ export default function NeuralHumPanel({
               setError(null);
             }}
             className="text-sm rounded px-3 py-2 w-full font-semibold"
-            style={{ background: '#242424', color: '#00E5FF', border: '1px solid #00E5FF44' }}
+            style={{ background: '#121218', color: '#00E5FF', border: '1px solid #00E5FF44' }}
           >
             {NEURAL_HUM_INSTRUMENTS.map((inst) => (
               <option key={inst.id} value={inst.id}>
@@ -1069,7 +1069,7 @@ export default function NeuralHumPanel({
 
       <div
         className="rounded-lg p-3"
-        style={{ background: '#1c1c1c', border: '1px solid #222' }}
+        style={{ background: '#0d0d14', border: '1px solid #222' }}
       >
         <NeuralHumDrumPads
           octave={keyboardOctave}
@@ -1133,7 +1133,7 @@ export default function NeuralHumPanel({
           className="py-3 rounded-lg text-sm font-bold transition-all"
           style={{
             background:
-              (hasAudio || rollTimedNotes.length >= 3) && !isTransforming ? '#00E5FF' : '#2c2c2c',
+              (hasAudio || rollTimedNotes.length >= 3) && !isTransforming ? '#00E5FF' : '#0d0d14',
             color: (hasAudio || rollTimedNotes.length >= 3) && !isTransforming ? '#000' : '#444',
             cursor:
               (hasAudio || rollTimedNotes.length >= 3) && !isTransforming ? 'pointer' : 'not-allowed',
@@ -1152,7 +1152,7 @@ export default function NeuralHumPanel({
               <span>{stage}</span>
               <span style={{ color: '#00E5FF', fontWeight: 'bold' }}>{Math.round(progress)}%</span>
             </div>
-            <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: '#2c2c2c' }}>
+            <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: '#0d0d14' }}>
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{ width: `${progress}%`, background: '#00E5FF', boxShadow: '0 0 12px #00E5FF' }}
@@ -1186,9 +1186,9 @@ export default function NeuralHumPanel({
               }}
               className="flex-1 py-1.5 rounded text-xs font-bold"
               style={{
-                background: playbackMode === 'original' ? '#1a2a2a' : '#242424',
+                background: playbackMode === 'original' ? '#1a2a2a' : '#121218',
                 color: playbackMode === 'original' ? '#00E5FF' : '#555',
-                border: `1px solid ${playbackMode === 'original' ? '#00E5FF44' : '#222'}`,
+                border: `1px solid ${playbackMode === 'original' ? '#00E5FF44' : '#1a1a24'}`,
               }}
             >
               Hum
@@ -1202,9 +1202,9 @@ export default function NeuralHumPanel({
               }}
               className="flex-1 py-1.5 rounded text-xs font-bold"
               style={{
-                background: playbackMode === 'instrument' ? '#1a2a2a' : '#242424',
+                background: playbackMode === 'instrument' ? '#1a2a2a' : '#121218',
                 color: playbackMode === 'instrument' ? '#00ff88' : '#555',
-                border: `1px solid ${playbackMode === 'instrument' ? '#00ff8844' : '#222'}`,
+                border: `1px solid ${playbackMode === 'instrument' ? '#00ff8844' : '#1a1a24'}`,
                 opacity: result ? 1 : 0.45,
                 cursor: result ? 'pointer' : 'not-allowed',
               }}
@@ -1220,7 +1220,7 @@ export default function NeuralHumPanel({
               disabled={playbackMode === 'instrument' ? !result : !hasAudio}
               className="flex items-center justify-center gap-1 px-4 py-2 rounded-lg font-bold text-sm transition-all"
               style={{
-                background: isPlaying ? '#00ff88' : '#2c2c2c',
+                background: isPlaying ? '#00ff88' : '#0d0d14',
                 color: isPlaying ? '#000' : '#00ff88',
                 border: '1px solid #00ff8844',
                 cursor: 'pointer',
@@ -1244,7 +1244,7 @@ export default function NeuralHumPanel({
                 type="button"
                 onClick={() => downloadNeuralHumWav(result.wavBlob, selectedMeta?.label ?? 'instrument')}
                 className="flex items-center justify-center p-2 rounded-lg"
-                style={{ background: '#2c2c2c', color: '#00E5FF', border: '1px solid #00E5FF44' }}
+                style={{ background: '#0d0d14', color: '#00E5FF', border: '1px solid #00E5FF44' }}
                 title="Download WAV"
               >
                 <Download size={14} />
@@ -1273,7 +1273,7 @@ export default function NeuralHumPanel({
                             : threshold > 60
                               ? '#ffaa00'
                               : '#00ff88'
-                          : '#2c2c2c',
+                          : '#0d0d14',
                         borderRadius: '2px',
                         transition: 'all 50ms',
                       }}

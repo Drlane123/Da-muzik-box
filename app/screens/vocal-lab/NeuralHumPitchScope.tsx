@@ -68,7 +68,7 @@ export default function NeuralHumPitchScope({
   return (
     <div className="flex flex-col items-center gap-1">
       <svg width={dial} height={dial} viewBox={`0 0 ${size} ${size}`} aria-label="Pitch scope">
-        <circle cx={cx} cy={cy} r={outerR + 6} fill="#2a2a2a" stroke="#2c2c2c" strokeWidth={1} />
+        <circle cx={cx} cy={cy} r={outerR + 6} fill="#16161c" stroke="#0d0d14" strokeWidth={1} />
         {NOTE_LABELS.map((name, pc) => {
           const angle = (pc / 12) * Math.PI * 2 - Math.PI / 2;
           const x1 = cx + Math.cos(angle) * innerR;
@@ -91,7 +91,7 @@ export default function NeuralHumPitchScope({
                 y1={y1}
                 x2={x2}
                 y2={y2}
-                stroke={inScale ? NH_SCALE.scopeInScale : '#222'}
+                stroke={inScale ? NH_SCALE.scopeInScale : '#1a1a24'}
                 strokeWidth={inScale ? 2.5 : 1}
               />
               {lit && (
@@ -120,7 +120,7 @@ export default function NeuralHumPitchScope({
                       ? NH_SCALE.scopeWedge
                       : '#151515'
                 }
-                stroke={lit ? '#00ff88' : inScale ? NH_SCALE.accent : '#333'}
+                stroke={lit ? '#00ff88' : inScale ? NH_SCALE.accent : '#1a1a24'}
                 strokeWidth={lit ? 1.5 : inScale ? 1 : 0.75}
                 strokeLinejoin="round"
                 style={lit ? { filter: 'drop-shadow(0 0 4px #00ff88)' } : undefined}
@@ -159,7 +159,7 @@ export default function NeuralHumPitchScope({
             );
           })()
         )}
-        <circle cx={cx} cy={cy} r={innerR - 8} fill="#1c1c1c" stroke="#222" strokeWidth={1} />
+        <circle cx={cx} cy={cy} r={innerR - 8} fill="#0d0d14" stroke="#1a1a24" strokeWidth={1} />
         <text x={cx} y={cy - 6} textAnchor="middle" fontSize={9} fill="#666" fontFamily="system-ui">
           {isRecording ? 'LISTEN' : 'SCOPE'}
         </text>

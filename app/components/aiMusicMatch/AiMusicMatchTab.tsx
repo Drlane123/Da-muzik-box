@@ -62,8 +62,8 @@ function MatchProgressPanel({
     <div
       className="rounded-xl p-4 flex flex-col gap-3"
       style={{
-        background: isComplete ? 'rgba(124, 244, 198, 0.08)' : '#1c1c1c',
-        border: `1px solid ${isComplete ? `${MINT}55` : isError ? '#f4a0a044' : '#222'}`,
+        background: isComplete ? 'rgba(124, 244, 198, 0.08)' : '#0d0d14',
+        border: `1px solid ${isComplete ? `${MINT}55` : isError ? '#f4a0a044' : '#1a1a24'}`,
       }}
     >
       <div className="flex justify-between items-center gap-3 text-xs">
@@ -73,7 +73,7 @@ function MatchProgressPanel({
         </span>
         <span style={{ color: accent, fontWeight: 900 }}>{pct}%</span>
       </div>
-      <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: '#2c2c2c' }}>
+      <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: '#0d0d14' }}>
         <div
           className="h-full rounded-full transition-all duration-300"
           style={{
@@ -514,7 +514,7 @@ export default function AiMusicMatchTab({
         </div>
       ) : null}
 
-      <div className="rounded-xl p-5 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #222' }}>
+      <div className="rounded-xl p-5 flex flex-col gap-3" style={{ background: '#0d0d14', border: '1px solid #222' }}>
         <span className="text-xs font-black uppercase tracking-widest" style={{ color: CYAN }}>
           2 · Based on Music Match
         </span>
@@ -536,9 +536,9 @@ export default function AiMusicMatchTab({
               }}
               className="px-3 py-2 rounded-lg text-xs font-bold"
               style={{
-                background: matchSource === opt.id ? `${CYAN}22` : '#242424',
+                background: matchSource === opt.id ? `${CYAN}22` : '#121218',
                 color: matchSource === opt.id ? CYAN : '#888',
-                border: `1px solid ${matchSource === opt.id ? CYAN : '#333'}`,
+                border: `1px solid ${matchSource === opt.id ? CYAN : '#1a1a24'}`,
               }}
             >
               {opt.label}
@@ -548,7 +548,7 @@ export default function AiMusicMatchTab({
       </div>
 
       <div className="grid w-full min-w-0 gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #222' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0d0d14', border: '1px solid #222' }}>
           <span className="text-xs font-black uppercase tracking-widest" style={{ color: PURPLE }}>
             3 · Genre
           </span>
@@ -560,9 +560,9 @@ export default function AiMusicMatchTab({
                 onClick={() => setGenre(g)}
                 className="px-2 py-1 rounded text-xs font-medium"
                 style={{
-                  background: genre === g ? `${PURPLE}22` : '#242424',
+                  background: genre === g ? `${PURPLE}22` : '#121218',
                   color: genre === g ? PURPLE : '#888',
-                  border: `1px solid ${genre === g ? PURPLE : '#333'}`,
+                  border: `1px solid ${genre === g ? PURPLE : '#1a1a24'}`,
                 }}
               >
                 {g}
@@ -570,7 +570,7 @@ export default function AiMusicMatchTab({
             ))}
           </div>
         </div>
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #222' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0d0d14', border: '1px solid #222' }}>
           <span className="text-xs font-black uppercase tracking-widest" style={{ color: CYAN }}>
             Mood / style
           </span>
@@ -582,9 +582,9 @@ export default function AiMusicMatchTab({
                 onClick={() => setMood(m)}
                 className="px-2 py-1 rounded text-xs font-medium"
                 style={{
-                  background: mood === m ? `${CYAN}22` : '#242424',
+                  background: mood === m ? `${CYAN}22` : '#121218',
                   color: mood === m ? CYAN : '#888',
-                  border: `1px solid ${mood === m ? CYAN : '#333'}`,
+                  border: `1px solid ${mood === m ? CYAN : '#1a1a24'}`,
                 }}
               >
                 {m}
@@ -600,7 +600,7 @@ export default function AiMusicMatchTab({
         disabled={busy || !audioBuffer}
         className="py-3.5 rounded-xl text-sm font-black flex items-center justify-center gap-2"
         style={{
-          background: busy || !audioBuffer ? '#2c2c2c' : `linear-gradient(135deg, ${MINT}, ${CYAN})`,
+          background: busy || !audioBuffer ? '#0d0d14' : `linear-gradient(135deg, ${MINT}, ${CYAN})`,
           color: busy || !audioBuffer ? '#555' : '#000',
         }}
       >

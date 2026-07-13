@@ -337,9 +337,9 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
   return (
     <VocalLabHelpProvider autoIntro introTab="melody-midi" introStorageKey={MELODY_MIDI_HELP_INTRO_STORAGE}>
-    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}>
+    <div className="flex flex-col h-full" style={{ background: '#16161c', color: '#ccc' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}>
+      <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: '1px solid #0d0d14', background: '#0d0d14' }}>
         <div className="flex items-center gap-3">
           {onBack && (
             <button onClick={onBack} className="p-1.5 rounded hover:bg-slate-800">
@@ -354,7 +354,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
               Melody-to-MIDI Transcription
               <VocalLabHelpTip tab="melody-midi" title="Melody-to-MIDI transcription" />
             </h2>
-            <p className="text-xs" style={{ color: '#555' }}>
+            <p className="text-xs" style={{ color: '#7a7a88' }}>
               {state.midiNotes.length > 0 ? `${state.midiNotes.length} notes · ${bpm} BPM` : 'Capture or upload audio'}
             </p>
           </div>
@@ -374,7 +374,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
         {/* Section 1: Input */}
-        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+        <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
           <span className="text-xs font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#ff6b35' }}>
             Audio Input
             <VocalLabHelpTip tab="melody-midi" title="Record or upload audio" />
@@ -383,13 +383,13 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
           <div className="flex gap-2">
             <button onClick={state.isRecording ? stopRecording : startRecording}
               className="flex-1 py-3 rounded-lg flex items-center justify-center gap-2 font-semibold transition-all"
-              style={{ background: state.isRecording ? '#ff6b3522' : '#242424', color: state.isRecording ? '#ff6b35' : '#666', border: `1px solid ${state.isRecording ? '#ff6b3544' : '#222'}`, cursor: 'pointer' }}>
+              style={{ background: state.isRecording ? '#ff6b3522' : '#121218', color: state.isRecording ? '#ff6b35' : '#666', border: `1px solid ${state.isRecording ? '#ff6b3544' : '#1a1a24'}`, cursor: 'pointer' }}>
               <Mic size={16} />
               {state.isRecording ? 'Stop Recording' : 'Start Recording'}
             </button>
 
             <label className="flex-1 py-3 rounded-lg flex items-center justify-center gap-2 font-semibold transition-all cursor-pointer"
-              style={{ background: '#242424', color: '#666', border: '1px solid #222' }}>
+              style={{ background: '#121218', color: '#666', border: '1px solid #222' }}>
               <Upload size={16} />
               Upload Audio
               <input type="file" accept="audio/*" onChange={e => {
@@ -415,7 +415,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
         {/* Section 1b: Waveform & Level Visualizer */}
         {state.isRecording && (
-          <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>Recording Monitor</span>
             <div className="flex gap-4">
               <div className="flex-1">
@@ -430,7 +430,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
         {/* Section 2: Transcription Controls */}
         {state.pitchEvents.length > 0 && (
-          <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-4" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
             <span className="text-xs font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#00E5FF' }}>
               Transcription Options
               <VocalLabHelpTip tab="melody-midi" title="Transpose, quantize & transcribe" />
@@ -487,7 +487,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
                 {['none', '1/4', '1/8', '1/16'].map(q => (
                   <button key={q} onClick={() => setQuantization(q as any)}
                     className="flex-1 py-1.5 rounded text-xs font-semibold"
-                    style={{ background: quantization === q ? '#ffcc0022' : '#242424', color: quantization === q ? '#ffcc00' : '#666', border: `1px solid ${quantization === q ? '#ffcc0044' : '#222'}`, cursor: 'pointer' }}>
+                    style={{ background: quantization === q ? '#ffcc0022' : '#121218', color: quantization === q ? '#ffcc00' : '#666', border: `1px solid ${quantization === q ? '#ffcc0044' : '#1a1a24'}`, cursor: 'pointer' }}>
                     {q}
                   </button>
                 ))}
@@ -516,13 +516,13 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
         {/* Section 2b: Loop Length */}
         {state.pitchEvents.length > 0 && (
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#ffcc00' }}>Pattern Length</span>
             <div className="flex gap-2">
               {[1, 2, 4, 8, 16].map(len => (
                 <button key={len} onClick={() => setLoopLength(len)}
                   className="flex-1 py-1.5 rounded text-xs font-semibold"
-                  style={{ background: loopLength === len ? '#ffcc0022' : '#242424', color: loopLength === len ? '#ffcc00' : '#666', border: `1px solid ${loopLength === len ? '#ffcc0044' : '#222'}`, cursor: 'pointer' }}>
+                  style={{ background: loopLength === len ? '#ffcc0022' : '#121218', color: loopLength === len ? '#ffcc00' : '#666', border: `1px solid ${loopLength === len ? '#ffcc0044' : '#1a1a24'}`, cursor: 'pointer' }}>
                   {len}B
                 </button>
               ))}
@@ -533,7 +533,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
         {/* Section 3: Piano Roll Editor */}
         {state.pitchEvents.length > 0 && (
           <div className="flex flex-col gap-2" style={{ marginTop: 12 }}>
-            <div className="rounded-xl p-4 pb-2" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+            <div className="rounded-xl p-4 pb-2" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
               <span className="text-xs font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#a78bfa' }}>
                 Piano Roll - Detected Pitch Notes + Manual Editing
                 <VocalLabHelpTip tab="melody-midi" title="Edit transcribed MIDI" />
@@ -542,7 +542,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
                 Click to add notes • Click on notes to delete • Ctrl+Scroll to zoom • Scroll to pan
               </p>
             </div>
-            <div className="rounded-xl overflow-hidden" style={{ background: '#1c1c1c', border: '1px solid #303030', height: 650 }}>
+            <div className="rounded-xl overflow-hidden" style={{ background: '#0d0d14', border: '1px solid #1a1a24', height: 650 }}>
               <PianoRollEditor
                 midiNotes={state.midiNotes}
                 onNotesChange={(notes) => {
@@ -572,21 +572,21 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
         {/* Section 4: Playback & Export */}
         {state.midiNotes.length > 0 && (
-          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+          <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#00E5FF' }}>
                 Playback & Export ({state.midiNotes.length} notes)
               </span>
               <button onClick={() => isPlayingMidi ? stopTranscribedPlayback() : playTranscribedMidi()}
                 className="px-3 py-1.5 rounded text-xs font-semibold transition-all"
-                style={{ background: isPlayingMidi ? '#ff6b3522' : '#242424', color: isPlayingMidi ? '#ff6b35' : '#666', border: `1px solid ${isPlayingMidi ? '#ff6b3544' : '#222'}`, cursor: 'pointer' }}>
+                style={{ background: isPlayingMidi ? '#ff6b3522' : '#121218', color: isPlayingMidi ? '#ff6b35' : '#666', border: `1px solid ${isPlayingMidi ? '#ff6b3544' : '#1a1a24'}`, cursor: 'pointer' }}>
                 {isPlayingMidi ? <>⏸ Stop</> : <>▶ Play</>}
               </button>
             </div>
 
             {/* Notes Summary Table */}
-            <div style={{ background: '#242424', border: '1px solid #222', borderRadius: 4, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
-              <div className="sticky top-0 grid gap-0" style={{ gridTemplateColumns: '30px 50px 60px 80px 60px', background: '#1c1c1c', borderBottom: '1px solid #222', padding: 6 }}>
+            <div style={{ background: '#121218', border: '1px solid #222', borderRadius: 4, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
+              <div className="sticky top-0 grid gap-0" style={{ gridTemplateColumns: '30px 50px 60px 80px 60px', background: '#0d0d14', borderBottom: '1px solid #222', padding: 6 }}>
                 <span className="text-10px font-bold" style={{ color: '#666' }}>#</span>
                 <span className="text-10px font-bold" style={{ color: '#666' }}>Pitch</span>
                 <span className="text-10px font-bold" style={{ color: '#666' }}>Start</span>
@@ -600,7 +600,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
                 const durationBeats = (note.duration / PPQ).toFixed(2);
                 return (
                   <div key={idx} className="grid gap-0 border-b py-2 px-6 text-10px"
-                    style={{ gridTemplateColumns: '30px 50px 60px 80px 60px', borderColor: '#2c2c2c', color: idx % 2 === 0 ? '#00ff88' : '#ff6b35' }}>
+                    style={{ gridTemplateColumns: '30px 50px 60px 80px 60px', borderColor: '#0d0d14', color: idx % 2 === 0 ? '#00ff88' : '#ff6b35' }}>
                     <span>{idx + 1}</span>
                     <span style={{ fontWeight: 'bold' }}>{noteName}{octave}</span>
                     <span style={{ color: '#888' }}>{beatStart}b</span>
@@ -615,8 +615,8 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
         {/* Empty state */}
         {state.pitchEvents.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: '#333' }}>
-            <Mic size={32} style={{ color: '#2c2c2c' }} />
+          <div className="flex-1 flex flex-col items-center justify-center gap-3" style={{ color: '#1a1a24' }}>
+            <Mic size={32} style={{ color: '#0d0d14' }} />
             <p className="text-sm">Record or upload audio to begin</p>
           </div>
         )}
@@ -625,10 +625,10 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
       {/* Export Modal */}
       {showExportModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="rounded-xl p-6 max-w-md w-full" style={{ background: '#1c1c1c', border: '1px solid #303030' }}>
+          <div className="rounded-xl p-6 max-w-md w-full" style={{ background: '#0d0d14', border: '1px solid #1a1a24' }}>
             <h3 className="text-sm font-bold mb-4" style={{ color: '#fff' }}>Export Transcription</h3>
             
-            <div className="mb-4 p-3 rounded" style={{ background: '#242424', border: '1px solid #222' }}>
+            <div className="mb-4 p-3 rounded" style={{ background: '#121218', border: '1px solid #222' }}>
               <p className="text-xs mb-2" style={{ color: '#888' }}>
                 <strong>{state.midiNotes.length} MIDI Notes</strong>
               </p>
@@ -641,7 +641,7 @@ export default function MelodyTranscriptionScreen({ onExport, onBack }: { onExpo
 
             <div className="flex gap-2">
               <button onClick={() => setShowExportModal(false)} className="flex-1 py-2 rounded text-xs font-bold" 
-                style={{ background: '#242424', color: '#666', border: '1px solid #222', cursor: 'pointer' }}>
+                style={{ background: '#121218', color: '#666', border: '1px solid #222', cursor: 'pointer' }}>
                 Cancel
               </button>
               <button onClick={() => exportMidi('creation-station')} className="flex-1 py-2 rounded text-xs font-bold" 

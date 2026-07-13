@@ -91,7 +91,7 @@ export default function VocalCapturePanel({
             <button
               onClick={onPlayPause}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
-              style={{ background: '#2c2c2c', color: '#00E5FF', border: '1px solid #00E5FF44' }}
+              style={{ background: '#0d0d14', color: '#00E5FF', border: '1px solid #00E5FF44' }}
             >
               {isPlaying ? <Pause size={12} /> : <Play size={12} />}
               {isPlaying ? 'Pause' : 'Play'}
@@ -99,7 +99,7 @@ export default function VocalCapturePanel({
             <button
               onClick={onDelete}
               className="w-7 h-7 flex items-center justify-center rounded"
-              style={{ background: '#2c2c2c', color: '#666' }}
+              style={{ background: '#0d0d14', color: '#666' }}
             >
               <Trash2 size={12} />
             </button>
@@ -109,7 +109,7 @@ export default function VocalCapturePanel({
           <button
             onClick={onDelete}
             className="w-7 h-7 flex items-center justify-center rounded"
-            style={{ background: '#2c2c2c', color: '#666' }}
+            style={{ background: '#0d0d14', color: '#666' }}
             title="Clear recording"
           >
             <Trash2 size={12} />
@@ -119,7 +119,7 @@ export default function VocalCapturePanel({
         <button
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold ml-auto"
-          style={{ background: '#242424', color: '#888', border: '1px solid #333' }}
+          style={{ background: '#121218', color: '#888', border: '1px solid #333' }}
         >
           <Upload size={12} /> Upload
         </button>

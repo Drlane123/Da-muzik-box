@@ -140,7 +140,7 @@ export default function AiMusicMatchLoopPanel({
   return (
     <div
       className="flex flex-col gap-4 rounded-xl p-4 w-full min-w-0"
-      style={{ background: '#1c1c1c', border: `2px solid ${MINT}44` }}
+      style={{ background: '#0d0d14', border: `2px solid ${MINT}44` }}
     >
       <div>
         <p className="text-xs font-black uppercase tracking-widest" style={{ color: MINT }}>
@@ -161,7 +161,7 @@ export default function AiMusicMatchLoopPanel({
             disabled={!canGenerate || matching}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-black"
             style={{
-              background: !canGenerate || matching ? '#222' : `linear-gradient(135deg, ${MINT}, ${CYAN})`,
+              background: !canGenerate || matching ? '#1a1a24' : `linear-gradient(135deg, ${MINT}, ${CYAN})`,
               color: !canGenerate || matching ? '#666' : '#000',
             }}
           >
@@ -173,7 +173,7 @@ export default function AiMusicMatchLoopPanel({
             type="button"
             onClick={exportStudio}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-black"
-            style={{ background: '#242424', color: CYAN, border: `1px solid ${CYAN}55` }}
+            style={{ background: '#121218', color: CYAN, border: `1px solid ${CYAN}55` }}
           >
             <ExternalLink size={12} />
             Send to Studio Editor 2
@@ -209,8 +209,8 @@ export default function AiMusicMatchLoopPanel({
                 onClick={() => onSelectCandidate(c.id)}
                 className="text-left px-3 py-2 rounded-lg text-xs max-w-full"
                 style={{
-                  background: active ? 'rgba(124, 244, 198, 0.12)' : '#242424',
-                  border: `1px solid ${active ? MINT : '#333'}`,
+                  background: active ? 'rgba(124, 244, 198, 0.12)' : '#121218',
+                  border: `1px solid ${active ? MINT : '#1a1a24'}`,
                   color: active ? MINT : '#aaa',
                 }}
               >
@@ -264,7 +264,7 @@ export default function AiMusicMatchLoopPanel({
             type="button"
             onClick={() => onOpenGrooveLab(selected)}
             className="text-[10px] font-bold px-3 py-1.5 rounded border"
-            style={{ borderColor: '#333', color: '#888' }}
+            style={{ borderColor: '#1a1a24', color: '#888' }}
           >
             Open in Groove Lab instead
           </button>

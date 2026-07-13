@@ -33,10 +33,10 @@ export default function AiMusicMatchScreen({
   onExportStudio: (payload: import('@/app/lib/aiMusicMatch/aiMusicMatchStudioExport').PendingAiMatchStudioImport) => void;
 }) {
   return (
-    <div className="flex flex-col h-full" style={{ background: '#2a2a2a', color: '#ccc' }}>
+    <div className="flex flex-col h-full" style={{ background: '#16161c', color: '#ccc' }}>
       <div
         className="flex items-center justify-between px-5 py-3 shrink-0 flex-wrap gap-3"
-        style={{ borderBottom: '1px solid #2c2c2c', background: '#2c2c2c' }}
+        style={{ borderBottom: '1px solid #0d0d14', background: '#0d0d14' }}
       >
         <div className="flex items-center gap-3">
           <div
@@ -49,7 +49,7 @@ export default function AiMusicMatchScreen({
             <h2 className="text-sm font-bold" style={{ color: '#fff' }}>
               AI Music Match
             </h2>
-            <p className="text-xs" style={{ color: '#555' }}>
+            <p className="text-xs" style={{ color: '#7a7a88' }}>
               Vocal stem in → key detect → chord roll + bass → Studio Editor 2
             </p>
           </div>

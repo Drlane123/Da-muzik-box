@@ -79,9 +79,9 @@ function OctaveKeys({
     let keyOpacity = 1;
 
     if (outOfScale) {
-      bg = black ? '#1c1c1c' : '#303030';
+      bg = black ? '#0d0d14' : '#1a1a24';
       border = '#252525';
-      labelColor = '#333';
+      labelColor = '#1a1a24';
       keyOpacity = black ? 0.28 : 0.32;
     } else if (isRoot && !black) {
       labelColor = PIANO.labelRoot;
@@ -220,8 +220,8 @@ export default function NeuralHumMiniKeyboard({
       <div
         className="flex items-center justify-between gap-2 rounded-md px-2.5 py-1.5"
         style={{
-          background: keyLockOff ? '#242424' : NH_SCALE.bgTint,
-          border: `1px solid ${keyLockOff ? '#222' : NH_SCALE.borderHi}`,
+          background: keyLockOff ? '#121218' : NH_SCALE.bgTint,
+          border: `1px solid ${keyLockOff ? '#1a1a24' : NH_SCALE.borderHi}`,
         }}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -247,7 +247,7 @@ export default function NeuralHumMiniKeyboard({
             type="button"
             onClick={() => onOctaveChange(Math.max(2, octave - 1))}
             className="px-1.5 py-0.5 rounded text-xs font-bold"
-            style={{ background: '#242424', color: '#888', border: '1px solid #333' }}
+            style={{ background: '#121218', color: '#888', border: '1px solid #333' }}
           >
             −
           </button>
@@ -258,7 +258,7 @@ export default function NeuralHumMiniKeyboard({
             type="button"
             onClick={() => onOctaveChange(Math.min(5, octave + 1))}
             className="px-1.5 py-0.5 rounded text-xs font-bold"
-            style={{ background: '#242424', color: '#888', border: '1px solid #333' }}
+            style={{ background: '#121218', color: '#888', border: '1px solid #333' }}
           >
             +
           </button>
@@ -290,7 +290,7 @@ export default function NeuralHumMiniKeyboard({
           <span className="flex items-center gap-1">
             <span
               className="inline-block rounded-sm"
-              style={{ width: 10, height: 10, background: '#303030', border: '1px solid #252525', opacity: 0.45 }}
+              style={{ width: 10, height: 10, background: '#1a1a24', border: '1px solid #252525', opacity: 0.45 }}
             />
             Out of scale
           </span>
@@ -306,7 +306,7 @@ export default function NeuralHumMiniKeyboard({
 
       <div
         className="relative select-none rounded-md overflow-hidden flex gap-px"
-        style={{ height: 96, background: '#2a2a2a', border: '1px solid #333', padding: 2 }}
+        style={{ height: 96, background: '#16161c', border: '1px solid #333', padding: 2 }}
       >
         {Array.from({ length: OCTAVE_COUNT }, (_, i) => (
           <OctaveKeys

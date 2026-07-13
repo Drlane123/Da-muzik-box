@@ -119,7 +119,7 @@ export default function WaveformCanvas({
       const H = canvas.height;
       ctx.clearRect(0, 0, W, H);
 
-      ctx.fillStyle = '#1c1c1c';
+      ctx.fillStyle = '#0d0d14';
       ctx.fillRect(0, 0, W, H);
 
       ctx.strokeStyle = '#141414';
@@ -158,7 +158,7 @@ export default function WaveformCanvas({
         const y = H - 3 - barH;
 
         ctx.fillStyle =
-          isRecording && level > REST_LEVEL * 2 ? barColor(level, accentColor) : '#1c1c1c';
+          isRecording && level > REST_LEVEL * 2 ? barColor(level, accentColor) : '#0d0d14';
         if (isRecording && level > 0.18) {
           ctx.shadowBlur = 6;
           ctx.shadowColor = accentColor;

@@ -491,7 +491,7 @@ export default function EnhancementSuite({ audioBlob = null }: EnhancementSuiteP
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold"
-            style={{ background: '#242424', color: '#00E5FF', border: '1px solid #00E5FF44', cursor: 'pointer' }}
+            style={{ background: '#121218', color: '#00E5FF', border: '1px solid #00E5FF44', cursor: 'pointer' }}
           >
             <Upload size={12} /> Import WAV / MP3
           </button>
@@ -503,7 +503,7 @@ export default function EnhancementSuite({ audioBlob = null }: EnhancementSuiteP
                 setImportedName(null);
               }}
               className="px-2 py-1.5 rounded text-9px font-bold"
-              style={{ background: '#2c2c2c', color: '#888', border: '1px solid #333' }}
+              style={{ background: '#0d0d14', color: '#888', border: '1px solid #333' }}
             >
               Clear import
             </button>
@@ -529,7 +529,7 @@ export default function EnhancementSuite({ audioBlob = null }: EnhancementSuiteP
               onClick={toggleSourcePlay}
               className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold"
               style={{
-                background: isPlayingSource ? '#888' : '#2c2c2c',
+                background: isPlayingSource ? '#888' : '#0d0d14',
                 color: isPlayingSource ? '#fff' : '#ccc',
                 border: '1px solid #444',
                 cursor: 'pointer',
@@ -734,7 +734,7 @@ export default function EnhancementSuite({ audioBlob = null }: EnhancementSuiteP
             disabled={!hasSource || isProcessing}
             className="flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-bold"
             style={{
-              background: hasSource && !isProcessing ? '#00E5FF' : '#2c2c2c',
+              background: hasSource && !isProcessing ? '#00E5FF' : '#0d0d14',
               color: hasSource && !isProcessing ? '#000' : '#444',
               cursor: hasSource && !isProcessing ? 'pointer' : 'not-allowed',
             }}
@@ -748,7 +748,7 @@ export default function EnhancementSuite({ audioBlob = null }: EnhancementSuiteP
             disabled={!hasSource || isProcessing}
             className="flex items-center justify-center gap-2 px-3 py-2 rounded text-xs font-bold"
             style={{
-              background: hasSource && !isProcessing ? '#1a2a1a' : '#2c2c2c',
+              background: hasSource && !isProcessing ? '#1a2a1a' : '#0d0d14',
               color: hasSource && !isProcessing ? '#00ff88' : '#444',
               border: '1px solid #00ff8844',
               cursor: hasSource && !isProcessing ? 'pointer' : 'not-allowed',
@@ -777,7 +777,7 @@ export default function EnhancementSuite({ audioBlob = null }: EnhancementSuiteP
                 onClick={toggleEnhancedPlay}
                 className="flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold"
                 style={{
-                  background: isPlayingEnhanced ? '#00E5FF' : '#2c2c2c',
+                  background: isPlayingEnhanced ? '#00E5FF' : '#0d0d14',
                   color: isPlayingEnhanced ? '#000' : '#00E5FF',
                   border: '1px solid #00E5FF44',
                 }}

@@ -272,7 +272,7 @@ export default function RVCSingingConverterPanel() {
             onClick={isRecording ? stopRecording : startRecording}
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded font-bold text-sm transition-all"
             style={{
-              background: isRecording ? '#ff4444' : '#2c2c2c',
+              background: isRecording ? '#ff4444' : '#0d0d14',
               color: isRecording ? '#fff' : '#00E5FF',
               border: `1px solid ${isRecording ? '#ff4444' : '#00E5FF44'}`,
               cursor: 'pointer',
@@ -297,7 +297,7 @@ export default function RVCSingingConverterPanel() {
               onClick={toggleOriginalPlay}
               className="flex items-center justify-center gap-1 px-3 py-1.5 rounded font-bold text-xs"
               style={{
-                background: isPlayingOriginal ? '#00ff88' : '#2c2c2c',
+                background: isPlayingOriginal ? '#00ff88' : '#0d0d14',
                 color: isPlayingOriginal ? '#000' : '#00ff88',
                 border: '1px solid #00ff8844',
                 cursor: 'pointer',
@@ -361,8 +361,8 @@ export default function RVCSingingConverterPanel() {
               }}
               className="p-2 rounded-lg text-9px transition-all text-left"
               style={{
-                background: settings.presetId === model.id ? 'rgba(167, 139, 250, 0.2)' : '#242424',
-                border: `1px solid ${settings.presetId === model.id ? '#a78bfa' : '#222'}`,
+                background: settings.presetId === model.id ? 'rgba(167, 139, 250, 0.2)' : '#121218',
+                border: `1px solid ${settings.presetId === model.id ? '#a78bfa' : '#1a1a24'}`,
                 color: settings.presetId === model.id ? '#a78bfa' : '#555',
               }}
             >
@@ -446,7 +446,7 @@ export default function RVCSingingConverterPanel() {
       </button>
 
       {isProcessing && (
-        <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: '#2c2c2c' }}>
+        <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: '#0d0d14' }}>
           <div
             style={{
               width: `${conversionProgress}%`,
@@ -484,7 +484,7 @@ export default function RVCSingingConverterPanel() {
               onClick={toggleConvertedPlay}
               className="flex items-center justify-center gap-1 px-3 py-1.5 rounded font-bold text-xs"
               style={{
-                background: isPlayingConverted ? '#D500F9' : '#2c2c2c',
+                background: isPlayingConverted ? '#D500F9' : '#0d0d14',
                 color: isPlayingConverted ? '#000' : '#D500F9',
                 border: '1px solid #D500F944',
                 cursor: 'pointer',
@@ -522,7 +522,7 @@ export default function RVCSingingConverterPanel() {
         </div>
       )}
 
-      <div className="p-2 rounded text-9px" style={{ background: '#2c2c2c', color: '#888', borderLeft: '2px solid #00FFFF' }}>
+      <div className="p-2 rounded text-9px" style={{ background: '#0d0d14', color: '#888', borderLeft: '2px solid #00FFFF' }}>
         <strong>Open source:</strong> Browser formant + EQ presets work offline. For real RVC .pth models, run{' '}
         <code style={{ color: '#00E5FF' }}>npm run music-enhancer-server</code> and set{' '}
         <code style={{ color: '#00E5FF' }}>RVC_INFER_URL</code> to your local RVC WebUI.
