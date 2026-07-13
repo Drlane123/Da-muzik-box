@@ -4,6 +4,7 @@
 import '@/app/globals.css';
 
 import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 import { MasterClockProvider } from '@/app/context/MasterClockContext';
 
@@ -33,6 +34,7 @@ import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
 
 import { type ScreenId } from '@/app/lib/navigation/moduleNav';
+import { prefetchModuleScreen, prefetchCommonModuleScreens } from '@/app/lib/navigation/prefetchModuleScreens';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import {
   screenToVocalLabSubScreen,
@@ -74,41 +76,38 @@ function AppBootFallback({ moduleName }: { moduleName?: string }) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 10,
+        gap: 12,
         minWidth: 0,
         minHeight: 0,
-        background: '#0a0a0a',
+        background: '#121214',
         color: '#9a9ab0',
       }}
     >
       <div
         style={{
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          border: '2px solid rgba(0,229,255,0.25)',
+          borderTopColor: '#00E5FF',
+          animation: 'dmb-module-spin 0.7s linear infinite',
+        }}
+      />
+      <div
+        style={{
           fontFamily: 'Rajdhani, system-ui, sans-serif',
-          fontSize: 20,
-          fontWeight: 600,
+          fontSize: 18,
+          fontWeight: 700,
           color: '#ececf4',
-          letterSpacing: '0.04em',
+          letterSpacing: '0.06em',
         }}
       >
-        Da Music Box
+        {moduleName ? `Loading ${moduleName}` : 'Loading module'}
       </div>
-      <div style={{ fontSize: 11, opacity: 0.85 }}>
-        {moduleName ? `Loading ${moduleName}…` : 'Loading module…'}
+      <div style={{ fontSize: 11, opacity: 0.75, maxWidth: 280, textAlign: 'center', lineHeight: 1.4 }}>
+        First open downloads this module — stay on this screen, it will appear when ready.
       </div>
-      {import.meta.env.DEV ? (
-        <div
-          style={{
-            fontSize: 10,
-            opacity: 0.55,
-            maxWidth: 320,
-            textAlign: 'center',
-            lineHeight: 1.45,
-          }}
-        >
-          First open compiles large screens in Cursor — Beat Lab can take 1–2 minutes. Keep one tab on{' '}
-          <code style={{ opacity: 0.9 }}>localhost:5173</code>.
-        </div>
-      ) : null}
+      <style>{`@keyframes dmb-module-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -253,14 +252,16 @@ class StudioEditor2ErrorBoundary extends React.Component<
 function LazyScreenMount({
   active,
   moduleName,
+  screenId,
   children,
 }: {
   active: boolean;
   moduleName: string;
+  screenId?: ScreenId;
   children: React.ReactNode;
 }) {
   return (
-    <ScreenMount active={active}>
+    <ScreenMount active={active} screenId={screenId}>
       <LazyScreenErrorBoundary moduleName={moduleName}>
         <Suspense fallback={<AppBootFallback moduleName={moduleName} />}>{children}</Suspense>
       </LazyScreenErrorBoundary>
@@ -268,9 +269,19 @@ function LazyScreenMount({
   );
 }
 
-function ScreenMount({ active, children }: { active: boolean; children: React.ReactNode }) {
+function ScreenMount({
+  active,
+  screenId,
+  children,
+}: {
+  active: boolean;
+  screenId?: ScreenId;
+  children: React.ReactNode;
+}) {
   return (
     <div
+      data-dmb-screen-mount={screenId ?? undefined}
+      data-dmb-screen-active={active ? '1' : '0'}
       style={{
         display: active ? 'flex' : 'none',
         flexDirection: 'column',
@@ -280,6 +291,9 @@ function ScreenMount({ active, children }: { active: boolean; children: React.Re
         minHeight: 0,
         height: '100%',
         overflow: 'hidden',
+        /** Contain absolute Beat Pads / overlays so they cannot paint over sibling modules. */
+        position: 'relative',
+        isolation: 'isolate',
       }}
     >
       {children}
@@ -315,13 +329,17 @@ function AppContent() {
   const { settings } = useSettings();
 
   const navigateToScreen = useCallback((id: ScreenId) => {
-    setVisitedScreens((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
+    prefetchModuleScreen(id);
+    /** Force paint of the target module (or its Suspense fallback) before heavy SE2 cleanup runs. */
+    flushSync(() => {
+      setVisitedScreens((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      setActiveScreen(id);
     });
-    setActiveScreen(id);
   }, []);
 
   const shouldMountScreen = useCallback(
@@ -360,15 +378,20 @@ function AppContent() {
    * (Beat Lab / Vocal Lab / Mastering Bay looked like they “wouldn’t load” until a second visit).
    */
 
-  /** Warm common module chunks after SE2 has settled so first clicks rarely wait on network. */
+  /** Tag <body> so CSS can hide SE2/Beat Lab body portals when another module is active. */
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      void import('@/app/screens/VocalLabScreen');
-      void loadCreationStationScreen();
-      void import('@/app/screens/MasterArrangerScreen');
-      void import('@/app/screens/ExportScreen');
-      void import('@/app/screens/MyProjectsScreen');
-    }, 600);
+    document.body.dataset.dmbScreen = activeScreen;
+    return () => {
+      delete document.body.dataset.dmbScreen;
+    };
+  }, [activeScreen]);
+
+  /**
+   * Prefetch module JS only — do not React-mount every screen on boot (that freezes the UI).
+   * Modules menu also prefetches on hover/open so the first click rarely waits on the network.
+   */
+  useEffect(() => {
+    const t = window.setTimeout(() => prefetchCommonModuleScreens(), 400);
     return () => window.clearTimeout(t);
   }, []);
 
@@ -507,7 +530,7 @@ function AppContent() {
           className="flex-1 min-w-0 min-h-0 overflow-hidden relative w-full"
           style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', background: '#303030' }}
         >
-          <LazyScreenMount active={activeScreen === 'vocal-lab'} moduleName="Vocal Lab">
+          <LazyScreenMount active={activeScreen === 'vocal-lab'} moduleName="Vocal Lab" screenId="vocal-lab">
             {shouldMountScreen('vocal-lab') ? (
             <VocalLabScreen
               onExport={handleExport}
@@ -523,10 +546,10 @@ function AppContent() {
             />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'ai-song'} moduleName="AI Song">
+          <LazyScreenMount active={activeScreen === 'ai-song'} moduleName="AI Song" screenId="ai-song">
             {shouldMountScreen('ai-song') ? <AiSongScreen onExport={handleExport} /> : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'ai-music-match'} moduleName="AI Music Match">
+          <LazyScreenMount active={activeScreen === 'ai-music-match'} moduleName="AI Music Match" screenId="ai-music-match">
             {shouldMountScreen('ai-music-match') ? (
               <AiMusicMatchScreen
                 onOpenGrooveLab={() => {
@@ -540,7 +563,7 @@ function AppContent() {
               />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'ai-pattern'} moduleName="AI Pattern">
+          <LazyScreenMount active={activeScreen === 'ai-pattern'} moduleName="AI Pattern" screenId="ai-pattern">
             {shouldMountScreen('ai-pattern') ? (
               <AiPatternScreen
                 onExport={handleExport}
@@ -548,12 +571,12 @@ function AppContent() {
               />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'melody-transcription'} moduleName="Melody Transcription">
+          <LazyScreenMount active={activeScreen === 'melody-transcription'} moduleName="Melody Transcription" screenId="melody-transcription">
             {shouldMountScreen('melody-transcription') ? (
             <MelodyTranscriptionScreen onExport={handleExport} onBack={() => navigateToScreen('vocal-lab')} />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'harmony-match'} moduleName="Harmony Match">
+          <LazyScreenMount active={activeScreen === 'harmony-match'} moduleName="Harmony Match" screenId="harmony-match">
             {shouldMountScreen('harmony-match') ? (
             <HarmonyMatchScreen
               onOpenGrooveLab={() => {
@@ -563,7 +586,7 @@ function AppContent() {
             />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'creation-station'} moduleName="Beat Lab">
+          <LazyScreenMount active={activeScreen === 'creation-station'} moduleName="Beat Lab" screenId="creation-station">
             {shouldMountScreen('creation-station') ? (
               <CreationStationScreen
                 onExport={handleExport}
@@ -577,7 +600,7 @@ function AppContent() {
               />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'studio-editor'} moduleName="Studio Editor">
+          <LazyScreenMount active={activeScreen === 'studio-editor'} moduleName="Studio Editor" screenId="studio-editor">
             {shouldMountScreen('studio-editor') ? (
             <StudioEditorScreen
               onExport={handleExport}
@@ -589,7 +612,7 @@ function AppContent() {
             />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'studio-editor-2'} moduleName="Studio Editor 2">
+          <LazyScreenMount active={activeScreen === 'studio-editor-2'} moduleName="Studio Editor 2" screenId="studio-editor-2">
             <StudioEditor2ErrorBoundary>
               <StudioEditor2Screen
                 isScreenActive={activeScreen === 'studio-editor-2'}
@@ -612,7 +635,7 @@ function AppContent() {
               />
             </StudioEditor2ErrorBoundary>
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'my-projects'} moduleName="My Projects">
+          <LazyScreenMount active={activeScreen === 'my-projects'} moduleName="My Projects" screenId="my-projects">
             {shouldMountScreen('my-projects') ? (
             <MyProjectsScreen
               onOpenStudioWithCloudProject={(studioTimelineJson) => {
@@ -623,12 +646,12 @@ function AppContent() {
             />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'master-arranger'} moduleName="Mastering Bay">
+          <LazyScreenMount active={activeScreen === 'master-arranger'} moduleName="Mastering Bay" screenId="master-arranger">
             {shouldMountScreen('master-arranger') ? (
               <MasterArrangerScreen onExport={handleExport} />
             ) : null}
           </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'export'} moduleName="Export">
+          <LazyScreenMount active={activeScreen === 'export'} moduleName="Export" screenId="export">
             {shouldMountScreen('export') ? <ExportScreen /> : null}
           </LazyScreenMount>
         </main>

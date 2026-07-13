@@ -25,6 +25,10 @@ import {
   type ScreenId,
 } from '@/app/lib/navigation/moduleNav';
 import {
+  prefetchCommonModuleScreens,
+  prefetchModuleScreen,
+} from '@/app/lib/navigation/prefetchModuleScreens';
+import {
   isVocalLabScreen,
   VOCAL_LAB_SUB_SCREENS,
   type VocalLabSubScreenId,
@@ -148,8 +152,14 @@ export default function ModulesMenu({
   };
 
   const selectScreen = (id: ScreenId) => {
+    prefetchModuleScreen(id);
     onScreenChange(id);
     closeMenu();
+  };
+
+  const openMenu = () => {
+    prefetchCommonModuleScreens();
+    setOpen(true);
   };
 
   const showSubmenu = (key: string, anchor: DOMRect) => {
@@ -221,17 +231,16 @@ export default function ModulesMenu({
             aria-haspopup="menu"
             aria-expanded={openSubmenu === item.id}
             style={menuRowStyle(parentActive)}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              if (openSubmenu === item.id) {
-                setOpenSubmenu(null);
-                setSubmenuAnchor(null);
-              } else {
-                showSubmenu(item.id, rect);
-              }
+            onClick={() => {
+              /** First click opens Vocal Lab immediately — don't wait for a submenu-only gesture. */
+              prefetchModuleScreen('vocal-lab');
+              onVocalLabSubScreenChange?.('vocal-lab');
+              onScreenChange('vocal-lab');
+              closeMenu();
             }}
             onMouseEnter={(e) => {
               if (!parentActive) e.currentTarget.style.background = MENU_HOVER;
+              prefetchModuleScreen('vocal-lab');
               showSubmenu(item.id, e.currentTarget.getBoundingClientRect());
             }}
             onMouseLeave={(e) => {
@@ -254,6 +263,7 @@ export default function ModulesMenu({
                 label: sub.label,
                 active: parentActive && activeVocalLabSubScreen === sub.id,
                 onSelect: () => {
+                  prefetchModuleScreen(sub.id);
                   onVocalLabSubScreenChange?.(sub.id);
                   onScreenChange(sub.id);
                   closeMenu();
@@ -278,17 +288,16 @@ export default function ModulesMenu({
             aria-haspopup="menu"
             aria-expanded={openSubmenu === item.id}
             style={menuRowStyle(parentActive)}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              if (openSubmenu === item.id) {
-                setOpenSubmenu(null);
-                setSubmenuAnchor(null);
-              } else {
-                showSubmenu(item.id, rect);
-              }
+            onClick={() => {
+              /** First click opens Beat Lab immediately — submenu hover is for switching tools. */
+              prefetchModuleScreen('creation-station');
+              onCreationSubScreenChange('beat-lab');
+              onScreenChange('creation-station');
+              closeMenu();
             }}
             onMouseEnter={(e) => {
               if (!parentActive) e.currentTarget.style.background = MENU_HOVER;
+              prefetchModuleScreen('creation-station');
               showSubmenu(item.id, e.currentTarget.getBoundingClientRect());
             }}
             onMouseLeave={(e) => {
@@ -306,6 +315,7 @@ export default function ModulesMenu({
                 label: sub.label,
                 active: parentActive && activeCreationSubScreen === sub.id,
                 onSelect: () => {
+                  prefetchModuleScreen('creation-station');
                   onCreationSubScreenChange(sub.id);
                   onScreenChange('creation-station');
                   closeMenu();
@@ -326,20 +336,11 @@ export default function ModulesMenu({
         style={menuRowStyle(isActive)}
         onMouseEnter={(e) => {
           if (!isActive) e.currentTarget.style.background = MENU_HOVER;
-          if (item.id === 'master-arranger') {
-            void import('@/app/screens/MasterArrangerScreen');
-          }
+          prefetchModuleScreen(item.id);
         }}
         onMouseLeave={(e) => {
           if (!isActive) e.currentTarget.style.background = MENU_ROW;
         }}
-        onClickCapture={
-          item.id === 'master-arranger'
-            ? () => {
-                void import('@/app/screens/MasterArrangerScreen');
-              }
-            : undefined
-        }
       >
         <span style={{ color: isActive ? ACCENT : '#888', display: 'flex' }}>{navIcon(item.id)}</span>
         <span className="truncate flex-1">{item.label}</span>
@@ -368,7 +369,9 @@ export default function ModulesMenu({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onPointerEnter={() => prefetchCommonModuleScreens()}
+        onPointerDown={() => prefetchCommonModuleScreens()}
+        onClick={() => (open ? setOpen(false) : openMenu())}
         className="dmb-modules-trigger flex items-center justify-center gap-1.5 rounded-md transition-colors active:scale-[0.98]"
         style={{
           height: 44,
