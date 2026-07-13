@@ -3,8 +3,7 @@
 
 import '@/app/globals.css';
 
-import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { flushSync } from 'react-dom';
+import React, { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { MasterClockProvider } from '@/app/context/MasterClockContext';
 
@@ -34,33 +33,25 @@ import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
 
 import { type ScreenId } from '@/app/lib/navigation/moduleNav';
-import { prefetchModuleScreen, prefetchCommonModuleScreens } from '@/app/lib/navigation/prefetchModuleScreens';
+import {
+  prefetchModuleScreen,
+  prefetchCommonModuleScreens,
+  SCREEN_MODULE_LOADERS,
+} from '@/app/lib/navigation/prefetchModuleScreens';
+import { useScreenModule, type ScreenComponent } from '@/app/lib/navigation/useScreenModule';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import {
   screenToVocalLabSubScreen,
   type VocalLabSubScreenId,
 } from '@/app/lib/vocalLab/vocalLabSubScreens';
 
-
-const AiSongScreen = lazy(() => import('@/app/screens/AiSongScreen'));
-const AiMusicMatchScreen = lazy(() => import('@/app/screens/AiMusicMatchScreen'));
-const CreationStationScreen = lazy(() => loadCreationStationScreen());
-const VocalLabScreen = lazy(() => import('@/app/screens/VocalLabScreen'));
-const AiPatternScreen = lazy(() => import('@/app/screens/AiPatternScreen'));
-const MelodyTranscriptionScreen = lazy(() => import('@/app/screens/MelodyTranscriptionScreen'));
-const HarmonyMatchScreen = lazy(() => import('@/app/screens/HarmonyMatchScreen'));
-const StudioEditorScreen = lazy(() => import('@/app/screens/StudioEditorScreen'));
-const StudioEditor2Screen = lazy(() => import('@/app/screens/StudioEditor2Screen'));
-const MyProjectsScreen = lazy(() => import('@/app/screens/MyProjectsScreen'));
-const MasterArrangerScreen = lazy(() => import('@/app/screens/MasterArrangerScreen'));
-const ExportScreen = lazy(() => import('@/app/screens/ExportScreen'));
 import type { PendingNeuralHumStudioImport } from '@/app/lib/vocalLab/neuralHumStudioExport';
 import { BEAT_PADS_OPEN_SE2_EVENT, markBeatPadsSe2BridgeInactive } from '@/app/lib/creationStation/beatPadsSe2Bridge';
 import type { PendingBeatPadsStudioImport } from '@/app/lib/creationStation/beatPadsStudioExport';
 import type { PendingAiMatchStudioImport } from '@/app/lib/aiMusicMatch/aiMusicMatchStudioExport';
 import { setPendingMasteringBayImport } from '@/app/lib/masteringBay/masteringBayPendingImport';
+import type { MasteringBaySourcePayload } from '@/app/lib/masteringBay/masteringBaySourceTrack';
 import { DaMuzikBoxBootSplash } from '@/app/components/DaMuzikBoxBootSplash';
-import { loadCreationStationScreen } from '@/app/lib/boot/beatLabBootGate';
 import {
   publishNeuralHumCreationImport,
   type PendingNeuralHumCreationImport,
@@ -245,26 +236,74 @@ class StudioEditor2ErrorBoundary extends React.Component<
 }
 
 /**
- * Default behavior: keep screens mounted and hide via CSS.
- * Some modules may still be conditionally unmounted by AppContent to enforce
- * strict runtime isolation from Studio transport/sync while hidden.
+ * Loads a screen with promise + useState (not React.lazy / Suspense).
+ * Suspense + navigation left the spinner spinning until the user left and came back.
  */
-function LazyScreenMount({
+function DeferredScreenMount({
   active,
+  enabled,
   moduleName,
   screenId,
   children,
 }: {
   active: boolean;
+  enabled: boolean;
   moduleName: string;
-  screenId?: ScreenId;
-  children: React.ReactNode;
+  screenId: ScreenId;
+  children: (Comp: ScreenComponent) => ReactNode;
 }) {
+  const { Comp, error } = useScreenModule(screenId, SCREEN_MODULE_LOADERS[screenId], enabled);
+
+  let body: ReactNode = null;
+  if (enabled) {
+    if (error) {
+      body = (
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            padding: 24,
+            background: '#121214',
+            color: '#e8e8f0',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: 14, fontWeight: 800, color: '#00E5FF', margin: 0 }}>
+            {moduleName} failed to load
+          </p>
+          <p style={{ fontSize: 12, color: '#9a9aa8', margin: 0 }}>{error.message}</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: 8,
+              padding: '8px 16px',
+              borderRadius: 6,
+              border: '1px solid rgba(0,229,255,0.45)',
+              background: 'rgba(0,229,255,0.12)',
+              color: '#00E5FF',
+              fontWeight: 800,
+              cursor: 'pointer',
+            }}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    } else if (!Comp) {
+      body = <AppBootFallback moduleName={moduleName} />;
+    } else {
+      body = children(Comp);
+    }
+  }
+
   return (
     <ScreenMount active={active} screenId={screenId}>
-      <LazyScreenErrorBoundary moduleName={moduleName}>
-        <Suspense fallback={<AppBootFallback moduleName={moduleName} />}>{children}</Suspense>
-      </LazyScreenErrorBoundary>
+      <LazyScreenErrorBoundary moduleName={moduleName}>{body}</LazyScreenErrorBoundary>
     </ScreenMount>
   );
 }
@@ -291,7 +330,6 @@ function ScreenMount({
         minHeight: 0,
         height: '100%',
         overflow: 'hidden',
-        /** Contain absolute Beat Pads / overlays so they cannot paint over sibling modules. */
         position: 'relative',
         isolation: 'isolate',
       }}
@@ -330,16 +368,13 @@ function AppContent() {
 
   const navigateToScreen = useCallback((id: ScreenId) => {
     prefetchModuleScreen(id);
-    /** Force paint of the target module (or its Suspense fallback) before heavy SE2 cleanup runs. */
-    flushSync(() => {
-      setVisitedScreens((prev) => {
-        if (prev.has(id)) return prev;
-        const next = new Set(prev);
-        next.add(id);
-        return next;
-      });
-      setActiveScreen(id);
+    setVisitedScreens((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
     });
+    setActiveScreen(id);
   }, []);
 
   const shouldMountScreen = useCallback(
@@ -530,67 +565,105 @@ function AppContent() {
           className="flex-1 min-w-0 min-h-0 overflow-hidden relative w-full"
           style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', background: '#303030' }}
         >
-          <LazyScreenMount active={activeScreen === 'vocal-lab'} moduleName="Vocal Lab" screenId="vocal-lab">
-            {shouldMountScreen('vocal-lab') ? (
-            <VocalLabScreen
-              onExport={handleExport}
-              onNeuralHumToStudio={(payload) => {
-                setPendingNeuralHumStudioImport(payload);
-                navigateToScreen('studio-editor-2');
-              }}
-              onNeuralHumToCreation={(payload) => {
-                publishNeuralHumCreationImport(payload);
-                setCreationSubScreen(payload.target === 'groove-lab' ? 'groove-lab' : 'beat-lab');
-                navigateToScreen('creation-station');
-              }}
-            />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'ai-song'} moduleName="AI Song" screenId="ai-song">
-            {shouldMountScreen('ai-song') ? <AiSongScreen onExport={handleExport} /> : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'ai-music-match'} moduleName="AI Music Match" screenId="ai-music-match">
-            {shouldMountScreen('ai-music-match') ? (
+          <DeferredScreenMount
+            active={activeScreen === 'vocal-lab'}
+            enabled={shouldMountScreen('vocal-lab')}
+            moduleName="Vocal Lab"
+            screenId="vocal-lab"
+          >
+            {(VocalLabScreen) => (
+              <VocalLabScreen
+                onExport={handleExport}
+                onNeuralHumToStudio={(payload: PendingNeuralHumStudioImport) => {
+                  setPendingNeuralHumStudioImport(payload);
+                  navigateToScreen('studio-editor-2');
+                }}
+                onNeuralHumToCreation={(payload: PendingNeuralHumCreationImport) => {
+                  publishNeuralHumCreationImport(payload);
+                  setCreationSubScreen(payload.target === 'groove-lab' ? 'groove-lab' : 'beat-lab');
+                  navigateToScreen('creation-station');
+                }}
+              />
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'ai-song'}
+            enabled={shouldMountScreen('ai-song')}
+            moduleName="AI Song"
+            screenId="ai-song"
+          >
+            {(AiSongScreen) => <AiSongScreen onExport={handleExport} />}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'ai-music-match'}
+            enabled={shouldMountScreen('ai-music-match')}
+            moduleName="AI Music Match"
+            screenId="ai-music-match"
+          >
+            {(AiMusicMatchScreen) => (
               <AiMusicMatchScreen
                 onOpenGrooveLab={() => {
                   setCreationSubScreen('groove-lab');
                   navigateToScreen('creation-station');
                 }}
-                onExportStudio={(payload) => {
+                onExportStudio={(payload: PendingAiMatchStudioImport) => {
                   setPendingAiMatchStudioImport(payload);
                   navigateToScreen('studio-editor-2');
                 }}
               />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'ai-pattern'} moduleName="AI Pattern" screenId="ai-pattern">
-            {shouldMountScreen('ai-pattern') ? (
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'ai-pattern'}
+            enabled={shouldMountScreen('ai-pattern')}
+            moduleName="AI Pattern"
+            screenId="ai-pattern"
+          >
+            {(AiPatternScreen) => (
               <AiPatternScreen
                 onExport={handleExport}
                 isScreenActive={activeScreen === 'ai-pattern'}
               />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'melody-transcription'} moduleName="Melody Transcription" screenId="melody-transcription">
-            {shouldMountScreen('melody-transcription') ? (
-            <MelodyTranscriptionScreen onExport={handleExport} onBack={() => navigateToScreen('vocal-lab')} />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'harmony-match'} moduleName="Harmony Match" screenId="harmony-match">
-            {shouldMountScreen('harmony-match') ? (
-            <HarmonyMatchScreen
-              onOpenGrooveLab={() => {
-                setCreationSubScreen('groove-lab');
-                navigateToScreen('creation-station');
-              }}
-            />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'creation-station'} moduleName="Beat Lab" screenId="creation-station">
-            {shouldMountScreen('creation-station') ? (
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'melody-transcription'}
+            enabled={shouldMountScreen('melody-transcription')}
+            moduleName="Melody Transcription"
+            screenId="melody-transcription"
+          >
+            {(MelodyTranscriptionScreen) => (
+              <MelodyTranscriptionScreen
+                onExport={handleExport}
+                onBack={() => navigateToScreen('vocal-lab')}
+              />
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'harmony-match'}
+            enabled={shouldMountScreen('harmony-match')}
+            moduleName="Harmony Match"
+            screenId="harmony-match"
+          >
+            {(HarmonyMatchScreen) => (
+              <HarmonyMatchScreen
+                onOpenGrooveLab={() => {
+                  setCreationSubScreen('groove-lab');
+                  navigateToScreen('creation-station');
+                }}
+              />
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'creation-station'}
+            enabled={shouldMountScreen('creation-station')}
+            moduleName="Beat Lab"
+            screenId="creation-station"
+          >
+            {(CreationStationScreen) => (
               <CreationStationScreen
                 onExport={handleExport}
-                onBeatPadsToStudio={(payload) => {
+                onBeatPadsToStudio={(payload: PendingBeatPadsStudioImport) => {
                   setPendingBeatPadsStudioImport(payload);
                   navigateToScreen('studio-editor-2');
                 }}
@@ -598,62 +671,87 @@ function AppContent() {
                 creationSubScreen={creationSubScreen}
                 onCreationSubScreenChange={setCreationSubScreen}
               />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'studio-editor'} moduleName="Studio Editor" screenId="studio-editor">
-            {shouldMountScreen('studio-editor') ? (
-            <StudioEditorScreen
-              onExport={handleExport}
-              pendingStudioAudioBlob={pendingStudioAudioBlob}
-              onPendingStudioAudioConsumed={clearPendingStudioAudio}
-              pendingCloudStudioJson={pendingStudioCloudJson}
-              onPendingCloudStudioConsumed={clearPendingStudioCloud}
-              isStudioScreenActive={activeScreen === 'studio-editor'}
-            />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'studio-editor-2'} moduleName="Studio Editor 2" screenId="studio-editor-2">
-            <StudioEditor2ErrorBoundary>
-              <StudioEditor2Screen
-                isScreenActive={activeScreen === 'studio-editor-2'}
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'studio-editor'}
+            enabled={shouldMountScreen('studio-editor')}
+            moduleName="Studio Editor"
+            screenId="studio-editor"
+          >
+            {(StudioEditorScreen) => (
+              <StudioEditorScreen
+                onExport={handleExport}
                 pendingStudioAudioBlob={pendingStudioAudioBlob}
                 onPendingStudioAudioConsumed={clearPendingStudioAudio}
-                pendingNeuralHumStudioImport={pendingNeuralHumStudioImport}
-                onPendingNeuralHumStudioConsumed={clearPendingNeuralHumStudio}
-                pendingBeatPadsStudioImport={pendingBeatPadsStudioImport}
-                onPendingBeatPadsStudioConsumed={clearPendingBeatPadsStudio}
-                onOpenBeatLab={() => {
-                  setCreationSubScreen('beat-lab');
-                  navigateToScreen('creation-station');
-                }}
-                pendingAiMatchStudioImport={pendingAiMatchStudioImport}
-                onPendingAiMatchStudioConsumed={clearPendingAiMatchStudio}
-                onExportToMasteringBay={(payload) => {
-                  setPendingMasteringBayImport(payload);
-                  navigateToScreen('master-arranger');
-                }}
+                pendingCloudStudioJson={pendingStudioCloudJson}
+                onPendingCloudStudioConsumed={clearPendingStudioCloud}
+                isStudioScreenActive={activeScreen === 'studio-editor'}
               />
-            </StudioEditor2ErrorBoundary>
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'my-projects'} moduleName="My Projects" screenId="my-projects">
-            {shouldMountScreen('my-projects') ? (
-            <MyProjectsScreen
-              onOpenStudioWithCloudProject={(studioTimelineJson) => {
-                setPendingStudioCloudJson(studioTimelineJson);
-                navigateToScreen('studio-editor');
-              }}
-              onNavigate={(screen) => navigateToScreen(screen as ScreenId)}
-            />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'master-arranger'} moduleName="Mastering Bay" screenId="master-arranger">
-            {shouldMountScreen('master-arranger') ? (
-              <MasterArrangerScreen onExport={handleExport} />
-            ) : null}
-          </LazyScreenMount>
-          <LazyScreenMount active={activeScreen === 'export'} moduleName="Export" screenId="export">
-            {shouldMountScreen('export') ? <ExportScreen /> : null}
-          </LazyScreenMount>
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'studio-editor-2'}
+            enabled
+            moduleName="Studio Editor 2"
+            screenId="studio-editor-2"
+          >
+            {(StudioEditor2Screen) => (
+              <StudioEditor2ErrorBoundary>
+                <StudioEditor2Screen
+                  isScreenActive={activeScreen === 'studio-editor-2'}
+                  pendingStudioAudioBlob={pendingStudioAudioBlob}
+                  onPendingStudioAudioConsumed={clearPendingStudioAudio}
+                  pendingNeuralHumStudioImport={pendingNeuralHumStudioImport}
+                  onPendingNeuralHumStudioConsumed={clearPendingNeuralHumStudio}
+                  pendingBeatPadsStudioImport={pendingBeatPadsStudioImport}
+                  onPendingBeatPadsStudioConsumed={clearPendingBeatPadsStudio}
+                  onOpenBeatLab={() => {
+                    setCreationSubScreen('beat-lab');
+                    navigateToScreen('creation-station');
+                  }}
+                  pendingAiMatchStudioImport={pendingAiMatchStudioImport}
+                  onPendingAiMatchStudioConsumed={clearPendingAiMatchStudio}
+                  onExportToMasteringBay={(payload: MasteringBaySourcePayload) => {
+                    setPendingMasteringBayImport(payload);
+                    navigateToScreen('master-arranger');
+                  }}
+                />
+              </StudioEditor2ErrorBoundary>
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'my-projects'}
+            enabled={shouldMountScreen('my-projects')}
+            moduleName="My Projects"
+            screenId="my-projects"
+          >
+            {(MyProjectsScreen) => (
+              <MyProjectsScreen
+                onOpenStudioWithCloudProject={(studioTimelineJson: string) => {
+                  setPendingStudioCloudJson(studioTimelineJson);
+                  navigateToScreen('studio-editor');
+                }}
+                onNavigate={(screen: string) => navigateToScreen(screen as ScreenId)}
+              />
+            )}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'master-arranger'}
+            enabled={shouldMountScreen('master-arranger')}
+            moduleName="Mastering Bay"
+            screenId="master-arranger"
+          >
+            {(MasterArrangerScreen) => <MasterArrangerScreen onExport={handleExport} />}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'export'}
+            enabled={shouldMountScreen('export')}
+            moduleName="Export"
+            screenId="export"
+          >
+            {(ExportScreen) => <ExportScreen />}
+          </DeferredScreenMount>
         </main>
       </div>
     </div>
