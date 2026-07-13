@@ -472,6 +472,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </p>
 
             <label style={fieldLabel}>Display size</label>
+            <p style={{ fontSize: 11, color: '#888', margin: '0 0 8px', lineHeight: 1.4 }}>
+              Auto-fit shrinks the UI on smaller laptop screens and still fills the window edge-to-edge.
+              Use Manual if you want a fixed size.
+            </p>
             <select
               value={settings.uiScaleMode}
               onChange={(e) => updateSetting('uiScaleMode', e.target.value as UiScaleMode)}

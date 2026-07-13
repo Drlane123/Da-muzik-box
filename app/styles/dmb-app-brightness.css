@@ -15,11 +15,17 @@ html,
 body {
   background: var(--dmb-cursor-editor) !important;
   color: var(--dmb-shell-text);
+  /* Fill the scaled shell — see applyDocumentUiScale (laptop zoom compensation). */
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
 }
 
 #root {
   flex: 1;
   min-height: 100%;
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   background: var(--dmb-cursor-editor);

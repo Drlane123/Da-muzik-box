@@ -33,16 +33,44 @@ export function resolveUiScale(mode: UiScaleMode, manualScale: number): number {
   return computeAutoUiScale();
 }
 
+/**
+ * `zoom` on <html> shrinks paint size but leaves blank bands under/ beside the shell
+ * (modules looked “half height” on laptops). Expand logical width/height by 1/scale
+ * so after zoom the app still fills the viewport.
+ */
 export function applyDocumentUiScale(scale: number): void {
   const s = clampUiScale(scale);
   const root = document.documentElement;
   root.style.setProperty('--dmb-ui-scale', String(s));
   // Chromium / Edge / Cursor — scales layout + hit targets together (portals included).
   (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(s);
+
+  if (s < 0.999) {
+    const inv = 1 / s;
+    root.style.setProperty('--dmb-ui-shell-w', `calc(100vw * ${inv})`);
+    root.style.setProperty('--dmb-ui-shell-h', `calc(100dvh * ${inv})`);
+    root.style.width = `calc(100vw * ${inv})`;
+    root.style.minHeight = `calc(100dvh * ${inv})`;
+    root.style.height = `calc(100dvh * ${inv})`;
+    root.style.overflow = 'hidden';
+  } else {
+    root.style.setProperty('--dmb-ui-shell-w', '100%');
+    root.style.setProperty('--dmb-ui-shell-h', '100dvh');
+    root.style.removeProperty('width');
+    root.style.removeProperty('min-height');
+    root.style.removeProperty('height');
+    root.style.removeProperty('overflow');
+  }
 }
 
 export function clearDocumentUiScale(): void {
   const root = document.documentElement;
   root.style.removeProperty('--dmb-ui-scale');
+  root.style.removeProperty('--dmb-ui-shell-w');
+  root.style.removeProperty('--dmb-ui-shell-h');
+  root.style.removeProperty('width');
+  root.style.removeProperty('min-height');
+  root.style.removeProperty('height');
+  root.style.removeProperty('overflow');
   (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = '';
 }

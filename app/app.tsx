@@ -535,7 +535,15 @@ function AppContent() {
   }
 
   return (
-    <div className="flex flex-col w-full overflow-hidden" style={{ height: '100vh', background: '#303030', color: '#f0f0f0' }}>
+    <div
+      className="flex flex-col w-full overflow-hidden"
+      style={{
+        height: 'var(--dmb-ui-shell-h, 100dvh)',
+        width: 'var(--dmb-ui-shell-w, 100%)',
+        background: '#303030',
+        color: '#f0f0f0',
+      }}
+    >
       <TouchDeviceBootstrap />
       <UiScaleBootstrap />
       <UiBrightnessBootstrap />
