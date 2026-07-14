@@ -27,6 +27,8 @@ export class Se2LiveRecordingCapture {
       this.processor = this.ctx.createScriptProcessor(4096, 2, 2);
       this.silent = this.ctx.createGain();
       this.silent.gain.value = 0;
+      // Keep ScriptProcessor in the graph without feeding speakers (zero→destination leaked hiss).
+      const sink = this.ctx.createMediaStreamDestination();
 
       this.processor.onaudioprocess = (e) => {
         if (this.stopped) return;
@@ -48,7 +50,7 @@ export class Se2LiveRecordingCapture {
 
       sourceNode.connect(this.processor);
       this.processor.connect(this.silent);
-      this.silent.connect(this.ctx.destination);
+      this.silent.connect(sink);
       return true;
     } catch (e) {
       console.warn('[SE2 Record] Live waveform tap failed', e);

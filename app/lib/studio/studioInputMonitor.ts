@@ -4,6 +4,11 @@
 
 import { studioMicTrackConstraints } from '@/app/lib/audioRouting';
 
+/** Idle / armed monitoring into the strip — pad so mic + FX isn't slamming the bus. */
+export const STUDIO_INPUT_MONITOR_GAIN = 0.42;
+/** While MediaRecorder runs — further dim to stop speaker/headphone feed → mic bleed/noise. */
+export const STUDIO_INPUT_MONITOR_GAIN_RECORDING = 0.22;
+
 type MonitorNodes = {
   stream: MediaStream;
   src: MediaStreamAudioSourceNode;
@@ -16,6 +21,7 @@ type MonitorNodes = {
 
 let nodes: MonitorNodes | null = null;
 let keepStreamAlive: (() => boolean) | null = null;
+let monitorGainLinear = STUDIO_INPUT_MONITOR_GAIN;
 
 export function setStudioInputMonitorKeepAlive(fn: (() => boolean) | null): void {
   keepStreamAlive = fn;
@@ -43,6 +49,20 @@ export function getStudioInputMonitorStream(): MediaStream | null {
 /** Which track index currently owns the live mic fanout → strip/FX connection. */
 export function getStudioInputMonitorScopeTrackIndex(): number {
   return nodes?.scopeTrackIndex ?? -1;
+}
+
+/** Soften/restore mic → strip monitor level (does not change dry MediaRecorder capture). */
+export function setStudioInputMonitorGain(linear: number): void {
+  monitorGainLinear = Math.max(0, Math.min(1, linear));
+  if (nodes) {
+    const t = nodes.fanout.context.currentTime;
+    nodes.fanout.gain.cancelScheduledValues(t);
+    nodes.fanout.gain.setTargetAtTime(monitorGainLinear, t, 0.02);
+  }
+}
+
+export function getStudioInputMonitorGain(): number {
+  return monitorGainLinear;
 }
 
 /**
@@ -119,7 +139,7 @@ export async function ensureStudioInputMonitor(
     }
     const src = ctx.createMediaStreamSource(stream);
     const fanout = ctx.createGain();
-    fanout.gain.value = 1;
+    fanout.gain.value = monitorGainLinear;
     src.connect(fanout);
     nodes = { stream, src, fanout, deviceId: want, stripInput: null, scopeTrackIndex: -1 };
 

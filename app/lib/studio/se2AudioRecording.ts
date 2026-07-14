@@ -139,9 +139,33 @@ async function finalizeSe2RecordingChunks(
     }
     const raw = await blob.arrayBuffer();
     const buffer = await decodeCtx.decodeAudioData(raw.slice(0));
-    return { ...meta, buffer };
+    return { ...meta, buffer: padHotSe2RecordedBuffer(buffer) };
   } catch (e) {
     console.error('[SE2 Record] Failed to finalize take', e);
     return null;
   }
+}
+
+/** Soften slamming takes (AGC / hot mics) without crushing quiet ones. */
+export function padHotSe2RecordedBuffer(buffer: AudioBuffer): AudioBuffer {
+  let peak = 0;
+  for (let c = 0; c < buffer.numberOfChannels; c += 1) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < data.length; i += 1) {
+      const a = Math.abs(data[i]!);
+      if (a > peak) peak = a;
+    }
+  }
+  if (peak < 0.72) return buffer;
+  // Aim ~-3 dBFS ceiling when the take was already hot.
+  const target = 0.7;
+  const scale = Math.min(1, target / peak) * 0.92;
+  if (scale >= 0.98) return buffer;
+  for (let c = 0; c < buffer.numberOfChannels; c += 1) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < data.length; i += 1) {
+      data[i]! *= scale;
+    }
+  }
+  return buffer;
 }

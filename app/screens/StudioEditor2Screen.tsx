@@ -712,8 +712,11 @@ import {
   ensureStudioInputMonitor,
   getStudioInputMonitorFanout,
   getStudioInputMonitorStream,
+  setStudioInputMonitorGain,
   setStudioInputMonitorKeepAlive,
   stopStudioInputMonitor,
+  STUDIO_INPUT_MONITOR_GAIN,
+  STUDIO_INPUT_MONITOR_GAIN_RECORDING,
   studioInputMonitorConnectDest,
   studioInputMonitorDisconnectStrip,
 } from '@/app/lib/studio/studioInputMonitor';
@@ -726,6 +729,7 @@ import {
 } from '@/app/lib/studio/studioEditor2MidiInstrumentPlayback';
 import {
   findSe2RecordTargetTrackIndex,
+  padHotSe2RecordedBuffer,
   se2AudioRecordingActive,
   startSe2AudioRecording,
   stopSe2AudioRecording,
@@ -7455,6 +7459,14 @@ export default function StudioEditor2Screen({
     setStudioInputMonitorKeepAlive(() => recordingRef.current);
     return () => setStudioInputMonitorKeepAlive(null);
   }, []);
+
+  /** Dim mic→strip monitor while recording so speaker/FX feed doesn't pump noise into the take. */
+  useEffect(() => {
+    setStudioInputMonitorGain(
+      recording ? STUDIO_INPUT_MONITOR_GAIN_RECORDING : STUDIO_INPUT_MONITOR_GAIN,
+    );
+    return () => setStudioInputMonitorGain(STUDIO_INPUT_MONITOR_GAIN);
+  }, [recording]);
 
   /** Record preflight â€” require a record-armed audio track (Studio One / Pro Tools model). */
   useEffect(() => {
@@ -19741,7 +19753,7 @@ export default function StudioEditor2Screen({
       finalizeSe2RecordedTake(
         live.trackIndex,
         live.startBeat,
-        pcmFallback,
+        padHotSe2RecordedBuffer(pcmFallback),
         tr?.name ?? 'Audio',
         { sourceId: live.sourceId, clipId: live.clipId },
       );
