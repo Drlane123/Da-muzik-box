@@ -146,6 +146,28 @@ export function resetStudioTrackVocalFxInserts(): void {
   for (const ti of [...routes.keys()]) disconnectStudioTrackVocalFxInsert(ti);
 }
 
+/** Drop insert at `trackIndex` and shift higher keys down (track delete). */
+export function removeStudioTrackVocalFxInsertAt(trackIndex: number): void {
+  disconnectStudioTrackVocalFxInsert(trackIndex);
+  const keys = [...routes.keys()].filter((ti) => ti > trackIndex).sort((a, b) => a - b);
+  for (const ti of keys) {
+    const route = routes.get(ti);
+    if (!route) continue;
+    routes.delete(ti);
+    routes.set(ti - 1, route);
+    const pending = pendingSyncOpts.get(ti);
+    if (pending) {
+      pendingSyncOpts.delete(ti);
+      pendingSyncOpts.set(ti - 1, { ...pending, trackIndex: ti - 1 });
+    }
+    const gen = syncGeneration.get(ti);
+    if (gen != null) {
+      syncGeneration.delete(ti);
+      syncGeneration.set(ti - 1, gen);
+    }
+  }
+}
+
 function wireEntryBypass(entry: GainNode, preStrip: GainNode, trackIndex: number): void {
   try {
     entry.disconnect();
@@ -240,7 +262,8 @@ async function syncStudioTrackVocalFxInsertInner(opts: VocalFxSyncOpts): Promise
         /* DA FX Suite uses preStrip only — idle entry must not sit in the graph */
       }
     }
-    reconnectStudioVocalLiveMicIfCached(trackIndex);
+    // Mic must follow preStrip when Vocal DSP is off — never an orphaned entry.
+    reconnectStudioVocalLiveMicIfCached(trackIndex, preStrip);
     retapPitchMonitorIfOpen(trackIndex);
     return preStrip;
   }

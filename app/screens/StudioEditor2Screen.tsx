@@ -278,6 +278,7 @@ import {
   readSe2StudioMixerSnapshot,
   se2EffectiveTrackMuted,
   SE2_STUDIO_DEFAULT_MASTER_VOL,
+  SE2_STUDIO_MIXER_TRACK_DEFAULTS,
   snapshotSe2MixerFromArrays,
   writeSe2StudioMixerSnapshot,
 } from '@/app/lib/studio/se2StudioMixerState';
@@ -670,12 +671,14 @@ import {
 import { ensureStudioLivePitchTuneWorklet } from '@/app/lib/studio/studioLivePitchTune';
 import {
   cleanupAllStudioLiveVocalFx,
+  reindexStudioLiveVocalFxRegistryAfterRemove,
   updateStudioLiveVocalFxForTrack,
 } from '@/app/lib/studio/studioLiveVocalFxRegistry';
 import {
   disconnectStudioTrackVocalFxInsert,
   invalidateStudioTrackVocalFxInsert,
   getStudioTrackVocalFxEntry,
+  removeStudioTrackVocalFxInsertAt,
   resetStudioTrackVocalFxInserts,
   syncStudioTrackVocalFxInsert,
 } from '@/app/lib/studio/studioTrackVocalFxInsert';
@@ -714,6 +717,7 @@ import {
   studioInputMonitorConnectDest,
   studioInputMonitorDisconnectStrip,
 } from '@/app/lib/studio/studioInputMonitor';
+import { se2RemoveParallelTrackSlot } from '@/app/lib/studio/se2TrackParallelSlots';
 import {
   findSe2RecordTargetTrackIndex,
   se2AudioRecordingActive,
@@ -741,6 +745,7 @@ import {
   readStudioMasterBusMeter,
   readStudioMixerStripInputMeter,
   readStudioMixerStripMeter,
+  removeStudioMixerStripAt,
   resetStudioMixerMeterPeaks,
   setStudioMixerStripGraphPlaybackLocked,
   isStudioMixerStripGraphPlaybackLocked,
@@ -756,6 +761,7 @@ import {
   getStudioTrackClipPlaybackBus,
   healStudioTrackPlaybackRouteIfStale,
   resyncStudioTrackInsertFxStripInputs,
+  removeStudioTrackInsertFxStripAt,
   resetStudioTrackInsertFxStrips,
 } from '@/app/lib/studio/studioTrackInsertFxStrip';
 import {
@@ -8233,6 +8239,7 @@ export default function StudioEditor2Screen({
             slots,
             rack,
           });
+          // Only reconnects when this lane already owns the mic scope — never steal mid-record.
           reconnectStudioVocalLiveMicIfCached(ti);
         } catch (e) {
           console.warn(`[Studio] Vocal DSP insert sync failed for track ${ti}.`, e);
@@ -18007,13 +18014,48 @@ export default function StudioEditor2Screen({
 
   const deleteStudioTrackAt = useCallback(
     (trackIndex: number) => {
+      if (trackIndex < 0) return;
       applyTracksMutation((prev) => {
+        if (trackIndex >= prev.length) return prev;
         const next = prev.filter((_, j) => j !== trackIndex);
         setSelectedTrackIndex(
           next.length === 0 ? 0 : Math.max(0, Math.min(next.length - 1, trackIndex)),
         );
         return next;
       });
+      // Keep index-parallel mixer / arm / FX state aligned after delete (otherwise Rec arm
+      // and Pitch Tune stick to stale indices and recording / vocal monitor break).
+      setTrackVolumes((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, SE2_STUDIO_MIXER_TRACK_DEFAULTS.vol127, MAX_STUDIO_TRACKS),
+      );
+      setTrackPans((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, SE2_STUDIO_MIXER_TRACK_DEFAULTS.pan127, MAX_STUDIO_TRACKS),
+      );
+      setTrackMutes((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, SE2_STUDIO_MIXER_TRACK_DEFAULTS.muted, MAX_STUDIO_TRACKS),
+      );
+      setTrackSolos((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, SE2_STUDIO_MIXER_TRACK_DEFAULTS.solo, MAX_STUDIO_TRACKS),
+      );
+      setTrackMonos((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, SE2_STUDIO_MIXER_TRACK_DEFAULTS.mono, MAX_STUDIO_TRACKS),
+      );
+      setTrackRecordArmed((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, false, MAX_STUDIO_TRACKS),
+      );
+      setTrackFxSlots((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, emptyMixerFxSlots(), MAX_STUDIO_TRACKS),
+      );
+      setTrackVocalFx((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, { ...STUDIO_TRACK_VOCAL_FX_DEFAULT }, MAX_STUDIO_TRACKS),
+      );
+      setTrackInsertFxRacks((prev) =>
+        se2RemoveParallelTrackSlot(prev, trackIndex, defaultStudioTrackInsertFxRack(), MAX_STUDIO_TRACKS),
+      );
+      removeStudioMixerStripAt(trackIndex);
+      removeStudioTrackInsertFxStripAt(trackIndex);
+      removeStudioTrackVocalFxInsertAt(trackIndex);
+      reindexStudioLiveVocalFxRegistryAfterRemove(trackIndex);
       clearSelectedPianoNotes();
       clearSelectedTimelineAudioClip();
       gridCacheRef.current = null;
@@ -19716,6 +19758,66 @@ export default function StudioEditor2Screen({
       gridCacheRef.current = null;
       syncTimelineGridNow();
 
+      // Pin mic → this lane's Pitch Tune / Vocoder insert before MediaRecorder starts.
+      // Seed-clip track mutation otherwise re-syncs every insert and can leave monitor dry.
+      const bus = midiPreviewBusRef.current;
+      if (bus) {
+        const masterOut = studioMasterOutRef.current ?? ctx.destination;
+        setStudioMixerStripCountHint(Math.max(1, studioTracksRef.current.length));
+        // Tracks added while transport was locked may lack a strip — unlock briefly to provision.
+        if (!getStudioMixerStripInput(trackIndex)) {
+          const wasLocked = isStudioMixerStripGraphPlaybackLocked();
+          setStudioMixerStripGraphPlaybackLocked(false);
+          ensureSe2MixerStrips(ctx, bus, masterOut);
+          resyncStudioTrackInsertFxStripInputs(
+            ctx,
+            bus,
+            getStudioMixerStripCountHint(),
+            masterOut,
+          );
+          if (wasLocked) setStudioMixerStripGraphPlaybackLocked(true);
+        } else {
+          ensureSe2MixerStrips(ctx, bus, masterOut);
+        }
+        const rawFx = trackVocalFxRef.current[trackIndex] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
+        const slots = trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots();
+        const effectiveFx = studioEffectiveTrackVocalFx(rawFx, slots);
+        const rack = trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack();
+        const keyRoot = tr.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
+        se2TrackPlaybackInput(
+          ctx,
+          bus,
+          trackIndex,
+          slots,
+          rack,
+          bpmRef.current,
+          masterOut,
+        );
+        const preStrip = getStudioTrackInsertPreStrip(trackIndex);
+        const stripIn = getStudioMixerStripInput(trackIndex);
+        if (preStrip && stripIn) {
+          try {
+            await routeStudioVocalLiveSignal({
+              ctx,
+              trackIndex,
+              deviceId,
+              preStrip,
+              stripIn,
+              fx: effectiveFx,
+              keyRoot,
+              carrierTracks: studioEditorVocoderCarrierTracks(studioTracksRef.current),
+              bpm: bpmRef.current,
+              clipStartBeat: startBeatSnapped,
+              connectMic: true,
+              slots,
+              rack,
+            });
+          } catch (e) {
+            console.warn('[SE2 Record] Live vocal monitor re-route failed.', e);
+          }
+        }
+      }
+
       const started = startSe2AudioRecording(stream, {
         startBeat: startBeatSnapped,
         trackIndex,
@@ -19739,16 +19841,38 @@ export default function StudioEditor2Screen({
   const beginSe2RecordWithOptionalPrecount = useCallback(async () => {
     if (recordingRef.current || isPrecountingRef.current) return;
 
-    const trackIndex = findSe2RecordTargetTrackIndex(
+    let trackIndex = findSe2RecordTargetTrackIndex(
       studioTracksRef.current,
       trackRecordArmedRef.current,
       selectedTrackIndexRef.current,
     );
+    // Convenience: if nothing is armed, arm the selected audio lane (or first audio lane).
     if (trackIndex < 0) {
-      console.warn(
-        '[SE2 Record] Arm an audio track first (mixer R button), then press Record or Play with Precount.',
-      );
-      return;
+      const tracks = studioTracksRef.current;
+      const sel = Math.max(0, Math.min(tracks.length - 1, selectedTrackIndexRef.current));
+      let autoArm = tracks[sel]?.kind === 'audio' ? sel : -1;
+      if (autoArm < 0) {
+        for (let ti = 0; ti < tracks.length; ti++) {
+          if (tracks[ti]?.kind === 'audio') {
+            autoArm = ti;
+            break;
+          }
+        }
+      }
+      if (autoArm < 0) {
+        console.warn(
+          '[SE2 Record] Add an audio track and press Record (or arm with mixer R), then try again.',
+        );
+        return;
+      }
+      setTrackRecordArmed((prev) => {
+        const next = [...prev];
+        next[autoArm] = true;
+        trackRecordArmedRef.current = next;
+        return next;
+      });
+      setSelectedTrackIndex(autoArm);
+      trackIndex = autoArm;
     }
 
     if (precountEnabledRef.current) {
@@ -21385,7 +21509,7 @@ export default function StudioEditor2Screen({
                           muted={trackMutes[ti] ?? false}
                           mono={trackMonos[ti] ?? false}
                           recording={recording}
-                          disabled={running}
+                          disabled={recording}
                           shellRef={(el) => {
                             trackLaneMeterShellRef.current[ti] = el;
                           }}

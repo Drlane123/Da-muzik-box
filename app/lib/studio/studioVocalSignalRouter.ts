@@ -7,6 +7,7 @@ import { studioUseLiveVocalFxPlayback } from '@/app/lib/studio/studioLiveVocalFx
 import {
   ensureStudioInputMonitor,
   getStudioInputMonitorFanout,
+  getStudioInputMonitorScopeTrackIndex,
   studioInputMonitorConnectDest,
 } from '@/app/lib/studio/studioInputMonitor';
 import {
@@ -194,8 +195,18 @@ export async function routeStudioVocalLiveSignal(opts: {
   return entry;
 }
 
-export function reconnectStudioVocalLiveMicIfCached(trackIndex: number): void {
-  const entry = getStudioTrackVocalFxEntry(trackIndex);
-  if (!entry || !getStudioInputMonitorFanout()) return;
-  studioInputMonitorConnectDest(entry, trackIndex);
+/**
+ * Re-attach live mic to this lane only when it already owns the monitor scope.
+ * Prevents per-track Vocal DSP sync from stealing the mic onto the wrong entry
+ * (breaks Pitch Tune / Vocoder in the headphones while recording).
+ */
+export function reconnectStudioVocalLiveMicIfCached(
+  trackIndex: number,
+  destOverride?: AudioNode | null,
+): void {
+  if (!getStudioInputMonitorFanout()) return;
+  if (getStudioInputMonitorScopeTrackIndex() !== trackIndex) return;
+  const dest = destOverride ?? getStudioTrackVocalFxEntry(trackIndex);
+  if (!dest) return;
+  studioInputMonitorConnectDest(dest, trackIndex);
 }

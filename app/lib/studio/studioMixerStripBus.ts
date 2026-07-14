@@ -318,6 +318,25 @@ function connectFaderToBus(
   };
 }
 
+/**
+ * Drop the strip for a deleted track and re-key higher strips down so lane
+ * indices stay aligned with studioTracks (arm/FX/record target).
+ * Allowed even while playback-locked — only the removed lane is torn down.
+ */
+export function removeStudioMixerStripAt(trackIndex: number): void {
+  tearDownStrip(trackIndex);
+  const keys = [...strips.keys()].filter((ti) => ti > trackIndex).sort((a, b) => a - b);
+  for (const ti of keys) {
+    const strip = strips.get(ti);
+    if (!strip) continue;
+    strips.delete(ti);
+    strips.set(ti - 1, strip);
+  }
+  if (stripCountHint > 1) {
+    stripCountHint = Math.max(1, stripCountHint - 1);
+  }
+}
+
 function tearDownStrip(trackIndex: number): void {
   const strip = strips.get(trackIndex);
   if (!strip) return;

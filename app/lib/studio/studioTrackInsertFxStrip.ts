@@ -618,3 +618,19 @@ export function resetStudioTrackInsertFxStrips(): void {
     routes.delete(trackIndex);
   }
 }
+
+/** Drop insert route at `trackIndex` and shift higher keys down (track delete). */
+export function removeStudioTrackInsertFxStripAt(trackIndex: number): void {
+  const doomed = routes.get(trackIndex);
+  if (doomed) {
+    destroyRoute(doomed, trackIndex);
+    routes.delete(trackIndex);
+  }
+  const keys = [...routes.keys()].filter((ti) => ti > trackIndex).sort((a, b) => a - b);
+  for (const ti of keys) {
+    const route = routes.get(ti);
+    if (!route) continue;
+    routes.delete(ti);
+    routes.set(ti - 1, route);
+  }
+}

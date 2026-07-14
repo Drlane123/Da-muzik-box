@@ -66,3 +66,16 @@ export function purgeStudioLiveVocalFxRegistryForTrack(trackIndex: number): void
     if (entries[i]!.trackIndex === trackIndex) entries.splice(i, 1);
   }
 }
+
+/** After a track delete — purge that index and shift higher registry indices down. */
+export function reindexStudioLiveVocalFxRegistryAfterRemove(trackIndex: number): void {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i]!;
+    if (e.trackIndex === trackIndex) {
+      e.handle.cleanup();
+      entries.splice(i, 1);
+    } else if (e.trackIndex > trackIndex) {
+      e.trackIndex -= 1;
+    }
+  }
+}
