@@ -53,6 +53,50 @@ body {
   background: #0a0a0a !important;
 }
 
+/**
+ * Monitor chrome rim — metal/bezel around the app only (not a backdrop).
+ * Looks like the thin silver edge of a computer screen framing the UI.
+ */
+.dmb-app-monitor-bezel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: 12px;
+  overflow: hidden;
+  /* Brushed chrome laminate — bright edge catches light like a monitor trim */
+  background:
+    linear-gradient(
+      145deg,
+      #f0f3f8 0%,
+      #8b919c 14%,
+      #d5dae3 28%,
+      #4a4f58 46%,
+      #c8ced8 62%,
+      #2f333a 78%,
+      #aeb5c0 90%,
+      #5c626c 100%
+    );
+  box-shadow:
+    0 0 0 1px #121418,
+    0 2px 12px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.dmb-app-monitor-bezel__screen {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  /* Matte black lip where glass meets the chrome (screen inset) */
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.82),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
 /* Geno Build 1 / 2 fullscreen — hide Modules (returns on Minimize) */
 body[data-studio-geno-build-fullscreen] [data-dmb-modules-menu] {
   display: none !important;

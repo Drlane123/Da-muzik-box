@@ -536,14 +536,20 @@ function AppContent() {
 
   return (
     <div
-      className="flex flex-col w-full overflow-hidden"
+      className="dmb-app-monitor-bezel"
       style={{
         height: 'var(--dmb-ui-shell-h, 100dvh)',
         width: 'var(--dmb-ui-shell-w, 100%)',
-        background: '#303030',
-        color: '#f0f0f0',
       }}
+      data-dmb-app-monitor-bezel
     >
+      <div
+        className="dmb-app-monitor-bezel__screen flex flex-col w-full overflow-hidden"
+        style={{
+          background: '#303030',
+          color: '#f0f0f0',
+        }}
+      >
       <TouchDeviceBootstrap />
       <UiScaleBootstrap />
       <UiBrightnessBootstrap />
@@ -761,6 +767,7 @@ function AppContent() {
             {(ExportScreen) => <ExportScreen />}
           </DeferredScreenMount>
         </main>
+      </div>
       </div>
     </div>
   );
