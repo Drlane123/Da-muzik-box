@@ -512,7 +512,13 @@ export function Se2GenoChordCreatorPanel({
       if (result.loopBars && result.loopBars !== loopBars) {
         onLoopBarsChange(result.loopBars);
       }
-      if (result.genreId && stylePacks.some((g) => g.id === result.genreId)) {
+      // Prefer the catalog pack on the matched preset (Neo-Soul cards stay Neo-Soul).
+      const presetPackId = result.presetId?.includes('::')
+        ? result.presetId.split('::')[0]!
+        : null;
+      if (presetPackId && stylePacks.some((g) => g.id === presetPackId)) {
+        setStyleGenreId(presetPackId);
+      } else if (result.genreId && stylePacks.some((g) => g.id === result.genreId)) {
         setStyleGenreId(result.genreId);
       }
 
@@ -609,14 +615,15 @@ export function Se2GenoChordCreatorPanel({
       loopBars,
     });
     if (!result) {
-      setStatus('Type a style or progression — e.g. pop axis 8 bars bpm 120');
+      setStatus('Type a style or progression — e.g. neo soul 8 bars bpm 88');
       return;
     }
     applyComposeResult(result);
   }, [applyComposeResult, composeText, keyMode, keyRoot, loopBars, styleGenreId]);
 
   const runComposeRegen = useCallback(() => {
-    const result = resolveSe2ChordGenieAutoCompose(composeText, {
+    const phrase = composeText.trim() || stylePacks.find((g) => g.id === styleGenreId)?.label || styleGenreId;
+    const result = resolveSe2ChordGenieAutoCompose(phrase, {
       keyRoot,
       keyMode,
       fallbackGenreId: styleGenreId,
@@ -624,11 +631,20 @@ export function Se2GenoChordCreatorPanel({
       excludePresetId: lastComposePresetId,
     });
     if (!result) {
-      setStatus('Type a phrase first, then Regen for another match');
+      setStatus('Pick a Wheel style or type a phrase, then Regen for another match');
       return;
     }
     applyComposeResult(result);
-  }, [applyComposeResult, composeText, keyMode, keyRoot, lastComposePresetId, loopBars, styleGenreId]);
+  }, [
+    applyComposeResult,
+    composeText,
+    keyMode,
+    keyRoot,
+    lastComposePresetId,
+    loopBars,
+    styleGenreId,
+    stylePacks,
+  ]);
 
   const handleComposeKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
@@ -1029,8 +1045,19 @@ export function Se2GenoChordCreatorPanel({
                 </span>
                 <button
                   type="button"
-                  disabled={disabled}
-                  onClick={() => runPresetGenerate({ seed: Date.now() })}
+                  disabled={disabled || presetCatalog.length === 0}
+                  onClick={() => {
+                    const current = catalogPresetId || presetId;
+                    const packPresets = presetCatalog.filter((p) => p.genreId === styleGenreId);
+                    const pool = packPresets.length > 0 ? packPresets : presetCatalog;
+                    const others = pool.filter((p) => p.id !== current);
+                    const pick =
+                      others.length > 0
+                        ? others[Math.floor(Math.random() * others.length)]!
+                        : pool[0];
+                    if (!pick) return;
+                    handlePresetPick(pick.id);
+                  }}
                   className="inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[8px] font-black uppercase whitespace-nowrap shrink-0"
                   style={{
                     borderColor: 'rgba(124,244,198,0.45)',
@@ -1038,10 +1065,10 @@ export function Se2GenoChordCreatorPanel({
                     color: '#7cf4c6',
                     height: presetControlH,
                   }}
-                  title="Preset generate"
+                  title="Roll another preset in the selected Wheel style (e.g. Neo-Soul)"
                 >
-                  <Sparkles size={10} aria-hidden />
-                  Generate
+                  <RefreshCw size={10} aria-hidden />
+                  Regen
                 </button>
               </div>
               <Se2ChordGeneratorUpSelect
@@ -1371,14 +1398,14 @@ export function Se2GenoChordCreatorPanel({
         </button>
         <button
           type="button"
-          disabled={disabled || !composeText.trim()}
+          disabled={disabled || (!composeText.trim() && !styleGenreId)}
           onClick={runComposeRegen}
-          title="Try another preset for this phrase"
+          title="Try another preset for this phrase / Wheel style"
           aria-label="Regenerate compose match"
           style={{
             ...COMPOSE_REGEN_BTN,
-            cursor: disabled || !composeText.trim() ? 'not-allowed' : 'pointer',
-            opacity: disabled || !composeText.trim() ? 0.45 : 1,
+            cursor: disabled || (!composeText.trim() && !styleGenreId) ? 'not-allowed' : 'pointer',
+            opacity: disabled || (!composeText.trim() && !styleGenreId) ? 0.45 : 1,
           }}
         >
           <RefreshCw size={10} aria-hidden />

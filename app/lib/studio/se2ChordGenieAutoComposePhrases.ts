@@ -36,14 +36,26 @@ export const CHORD_GENIE_GENRE_PROFILES: readonly ChordGenieGenreProfile[] = [
     weak: ['bright', 'cute'],
   },
   {
+    genreId: 'neo-soul-eras',
+    strong: ['neo soul', 'neosoul', 'neo-soul', 'dangelo', 'erykah', 'maxwell', 'jill scott'],
+    medium: ['silk', 'velvet', 'warm glide', 'lush vamp', 'modern turn'],
+    weak: ['groove', 'smooth'],
+  },
+  {
+    genreId: 'soul-eras',
+    strong: ['classic soul', 'motown', 'philly soul', 'memphis soul'],
+    medium: ['curtis', 'aretha', 'al green', 'stevie soul'],
+    weak: ['soul'],
+  },
+  {
     genreId: 'rnb-true',
-    strong: ['neo soul', 'neosoul', 'modern rnb', 'true rnb', 'contemporary rnb'],
+    strong: ['modern rnb', 'true rnb', 'contemporary rnb', 'true r&b'],
     medium: ['silk', 'velvet', 'late night'],
     weak: ['smooth'],
   },
   {
     genreId: 'rnb',
-    strong: ['rnb', 'r and b', 'r&b', 'neo soul', 'neosoul', 'slow jam', 'quiet storm', 'bedroom'],
+    strong: ['rnb', 'r and b', 'r&b', 'slow jam', 'quiet storm', 'bedroom'],
     medium: ['soulful', 'smooth', 'velvet', 'silk', 'intimate', 'late night', 'modern rnb'],
     weak: ['soft', 'warm', 'mellow', 'turnaround'],
   },

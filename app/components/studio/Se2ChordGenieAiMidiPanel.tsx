@@ -220,6 +220,26 @@ export function Se2ChordGenieAiMidiPanel({
   const [apiKeyDraft, setApiKeyDraft] = useState('');
   const [customEndpointDraft, setCustomEndpointDraft] = useState('');
 
+  /** Map Wheel style / catalog pack ids onto MIDI Composer genre picks. */
+  useEffect(() => {
+    const pack = (genreId ?? fallbackGenreId ?? '').trim().toLowerCase();
+    if (!pack) return;
+    if (pack === 'neo-soul-eras' || pack === 'neo-soul' || pack.includes('neo')) {
+      setGenre('neo_soul');
+      return;
+    }
+    if (pack === 'rnb-true' || pack === 'rnb' || pack.startsWith('rnb')) {
+      setGenre('true_rnb');
+      return;
+    }
+    if (pack === 'gospel') setGenre('gospel');
+    else if (pack === 'trap' || pack === 'drill') setGenre('trap');
+    else if (pack === 'pop' || pack.startsWith('pop')) setGenre('pop');
+    else if (pack === 'lofi') setGenre('lofi');
+    else if (pack === 'afrobeat' || pack === 'afro') setGenre('afro');
+    else if (pack.includes('ballad') || pack.includes('cinematic')) setGenre('cinematic');
+  }, [fallbackGenreId, genreId]);
+
   const previewBarCount = staged?.result.loopBars ?? 8;
 
   const { playing: previewPlaying, play: playPreview, stop: stopPreview } = useGenoLoopRollPreview({
@@ -314,6 +334,7 @@ export function Se2ChordGenieAiMidiPanel({
           beatsPerBar,
           fallbackGenreId,
           seed: seedRef.current,
+          excludePresetId: opts.isRegenerate ? staged?.result.presetId ?? null : null,
         });
 
         if ('error' in result) {
@@ -367,6 +388,7 @@ export function Se2ChordGenieAiMidiPanel({
       persistSettings,
       provider,
       scale,
+      staged,
       stopPreview,
     ],
   );

@@ -43,6 +43,23 @@ function snapBeats(beats: number, bpb: number): number {
   return Math.max(q, Math.round(beats / q) * q);
 }
 
+/** Map Chord Generator / catalog pack ids onto Synth Geno live genre vocabulary. */
+function liveGenreIdForPassing(genreId: string): Se2SynthGenoLiveGenreId {
+  const id = genreId.trim().toLowerCase();
+  if (id === 'neo-soul' || id === 'neo-soul-eras') return 'neo-soul';
+  if (id === 'rnb' || id === 'rnb-true' || id.startsWith('rnb') || id === 'soul-eras') return 'rnb';
+  if (id === 'gospel') return 'gospel';
+  if (id === 'jazz') return 'jazz';
+  if (id === 'trap' || id === 'drill') return 'trap';
+  if (id === 'lofi') return 'lofi';
+  if (id === 'pop' || id.startsWith('pop') || id === 'doowop' || id.includes('ballad')) return 'pop';
+  if (id === 'house' || id === 'dance' || id === 'disco') return 'house-dance';
+  if (id === 'kpop' || id === 'kpop-eras') return 'kpop';
+  if (id === 'afrobeat' || id === 'afro') return 'afrobeats';
+  if (id === 'hiphop' || id === 'hip-hop') return 'hip-hop';
+  return 'rnb';
+}
+
 function passingLabelForBar(
   fromLabel: string,
   toLabel: string,
@@ -54,6 +71,7 @@ function passingLabelForBar(
   const fromNorm = fromLabel.trim().toLowerCase();
   const skipNorm = opts.skipLabel?.trim().toLowerCase();
   const cycle = Math.max(0, opts.cycleIndex ?? 0);
+  const liveGenre = liveGenreIdForPassing(opts.genreId);
 
   const labelOk = (label: string) => {
     const norm = label.trim().toLowerCase();
@@ -65,7 +83,7 @@ function passingLabelForBar(
       fromRoman as ChordSymbol,
       toRoman as ChordSymbol,
       opts.mode,
-      { genreId: opts.genreId as Se2SynthGenoLiveGenreId, maxOptions: 12, includeClusters: false },
+      { genreId: liveGenre, maxOptions: 12, includeClusters: false },
     );
     if (passing.length > 0) {
       const start =

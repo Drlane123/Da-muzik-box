@@ -57,6 +57,9 @@ const GENRE_STRONG = new Set([
   'hip hop',
   'garage',
   'soul',
+  'neo soul',
+  'neosoul',
+  'neo-soul',
 ]);
 
 const STYLE_TO_GENRE: Partial<Record<GenoChordStyle, string>> = {

@@ -27,14 +27,14 @@ import {
 import type { StudioEditor2GenNote } from '@/app/lib/studio/studioEditor2PartGenerator';
 
 const GENRE_TO_COMPOSE_ID: Record<string, string> = {
-  true_rnb: 'rnb',
+  true_rnb: 'rnb-true',
   trap: 'trap',
   gospel: 'gospel',
-  neo_soul: 'rnb',
+  neo_soul: 'neo-soul-eras',
   pop: 'pop',
   afro: 'afrobeat',
   lofi: 'lofi',
-  cinematic: 'ballad',
+  cinematic: 'ballad-80s',
 };
 
 export type Se2MidiComposerGenerateRequest = {
@@ -52,6 +52,8 @@ export type Se2MidiComposerGenerateRequest = {
   beatsPerBar: number;
   fallbackGenreId: string;
   seed?: number;
+  /** On Regenerate — skip the last applied preset so a new card is chosen. */
+  excludePresetId?: string | null;
 };
 
 export type Se2MidiComposerGenerateResult = {
@@ -129,6 +131,7 @@ function generateChordsLocal(
     keyMode,
     fallbackGenreId: genreId,
     loopBars,
+    excludePresetId: req.excludePresetId,
   });
   if (!compose) return { error: 'Could not match a chord pattern — try more detail in your prompt.' };
 
