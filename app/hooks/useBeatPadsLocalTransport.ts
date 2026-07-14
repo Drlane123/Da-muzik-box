@@ -27,6 +27,9 @@ import {
   type BeatPadsPlaylineWapiRefs,
 } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
 import { setBeatPadsScreenActive, setBeatPadsTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
+import { refillSe2Lab808DrumOnTransport } from '@/app/lib/studio/se2Lab808DrumTransport';
+import { refillSe2Lab808PercOnTransport } from '@/app/lib/studio/se2Lab808PercTransport';
+import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
 
 /** Match Beat Lab lookahead — 120 ms was starving the 16th-note grid. */
@@ -35,6 +38,13 @@ const BEAT_PADS_LOOKAHEAD_MS = 25;
 const BEAT_PADS_COL_W = BEAT_PADS_GRID_COL_W;
 /** Lane label column — playline lives in the grid column to the right of this. */
 const BEAT_PADS_LANE_LABEL_W = 72;
+
+export type BeatPads808LabTransportLink = {
+  synced: boolean;
+  trackId: string;
+  voice: Se2Lab808VoiceParams;
+  getDestination: (ctx: AudioContext) => AudioNode | null;
+};
 
 export type UseBeatPadsLocalTransportOpts = {
   open: boolean;
@@ -49,6 +59,8 @@ export type UseBeatPadsLocalTransportOpts = {
   spreadLoopBars?: number;
   spreadActive?: boolean;
   onStrikeSpreadRow?: (row: number, col: number, whenSec: number) => void;
+  /** Miniature 808 Lab — plays on the same clock when Sync to BeatPads is on. */
+  lab808Link?: BeatPads808LabTransportLink | null;
   onWarmAudio?: () => void | Promise<void>;
   getAudioContext?: () => AudioContext | null;
 };
@@ -65,6 +77,7 @@ export function useBeatPadsLocalTransport({
   spreadLoopBars,
   spreadActive = false,
   onStrikeSpreadRow,
+  lab808Link = null,
   onWarmAudio,
   getAudioContext,
 }: UseBeatPadsLocalTransportOpts) {
@@ -76,6 +89,7 @@ export function useBeatPadsLocalTransport({
   const firedThroughRef = useRef(-1);
   const lookaheadRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRafRef = useRef(0);
+  const lab808ScheduledRef = useRef(new Set<string>());
 
   const patternRef = useRef(pattern);
   const bpmRef = useRef(bpm);
@@ -86,6 +100,7 @@ export function useBeatPadsLocalTransport({
   const spreadLoopBarsRef = useRef(spreadLoopBars);
   const spreadActiveRef = useRef(spreadActive);
   const onStrikeSpreadRowRef = useRef(onStrikeSpreadRow);
+  const lab808LinkRef = useRef(lab808Link);
 
   const animRef = useRef<Animation | null>(null);
   const wapiSegStateRef = useRef({ ...BEAT_PADS_PLAYLINE_WAPI_SEG_IDLE });
@@ -105,6 +120,7 @@ export function useBeatPadsLocalTransport({
   spreadLoopBarsRef.current = spreadLoopBars;
   spreadActiveRef.current = spreadActive;
   onStrikeSpreadRowRef.current = onStrikeSpreadRow;
+  lab808LinkRef.current = lab808Link;
 
   const clearLookahead = useCallback(() => {
     if (lookaheadRef.current != null) {
@@ -172,6 +188,46 @@ export function useBeatPadsLocalTransport({
       }
       nextStepIndexRef.current = stepIndex + 1;
     }
+
+    const lab = lab808LinkRef.current;
+    if (lab?.synced) {
+      const stripIn = lab.getDestination(ctx);
+      if (stripIn) {
+        const spb = 60 / Math.max(1, bpmRef.current);
+        const trackId = `${lab.trackId}__beatPads808Lab`;
+        refillSe2Lab808DrumOnTransport({
+          ctx,
+          ctSnap: now,
+          horizon,
+          chainFloor: SE2_AUDIO_START_FLOOR_SEC,
+          trackId,
+          voice: lab.voice,
+          toneGridSteps: lab.voice.toneGridSteps,
+          stripIn,
+          originBeat: 0,
+          sessionStart,
+          spb,
+          bpm: bpmRef.current,
+          beatsPerBar: 4,
+          trackVolume127: 127,
+          scheduled: lab808ScheduledRef.current,
+        });
+        refillSe2Lab808PercOnTransport({
+          ctx,
+          ctSnap: now,
+          horizon,
+          chainFloor: SE2_AUDIO_START_FLOOR_SEC,
+          trackId,
+          voice: lab.voice,
+          stripIn,
+          originBeat: 0,
+          sessionStart,
+          spb,
+          beatsPerBar: 4,
+          scheduled: lab808ScheduledRef.current,
+        });
+      }
+    }
   }, [fireStepAt, getAudioContext]);
 
   const syncPlaylineScroll = useCallback(() => {
@@ -233,6 +289,7 @@ export function useBeatPadsLocalTransport({
     firedThroughRef.current = -1;
     playlineLoopPrevPhaseRef.current = -1;
     playlineLoopCycleRef.current = 0;
+    lab808ScheduledRef.current.clear();
   }, [clearLookahead, playlineElRef]);
 
   const start = useCallback(async () => {
@@ -252,6 +309,7 @@ export function useBeatPadsLocalTransport({
     firedThroughRef.current = -1;
     playlineLoopPrevPhaseRef.current = -1;
     playlineLoopCycleRef.current = 0;
+    lab808ScheduledRef.current.clear();
     runningRef.current = true;
     setIsPlaying(true);
     setBeatPadsTransportRunning(true);
@@ -311,6 +369,7 @@ export function useBeatPadsLocalTransport({
     });
     nextStepIndexRef.current = 0;
     firedThroughRef.current = -1;
+    lab808ScheduledRef.current.clear();
     const ctx = getAudioContext?.();
     if (ctx && ctx.state === 'running') {
       sessionStartRef.current = ctx.currentTime + SE2_AUDIO_START_FLOOR_SEC;
@@ -347,6 +406,7 @@ export function useBeatPadsLocalTransport({
         sessionStartRef.current = tNow + SE2_AUDIO_START_FLOOR_SEC - globalStep * stepSec;
         nextStepIndexRef.current = globalStep + 1;
         firedThroughRef.current = globalStep;
+        lab808ScheduledRef.current.clear();
         refillSchedule();
       }
     }

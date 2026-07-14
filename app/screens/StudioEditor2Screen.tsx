@@ -567,6 +567,10 @@ import {
   type Se2BeatPadsTrack,
 } from '@/app/lib/studio/se2BeatPadsTrack';
 import {
+  cloneSe2Lab808VoiceParams,
+  se2BeatPads808LabVoiceFromTrack,
+} from '@/app/lib/studio/se2BeatPads808LabSync';
+import {
   se2BeatPadsHarmonyKey,
   se2BeatPadsHarmonySyncFromLane,
   se2BeatPadsLoadMatchedPattern,
@@ -1204,6 +1208,12 @@ type MockMusioTrack = {
   beatPadsKickFollowMode?: import('@/app/lib/studio/se2BeatPadsKickMatch').Se2BeatPadsKickFollowMode;
   beatPadsKickTargetPad?: number;
   beatPadsSyncLocked?: boolean;
+  beatPadsSe2SyncMode?: import('@/app/lib/studio/se2BeatPadsTrack').Se2BeatPadsSe2SyncMode;
+  beatPadsProducerKitId?: import('@/app/lib/creationStation/beatLabProducerKits').BeatLabProducerKitId;
+  beatPadsSpread?: import('@/app/lib/studio/se2BeatPadsSpreadStore').Se2BeatPadsSpreadSnapshot;
+  /** Beat Pads mini 808 Lab — survives closing the 808 Lab tab. */
+  beatPads808LabVoice?: import('@/app/lib/studio/se2Lab808Types').Se2Lab808VoiceParams;
+  beatPads808LabSynced?: boolean;
   /** Hum Capture lane — mic, key pads, melody roll. */
   humCaptureInstrumentId?: NeuralHumInstrumentId;
   humCaptureHarmonyTrackId?: string;
@@ -9167,6 +9177,41 @@ export default function StudioEditor2Screen({
           songKeyRoot: songKeyRootRef.current,
           songKeyMode: songKeyModeRef.current,
         });
+        if (bpTr.beatPads808LabSynced && bpTr.beatPads808LabVoice) {
+          const labVoice = se2BeatPads808LabVoiceFromTrack(bpTr);
+          const labTrackId = `${bpTr.id}__beatPads808Lab`;
+          refillSe2Lab808DrumOnTransport({
+            ctx,
+            ctSnap,
+            horizon,
+            chainFloor,
+            trackId: labTrackId,
+            voice: labVoice,
+            toneGridSteps: labVoice.toneGridSteps,
+            stripIn,
+            originBeat: origin,
+            sessionStart,
+            spb,
+            bpm: bpmRef.current,
+            beatsPerBar: beatsPerBarRef.current,
+            trackVolume127: trackVolumesRef.current[ti] ?? MIXER_UNITY_VOL,
+            scheduled,
+          });
+          refillSe2Lab808PercOnTransport({
+            ctx,
+            ctSnap,
+            horizon,
+            chainFloor,
+            trackId: labTrackId,
+            voice: labVoice,
+            stripIn,
+            originBeat: origin,
+            sessionStart,
+            spb,
+            beatsPerBar: beatsPerBarRef.current,
+            scheduled,
+          });
+        }
         continue;
       }
 
@@ -13723,6 +13768,39 @@ export default function StudioEditor2Screen({
     [applyTracksMutation],
   );
 
+  const updateBeatPads808LabVoice = useCallback(
+    (trackIndex: number, voice: import('@/app/lib/studio/se2Lab808Types').Se2Lab808VoiceParams) => {
+      applyTracksMutation((prev) =>
+        prev.map((t, i) =>
+          i === trackIndex && studioTrackIsBeatPadsChannel(t)
+            ? { ...t, beatPads808LabVoice: cloneSe2Lab808VoiceParams(voice) }
+            : t,
+        ),
+      );
+    },
+    [applyTracksMutation],
+  );
+
+  const updateBeatPads808LabSynced = useCallback(
+    (
+      trackIndex: number,
+      synced: boolean,
+      voice?: import('@/app/lib/studio/se2Lab808Types').Se2Lab808VoiceParams,
+    ) => {
+      applyTracksMutation((prev) =>
+        prev.map((t, i) => {
+          if (i !== trackIndex || !studioTrackIsBeatPadsChannel(t)) return t;
+          return {
+            ...t,
+            beatPads808LabSynced: synced,
+            ...(voice ? { beatPads808LabVoice: cloneSe2Lab808VoiceParams(voice) } : {}),
+          };
+        }),
+      );
+    },
+    [applyTracksMutation],
+  );
+
   const updateBeatPadsHarmonyTrackId = useCallback(
     (trackIndex: number, trackId: string, slot: BeatPadsGenoBuildSlot) => {
       applyTracksMutation((prev) =>
@@ -17186,6 +17264,8 @@ export default function StudioEditor2Screen({
                     onExportBeatPads808LabWavToTrack={(args) =>
                       exportBeatPadsToAudioTrack(ti, args)
                     }
+                    onBeatPads808LabVoiceChange={updateBeatPads808LabVoice}
+                    onBeatPads808LabSyncedChange={updateBeatPads808LabSynced}
                   />
                 </Suspense>
               </Se2BeatPadsDockedPanel>
@@ -17852,6 +17932,10 @@ export default function StudioEditor2Screen({
                           notes: src.beatPadsSpread.notes.map((n) => ({ ...n })),
                         }
                       : undefined,
+                    beatPads808LabVoice: src.beatPads808LabVoice
+                      ? cloneSe2Lab808VoiceParams(src.beatPads808LabVoice)
+                      : undefined,
+                    beatPads808LabSynced: src.beatPads808LabSynced,
                     notes: [],
                   }
               : {

@@ -26,6 +26,7 @@ import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808C
 import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 import { SE2_LAB808_DOCK_TECH_LABEL } from '@/app/lib/studio/se2Lab808UiTheme';
+import { se2BeatPads808LabHasHits } from '@/app/lib/studio/se2BeatPads808LabSync';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import {
   BeatLabDrumMachineFxPanel,
@@ -277,6 +278,8 @@ export type BeatLabDrumMachineOverlayProps = {
     lanePad?: number;
     voice: Se2Lab808VoiceParams;
     onVoiceChange: (voice: Se2Lab808VoiceParams) => void;
+    syncedToBeatPads: boolean;
+    onSyncedToBeatPadsChange: (synced: boolean) => void;
     getPreviewDestination: (ctx: AudioContext) => AudioNode | null;
     onExportToneGridToPianoRoll?: (notes: Se2Lab808ToneGridRollNote[]) => void;
     onExportToneGridWavToTrack?: (args: {
@@ -717,6 +720,15 @@ export function BeatLabDrumMachineOverlay({
     spreadLoopBars: beatPadsSpreadActive ? beatPadsSpreadLoopBars : undefined,
     spreadActive: beatPadsSpreadActive,
     onStrikeSpreadRow: beatPadsSpreadActive ? handleTransportStrikeSpread : undefined,
+    lab808Link:
+      beatPads808Lab != null
+        ? {
+            synced: beatPads808Lab.syncedToBeatPads,
+            trackId: beatPads808Lab.trackId,
+            voice: beatPads808Lab.voice,
+            getDestination: beatPads808Lab.getPreviewDestination,
+          }
+        : null,
     onWarmAudio,
     getAudioContext,
   });
@@ -1679,13 +1691,29 @@ export function BeatLabDrumMachineOverlay({
                       type="button"
                       disabled={patternActionsDisabled}
                       onClick={() => {
-                        setLab808Open((o) => !o);
-                        setVocalBoxOpen(false);
+                        setLab808Open((o) => {
+                          if (o) {
+                            // Closing: keep pattern; auto-arm Sync so Beat Pads play includes 808 Lab.
+                            if (
+                              !beatPads808Lab.syncedToBeatPads &&
+                              se2BeatPads808LabHasHits(beatPads808Lab.voice)
+                            ) {
+                              beatPads808Lab.onSyncedToBeatPadsChange(true);
+                            }
+                            return false;
+                          }
+                          setVocalBoxOpen(false);
+                          return true;
+                        });
                       }}
                       title={
                         lab808Open
-                          ? 'Close 808 Lab — return to pad FX'
-                          : '808 Lab — piano-roll 808s (Preview, then export to SE2)'
+                          ? beatPads808Lab.syncedToBeatPads
+                            ? 'Close 808 Lab — pattern kept · Synced to BeatPads'
+                            : 'Close 808 Lab — pattern kept (Sync so it plays with Beat Pads)'
+                          : beatPads808Lab.syncedToBeatPads
+                            ? '808 Lab — Synced to BeatPads (plays with drums)'
+                            : '808 Lab — piano-roll 808s (Sync to BeatPads, then play)'
                       }
                       aria-label="808 Lab — piano-roll 808s inside Beat Pads"
                       className="beat-pads-808lab-tab"
@@ -1699,16 +1727,20 @@ export function BeatLabDrumMachineOverlay({
                         flexShrink: 0,
                         borderColor: lab808Open
                           ? 'rgba(0, 229, 255, 0.75)'
-                          : 'rgba(0, 229, 255, 0.42)',
+                          : beatPads808Lab.syncedToBeatPads
+                            ? 'rgba(0, 229, 255, 0.55)'
+                            : 'rgba(0, 229, 255, 0.42)',
                         color: lab808Open ? '#b8f7ff' : BEAT_PADS_808_LAB_ACCENT,
                         background: lab808Open
                           ? 'rgba(0, 229, 255, 0.22)'
-                          : 'rgba(0, 229, 255, 0.08)',
+                          : beatPads808Lab.syncedToBeatPads
+                            ? 'rgba(0, 229, 255, 0.14)'
+                            : 'rgba(0, 229, 255, 0.08)',
                         opacity: patternActionsDisabled ? 0.5 : 1,
                       }}
                     >
                       <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.03em' }}>
-                        808 Lab
+                        808 Lab{beatPads808Lab.syncedToBeatPads && !lab808Open ? ' · SYNC' : ''}
                       </span>
                     </button>
                   ) : null}
@@ -2113,6 +2145,8 @@ export function BeatLabDrumMachineOverlay({
               lanePad={beatPads808Lab.lanePad}
               voice={beatPads808Lab.voice}
               onVoiceChange={beatPads808Lab.onVoiceChange}
+              syncedToBeatPads={beatPads808Lab.syncedToBeatPads}
+              onSyncedToBeatPadsChange={beatPads808Lab.onSyncedToBeatPadsChange}
               getAudioContext={getAudioContext ?? (() => null)}
               getPreviewDestination={beatPads808Lab.getPreviewDestination}
               warmAudio={onWarmAudio}

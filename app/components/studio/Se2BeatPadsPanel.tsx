@@ -51,10 +51,12 @@ import { se2BeatPadsPadLabelsForTrack } from '@/app/lib/studio/se2BeatPadsPianoR
 import type { Se2BeatPadsTrack, Se2BeatPadsSe2SyncMode } from '@/app/lib/studio/se2BeatPadsTrack';
 import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808ChordLock';
 import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
+import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 import {
-  se2Lab808DefaultVoice,
-  type Se2Lab808VoiceParams,
-} from '@/app/lib/studio/se2Lab808Types';
+  cloneSe2Lab808VoiceParams,
+  se2BeatPads808LabAlignLoopBars,
+  se2BeatPads808LabVoiceFromTrack,
+} from '@/app/lib/studio/se2BeatPads808LabSync';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 
 export type Se2BeatPadsTimelineNote = {
@@ -154,6 +156,14 @@ export type Se2BeatPadsPanelProps = {
     bpm: number;
     sourceTrackName: string;
   }) => void | Promise<void>;
+  /** Persist miniature 808 Lab voice on the Beat Pads track (survives close). */
+  onBeatPads808LabVoiceChange?: (trackIndex: number, voice: Se2Lab808VoiceParams) => void;
+  /** Sync miniature 808 Lab playback to Beat Pads transport. */
+  onBeatPads808LabSyncedChange?: (
+    trackIndex: number,
+    synced: boolean,
+    voice?: Se2Lab808VoiceParams,
+  ) => void;
 };
 
 export function Se2BeatPadsPanel({
@@ -202,13 +212,17 @@ export function Se2BeatPadsPanel({
   onBeatPadsSpreadChange,
   onExportBeatPads808LabToPianoRoll,
   onExportBeatPads808LabWavToTrack,
+  onBeatPads808LabVoiceChange,
+  onBeatPads808LabSyncedChange,
 }: Se2BeatPadsPanelProps) {
   const [loadingPattern, setLoadingPattern] = useState(false);
   const [regeneratingPad, setRegeneratingPad] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
-  const [beatPads808LabVoice, setBeatPads808LabVoice] = useState<Se2Lab808VoiceParams>(() =>
-    se2Lab808DefaultVoice(),
+  const beatPads808LabVoice = useMemo(
+    () => se2BeatPads808LabVoiceFromTrack(track),
+    [track.beatPads808LabVoice, track.id],
   );
+  const beatPads808LabSynced = track.beatPads808LabSynced === true;
   const exportStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loopBars = track.beatPadsLoopBars ?? 8;
   const stepsPerBar = track.beatPadsStepsPerBar ?? 16;
@@ -252,6 +266,27 @@ export function Se2BeatPadsPanel({
       onPatternChange(trackIndex, converted, loopBars, steps);
     },
     [onPatternChange, trackIndex, pattern, loopBars, stepsPerBar],
+  );
+
+  const handleBeatPads808LabVoiceChange = useCallback(
+    (voice: Se2Lab808VoiceParams) => {
+      onBeatPads808LabVoiceChange?.(trackIndex, cloneSe2Lab808VoiceParams(voice));
+    },
+    [onBeatPads808LabVoiceChange, trackIndex],
+  );
+
+  const handleBeatPads808LabSyncedChange = useCallback(
+    (synced: boolean) => {
+      const aligned = synced
+        ? se2BeatPads808LabAlignLoopBars(beatPads808LabVoice, loopBars)
+        : undefined;
+      onBeatPads808LabSyncedChange?.(
+        trackIndex,
+        synced,
+        aligned ? cloneSe2Lab808VoiceParams(aligned) : undefined,
+      );
+    },
+    [beatPads808LabVoice, loopBars, onBeatPads808LabSyncedChange, trackIndex],
   );
 
   const kickKeySemi = useMemo(() => {
@@ -748,7 +783,9 @@ export function Se2BeatPadsPanel({
                 studioTracks: harmonyTracks as readonly Se2Lab808ChordLockHarmonyTrack[],
                 lanePad: Math.max(2, String(harmonyTracks.length).length),
                 voice: beatPads808LabVoice,
-                onVoiceChange: setBeatPads808LabVoice,
+                onVoiceChange: handleBeatPads808LabVoiceChange,
+                syncedToBeatPads: beatPads808LabSynced,
+                onSyncedToBeatPadsChange: handleBeatPads808LabSyncedChange,
                 getPreviewDestination: (ctx) =>
                   getTrackStripInput?.() ?? getMasterOutput?.() ?? ctx.destination,
                 onExportToneGridToPianoRoll: onExportBeatPads808LabToPianoRoll,
@@ -763,7 +800,9 @@ export function Se2BeatPadsPanel({
                 studioTracks: [],
                 lanePad: 2,
                 voice: beatPads808LabVoice,
-                onVoiceChange: setBeatPads808LabVoice,
+                onVoiceChange: handleBeatPads808LabVoiceChange,
+                syncedToBeatPads: beatPads808LabSynced,
+                onSyncedToBeatPadsChange: handleBeatPads808LabSyncedChange,
                 getPreviewDestination: (ctx) =>
                   getTrackStripInput?.() ?? getMasterOutput?.() ?? ctx.destination,
                 onExportToneGridToPianoRoll: onExportBeatPads808LabToPianoRoll,

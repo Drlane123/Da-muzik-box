@@ -3,6 +3,7 @@
 /**
  * Beat Pads — SE2 808 Lab drop-down (piano-roll tone grid).
  * Own voice state (not linked to the main 808 Lab lane). Same sounds + Preview + export.
+ * Sync to BeatPads locks tempo + playback to the drum machine clock (survives close).
  * fullBleed: spans the Beat Pads work stage (pads/FX/sequencer) while open.
  */
 import { useCallback, useMemo, useState } from 'react';
@@ -30,6 +31,9 @@ export type BeatPads808LabPanelProps = {
   lanePad?: number;
   voice?: Se2Lab808VoiceParams;
   onVoiceChange?: (voice: Se2Lab808VoiceParams) => void;
+  /** Sync 808 Lab tone/perc to Beat Pads transport (tempo + play together). */
+  syncedToBeatPads?: boolean;
+  onSyncedToBeatPadsChange?: (synced: boolean) => void;
   getAudioContext: () => AudioContext | null;
   getPreviewDestination: (ctx: AudioContext) => AudioNode | null;
   warmAudio?: () => void | Promise<void>;
@@ -56,6 +60,8 @@ export function BeatPads808LabPanel({
   lanePad = 2,
   voice: voiceProp,
   onVoiceChange: onVoiceChangeProp,
+  syncedToBeatPads = false,
+  onSyncedToBeatPadsChange,
   getAudioContext,
   getPreviewDestination,
   warmAudio,
@@ -73,8 +79,6 @@ export function BeatPads808LabPanel({
       name: trackName,
       colorHex: accentHex,
       kind: 'lab808',
-      notes: [],
-      audioClips: [],
     }),
     [accentHex, trackId, trackName],
   );
@@ -96,6 +100,11 @@ export function BeatPads808LabPanel({
     [getPreviewDestination],
   );
 
+  const toggleSync = useCallback(() => {
+    if (disabled || !onSyncedToBeatPadsChange) return;
+    onSyncedToBeatPadsChange(!syncedToBeatPads);
+  }, [disabled, onSyncedToBeatPadsChange, syncedToBeatPads]);
+
   return (
     <div
       className={
@@ -111,20 +120,57 @@ export function BeatPads808LabPanel({
       }}
       data-beat-pads-808lab-panel
       data-beat-pads-808lab-fullbleed={fullBleed ? '1' : undefined}
+      data-beat-pads-808lab-synced={syncedToBeatPads ? '1' : undefined}
     >
       <div
         className="flex items-center justify-between gap-2 shrink-0 px-2 py-1 border-b"
         style={{ borderColor: 'rgba(0, 229, 255, 0.28)' }}
       >
-        <span
-          className="text-[10px] font-black uppercase tracking-wide"
-          style={{ color: accentHex }}
-        >
-          {LAB808_DISPLAY_NAME}
-        </span>
-        <span className="text-[8px] font-bold" style={{ color: 'rgba(0, 229, 255, 0.75)' }}>
-          Piano roll · Scope · Preview · Export
-        </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <span
+            className="text-[10px] font-black uppercase tracking-wide shrink-0"
+            style={{ color: accentHex }}
+          >
+            {LAB808_DISPLAY_NAME}
+          </span>
+          <span className="text-[8px] font-bold truncate" style={{ color: 'rgba(0, 229, 255, 0.75)' }}>
+            Piano roll · Scope · Preview · Export
+          </span>
+        </div>
+        {onSyncedToBeatPadsChange ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={toggleSync}
+            aria-pressed={syncedToBeatPads}
+            title={
+              syncedToBeatPads
+                ? 'Synced — 808 Lab plays with Beat Pads at the same tempo (pattern kept when you close)'
+                : 'Sync to BeatPads — lock tempo and play 808 Lab together with the drum machine'
+            }
+            className="beat-pads-808lab-sync-btn shrink-0"
+            style={{
+              height: 26,
+              padding: '0 10px',
+              borderRadius: 5,
+              border: syncedToBeatPads
+                ? `1px solid ${accentHex}`
+                : '1px solid rgba(0, 229, 255, 0.35)',
+              background: syncedToBeatPads ? 'rgba(0, 229, 255, 0.22)' : 'rgba(0, 229, 255, 0.06)',
+              color: syncedToBeatPads ? '#b8f7ff' : accentHex,
+              fontSize: 9,
+              fontWeight: 900,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              cursor: disabled ? 'default' : 'pointer',
+              opacity: disabled ? 0.5 : 1,
+              whiteSpace: 'nowrap',
+              boxShadow: syncedToBeatPads ? `0 0 10px ${accentHex}44` : undefined,
+            }}
+          >
+            {syncedToBeatPads ? '● Synced to BeatPads' : '○ Sync to BeatPads'}
+          </button>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">
         <Se2Lab808Panel

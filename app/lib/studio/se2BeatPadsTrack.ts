@@ -11,6 +11,7 @@ import type { StudioEditor2MidiTrack } from '@/app/lib/studio/studioEditor2Midi'
 import type { Se2DrumGenStyle } from '@/app/lib/studio/se2DrumGeneratorTrack';
 import type { Se2BeatPadsKickFollowMode } from '@/app/lib/studio/se2BeatPadsKickMatch';
 import type { Se2BeatPadsSpreadSnapshot } from '@/app/lib/studio/se2BeatPadsSpreadStore';
+import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 
 export type Se2BeatPadsTrackFields = {
   kind: 'beatPads';
@@ -41,6 +42,13 @@ export type Se2BeatPadsTrackFields = {
   beatPadsProducerKitId?: BeatLabProducerKitId;
   /** Spread roll (CH 17) — notes + match track; survives lane deselect. */
   beatPadsSpread?: Se2BeatPadsSpreadSnapshot;
+  /**
+   * Beat Pads miniature 808 Lab — tone grid + presets.
+   * Survives closing the 808 Lab tab (never wipe on close).
+   */
+  beatPads808LabVoice?: Se2Lab808VoiceParams;
+  /** When true, 808 Lab tone/perc play locked to Beat Pads (local + SE2-linked transport). */
+  beatPads808LabSynced?: boolean;
 };
 
 export type Se2BeatPadsTrack = StudioEditor2MidiTrack & Se2BeatPadsTrackFields;
