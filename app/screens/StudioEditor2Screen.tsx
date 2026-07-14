@@ -719,6 +719,12 @@ import {
 } from '@/app/lib/studio/studioInputMonitor';
 import { se2RemoveParallelTrackSlot } from '@/app/lib/studio/se2TrackParallelSlots';
 import {
+  previewStudioEditor2MidiInstrumentNote,
+  scheduleStudioEditor2MidiInstrumentNote,
+  warmupStudioEditor2MidiInstrument,
+  warmupStudioEditor2TrackMidiInstruments,
+} from '@/app/lib/studio/studioEditor2MidiInstrumentPlayback';
+import {
   findSe2RecordTargetTrackIndex,
   se2AudioRecordingActive,
   startSe2AudioRecording,
@@ -8618,6 +8624,23 @@ export default function StudioEditor2Screen({
           return;
         }
       }
+      if (
+        stripIn &&
+        tr &&
+        previewStudioEditor2MidiInstrumentNote({
+          ctx,
+          stripIn,
+          trackIndex: ti,
+          instrumentId: tr.midiInstrumentId,
+          midi: pitch,
+          velocity: Math.max(1, Math.round(velocity01 * 127)),
+          when: ctx.currentTime + 0.008,
+          durationSec: 0.45,
+          bpm: bpmRef.current,
+        })
+      ) {
+        return;
+      }
       if (stripIn) {
         previewMidiKeyThroughBus(ctx, stripIn, pitch, velocity01, 0.32, 64, false, 1);
       } else {
@@ -9550,6 +9573,20 @@ export default function StudioEditor2Screen({
               ) {
                 playScheduledMidiNote(ctx, stripIn, when, tEnd, note.pitch, note.velocity / 127, ti);
               }
+            } else if (
+              scheduleStudioEditor2MidiInstrumentNote({
+                ctx,
+                stripIn,
+                trackIndex: ti,
+                instrumentId: tr.midiInstrumentId,
+                midi: note.pitch,
+                velocity: note.velocity,
+                when,
+                durationSec: Math.max(0.04, tEnd - when),
+                bpm: bpmRef.current,
+              })
+            ) {
+              /* GM / 808 / synth from track instrument dropdown */
             } else {
               const drumSession =
                 studioTrackIsDrumChannel(tr) &&
@@ -10800,7 +10837,35 @@ export default function StudioEditor2Screen({
         i === trackIndex && studioTrackOutputsMidi(t) ? { ...t, midiInstrumentId: nextId } : t,
       ),
     );
-  }, []);
+    void (async () => {
+      const ctx = await ensureCtx();
+      const bus = midiPreviewBusRef.current;
+      if (!bus) return;
+      const masterOut = studioMasterOutRef.current ?? ctx.destination;
+      ensureSe2MixerStrips(ctx, bus, masterOut);
+      const stripIn = se2TrackPlaybackInput(
+        ctx,
+        bus,
+        trackIndex,
+        trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots(),
+        trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack(),
+        bpmRef.current,
+        masterOut,
+      );
+      await warmupStudioEditor2MidiInstrument(ctx, nextId, stripIn);
+      previewStudioEditor2MidiInstrumentNote({
+        ctx,
+        stripIn,
+        trackIndex,
+        instrumentId: nextId,
+        midi: 60,
+        velocity: 100,
+        when: ctx.currentTime + 0.01,
+        durationSec: 0.5,
+        bpm: bpmRef.current,
+      });
+    })();
+  }, [ensureCtx]);
 
   const updateTrackHarmonySteps = useCallback((trackIndex: number, steps: GrooveProgressionStep[]) => {
     setStudioTracks((prev) =>
@@ -18086,6 +18151,22 @@ export default function StudioEditor2Screen({
       ...studioTracksRef.current
         .filter((t) => studioTrackIsBeatPadsChannel(t))
         .map((t) => studioBeatPadsSessionForTrack(t as Se2BeatPadsTrack)),
+      warmupStudioEditor2TrackMidiInstruments(ctx, studioTracksRef.current, (ti) => {
+        const stripBus = midiPreviewBusRef.current;
+        if (!stripBus) return null;
+        return (
+          getStudioMixerStripInput(ti) ??
+          se2TrackPlaybackInput(
+            ctx,
+            stripBus,
+            ti,
+            trackFxSlotsRef.current[ti] ?? emptyMixerFxSlots(),
+            trackInsertFxRacksRef.current[ti] ?? defaultStudioTrackInsertFxRack(),
+            bpmRef.current,
+            masterOut ?? ctx.destination,
+          )
+        );
+      }),
     ]);
     muteMetro();
     cancelArrangerPreviewScheduling();
