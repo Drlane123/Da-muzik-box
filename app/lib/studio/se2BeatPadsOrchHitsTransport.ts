@@ -44,7 +44,8 @@ export function refillBeatPadsOrchHitsOnTransport(opts: {
   const chainFloor = opts.chainFloor ?? SE2_AUDIO_START_FLOOR_SEC;
   const stepBeats = 4 / BEAT_PADS_ORCH_HITS_STEPS_PER_BAR;
   const loopBeats = bars * 4;
-  const vel = Math.max(0.05, Math.min(1, voice.level ?? 1)) * 0.92;
+  const vel = Math.max(0, Math.min(1.5, voice.level ?? 1)) * 0.92;
+  if (vel <= 0.001) return;
 
   const beatNow = originBeat + Math.max(0, ctSnap - sessionStart) / spb;
   const startBeat = beatNow - 0.05;
@@ -96,8 +97,10 @@ export function auditionBeatPadsOrchHit(
   const def = getOrchestraHitDef(hitId);
   if (!def) return;
   const midi = targetMidi ?? def.rootMidi;
+  const vel = Math.max(0, Math.min(1.5, voice.level ?? 1)) * 0.95;
+  if (vel <= 0.001) return;
   void ensureOrchestraHitBuffer(ctx, def).then(() => {
-    playOrchestraHitSample(ctx, def, ctx.currentTime, 0.95, {
+    playOrchestraHitSample(ctx, def, ctx.currentTime, vel, {
       outputNode: dest,
       nativePitch: false,
       targetMidi: midi,

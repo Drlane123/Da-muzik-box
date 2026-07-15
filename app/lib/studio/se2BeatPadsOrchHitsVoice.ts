@@ -184,7 +184,7 @@ export function cloneBeatPadsOrchHitsVoice(voice: BeatPadsOrchHitsVoice): BeatPa
         : BEAT_PADS_ORCH_HITS_DEFAULT_BASE_MIDI,
     level:
       typeof voice.level === 'number' && Number.isFinite(voice.level)
-        ? Math.max(0.05, Math.min(1.5, voice.level))
+        ? Math.max(0, Math.min(1.5, voice.level))
         : 1,
   };
 }

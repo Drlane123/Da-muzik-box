@@ -14,6 +14,7 @@ import {
 } from 'react';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { setBeatPadsPlaylineAtCol } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
+import { BeatPadsInstrumentAnalogKnob } from '@/app/components/creation/BeatPadsInstrumentAnalogKnob';
 import { Se2Lab808ChordLockPanel } from '@/app/components/studio/Se2Lab808ChordLockPanel';
 import {
   se2Lab808ChordLockConnected,
@@ -416,6 +417,19 @@ export function BeatPadsOrchHitsPanel({
           >
             {syncedToBeatPads ? 'Synced' : 'Sync to BeatPads'}
           </button>
+          <div style={{ flexShrink: 0, marginLeft: 4 }}>
+            <BeatPadsInstrumentAnalogKnob
+              label="Vol"
+              value={Math.max(0, Math.min(1.5, voice.level ?? 1))}
+              min={0}
+              max={1.5}
+              step={0.01}
+              disabled={disabled}
+              accent={accentHex}
+              format={(v) => `${Math.round(v * 100)}%`}
+              onChange={(level) => patch({ level })}
+            />
+          </div>
         </div>
 
         <div
