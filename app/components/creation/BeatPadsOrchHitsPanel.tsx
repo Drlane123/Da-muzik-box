@@ -484,19 +484,17 @@ export function BeatPadsOrchHitsPanel({
           </div>
         </div>
 
+        {/* Key alone — never share this row with Place / Clear / Genre */}
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'row',
-            flexWrap: 'nowrap',
-            alignItems: 'flex-start',
-            gap: 10,
+            display: 'block',
             padding: '6px 8px',
             borderTop: '1px solid #333',
-            overflowX: 'auto',
+            position: 'relative',
+            zIndex: 1,
           }}
         >
-          <div style={{ width: 168, flexShrink: 0, overflow: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: 220 }}>
             <Se2Lab808ChordLockPanel
               lock={voice.chordLock}
               rootCount={progressionRoots.length}
@@ -510,39 +508,47 @@ export function BeatPadsOrchHitsPanel({
               onLockChange={(chordLock) => patch({ chordLock })}
             />
           </div>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'row',
-              flexWrap: 'nowrap',
-              alignItems: 'center',
-              gap: 6,
-              paddingTop: 16,
-            }}
-          >
-            <button type="button" disabled={disabled} onClick={placeRoots} style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}>
-              Place on roots
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={clearGrid}
-              style={{ ...toolBtn(false, accentHex, true), flexShrink: 0 }}
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              disabled={disabled || !hasHits}
-              onClick={duplicateFourBars}
-              style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
-              title="Copy bars 1–4 onto bars 5–8 (expands to 8 if needed)"
-            >
-              Duplicate 4→8
-            </button>
-          </div>
         </div>
 
+        {/* Place / Clear on their own row under Key */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 8px',
+            borderTop: '1px solid #333',
+            overflowX: 'auto',
+            position: 'relative',
+            zIndex: 1,
+            background: 'rgba(10, 8, 4, 0.96)',
+          }}
+        >
+          <button type="button" disabled={disabled} onClick={placeRoots} style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}>
+            Place on roots
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={clearGrid}
+            style={{ ...toolBtn(false, accentHex, true), flexShrink: 0 }}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            disabled={disabled || !hasHits}
+            onClick={duplicateFourBars}
+            style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
+            title="Copy bars 1–4 onto bars 5–8 (expands to 8 if needed)"
+          >
+            Duplicate 4→8
+          </button>
+        </div>
+
+        {/* Genre chips alone — never share space with Place / Clear */}
         <div
           style={{
             display: 'flex',
@@ -553,6 +559,9 @@ export function BeatPadsOrchHitsPanel({
             padding: '6px 8px',
             borderTop: '1px solid #333',
             overflowX: 'auto',
+            position: 'relative',
+            zIndex: 1,
+            background: 'rgba(10, 8, 4, 0.96)',
           }}
         >
           <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Genre</label>

@@ -285,13 +285,13 @@ export function Se2Lab808ChordLockPanel({
         {lock.enabled ? '● Lock on' : '○ Lock off'}
       </button>
 
-      <div className="relative min-w-0">
+      <div className="flex flex-row items-center gap-1.5 min-w-0">
         <button
           ref={btnRef}
           type="button"
           disabled={disabled}
           onClick={toggleMenu}
-          className="w-full rounded border px-2 py-1.5 text-left outline-none touch-manipulation inline-flex items-center justify-between gap-1 min-w-0"
+          className="min-w-0 flex-1 rounded border px-2 py-1.5 text-left outline-none touch-manipulation inline-flex items-center justify-between gap-1"
           style={{
             borderColor: '#333340',
             background: '#0a0a10',
@@ -307,17 +307,10 @@ export function Se2Lab808ChordLockPanel({
           <span className="truncate font-semibold">{sourceLabel}</span>
           <ChevronDown size={12} className="shrink-0 opacity-70" />
         </button>
-        {besideSource ? (
-          <div
-            className="absolute left-full top-1/2 z-10 -translate-y-1/2 pl-1.5 pointer-events-none"
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            {besideSource}
-          </div>
-        ) : null}
+        {besideSource ? <div className="shrink-0">{besideSource}</div> : null}
       </div>
 
-      {menu}
+      {open && menu ? createPortal(menu, document.body) : null}
     </div>
   );
 }
