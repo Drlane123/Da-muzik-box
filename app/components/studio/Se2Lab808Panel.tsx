@@ -379,11 +379,13 @@ export function Se2Lab808Panel({
     (genre: Se2Lab808SparseLowsGenre, seed: number) => {
       const v = voiceRef.current;
       const roots = rootsRef.current;
+      const key = lockKeyRef.current;
       const result = se2Lab808GenerateSparseLowsPattern({
         roots,
         loopBars: v.toneGridLoopBars,
         genre,
         seed,
+        keyRoot: key.keyRoot,
       });
       lowsSeedRef.current = seed;
       onVoiceChange({
@@ -400,17 +402,15 @@ export function Se2Lab808Panel({
 
   const handleGenerateLows = useCallback(
     (genre: Se2Lab808SparseLowsGenre) => {
-      if (!canGenerate) return;
       setLowsGenre(genre);
       applySparseLowsGrid(genre, lowsSeedRef.current || 1);
     },
-    [applySparseLowsGrid, canGenerate],
+    [applySparseLowsGrid],
   );
 
   const handleRegenerateLows = useCallback(() => {
-    if (!canGenerate) return;
     applySparseLowsGrid(lowsGenre, (lowsSeedRef.current || 1) + 1);
-  }, [applySparseLowsGrid, canGenerate, lowsGenre]);
+  }, [applySparseLowsGrid, lowsGenre]);
 
   const tonePadsShared = {
     voice,
@@ -481,7 +481,7 @@ export function Se2Lab808Panel({
 
             <aside
               className="flex flex-col gap-2.5 shrink-0 min-w-0 overflow-visible"
-              style={{ width: miniature ? (lowsTabOpen ? 168 : 156) : lowsTabOpen ? 188 : 172 }}
+              style={{ width: miniature ? (lowsTabOpen ? 200 : 188) : lowsTabOpen ? 220 : 210 }}
             >
               <div className="flex flex-col gap-1">
                 <span style={sideLabel}>Lane</span>
@@ -523,14 +523,17 @@ export function Se2Lab808Panel({
                     >
                       Regenerate
                     </button>
+                  </div>
+                  {/* Lows sits to the RIGHT of Generate / Regenerate — not under them. */}
+                  <div className="flex flex-col gap-1 shrink-0 items-stretch">
                     <button
                       type="button"
                       disabled={disabled}
                       style={genBtn(lowsTabOpen ? '#f5a623' : '#c4a574', true, true)}
                       onClick={() => setLowsTabOpen((o) => !o)}
-                      title="Sparse R&B / Trap lows — 2–3 hits per bar locked to chord progression"
+                      title="Dark sparse R&B / Trap lows — 2–3 hits/bar, chord roots or freelance"
                     >
-                      {lowsTabOpen ? 'Lows ▴' : 'Lows ▾'}
+                      {lowsTabOpen ? 'Lows ▴' : 'Lows'}
                     </button>
                   </div>
                 </div>
@@ -541,7 +544,7 @@ export function Se2Lab808Panel({
                   className="flex flex-col gap-1.5 min-w-0 rounded-md border px-1.5 py-1.5"
                   style={{ borderColor: '#f5a62366', background: 'rgba(245,166,35,0.06)' }}
                 >
-                  <span style={{ ...sideLabel, color: '#f5a623' }}>Chord lows · 2–3 / bar</span>
+                  <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows · 2–3 / bar</span>
                   <div className="flex flex-wrap gap-1">
                     {(
                       [
@@ -565,7 +568,7 @@ export function Se2Lab808Panel({
                             flex: '1 1 auto',
                             width: 'auto',
                           }}
-                          title={`${label} — sparse chord-progression 808s`}
+                          title={`${label} — dark sparse melodies for drum tracks`}
                         >
                           {label}
                         </button>
@@ -575,25 +578,25 @@ export function Se2Lab808Panel({
                   <div className="flex gap-1">
                     <button
                       type="button"
-                      disabled={!canGenerate}
-                      style={{ ...genBtn('#f5a623', canGenerate, true), flex: 1, minWidth: 0 }}
+                      disabled={disabled}
+                      style={{ ...genBtn('#f5a623', !disabled, true), flex: 1, minWidth: 0 }}
                       onClick={() => handleGenerateLows(lowsGenre)}
-                      title={`Generate sparse ${lowsGenre === 'rnb' ? 'R&B' : lowsGenre === 'reggae' ? 'Reggae' : 'Trap'} lows from chord progression (2–3 hits/bar)`}
+                      title={`Generate dark ${lowsGenre === 'rnb' ? 'R&B' : lowsGenre === 'reggae' ? 'Reggae' : 'Trap'} lows — chord roots if locked, else freelance dark minor`}
                     >
                       Gen lows
                     </button>
                     <button
                       type="button"
-                      disabled={!canGenerate}
-                      style={{ ...genBtn(accent, canGenerate, true), flex: 1, minWidth: 0 }}
+                      disabled={disabled}
+                      style={{ ...genBtn(accent, !disabled, true), flex: 1, minWidth: 0 }}
                       onClick={handleRegenerateLows}
-                      title="Roll another sparse lows pocket (same genre · chord roots)"
+                      title="Roll another dark lows melody (same genre)"
                     >
                       Regen lows
                     </button>
                   </div>
                   <span className="text-[7px] leading-tight" style={{ color: '#9a8a70' }}>
-                    Follows progression roots · works on Kick or Bass Low · 4/8/16 bars
+                    Chord roots when locked · freelance dark if not · Kick or Bass Low
                   </span>
                 </div>
               ) : null}

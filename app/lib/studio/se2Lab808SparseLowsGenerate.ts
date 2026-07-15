@@ -1,6 +1,7 @@
 /**
- * SE2 / Beat Pads 808 Lab — generate sparse R&B / Trap lows locked to chord progression.
- * Places 2–3 hits per bar on the active progression root (not dense trap rolls).
+ * SE2 / Beat Pads 808 Lab — sparse dark R&B / Trap lows.
+ * 2–3 hits/bar with melodic intervals (not root-only).
+ * Chord progression when roots exist; freelance dark minor when not.
  * Does not alter {@link se2Lab808GenerateRootGridPattern}.
  */
 import { LAB808_BEATS_PER_BAR, lab808ActiveRootIndexAtBeat } from '@/app/lib/creationStation/lab808ChordRoots';
@@ -19,6 +20,7 @@ import {
   type Se2Lab808GenerateRootGridResult,
 } from '@/app/lib/studio/se2Lab808RootGridGenerate';
 import {
+  SE2_LAB808_FREELANCE_DARK_PROGRESSIONS,
   se2Lab808SparseLowsTemplates,
   se2NormalizeLab808SparseLowsGenre,
   type Se2Lab808SparseLowsGenre,
@@ -31,13 +33,17 @@ const GENRE_LABEL: Record<Se2Lab808SparseLowsGenre, string> = {
   reggae: 'Reggae lows',
 };
 
+/** Low C-ish center for freelance 808 melodies (fits kick / bass low pads). */
+const FREELANCE_BASE_MIDI = 36;
+
 function pickTemplate(
   pool: readonly Se2Lab808SparseLowsTemplate[],
   rng: () => number,
-  excludeId?: string | null,
+  recentIds: readonly string[],
 ): Se2Lab808SparseLowsTemplate | null {
   if (pool.length === 0) return null;
-  const alternates = excludeId ? pool.filter((t) => t.id !== excludeId) : pool;
+  const blocked = new Set(recentIds);
+  const alternates = pool.filter((t) => !blocked.has(t.id));
   const list = alternates.length > 0 ? alternates : pool;
   return list[Math.floor(rng() * list.length)] ?? null;
 }
@@ -54,9 +60,46 @@ function placeHit(
   return true;
 }
 
+function clampLaneNear(rootLane: number, interval: number): number {
+  let lane = rootLane + interval;
+  // Keep melody on the 16-pad board; prefer dropping an octave over climbing bright.
+  while (lane > 15) lane -= 12;
+  while (lane < 0) lane += 12;
+  if (lane > 15) lane = 15;
+  if (lane < 0) lane = 0;
+  return lane;
+}
+
+function rootMidiForBar(
+  roots: readonly Lab808ProgressionRoot[],
+  bar: number,
+  loopBeats: number,
+  freelancePcs: readonly number[],
+  freelanceKeyPc: number,
+  freelanceBaseMidi: number,
+): number {
+  if (roots.length > 0) {
+    const barBeat = bar * LAB808_BEATS_PER_BAR;
+    const rootIdx =
+      lab808ActiveRootIndexAtBeat(roots, barBeat + 0.01, loopBeats)
+      ?? lab808ActiveRootIndexAtBeat(roots, barBeat, loopBeats)
+      ?? 0;
+    return roots[rootIdx]?.midi ?? roots[0]!.midi;
+  }
+  const deg = freelancePcs[bar % freelancePcs.length] ?? 0;
+  const pc = (freelanceKeyPc + deg) % 12;
+  // Keep freelance roots in a low octave around base.
+  const basePc = ((freelanceBaseMidi % 12) + 12) % 12;
+  let midi = freelanceBaseMidi - basePc + pc;
+  if (midi > freelanceBaseMidi + 6) midi -= 12;
+  if (midi < freelanceBaseMidi - 6) midi += 12;
+  return midi;
+}
+
 /**
- * Write sparse chord-progression lows onto the tone grid.
- * One pocket per bar (2–3 hits), pitch follows the progression root active on that bar.
+ * Write sparse dark lows onto the tone grid.
+ * With roots: follow progression + dark interval contours.
+ * Without roots: freelance dark minor phrase (still 2–3 hits/bar).
  */
 export function se2Lab808GenerateSparseLowsPattern(args: {
   roots: readonly Lab808ProgressionRoot[];
@@ -64,61 +107,68 @@ export function se2Lab808GenerateSparseLowsPattern(args: {
   genre: Se2Lab808SparseLowsGenre | string;
   seed?: number;
   tonePadBaseMidi?: number;
+  /** Song / lock key root (0–11) for freelance mode. */
+  keyRoot?: number;
 }): Se2Lab808GenerateRootGridResult {
   const genre = se2NormalizeLab808SparseLowsGenre(
     typeof args.genre === 'string' ? args.genre : undefined,
   );
   const roots = args.roots;
-  if (roots.length === 0) {
-    return {
-      pattern: emptySe2Lab808ToneGridPattern(args.loopBars),
-      tonePadBaseMidi: args.tonePadBaseMidi ?? lab808DefaultTonePadBaseMidi(),
-      hitCount: 0,
-      status: 'No roots — lock a chord progression (or key) first',
-    };
-  }
-
+  const freelance = roots.length === 0;
   const pool = se2Lab808SparseLowsTemplates(genre);
-  const baseMidi = se2Lab808BaseMidiForRoots(roots);
+  const rng = mulberry32((args.seed ?? Date.now()) >>> 0);
+
+  const freelanceProg =
+    SE2_LAB808_FREELANCE_DARK_PROGRESSIONS[
+      Math.floor(rng() * SE2_LAB808_FREELANCE_DARK_PROGRESSIONS.length)
+    ]!;
+  const freelanceKeyPc = ((Math.round(args.keyRoot ?? 0) % 12) + 12) % 12;
+
+  const baseMidi = freelance
+    ? (args.tonePadBaseMidi ?? FREELANCE_BASE_MIDI)
+    : se2Lab808BaseMidiForRoots(roots);
   const totalSteps = se2Lab808ToneGridStepCount(args.loopBars);
   const pattern = emptySe2Lab808ToneGridPattern(args.loopBars);
   const bars = Math.max(1, Math.round(args.loopBars));
   const loopBeats = bars * LAB808_BEATS_PER_BAR;
-  const rng = mulberry32((args.seed ?? Date.now()) >>> 0);
   let hitCount = 0;
-  let lastTplId: string | null = null;
+  const recentIds: string[] = [];
   const usedNames: string[] = [];
 
   for (let bar = 0; bar < bars; bar += 1) {
-    const barBeat = bar * LAB808_BEATS_PER_BAR;
-    const rootIdx =
-      lab808ActiveRootIndexAtBeat(roots, barBeat + 0.01, loopBeats)
-      ?? lab808ActiveRootIndexAtBeat(roots, barBeat, loopBeats)
-      ?? 0;
-    const root = roots[rootIdx] ?? roots[0]!;
-    const lane = se2Lab808LaneForRootMidi(baseMidi, root.midi);
-    if (lane == null) continue;
+    const rootMidi = rootMidiForBar(
+      roots,
+      bar,
+      loopBeats,
+      freelanceProg,
+      freelanceKeyPc,
+      FREELANCE_BASE_MIDI,
+    );
+    const rootLane = se2Lab808LaneForRootMidi(baseMidi, rootMidi);
+    if (rootLane == null) continue;
 
-    const tpl = pickTemplate(pool, rng, lastTplId);
+    const tpl = pickTemplate(pool, rng, recentIds);
     if (!tpl) continue;
-    lastTplId = tpl.id;
-    if (usedNames.length < 3) usedNames.push(tpl.name);
+    recentIds.push(tpl.id);
+    if (recentIds.length > 3) recentIds.shift();
+    if (usedNames.length < 4) usedNames.push(tpl.name);
 
     const barStartCol = bar * SE2_LAB808_TONE_GRID_STEPS_PER_BAR;
-    // Hard cap: never more than 3 hits in a bar.
-    const steps = tpl.steps.slice(0, 3);
-    for (const step of steps) {
-      const col = barStartCol + step;
+    const hits = tpl.hits.slice(0, 3);
+    for (const h of hits) {
+      const col = barStartCol + h.step;
+      const lane = clampLaneNear(rootLane, h.interval);
       if (placeHit(pattern, lane, col, totalSteps)) hitCount += 1;
     }
   }
 
   const sample = usedNames.length > 0 ? usedNames.join(' · ') : 'sparse';
+  const mode = freelance ? 'freelance dark' : 'chord roots';
   return {
     pattern,
-    tonePadBaseMidi: baseMidi,
+    tonePadBaseMidi: baseMidi || lab808DefaultTonePadBaseMidi(),
     hitCount,
-    status: `${hitCount} · ${bars}b ${GENRE_LABEL[genre]} · chord roots · ${sample}`,
+    status: `${hitCount} · ${bars}b ${GENRE_LABEL[genre]} · ${mode} · ${sample}`,
   };
 }
 

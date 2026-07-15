@@ -19,13 +19,20 @@ const roots: Lab808ProgressionRoot[] = [
 ];
 
 describe('se2Lab808 sparse lows pack', () => {
-  it('ships at least 15 R&B and 20 Trap templates with 2–3 hits each', () => {
-    expect(SE2_LAB808_RNB_LOWS_TEMPLATES.length).toBeGreaterThanOrEqual(15);
-    expect(SE2_LAB808_TRAP_LOWS_TEMPLATES.length).toBeGreaterThanOrEqual(20);
+  it('ships at least 25 R&B and 30 Trap dark templates with 2–3 hits each', () => {
+    expect(SE2_LAB808_RNB_LOWS_TEMPLATES.length).toBeGreaterThanOrEqual(25);
+    expect(SE2_LAB808_TRAP_LOWS_TEMPLATES.length).toBeGreaterThanOrEqual(30);
     for (const t of [...SE2_LAB808_RNB_LOWS_TEMPLATES, ...SE2_LAB808_TRAP_LOWS_TEMPLATES]) {
-      expect(t.steps.length).toBeGreaterThanOrEqual(2);
-      expect(t.steps.length).toBeLessThanOrEqual(3);
+      expect(t.hits.length).toBeGreaterThanOrEqual(2);
+      expect(t.hits.length).toBeLessThanOrEqual(3);
     }
+  });
+
+  it('uses dark interval colors (not all-root drones)', () => {
+    const withMotion = SE2_LAB808_TRAP_LOWS_TEMPLATES.filter((t) =>
+      t.hits.some((h) => h.interval !== 0),
+    );
+    expect(withMotion.length).toBeGreaterThan(20);
   });
 });
 
@@ -49,7 +56,18 @@ describe('se2Lab808GenerateSparseLowsPattern', () => {
         }
       }
       expect(count).toBeLessThanOrEqual(3);
-      expect(count).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it('freelance generates without roots', () => {
+    const result = se2Lab808GenerateSparseLowsPattern({
+      roots: [],
+      loopBars: 4,
+      genre: 'rnb',
+      seed: 7,
+      keyRoot: 0,
+    });
+    expect(result.hitCount).toBeGreaterThan(0);
+    expect(result.status).toMatch(/freelance/i);
   });
 });
