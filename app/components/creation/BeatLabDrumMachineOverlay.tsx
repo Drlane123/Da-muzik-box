@@ -1702,11 +1702,11 @@ export function BeatLabDrumMachineOverlay({
                         setOrchHitsOpen(true);
                       }}
                       style={{
-                        width: 28,
+                        width: 40,
                         height: 28,
-                        borderRadius: '50%',
+                        borderRadius: 14,
                         flexShrink: 0,
-                        padding: 0,
+                        padding: '0 4px',
                         border: orchHitsOpen
                           ? `1.5px solid ${BEAT_PADS_ORCH_HITS_ACCENT}`
                           : beatPadsOrchHits.syncedToBeatPads
@@ -1721,9 +1721,9 @@ export function BeatLabDrumMachineOverlay({
                           orchHitsOpen || beatPadsOrchHits.syncedToBeatPads
                             ? '#fff8e8'
                             : BEAT_PADS_ORCH_HITS_ACCENT,
-                        fontSize: 7,
+                        fontSize: 8,
                         fontWeight: 800,
-                        letterSpacing: 0.2,
+                        letterSpacing: 0.3,
                         lineHeight: 1.05,
                         textAlign: 'center',
                         cursor: patternActionsDisabled ? 'default' : 'pointer',
