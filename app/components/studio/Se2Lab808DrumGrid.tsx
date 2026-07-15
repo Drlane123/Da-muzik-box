@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { Eraser, MousePointer2, Pencil } from 'lucide-react';
 import { setBeatPadsPlaylineAtCol } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
+import { gridColFromClientX } from '@/app/lib/creationStation/gridColFromClientX';
 import type { Lab808SoundLane } from '@/app/lib/creationStation/eightZeroEightVoice';
 import {
   LAB808_TONE_PAD_COUNT,
@@ -361,37 +362,54 @@ export function Se2Lab808DrumGrid({
   const endPaint = useCallback(() => {
     if (moveRef.current) commitMove();
     paintRef.current = null;
-    scrubRef.current = false;
   }, [commitMove]);
+
+  const endScrub = useCallback((e?: PointerEvent<HTMLElement>) => {
+    if (!scrubRef.current) return;
+    scrubRef.current = false;
+    if (!e) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const stepsGridEl = useCallback((): HTMLElement | null => {
+    return (
+      (gridScrollRef.current?.querySelector('[data-lab808-tone-grid-steps]') as HTMLElement | null) ??
+      null
+    );
+  }, []);
 
   const colFromClientX = useCallback(
     (clientX: number): number | null => {
-      const scrollEl = gridScrollRef.current;
-      if (!scrollEl) return null;
-      const inner = scrollEl.querySelector('[data-lab808-tone-grid-steps]') as HTMLElement | null;
-      if (!inner) return null;
-      const rect = inner.getBoundingClientRect();
-      const localX = clientX - rect.left;
-      if (localX < 0 || localX > rect.width) return null;
-      const col = Math.floor(localX / layout.stepW);
-      return Math.max(0, Math.min(stepCount - 1, col));
+      const inner = stepsGridEl();
+      if (!inner || stepCount <= 0) return null;
+      return gridColFromClientX(clientX, inner, stepCount);
     },
-    [layout.stepW, stepCount],
+    [stepsGridEl, stepCount],
   );
 
   const onScrubPointerDown = useCallback(
-    (col: number, e: PointerEvent<HTMLElement>) => {
-      if (disabled) return;
+    (e: PointerEvent<HTMLElement>, col?: number) => {
+      if (disabled || e.button !== 0) return;
       e.preventDefault();
+      e.stopPropagation();
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {
         /* ignore */
       }
       scrubRef.current = true;
-      seekCol(col);
+      if (typeof col === 'number' && Number.isFinite(col)) {
+        seekCol(Math.max(0, Math.min(stepCount - 1, Math.floor(col))));
+        return;
+      }
+      const next = colFromClientX(e.clientX);
+      if (next != null) seekCol(next);
     },
-    [disabled, seekCol],
+    [colFromClientX, disabled, seekCol, stepCount],
   );
 
   const onScrubPointerMove = useCallback(
@@ -655,8 +673,14 @@ export function Se2Lab808DrumGrid({
               ? { maxHeight: gridMaxHeightPx }
               : null),
           }}
-          onPointerUp={endPaint}
-          onPointerCancel={endPaint}
+          onPointerUp={(e) => {
+            endPaint();
+            endScrub(e);
+          }}
+          onPointerCancel={(e) => {
+            endPaint();
+            endScrub(e);
+          }}
           onPointerLeave={endPaint}
           onPointerMove={onScrubPointerMove}
         >
@@ -727,16 +751,40 @@ export function Se2Lab808DrumGrid({
             />
             <div
               ref={playlineElRef}
-              className="absolute top-0 bottom-0 pointer-events-none z-10"
+              className="absolute top-0 bottom-0 z-10"
+              onPointerDown={(e) => onScrubPointerDown(e)}
+              onPointerMove={onScrubPointerMove}
+              onPointerUp={endScrub}
+              onPointerCancel={endScrub}
+              title={disabled ? undefined : 'Drag playhead'}
               style={{
                 left: 0,
-                width: 2,
-                background: playing ? accent : `${accent}99`,
-                boxShadow: playing ? `0 0 6px ${accent}88` : undefined,
+                width: 12,
+                marginLeft: -5,
+                background: 'transparent',
+                cursor: disabled ? 'default' : 'ew-resize',
+                touchAction: disabled ? undefined : 'none',
+                pointerEvents: disabled ? 'none' : 'auto',
                 willChange: playing ? 'transform' : undefined,
+                // While playing WAAPI owns transform; while stopped keep parked column.
+                ...(playing
+                  ? {}
+                  : {
+                      transform: `translate3d(${Math.floor(playheadCol) * layout.colW}px, 0, 0)`,
+                    }),
               }}
               aria-hidden
-            />
+            >
+              <div
+                className="absolute top-0 bottom-0 pointer-events-none"
+                style={{
+                  left: 5,
+                  width: 2,
+                  background: playing ? accent : `${accent}99`,
+                  boxShadow: playing ? `0 0 6px ${accent}88` : undefined,
+                }}
+              />
+            </div>
             <div
               data-lab808-tone-grid-steps
               className="inline-grid min-w-0 relative"
@@ -760,7 +808,10 @@ export function Se2Lab808DrumGrid({
                   key={`h-${col}`}
                   type="button"
                   disabled={disabled}
-                  onPointerDown={(e) => onScrubPointerDown(col, e)}
+                  onPointerDown={(e) => onScrubPointerDown(e, col)}
+                  onPointerMove={onScrubPointerMove}
+                  onPointerUp={endScrub}
+                  onPointerCancel={endScrub}
                   className="text-center font-bold tabular-nums flex items-center justify-center touch-manipulation select-none outline-none relative z-[2]"
                   style={{
                     fontSize: layout.headerFontPx,

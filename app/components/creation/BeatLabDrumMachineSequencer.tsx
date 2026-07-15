@@ -70,6 +70,7 @@ import {
   BEAT_PADS_GRID_COL_W,
   beatPadsPlaylineXForCol,
 } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
+import { gridColFromClientX } from '@/app/lib/creationStation/gridColFromClientX';
 
 const MINT = '#7cf4c6';
 const LANE_W = 72;
@@ -176,13 +177,7 @@ function BeatPadsGridHeader({
   const scrubbingRef = useRef(false);
 
   const colFromClientX = useCallback(
-    (clientX: number) => {
-      const el = headerRef.current;
-      if (!el || cols <= 0) return 0;
-      const rect = el.getBoundingClientRect();
-      const x = clientX - rect.left;
-      return Math.max(0, Math.min(cols - 1, Math.floor(x / COL_W)));
-    },
+    (clientX: number) => gridColFromClientX(clientX, headerRef.current, cols),
     [cols],
   );
 
@@ -635,9 +630,9 @@ export function BeatLabDrumMachineSequencer({
       const rect = el.getBoundingClientRect();
       const x = clientX - rect.left;
       const y = clientY - rect.top;
-      if (x < 0 || y < 0) return null;
-      const col = Math.floor(x / COL_W);
-      const lane = Math.floor(y / ROW_H);
+      if (x < 0 || y < 0 || rect.width <= 0 || rect.height <= 0) return null;
+      const col = Math.floor(x / (rect.width / Math.max(1, cols)));
+      const lane = Math.floor(y / (rect.height / BEAT_PADS_LANE_COUNT));
       if (col < 0 || col >= cols || lane < 0 || lane >= BEAT_PADS_LANE_COUNT) return null;
       return { lane, col };
     },
@@ -647,11 +642,7 @@ export function BeatLabDrumMachineSequencer({
   const seekColFromClientX = useCallback(
     (clientX: number) => {
       if (!onSeekPlayheadCol || !playheadScrubEnabled) return;
-      const el = gridBodyRef.current;
-      if (!el || cols <= 0) return;
-      const rect = el.getBoundingClientRect();
-      const col = Math.max(0, Math.min(cols - 1, Math.floor((clientX - rect.left) / COL_W)));
-      onSeekPlayheadCol(col);
+      onSeekPlayheadCol(gridColFromClientX(clientX, gridBodyRef.current, cols));
     },
     [cols, onSeekPlayheadCol, playheadScrubEnabled],
   );

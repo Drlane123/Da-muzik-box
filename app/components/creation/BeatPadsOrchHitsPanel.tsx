@@ -15,6 +15,7 @@ import {
 } from 'react';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { setBeatPadsPlaylineAtCol } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
+import { gridColFromClientXWithGutter } from '@/app/lib/creationStation/gridColFromClientX';
 import { BeatPadsInstrumentAnalogKnob } from '@/app/components/creation/BeatPadsInstrumentAnalogKnob';
 import { Se2Lab808ChordLockPanel } from '@/app/components/studio/Se2Lab808ChordLockPanel';
 import {
@@ -163,8 +164,8 @@ export function BeatPadsOrchHitsPanel({
     if (!el) return;
     const measure = () => {
       const w = el.clientWidth;
-      const labelW = 44;
-      const next = Math.max(10, Math.floor((w - labelW) / Math.max(1, cols)));
+      // Fixed px columns (no CSS gap) so scrub X and playline transform share one geometry.
+      const next = Math.max(10, Math.floor((w - ORCH_HITS_LABEL_W) / Math.max(1, cols)));
       setColW(next);
     };
     measure();
@@ -199,17 +200,21 @@ export function BeatPadsOrchHitsPanel({
       if (disabled || cols <= 0) return;
       const grid = gridWrapRef.current?.querySelector('[data-orch-hits-grid]') as HTMLElement | null;
       if (!grid) return;
-      const rect = grid.getBoundingClientRect();
-      const x = clientX - rect.left - ORCH_HITS_LABEL_W;
-      const cellW = Math.max(1, colW);
-      const col = Math.max(0, Math.min(cols - 1, Math.floor(x / cellW)));
-      seekCol(col);
+      seekCol(
+        gridColFromClientXWithGutter(
+          clientX,
+          grid,
+          cols,
+          ORCH_HITS_LABEL_W,
+          cols * Math.max(1, colW),
+        ),
+      );
     },
     [colW, cols, disabled, seekCol],
   );
 
   const onScrubPointerDown = useCallback(
-    (e: ReactPointerEvent<HTMLElement>) => {
+    (e: ReactPointerEvent<HTMLElement>, col?: number) => {
       if (disabled || e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
@@ -219,9 +224,13 @@ export function BeatPadsOrchHitsPanel({
       } catch {
         /* */
       }
+      if (typeof col === 'number' && Number.isFinite(col)) {
+        seekCol(Math.max(0, Math.min(cols - 1, Math.floor(col))));
+        return;
+      }
       seekColFromClientX(e.clientX);
     },
-    [disabled, seekColFromClientX],
+    [cols, disabled, seekCol, seekColFromClientX],
   );
 
   const onScrubPointerMove = useCallback(
@@ -785,15 +794,16 @@ export function BeatPadsOrchHitsPanel({
           style={{
             position: 'relative',
             display: 'grid',
-            gridTemplateColumns: `44px repeat(${cols}, minmax(10px, 1fr))`,
-            gap: 1,
-            minWidth: 44 + cols * 11,
+            gridTemplateColumns: `${ORCH_HITS_LABEL_W}px repeat(${cols}, ${Math.max(1, colW)}px)`,
+            columnGap: 0,
+            rowGap: 1,
+            minWidth: ORCH_HITS_LABEL_W + cols * Math.max(1, colW),
           }}
         >
           <div
             ref={playlineElRef}
             aria-hidden
-            onPointerDown={onScrubPointerDown}
+            onPointerDown={(e) => onScrubPointerDown(e)}
             onPointerMove={onScrubPointerMove}
             onPointerUp={endScrub}
             onPointerCancel={endScrub}
@@ -802,7 +812,7 @@ export function BeatPadsOrchHitsPanel({
               position: 'absolute',
               top: 0,
               bottom: 0,
-              left: 44,
+              left: ORCH_HITS_LABEL_W,
               width: 12,
               marginLeft: -5,
               zIndex: 8,
@@ -836,7 +846,7 @@ export function BeatPadsOrchHitsPanel({
           {Array.from({ length: cols }, (_, c) => (
             <div
               key={`h${c}`}
-              onPointerDown={onScrubPointerDown}
+              onPointerDown={(e) => onScrubPointerDown(e, c)}
               onPointerMove={onScrubPointerMove}
               onPointerUp={endScrub}
               onPointerCancel={endScrub}
