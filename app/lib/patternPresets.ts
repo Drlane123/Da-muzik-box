@@ -27,6 +27,10 @@ import { BEAT_LAB_SIGNATURE_TRAP_PATTERNS } from '@/app/lib/creationStation/beat
 import { BEAT_LAB_STREET_TRAP_PATTERNS } from '@/app/lib/creationStation/beatLabStreetTrapPatterns';
 import { BEAT_LAB_MODERN_RNB_PATTERNS } from '@/app/lib/creationStation/beatLabModernRnbPatterns';
 import { BEAT_LAB_PLATINUM_URBAN_PATTERNS } from '@/app/lib/creationStation/beatLabPlatinumUrbanPatterns';
+import {
+  BEAT_LAB_SE2_BEAT_PADS_BANK_BPM,
+  BEAT_LAB_SE2_BEAT_PADS_BANK_PACK,
+} from '@/app/lib/creationStation/beatLabSe2BeatPadsBankPack';
 import { beatLabTrapTransportBpmFromProducer } from '@/app/lib/creationStation/beatLabTrapTempo';
 import {
   trap808FollowKick,
@@ -115,6 +119,7 @@ const DRUM_PRESET_BPM: Readonly<Record<string, number>> = {
   'rnb-1': 92, 'rnb-2': 74, 'rnb-3': 88, 'rnb-4': 72, 'rnb-5': 96,
   'rnb-6': 90, 'rnb-7': 86, 'rnb-8': 76, 'rnb-9': 94, 'rnb-10': 88,
   'rnb-11': 90, 'rnb-12': 100, 'rnb-13': 84, 'rnb-14': 92, 'rnb-15': 94,
+  ...BEAT_LAB_SE2_BEAT_PADS_BANK_BPM,
   'soul-1': 94, 'soul-2': 96,
   'lofi-1': 78, 'lofi-2': 82, 'lofi-3': 86,
   'jazz-1': 128, 'jazz-2': 168,
@@ -890,6 +895,7 @@ const ALL_DRUM_PATTERN_SRC: PatternPreset[] = [
   ...BEAT_LAB_FLAGSHIP_DRUM_PATTERNS,
   ...DRUM_PRESETS,
   ...BEATLAB_EXPANDED_DRUMS_AS_PATTERN,
+  ...BEAT_LAB_SE2_BEAT_PADS_BANK_PACK,
 ];
 
 /** All hand-crafted drum grids for Beat Lab Pattern Bank + AI Pattern. */
