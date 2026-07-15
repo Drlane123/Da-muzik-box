@@ -1719,11 +1719,17 @@ export function BeatLabDrumMachineOverlay({
                         e.preventDefault();
                         e.stopPropagation();
                         if (orchHitsOpen) {
-                          // Closing: keep pattern + Sync state as-is (user must arm Sync themselves).
+                          // Closing: keep pattern, but always clear Sync — user must arm it again.
+                          if (beatPadsOrchHits.syncedToBeatPads) {
+                            beatPadsOrchHits.onSyncedToBeatPadsChange(false);
+                          }
                           setOrchHitsOpen(false);
                           return;
                         }
                         setVocalBoxOpen(false);
+                        if (lab808Open && beatPads808Lab?.syncedToBeatPads) {
+                          beatPads808Lab.onSyncedToBeatPadsChange(false);
+                        }
                         setLab808Open(false);
                         setOrchHitsOpen(true);
                       }}
@@ -1770,6 +1776,12 @@ export function BeatLabDrumMachineOverlay({
                     disabled={patternActionsDisabled}
                     onClick={() => {
                       setVocalBoxOpen((o) => !o);
+                      if (lab808Open && beatPads808Lab?.syncedToBeatPads) {
+                        beatPads808Lab.onSyncedToBeatPadsChange(false);
+                      }
+                      if (orchHitsOpen && beatPadsOrchHits?.syncedToBeatPads) {
+                        beatPadsOrchHits.onSyncedToBeatPadsChange(false);
+                      }
                       setLab808Open(false);
                       setOrchHitsOpen(false);
                     }}
@@ -1823,19 +1835,23 @@ export function BeatLabDrumMachineOverlay({
                       onClick={() => {
                         setLab808Open((o) => {
                           if (o) {
-                            // Closing: keep pattern + Sync state as-is (user must arm Sync themselves).
+                            // Closing: keep pattern, but always clear Sync — user must arm it again.
+                            if (beatPads808Lab.syncedToBeatPads) {
+                              beatPads808Lab.onSyncedToBeatPadsChange(false);
+                            }
                             return false;
                           }
                           setVocalBoxOpen(false);
+                          if (orchHitsOpen && beatPadsOrchHits?.syncedToBeatPads) {
+                            beatPadsOrchHits.onSyncedToBeatPadsChange(false);
+                          }
                           setOrchHitsOpen(false);
                           return true;
                         });
                       }}
                       title={
                         lab808Open
-                          ? beatPads808Lab.syncedToBeatPads
-                            ? 'Close 808 Lab — pattern kept · Synced to BeatPads'
-                            : 'Close 808 Lab — pattern kept (Sync stays off until you turn it on)'
+                          ? 'Close 808 Lab — pattern kept · Sync turns off (arm Sync when you want it with Beat Pads)'
                           : beatPads808Lab.syncedToBeatPads
                             ? '808 Lab — Synced to BeatPads (plays with drums)'
                             : '808 Lab — piano-roll 808s (turn Sync on to play with Beat Pads)'
@@ -2313,6 +2329,9 @@ export function BeatLabDrumMachineOverlay({
               <button
                 type="button"
                 onClick={() => {
+                  if (beatPadsOrchHits.syncedToBeatPads) {
+                    beatPadsOrchHits.onSyncedToBeatPadsChange(false);
+                  }
                   setOrchHitsOpen(false);
                 }}
                 style={{
