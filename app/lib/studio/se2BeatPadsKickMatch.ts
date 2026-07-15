@@ -1,23 +1,24 @@
 /**
- * Beat Pads — kick / 808 key lock + per-pad kick regenerate (Match chords).
+ * Beat Pads — kick / 808 key lock + per-pad regenerate (Match chords).
+ * Regenerate paints a Lane Placement groove for the selected pad's instrument role
+ * (kick / snare / clap / hat / …), not always a kick.
  */
 import {
-  beatPadsNewNoteId,
   type BeatPadsDrumPattern,
   type BeatPadsGridStepsPerBar,
 } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
-import {
-  trapKickLean,
-  trapKickMetro,
-  trapKickMinimal,
-  trapKickSlide,
-  trapKickSouth,
-  trapKickSparse,
-  trapKickSyncopated,
-} from '@/app/lib/creationStation/beatLabTrapPatternGrid';
 import { BEAT_PADS_LANE_GM_PITCH } from '@/app/lib/creationStation/beatPadsStudioExport';
+import {
+  applyBeatPadsLanePlacementTemplate,
+  beatPadsDrumRoleFromLabel,
+  beatPadsDrumRoleLabel,
+  getBeatPadsLaneTemplates,
+  type BeatPadsDrumRole,
+  type BeatPadsPlacementGenre,
+} from '@/app/lib/creationStation/beatPadsLanePlacementTemplates';
 import { mulberry32 } from '@/app/lib/magentaPatternGenerator';
 import type { Se2BeatPadsHarmonySourceTrack } from '@/app/lib/studio/se2BeatPadsHarmony';
+import { se2NormalizeDrumGenStyle } from '@/app/lib/studio/se2DrumGeneratorTrack';
 
 /** Beat Pads kick lane (pad 0). */
 export const SE2_BEAT_PADS_KICK_LANE = 0;
@@ -92,63 +93,61 @@ export function se2BeatPadsKickKeySemitones(keyRoot: number, referencePc = SE2_B
   return semi;
 }
 
-type KickBarTemplate = { id: string; label: string; steps: readonly number[] };
+/** Map Match-chords style chip → Lane Placement genre. */
+export function se2BeatPadsPlacementGenreFromStyle(style: string | undefined): BeatPadsPlacementGenre {
+  switch (se2NormalizeDrumGenStyle(style)) {
+    case 'trap':
+    case 'dark':
+      return 'trap';
+    case 'rnb':
+      return 'rnb';
+    case 'pop':
+      return 'pop';
+    case 'kpop':
+      return 'kpop';
+    case 'gospel':
+      return 'soulBlues';
+    case 'dance':
+      return 'dance';
+    case 'disco':
+      return 'house';
+    default:
+      return 'trap';
+  }
+}
 
-/** One-bar kick shapes from trap producer grid — step 0 = beat 1 downbeat (16th grid). */
-const KICK_REGENERATE_TEMPLATES: readonly KickBarTemplate[] = [
-  { id: 'minimal', label: 'trunk 1 & 3', steps: stepsFromTrapKick(trapKickMinimal) },
-  { id: 'sparse', label: 'sparse trap', steps: stepsFromTrapKick(trapKickSparse) },
-  { id: 'metro', label: 'metro bounce', steps: stepsFromTrapKick(trapKickMetro) },
-  { id: 'syncopated', label: 'sync pocket', steps: stepsFromTrapKick(trapKickSyncopated) },
-  { id: 'south', label: 'south bounce', steps: stepsFromTrapKick(trapKickSouth) },
-  { id: 'lean', label: 'lean pocket', steps: stepsFromTrapKick(trapKickLean) },
-  { id: 'slide', label: 'slide phrase', steps: stepsFromTrapKick(trapKickSlide) },
+const REGEN_GENRE_FALLBACKS: readonly BeatPadsPlacementGenre[] = [
+  'trap',
+  'rnb',
+  'pop',
+  'house',
+  'dance',
+  'kpop',
+  'soulBlues',
+  'afro',
+  'reggae',
 ];
 
-function stepsFromTrapKick(fn: () => ReadonlyArray<[number, number]>): number[] {
-  const out: number[] = [];
-  for (const [row, step] of fn()) {
-    if (row === 0) out.push(step);
+function templatesForRole(
+  role: BeatPadsDrumRole,
+  preferred: BeatPadsPlacementGenre,
+): ReturnType<typeof getBeatPadsLaneTemplates> {
+  const primary = getBeatPadsLaneTemplates(role, preferred);
+  if (primary.length > 0) return primary;
+  for (const g of REGEN_GENRE_FALLBACKS) {
+    if (g === preferred) continue;
+    const list = getBeatPadsLaneTemplates(role, g);
+    if (list.length > 0) return list;
   }
-  return out.length > 0 ? out : [0];
+  return [];
 }
 
-function scaleKickStepInBar(step16: number, stepsPerBar: BeatPadsGridStepsPerBar): number {
-  if (stepsPerBar === 16) return Math.max(0, Math.min(15, step16));
-  return Math.max(0, Math.min(stepsPerBar - 1, Math.round((step16 / 16) * stepsPerBar)));
-}
-
-function pickKickPatternColumns(
-  loopBars: number,
-  stepsPerBar: BeatPadsGridStepsPerBar,
-  seed: number,
-): { cols: number[]; label: string } {
-  const rng = mulberry32(seed >>> 0);
-  const tpl = KICK_REGENERATE_TEMPLATES[Math.floor(rng() * KICK_REGENERATE_TEMPLATES.length)]!;
-  const barSteps = [
-    ...new Set(tpl.steps.map((s) => scaleKickStepInBar(s, stepsPerBar))),
-  ].sort((a, b) => a - b);
-  if (barSteps[0] !== 0) barSteps.unshift(0);
-
-  const hits = new Set<number>();
-  const bars = Math.max(1, Math.round(loopBars));
-  for (let bar = 0; bar < bars; bar += 1) {
-    const barStart = bar * stepsPerBar;
-    hits.add(barStart);
-    for (const offset of barSteps) {
-      if (offset === 0) continue;
-      if (rng() < 0.1) continue;
-      hits.add(barStart + offset);
-    }
-  }
-
-  return { cols: [...hits].sort((a, b) => a - b), label: tpl.label };
-}
-
-function kickNotesAtColumns(cols: readonly number[]): BeatPadsDrumPattern[number] {
-  const uniq = [...new Set(cols)].sort((a, b) => a - b);
-  return uniq.map((start) => ({ id: beatPadsNewNoteId(), start, len: 1 }));
-}
+export type Se2BeatPadsRegeneratePadOpts = {
+  /** Sample / kit label for the selected pad (snare, clap, hat, …). */
+  padLabel?: string;
+  /** Match-chords style chip (`trap`, `rnb`, …). */
+  style?: string;
+};
 
 export type Se2BeatPadsRegeneratePadResult = {
   pattern: BeatPadsDrumPattern;
@@ -156,7 +155,10 @@ export type Se2BeatPadsRegeneratePadResult = {
   status: string;
 };
 
-/** Replace one pad lane with a producer kick grid — downbeat every bar + trap pocket (other pads untouched). */
+/**
+ * Replace one pad lane with a role-matched Lane Placement groove
+ * (snare plays like a snare, hats like hats, kick like kick). Other pads untouched.
+ */
 export function se2BeatPadsRegeneratePadLane(
   pattern: BeatPadsDrumPattern,
   _harmony: Se2BeatPadsHarmonySourceTrack | undefined,
@@ -166,26 +168,39 @@ export function se2BeatPadsRegeneratePadLane(
   targetPadIndex: number,
   _mode?: Se2BeatPadsKickPlaceMode,
   seed?: number,
+  opts?: Se2BeatPadsRegeneratePadOpts,
 ): Se2BeatPadsRegeneratePadResult {
   const lane = Math.max(0, Math.min(15, Math.round(targetPadIndex)));
-  const { cols, label } = pickKickPatternColumns(
-    loopBars,
-    stepsPerBar,
-    seed ?? Date.now() % 1_000_000_000,
-  );
-  if (cols.length === 0) {
-    return { pattern, applied: false, status: 'Could not build kick pattern — check loop length.' };
+  const role = beatPadsDrumRoleFromLabel(opts?.padLabel ?? '', lane);
+  const genre = se2BeatPadsPlacementGenreFromStyle(opts?.style);
+  const pool = templatesForRole(role, genre);
+  if (pool.length === 0) {
+    return {
+      pattern,
+      applied: false,
+      status: `No ${beatPadsDrumRoleLabel(role)} placements for this style — try another genre chip.`,
+    };
   }
 
-  const lanes = pattern.map((row) => [...row]);
-  while (lanes.length < 16) lanes.push([]);
-  lanes[lane] = kickNotesAtColumns(cols);
+  const rng = mulberry32((seed ?? Date.now() % 1_000_000_000) >>> 0);
+  const tpl = pool[Math.floor(rng() * pool.length)]!;
 
+  const lanes: BeatPadsDrumPattern = pattern.map((row) => [...row]);
+  while (lanes.length < 16) lanes.push([]);
+
+  const next = applyBeatPadsLanePlacementTemplate(
+    lanes,
+    lane,
+    loopBars,
+    tpl.steps,
+    stepsPerBar,
+  );
   const bars = Math.max(1, Math.round(loopBars));
+  const roleName = beatPadsDrumRoleLabel(role);
   return {
-    pattern: lanes,
+    pattern: next,
     applied: true,
-    status: `Regenerated Pad ${lane + 1} — ${bars}-bar kick (${label}, downbeat every bar).`,
+    status: `Regenerated Pad ${lane + 1} — ${roleName} · ${tpl.name} (${bars}-bar ${tpl.genre}).`,
   };
 }
 
@@ -199,6 +214,7 @@ export function se2BeatPadsApplyKickFollowToPattern(
   loopBars: number,
   targetPadIndex = SE2_BEAT_PADS_KICK_LANE,
   seed = Date.now(),
+  opts?: Se2BeatPadsRegeneratePadOpts,
 ): Se2BeatPadsRegeneratePadResult {
   const placeMode = se2NormalizeBeatPadsKickPlaceMode(mode === 'bar' ? 'bar' : 'card');
   return se2BeatPadsRegeneratePadLane(
@@ -210,6 +226,7 @@ export function se2BeatPadsApplyKickFollowToPattern(
     targetPadIndex,
     placeMode,
     seed,
+    opts,
   );
 }
 

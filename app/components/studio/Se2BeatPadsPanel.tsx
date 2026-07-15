@@ -47,6 +47,10 @@ import type { Se2DrumGenStyle } from '@/app/lib/studio/se2DrumGeneratorTrack';
 import type { Se2BeatPadsHarmonySourceTrack } from '@/app/lib/studio/se2BeatPadsHarmony';
 import { se2BeatPadsHarmonyKey, se2ResolveBeatPadsHarmonyTrack } from '@/app/lib/studio/se2BeatPadsHarmony';
 import { se2BeatPadsKickKeySemiForTrack } from '@/app/lib/studio/se2BeatPadsTransportPlayback';
+import {
+  beatPadsDrumRoleFromLabel,
+  beatPadsDrumRoleLabel,
+} from '@/app/lib/creationStation/beatPadsLanePlacementTemplates';
 import { se2BeatPadsPadLabelsForTrack } from '@/app/lib/studio/se2BeatPadsPianoRoll';
 import type { Se2BeatPadsTrack, Se2BeatPadsSe2SyncMode } from '@/app/lib/studio/se2BeatPadsTrack';
 import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808ChordLock';
@@ -718,6 +722,12 @@ export function Se2BeatPadsPanel({
     onBeatPadsSpreadChange,
   });
 
+  const selectedPadRoleLabel = useMemo(() => {
+    const pad = sampler.selectedPad;
+    const role = beatPadsDrumRoleFromLabel(padLabels[pad] ?? '', pad);
+    return beatPadsDrumRoleLabel(role);
+  }, [padLabels, sampler.selectedPad]);
+
   const patternControl = useMemo(
     () => ({
       pattern,
@@ -743,6 +753,7 @@ export function Se2BeatPadsPanel({
           sessionLoopBars={sessionLoopBars}
           disabled={disabled}
           kickTargetPad={sampler.selectedPad}
+          padRoleLabel={selectedPadRoleLabel}
           onHarmonyTrackIdChange={onBeatPadsHarmonyTrackIdChange}
           onHarmonyLockedChange={(locked) => onBeatPadsHarmonyLockedChange?.(locked)}
           onPatternStyleChange={(style) => onBeatPadsPatternStyleChange?.(style)}

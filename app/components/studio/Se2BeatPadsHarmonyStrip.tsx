@@ -214,6 +214,8 @@ export type Se2BeatPadsHarmonyStripProps = {
   sessionLoopBars: number;
   disabled?: boolean;
   kickTargetPad?: number;
+  /** Instrument role for the selected pad (Snare, Kick, …) — drives Regenerate label. */
+  padRoleLabel?: string;
   onHarmonyTrackIdChange: (trackId: string) => void;
   onHarmonyLockedChange: (locked: boolean) => void;
   onPatternStyleChange: (style: Se2DrumGenStyle) => void;
@@ -234,6 +236,7 @@ export function Se2BeatPadsHarmonyStrip({
   sessionLoopBars,
   disabled = false,
   kickTargetPad = 0,
+  padRoleLabel = 'Kick',
   onHarmonyTrackIdChange,
   onHarmonyLockedChange,
   onPatternStyleChange,
@@ -403,10 +406,10 @@ export function Se2BeatPadsHarmonyStrip({
           onClick={onRegeneratePad}
           className={`${STRIP_CHIP} px-2`}
           style={{ borderColor: `${ACCENT}88`, background: `${ACCENT}14`, color: ACCENT }}
-          title={`Kick pattern on Pad ${kickPadUi} — downbeat every bar + trap pocket hits`}
+          title={`Regenerate ${padRoleLabel} groove on Pad ${kickPadUi} — matches this pad’s instrument (style chip picks genre pocket)`}
         >
           <RefreshCw size={9} className={regeneratingPad ? 'animate-spin' : undefined} />
-          {regeneratingPad ? '…' : `Regenerate Pad ${kickPadUi}`}
+          {regeneratingPad ? '…' : `Regen ${padRoleLabel} · ${kickPadUi}`}
         </button>
         <span
           className="inline-flex shrink-0 flex-col items-center self-center px-1"

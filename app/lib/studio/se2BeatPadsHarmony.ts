@@ -34,6 +34,7 @@ import {
   type Se2DrumGenHarmonySourceTrack,
   type Se2DrumGenStyle,
 } from '@/app/lib/studio/se2DrumGeneratorTrack';
+import { se2BeatPadsPadLabelsForTrack } from '@/app/lib/studio/se2BeatPadsPianoRoll';
 import { studioNormalizeHarmonyLoopBars } from '@/app/lib/studio/studioInstrumentHarmony';
 import type { Se2BeatPadsTrack } from '@/app/lib/studio/se2BeatPadsTrack';
 
@@ -194,11 +195,14 @@ export function se2BeatPadsHarmonySyncFromLane(
 
 export function se2BeatPadsRegeneratePadOnTrack(
   track: {
+    id?: string;
     beatPadsPattern?: BeatPadsDrumPattern;
     beatPadsLoopBars?: number;
     beatPadsStepsPerBar?: BeatPadsGridStepsPerBar;
     beatPadsKickFollowMode?: string;
     beatPadsKickTargetPad?: number;
+    beatPadsPatternStyle?: string;
+    beatPadsProducerKitId?: string;
   },
   harmony: Se2BeatPadsHarmonySourceTrack | undefined,
   beatsPerBar: number,
@@ -210,6 +214,11 @@ export function se2BeatPadsRegeneratePadOnTrack(
   const base = track.beatPadsPattern;
   if (!base) return null;
   const pad = Math.max(0, Math.min(15, Math.round(targetPadIndex)));
+  const kitId = (track.beatPadsProducerKitId ?? 'trapDarkVault') as BeatLabProducerKitId;
+  const padLabel =
+    track.id != null
+      ? (se2BeatPadsPadLabelsForTrack(track.id, kitId)[pad] ?? '')
+      : '';
   return se2BeatPadsRegeneratePadLane(
     base,
     harmony,
@@ -219,6 +228,10 @@ export function se2BeatPadsRegeneratePadOnTrack(
     pad,
     undefined,
     seed ?? Date.now() % 1_000_000_000,
+    {
+      padLabel,
+      style: track.beatPadsPatternStyle,
+    },
   );
 }
 

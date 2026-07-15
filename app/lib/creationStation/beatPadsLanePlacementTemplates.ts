@@ -403,15 +403,50 @@ export function getBeatPadsLaneTemplateById(id: string): BeatPadsLanePlacementTe
 }
 
 export function beatPadsDrumRoleFromLabel(label: string, laneIndex: number): BeatPadsDrumRole {
-  const l = label.toLowerCase();
-  if (l.includes('kick') || l.includes('808')) return 'kick';
-  if (l.includes('snare')) return 'snare';
-  if (l.includes('clap')) return 'clap';
-  if (l.includes('open') && l.includes('hat')) return 'openHat';
-  if (l.includes('hat') || l.includes('hh') || l.includes('hi-hat')) return 'hihat';
-  if (l.includes('rim') || l.includes('perc') || l.includes('shaker')) return 'rim';
+  const l = label.toLowerCase().trim();
+  if (l.includes('kick') || l.includes('808') || l.includes('bass drum') || /\bkick\b/.test(l)) {
+    return 'kick';
+  }
+  if (
+    l.includes('snare')
+    || l.includes('snr')
+    || /\bsd\b/.test(l)
+    || l.includes('snap')
+    || l.includes('rimshot')
+  ) {
+    return 'snare';
+  }
+  if (l.includes('clap') || l.includes('handclap')) return 'clap';
+  if (
+    (l.includes('open') && (l.includes('hat') || l.includes('hh')))
+    || l.includes('ohh')
+    || l.includes('openhat')
+    || l === 'oh'
+  ) {
+    return 'openHat';
+  }
+  if (
+    l.includes('hat')
+    || l.includes('hh')
+    || l.includes('hi-hat')
+    || l.includes('hihat')
+    || l.includes('chh')
+    || l.includes('closed')
+  ) {
+    return 'hihat';
+  }
+  if (
+    l.includes('rim')
+    || l.includes('perc')
+    || l.includes('shaker')
+    || l.includes('cowbell')
+    || l.includes('tom')
+  ) {
+    return 'rim';
+  }
   if (laneIndex === 0) return 'kick';
-  if (laneIndex === 1 || laneIndex === 2) return 'snare';
+  if (laneIndex === 1) return 'snare';
+  if (laneIndex === 2) return 'clap';
   if (laneIndex === 3) return 'hihat';
   if (laneIndex === 4) return 'openHat';
   if (laneIndex === 7) return 'rim';
