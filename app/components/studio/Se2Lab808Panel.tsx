@@ -21,6 +21,7 @@ import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { previewSe2Lab808Note } from '@/app/lib/studio/se2Lab808Preview';
 import { Se2Lab808ChordLockPanel } from '@/app/components/studio/Se2Lab808ChordLockPanel';
 import { Se2Lab808DrumGrid } from '@/app/components/studio/Se2Lab808DrumGrid';
+import { Se2Lab808HumBox } from '@/app/components/studio/Se2Lab808HumBox';
 import { Se2Lab808PercStrip } from '@/app/components/studio/Se2Lab808PercStrip';
 import { Se2Lab808RootScope } from '@/app/components/studio/Se2Lab808RootScope';
 import { Se2Lab808TonePads } from '@/app/components/studio/Se2Lab808TonePads';
@@ -80,6 +81,8 @@ export type Se2Lab808PanelProps = {
   playButtonLabel?: string;
   /** Transparent accent-colored pads that light up on hit (Beat Pads cyan chrome). */
   accentPads?: boolean;
+  /** Warm AudioContext before Hum Box mic capture (Beat Pads). */
+  warmAudio?: () => void | Promise<void>;
 };
 
 const laneBtn = (active: boolean, accent: string): CSSProperties => ({
@@ -150,6 +153,7 @@ export function Se2Lab808Panel({
   miniature = false,
   playButtonLabel,
   accentPads = false,
+  warmAudio,
 }: Se2Lab808PanelProps) {
   const accent = track.colorHex ?? '#E8784A';
   const isKick = voice.soundLane === 'kick';
@@ -728,7 +732,20 @@ export function Se2Lab808Panel({
             </aside>
 
             {!miniature ? (
-              <div className="flex-1 flex justify-end items-start min-w-[180] pl-1">
+              <div className="flex-1 flex items-start justify-end gap-2 min-w-0 pl-1">
+                <Se2Lab808HumBox
+                  bpm={bpm}
+                  voice={voice}
+                  keyRoot={lockKey.keyRoot}
+                  keyMode={lockKey.keyMode === 'minor' ? 'minor' : 'major'}
+                  keyLabel={keyLabel}
+                  disabled={disabled}
+                  getAudioContext={getAudioContext}
+                  getPreviewDestination={getPreviewDestination}
+                  warmAudio={warmAudio}
+                  onVoiceChange={onVoiceChange}
+                  onStatus={(msg) => setGridStatus(msg)}
+                />
                 <Se2Lab808RootScope
                   dialSize={176}
                   keyRoot={lockKey.keyRoot}

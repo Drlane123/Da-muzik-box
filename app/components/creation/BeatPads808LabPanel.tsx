@@ -134,7 +134,7 @@ export function BeatPads808LabPanel({
             {LAB808_DISPLAY_NAME}
           </span>
           <span className="text-[8px] font-bold truncate" style={{ color: 'rgba(0, 229, 255, 0.75)' }}>
-            Piano roll · Scope · Preview · Export
+            Piano roll · Hum Box · Scope · Preview · Export
           </span>
         </div>
         {onSyncedToBeatPadsChange ? (
@@ -190,6 +190,7 @@ export function BeatPads808LabPanel({
           miniature={!fullBleed}
           playButtonLabel="Preview"
           accentPads
+          warmAudio={warmAudio}
         />
       </div>
     </div>
