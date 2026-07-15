@@ -663,6 +663,7 @@ import {
   getOrchestraHitDef,
   haltOrchestraHitPlayback,
 } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import { haltPadSamplePlayback } from '@/app/lib/creationStation/padSamplePlayback';
 import {
   newProgressionStepId,
   type GrooveProgressionStep,
@@ -6866,6 +6867,7 @@ export default function StudioEditor2Screen({
     haltSe2GuitarTransportNotes();
     const ctx = ctxRef.current;
     haltOrchestraHitPlayback(ctx);
+    haltPadSamplePlayback();
     if (ctx && ctx.state !== 'closed') {
       try {
         truncateKickKeyboardVoice(ctx, ctx.currentTime);

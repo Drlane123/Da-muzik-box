@@ -23,6 +23,25 @@ export type PlayPadSampleBufferOpts = {
   outputGain?: number;
 };
 
+type ActivePadVoice = {
+  stop: () => void;
+  when: number;
+};
+
+const activePadSampleVoices = new Set<ActivePadVoice>();
+
+/** Immediate silence for Beat Pads / SE2 pad lookahead (~2.5–3 s scheduled hits). */
+export function haltPadSamplePlayback(): void {
+  for (const voice of [...activePadSampleVoices]) {
+    try {
+      voice.stop();
+    } catch {
+      /* */
+    }
+  }
+  activePadSampleVoices.clear();
+}
+
 /**
  * Schedule or instantly play a decoded pad buffer with sampler + FX shaping.
  * Returns `stop()` to cut this voice.
@@ -196,9 +215,16 @@ export function playPadSampleBuffer(
   const whenPlay = instant ? now : Math.max(when, now + 0.001);
 
   let disposed = false;
+  const voiceEntry: ActivePadVoice = {
+    when: whenPlay,
+    stop: () => {
+      /* filled below after stop closes over dispose */
+    },
+  };
   const disposeGraph = () => {
     if (disposed) return;
     disposed = true;
+    activePadSampleVoices.delete(voiceEntry);
     try {
       dryG.gain.cancelScheduledValues(ctx.currentTime);
       wetG.gain.cancelScheduledValues(ctx.currentTime);
@@ -260,12 +286,26 @@ export function playPadSampleBuffer(
     if (disposed) return;
     const cutT = ctx.currentTime;
     try {
-      src.stop(cutT);
+      dryG.gain.cancelScheduledValues(cutT);
+      wetG.gain.cancelScheduledValues(cutT);
+      dryG.gain.setValueAtTime(0, cutT);
+      wetG.gain.setValueAtTime(0, cutT);
     } catch {
       /* */
     }
+    try {
+      src.stop(cutT);
+    } catch {
+      try {
+        src.stop();
+      } catch {
+        /* */
+      }
+    }
     disposeGraph();
   };
+  voiceEntry.stop = stop;
+  activePadSampleVoices.add(voiceEntry);
 
   try {
     const wetVol = vol * fxSendMul;
@@ -329,3 +369,4 @@ export function playPadSampleBuffer(
   }
   return stop;
 }
+

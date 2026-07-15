@@ -197,13 +197,17 @@ export function beatPadsOrchHitsApplyPreset(
   preset: BeatPadsOrchHitsPreset,
   roots: readonly Lab808ProgressionRoot[],
   seed = 1,
+  opts?: { /** When true, adopt the preset's preferred Sound Families hit (default: keep current). */ applyPresetHitId?: boolean },
 ): BeatPadsOrchHitsVoice {
   const bars = beatPadsOrchHitsNormalizeLoopBars(voice.loopBars);
   const grid = emptyBeatPadsOrchHitsGrid(bars);
   const base = voice.baseMidi;
   const stepBeats = 4 / BEAT_PADS_ORCH_HITS_STEPS_PER_BAR;
+  // Generate / Regen keep the user's selected Sound Families hit — presets only place timing.
   const hitId =
-    preset.hitId && (BEAT_PADS_ORCH_HIT_IDS as readonly string[]).includes(preset.hitId)
+    opts?.applyPresetHitId &&
+    preset.hitId &&
+    (BEAT_PADS_ORCH_HIT_IDS as readonly string[]).includes(preset.hitId)
       ? preset.hitId
       : voice.hitId;
 

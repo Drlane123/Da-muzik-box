@@ -16,6 +16,7 @@ import {
   beatPadsOrchHitsStepCount,
   type BeatPadsOrchHitsVoice,
 } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
+import { haltOrchestraHitPlayback } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
 import { refillBeatPadsOrchHitsOnTransport } from '@/app/lib/studio/se2BeatPadsOrchHitsTransport';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
 
@@ -167,7 +168,8 @@ export function useBeatPadsOrchHitsToneGridTransport({
     playheadColRef.current = 0;
     setPlayheadCol(0);
     setBeatPadsPlaylineAtCol(playlineElRef.current, 0, colWidthRef.current);
-  }, [clearLookahead, playlineElRef]);
+    haltOrchestraHitPlayback(getAudioContext());
+  }, [clearLookahead, getAudioContext, playlineElRef]);
 
   const play = useCallback(async () => {
     if (disabled || stepCountRef.current < 1) return;
@@ -179,15 +181,18 @@ export function useBeatPadsOrchHitsToneGridTransport({
     }
     if (ctx.state !== 'running') return;
 
+    // Always start ORCH preview from column 1 (beat 1).
+    haltOrchestraHitPlayback(ctx);
     scheduledRef.current.clear();
+    playheadColRef.current = 0;
+    setPlayheadCol(0);
+    originBeatRef.current = 0;
     runningRef.current = true;
     setPlaying(true);
 
-    const startCol = Math.floor(playheadColRef.current);
-    originBeatRef.current = startCol * stepBeats(voiceRef.current);
     sessionStartRef.current = ctx.currentTime + SE2_AUDIO_START_FLOOR_SEC;
 
-    launchPlayline(startCol, true, true);
+    launchPlayline(0, true, true);
     refillSchedule();
     queueMicrotask(() => {
       if (!runningRef.current) return;
@@ -205,7 +210,6 @@ export function useBeatPadsOrchHitsToneGridTransport({
     launchPlayline,
     refillSchedule,
     clearLookahead,
-    stepBeats,
     syncPlayheadColFromWapi,
   ]);
 
@@ -258,5 +262,17 @@ export function useBeatPadsOrchHitsToneGridTransport({
 
   useEffect(() => () => stop(), [stop]);
 
-  return { playing, playheadCol, play, stop, seekCol };
+  /** Rewind playhead to bar 1; if currently playing, re-anchor audio from the top. */
+  const restartFromStart = useCallback(async () => {
+    if (runningRef.current) {
+      stop();
+      await play();
+      return;
+    }
+    playheadColRef.current = 0;
+    setPlayheadCol(0);
+    setBeatPadsPlaylineAtCol(playlineElRef.current, 0, colWidthRef.current);
+  }, [play, playlineElRef, stop]);
+
+  return { playing, playheadCol, play, stop, seekCol, restartFromStart };
 }

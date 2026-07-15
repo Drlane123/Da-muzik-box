@@ -265,15 +265,43 @@ export type PlayOrchestraHitSampleOpts = {
 };
 
 const activeOrchestraHitSources = new Set<AudioBufferSourceNode>();
+const activeOrchestraHitGains = new Set<GainNode>();
+/** Bumped on halt so in-flight `ensureBuffer().then(play)` callbacks are dropped. */
+let orchestraHitScheduleGeneration = 0;
 
-/** Cut ringing cinematic / orchestra hit tails (SE2 Stop). */
+export function getOrchestraHitScheduleGeneration(): number {
+  return orchestraHitScheduleGeneration;
+}
+
+/** Cut ringing cinematic / orchestra hit tails (SE2 / Beat Pads / ORCH Stop). */
 export function haltOrchestraHitPlayback(ctx?: AudioContext | null): void {
+  orchestraHitScheduleGeneration += 1;
   const now = ctx && ctx.state !== 'closed' ? ctx.currentTime : 0;
+  for (const gain of [...activeOrchestraHitGains]) {
+    try {
+      if (ctx && ctx.state !== 'closed' && gain.context === ctx) {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
+      }
+    } catch {
+      /* */
+    }
+    try {
+      gain.disconnect();
+    } catch {
+      /* */
+    }
+  }
+  activeOrchestraHitGains.clear();
   for (const src of [...activeOrchestraHitSources]) {
     try {
       src.stop(now);
     } catch {
-      /* */
+      try {
+        src.stop();
+      } catch {
+        /* */
+      }
     }
     try {
       src.disconnect();
@@ -322,8 +350,10 @@ export function playOrchestraHitSample(
   connectOrchestraHitPlaybackChain(ctx, src, gainNode, def.playbackFilter, startAt);
   gainNode.connect(out);
   activeOrchestraHitSources.add(src);
+  activeOrchestraHitGains.add(gainNode);
   src.onended = () => {
     activeOrchestraHitSources.delete(src);
+    activeOrchestraHitGains.delete(gainNode);
   };
   src.start(startAt);
   src.stop(startAt + buf.duration + 0.05);

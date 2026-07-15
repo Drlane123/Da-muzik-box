@@ -4,6 +4,7 @@
 import {
   ensureOrchestraHitBuffer,
   getOrchestraHitDef,
+  getOrchestraHitScheduleGeneration,
   playOrchestraHitSample,
 } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
 import { resolveGrooveLabOrchestraHitId } from '@/app/lib/creationStation/grooveLabOrchestraHitSoundBank';
@@ -69,7 +70,9 @@ export function refillBeatPadsOrchHitsOnTransport(opts: {
       scheduled.add(key);
 
       const at = Math.max(when, ctSnap + chainFloor);
+      const genAtSchedule = getOrchestraHitScheduleGeneration();
       void ensureOrchestraHitBuffer(ctx, def).then(() => {
+        if (getOrchestraHitScheduleGeneration() !== genAtSchedule) return;
         playOrchestraHitSample(ctx, def, at, vel, {
           outputNode: stripIn,
           nativePitch: false,

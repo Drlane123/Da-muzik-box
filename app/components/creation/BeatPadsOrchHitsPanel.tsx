@@ -138,6 +138,8 @@ export function BeatPadsOrchHitsPanel({
   const playlineElRef = useRef<HTMLDivElement | null>(null);
   const gridWrapRef = useRef<HTMLDivElement | null>(null);
   const [colW, setColW] = useState(12);
+  /** After Generate/Regen, restart ORCH preview once the new voice commits. */
+  const pendingOrchRestartRef = useRef(false);
 
   const presets = useMemo(() => getBeatPadsOrchHitsPresets(presetGenre), [presetGenre]);
   useEffect(() => {
@@ -168,7 +170,7 @@ export function BeatPadsOrchHitsPanel({
     return () => ro?.disconnect();
   }, [cols]);
 
-  const { playing, playheadCol, play, stop } = useBeatPadsOrchHitsToneGridTransport({
+  const { playing, playheadCol, play, stop, restartFromStart } = useBeatPadsOrchHitsToneGridTransport({
     stepCount: cols,
     bpm,
     voice,
@@ -263,13 +265,24 @@ export function BeatPadsOrchHitsPanel({
       if (disabled) return;
       const preset = presets.find((p) => p.id === presetId) ?? presets[0];
       if (!preset) return;
+      // Keep the Sound Families hit the user picked — only rewrite hit placement.
       const next = beatPadsOrchHitsApplyPreset(voice, preset, progressionRoots, seed);
+      const wasPlaying = playing;
+      if (wasPlaying) stop();
       setGenSeed(seed);
       onVoiceChange(next);
       flash(`Generated · ${preset.name}`);
+      pendingOrchRestartRef.current = wasPlaying;
+      if (!wasPlaying) void restartFromStart();
     },
-    [disabled, flash, onVoiceChange, presetId, presets, progressionRoots, voice],
+    [disabled, flash, onVoiceChange, playing, presetId, presets, progressionRoots, restartFromStart, stop, voice],
   );
+
+  useEffect(() => {
+    if (!pendingOrchRestartRef.current) return;
+    pendingOrchRestartRef.current = false;
+    void play();
+  }, [voice.gridSteps, voice.hitId, play]);
 
   const clearGrid = useCallback(() => {
     if (disabled) return;

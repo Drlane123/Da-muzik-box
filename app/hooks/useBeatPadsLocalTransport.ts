@@ -27,6 +27,8 @@ import {
   type BeatPadsPlaylineWapiRefs,
 } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
 import { setBeatPadsScreenActive, setBeatPadsTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
+import { haltOrchestraHitPlayback } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import { haltPadSamplePlayback } from '@/app/lib/creationStation/padSamplePlayback';
 import { refillSe2Lab808DrumOnTransport } from '@/app/lib/studio/se2Lab808DrumTransport';
 import { refillSe2Lab808PercOnTransport } from '@/app/lib/studio/se2Lab808PercTransport';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
@@ -327,7 +329,10 @@ export function useBeatPadsLocalTransport({
     playlineLoopCycleRef.current = 0;
     lab808ScheduledRef.current.clear();
     orchHitsScheduledRef.current.clear();
-  }, [clearLookahead, playlineElRef]);
+    // Cut ~2.5s lookahead pad hits + synced ORCH tails immediately.
+    haltPadSamplePlayback();
+    haltOrchestraHitPlayback(getAudioContext?.() ?? null);
+  }, [clearLookahead, getAudioContext, playlineElRef]);
 
   const start = useCallback(async () => {
     await Promise.resolve(onWarmAudio?.());
