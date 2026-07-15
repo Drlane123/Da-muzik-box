@@ -128,6 +128,25 @@ export function resizeBeatPadsOrchHitsGrid(
   return normalizeBeatPadsOrchHitsGrid(pattern, toBars);
 }
 
+/**
+ * Duplicate first 4 bars into the next 4.
+ * On a 4-bar loop → expands to 8 and copies; on 8 → overwrites bars 5–8 from 1–4.
+ */
+export function beatPadsOrchHitsDuplicateFourBars(voice: BeatPadsOrchHitsVoice): BeatPadsOrchHitsVoice {
+  const from = beatPadsOrchHitsNormalizeLoopBars(voice.loopBars);
+  const cols4 = beatPadsOrchHitsStepCount(4);
+  const src = normalizeBeatPadsOrchHitsGrid(voice.gridSteps, from);
+  const dest = emptyBeatPadsOrchHitsGrid(8);
+  for (let lane = 0; lane < BEAT_PADS_ORCH_HITS_PIANO_LANES; lane += 1) {
+    for (let c = 0; c < cols4; c += 1) {
+      const on = Boolean(src[lane]?.[c]);
+      dest[lane]![c] = on;
+      dest[lane]![c + cols4] = on;
+    }
+  }
+  return { ...voice, loopBars: 8, gridSteps: dest };
+}
+
 export function beatPadsOrchHitsHasHits(grid: BeatPadsOrchHitsGrid | undefined): boolean {
   if (!grid?.length) return false;
   for (const row of grid) {

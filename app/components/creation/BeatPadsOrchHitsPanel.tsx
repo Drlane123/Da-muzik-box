@@ -36,6 +36,7 @@ import {
   BEAT_PADS_ORCH_HITS_LOOP_BARS_OPTIONS,
   BEAT_PADS_ORCH_HITS_PIANO_LANES,
   BEAT_PADS_ORCH_HITS_STEPS_PER_BAR,
+  beatPadsOrchHitsDuplicateFourBars,
   beatPadsOrchHitsHasHits,
   beatPadsOrchHitsMidiForLane,
   beatPadsOrchHitsNormalizeLoopBars,
@@ -274,6 +275,13 @@ export function BeatPadsOrchHitsPanel({
     patch({ gridSteps: normalizeBeatPadsOrchHitsGrid([], loopBars) });
   }, [disabled, loopBars, patch]);
 
+  const duplicateFourBars = useCallback(() => {
+    if (disabled) return;
+    if (playing) stop();
+    onVoiceChange(beatPadsOrchHitsDuplicateFourBars(voice));
+    flash(loopBars === 4 ? 'Duplicated 4 → 8 bars' : 'Duplicated bars 1–4 onto bars 5–8');
+  }, [disabled, flash, loopBars, onVoiceChange, playing, stop, voice]);
+
   const toggleSync = useCallback(() => {
     if (disabled || !onSyncedToBeatPadsChange) return;
     if (playing) stop();
@@ -441,145 +449,205 @@ export function BeatPadsOrchHitsPanel({
         </div>
       </div>
 
+      {/*
+        Two-column toolbar — chord lock stays left; Place / Clear / presets / export
+        line up across the right column (no absolute besideSource overlap).
+      */}
       <div
-        className="flex flex-wrap items-start gap-2 px-2 py-1.5"
-        style={{ borderBottom: '1px solid #333' }}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(148px, 168px) minmax(0, 1fr)',
+          gap: 10,
+          alignItems: 'start',
+          padding: '8px 8px',
+          borderBottom: '1px solid #333',
+        }}
       >
-        <Se2Lab808ChordLockPanel
-          lock={voice.chordLock}
-          rootCount={progressionRoots.length}
-          connected={chordConnected}
-          disabled={disabled}
-          songKeyRoot={songKeyRoot}
-          songKeyMode={songKeyMode}
-          lab808TrackId={trackId}
-          tracks={studioTracks}
-          lanePad={lanePad}
-          onLockChange={(chordLock) => patch({ chordLock })}
-          besideSource={
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button type="button" disabled={disabled} onClick={placeRoots} style={toolBtn(false, accentHex)}>
-                Place on roots
-              </button>
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={clearGrid}
-                style={toolBtn(false, accentHex, true)}
-              >
-                Clear
-              </button>
-            </div>
-          }
-        />
-      </div>
+        <div style={{ minWidth: 0 }}>
+          <Se2Lab808ChordLockPanel
+            lock={voice.chordLock}
+            rootCount={progressionRoots.length}
+            connected={chordConnected}
+            disabled={disabled}
+            songKeyRoot={songKeyRoot}
+            songKeyMode={songKeyMode}
+            lab808TrackId={trackId}
+            tracks={studioTracks}
+            lanePad={lanePad}
+            onLockChange={(chordLock) => patch({ chordLock })}
+          />
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5" style={{ borderBottom: '1px solid #333' }}>
-        <label style={{ color: '#aaa', fontSize: 10 }}>Preset</label>
-        <select
-          disabled={disabled}
-          value={presetGenre}
-          onChange={(e) => setPresetGenre(e.target.value as BeatPadsOrchHitsPresetGenre)}
+        <div
           style={{
-            fontSize: 11,
-            background: '#111',
-            color: '#eee',
-            border: '1px solid #555',
-            borderRadius: 4,
-            padding: '2px 6px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            minWidth: 0,
           }}
         >
-          {BEAT_PADS_ORCH_HITS_PRESET_GENRES.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-        <select
-          disabled={disabled}
-          value={presetId}
-          onChange={(e) => setPresetId(e.target.value)}
-          style={{
-            fontSize: 11,
-            background: '#111',
-            color: '#eee',
-            border: '1px solid #555',
-            borderRadius: 4,
-            padding: '2px 6px',
-            maxWidth: 180,
-          }}
-        >
-          {presets.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={disabled || !presets.length}
-          onClick={() => applySelectedPreset(genSeed || 1)}
-          style={toolBtn(false, accentHex)}
-          title="Generate hits from preset + chord roots"
-        >
-          Generate
-        </button>
-        <button
-          type="button"
-          disabled={disabled || !presets.length}
-          onClick={() => applySelectedPreset((genSeed || 1) + 1)}
-          style={toolBtn(false, accentHex)}
-          title="Regenerate with a new variation"
-        >
-          Regen
-        </button>
-        {onExportMidiToTrack ? (
-          <>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <button type="button" disabled={disabled} onClick={placeRoots} style={toolBtn(false, accentHex)}>
+              Place on roots
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={clearGrid}
+              style={toolBtn(false, accentHex, true)}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              disabled={disabled || !hasHits}
+              onClick={duplicateFourBars}
+              style={toolBtn(false, accentHex)}
+              title="Copy bars 1–4 onto bars 5–8 (expands to 8 if needed)"
+            >
+              Duplicate 4→8
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Genre</label>
             <select
-              disabled={disabled || !exportTrackOptions.length || !hasHits}
-              value={exportTrackIndex === '' ? '' : String(exportTrackIndex)}
-              onChange={(e) => {
-                const v = e.target.value;
-                setExportTrackIndex(v === '' ? '' : Number(v));
-              }}
+              disabled={disabled}
+              value={presetGenre}
+              onChange={(e) => setPresetGenre(e.target.value as BeatPadsOrchHitsPresetGenre)}
               style={{
                 fontSize: 11,
                 background: '#111',
                 color: '#eee',
                 border: '1px solid #555',
                 borderRadius: 4,
-                padding: '2px 6px',
-                maxWidth: 200,
+                padding: '3px 8px',
+                minWidth: 96,
               }}
-              title="Export ORCH MIDI to any SE2 instrument track"
             >
-              {!exportTrackOptions.length ? (
-                <option value="">No MIDI tracks</option>
-              ) : (
-                exportTrackOptions.map((o) => (
-                  <option key={o.trackIndex} value={o.trackIndex}>
-                    {o.label}
-                  </option>
-                ))
-              )}
+              {BEAT_PADS_ORCH_HITS_PRESET_GENRES.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+            <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Placement</label>
+            <select
+              disabled={disabled}
+              value={presetId}
+              onChange={(e) => setPresetId(e.target.value)}
+              style={{
+                fontSize: 11,
+                background: '#111',
+                color: '#eee',
+                border: '1px solid #555',
+                borderRadius: 4,
+                padding: '3px 8px',
+                minWidth: 120,
+                flex: '1 1 140px',
+                maxWidth: 220,
+              }}
+            >
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
             <button
               type="button"
-              disabled={disabled || !hasHits || exportTrackIndex === ''}
-              onClick={handleExport}
+              disabled={disabled || !presets.length}
+              onClick={() => applySelectedPreset(genSeed || 1)}
               style={toolBtn(false, accentHex)}
+              title="Generate hits from preset + chord roots"
             >
-              Export to track
+              Generate
             </button>
-          </>
-        ) : null}
-        {status ? (
-          <span style={{ color: accentHex, fontSize: 10, fontWeight: 600 }}>{status}</span>
-        ) : (
-          <span style={{ color: '#777', fontSize: 10 }}>
-            Chord lock follows the track progression · Play to audition the loop
-          </span>
-        )}
+            <button
+              type="button"
+              disabled={disabled || !presets.length}
+              onClick={() => applySelectedPreset((genSeed || 1) + 1)}
+              style={toolBtn(false, accentHex)}
+              title="Regenerate with a new variation"
+            >
+              Regen
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            {onExportMidiToTrack ? (
+              <>
+                <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Export</label>
+                <select
+                  disabled={disabled || !exportTrackOptions.length || !hasHits}
+                  value={exportTrackIndex === '' ? '' : String(exportTrackIndex)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setExportTrackIndex(v === '' ? '' : Number(v));
+                  }}
+                  style={{
+                    fontSize: 11,
+                    background: '#111',
+                    color: '#eee',
+                    border: '1px solid #555',
+                    borderRadius: 4,
+                    padding: '3px 8px',
+                    minWidth: 140,
+                    flex: '1 1 160px',
+                    maxWidth: 260,
+                  }}
+                  title="Export ORCH MIDI to any SE2 instrument track"
+                >
+                  {!exportTrackOptions.length ? (
+                    <option value="">No MIDI tracks</option>
+                  ) : (
+                    exportTrackOptions.map((o) => (
+                      <option key={o.trackIndex} value={o.trackIndex}>
+                        {o.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="button"
+                  disabled={disabled || !hasHits || exportTrackIndex === ''}
+                  onClick={handleExport}
+                  style={toolBtn(false, accentHex)}
+                >
+                  Export to track
+                </button>
+              </>
+            ) : null}
+            {status ? (
+              <span style={{ color: accentHex, fontSize: 10, fontWeight: 600 }}>{status}</span>
+            ) : (
+              <span style={{ color: '#777', fontSize: 10 }}>
+                Chord lock follows song chords · Play to hear the loop
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       <div ref={gridWrapRef} className="relative min-h-0 flex-1 overflow-auto px-1 py-1">
