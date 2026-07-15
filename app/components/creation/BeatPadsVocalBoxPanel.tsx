@@ -717,7 +717,8 @@ export function BeatPadsVocalBoxPanel({
         setMicLevel(level);
         setLiveRoleLevel({
           kick: Math.min(1, boom * level * 2.4 * (boom > snap * 0.9 ? 1.15 : 0.65)),
-          snare: Math.min(1, snap * level * 2.1 * (snap >= boom * 0.75 ? 1.2 : 0.5)),
+          // Snare meter less eager — needs a clearer snap than the boom band.
+          snare: Math.min(1, snap * level * 1.7 * (snap >= boom * 1.05 ? 1.15 : 0.35)),
           clap: Math.min(1, (mid / sum) * level * 2.2),
           hat: Math.min(1, (high / sum) * level * 2.5),
         });

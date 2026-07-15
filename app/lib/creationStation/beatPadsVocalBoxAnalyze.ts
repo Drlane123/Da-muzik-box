@@ -225,8 +225,8 @@ function adaptiveRmsGate(rmses: number[]): number {
   const sorted = [...rmses].sort((a, b) => a - b);
   const med = sorted[Math.floor(sorted.length * 0.5)] ?? 0;
   const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? med;
-  // Slightly more sensitive so quiet "ka" / snare mouth hits still cross the gate.
-  return Math.max(0.0012, med * 1.02 + (p90 - med) * 0.06);
+  // Gate quiet enough for a real "ka", but not so open that breath/noise becomes snare.
+  return Math.max(0.0018, med * 1.08 + (p90 - med) * 0.1);
 }
 
 function frameBrightness(samples: Float32Array, start: number): number {
@@ -346,28 +346,30 @@ function classifyKickSnareFromBands(
   const snap = high + mid * 0.5;
   const attackScore = attack / (rms * rms + 1e-8);
 
-  // Sharp slap/clop — almost always snare, not kick
-  if (attackScore >= 42 && !(boom >= 0.55 && high < 0.12)) return 'snare';
+  // Sharp slap/clop — clear "ka" only (raised so boom edges don't steal snare)
+  if (attackScore >= 52 && !(boom >= 0.5 && high < 0.14)) return 'snare';
 
   // Kick = low-frequency boom, soft attack, not much snap
   const kickLike =
-    boom >= 0.42 &&
-    boom > snap * 1.18 &&
-    high <= 0.24 &&
-    attackScore < 85;
+    boom >= 0.4 &&
+    boom > snap * 1.1 &&
+    high <= 0.26 &&
+    attackScore < 90;
 
-  // Snare = slap / clop / ka — sharp transient + mid/high energy (tuned for quieter "ka")
+  // Snare = real "ka" slap — needs clearer snap than before (was over-firing)
   const snareLike =
-    snap >= 0.18 &&
-    (attackScore >= 20 || high >= 0.12 || (snap >= boom * 0.82 && attackScore >= 10));
+    snap >= 0.26 &&
+    (attackScore >= 32 || high >= 0.18 || (snap >= boom * 1.05 && attackScore >= 22));
 
   if (kickLike && !snareLike) return 'kick';
-  if (snareLike) return 'snare';
+  if (snareLike && !kickLike) return 'snare';
   if (kickLike) return 'kick';
+  if (snareLike) return 'snare';
 
-  if (attackScore >= 36 || high >= 0.16) return 'snare';
-  if (boom >= 0.48 && high < 0.18) return 'kick';
-  return snap >= boom * 0.9 ? 'snare' : 'kick';
+  if (attackScore >= 48 || high >= 0.22) return 'snare';
+  if (boom >= 0.45 && high < 0.2) return 'kick';
+  // Tie → kick (snares were too eager on ambiguous hits)
+  return snap >= boom * 1.12 ? 'snare' : 'kick';
 }
 
 /**
@@ -435,7 +437,8 @@ function classifyKickSnareAdaptive(
   // Clusters too close → almost certainly one drum type; trust absolute classifier.
   if (cHi - cLo < 0.09) return absolute();
 
-  const thr = (cLo + cHi) / 2;
+  // Bias threshold toward snare cluster so only clearer "ka" brightness becomes snare.
+  const thr = cLo + (cHi - cLo) * 0.58;
   return discs.map((d) => (d >= thr ? 'snare' : 'kick'));
 }
 
@@ -456,18 +459,18 @@ function classifyVocalBoxHit(
 
   let role: VocalBoxDrumRole;
   if (low >= 0.42 && low > snap * 1.1 && high < 0.3 && attackScore < 100) role = 'kick';
-  else if (snap >= 0.22 && (attackScore >= 30 || high >= 0.17)) role = 'snare';
+  else if (snap >= 0.28 && (attackScore >= 38 || high >= 0.2)) role = 'snare';
   else if (centroid < 0.14 && brightness < 0.28) role = 'kick';
   else if (brightness < 0.14 && rms >= 0.03) role = 'kick';
-  else if (centroid >= 0.1 && centroid < 0.42 && brightness >= 0.14 && brightness < 0.54 && rms >= 0.025) {
+  else if (centroid >= 0.12 && centroid < 0.42 && brightness >= 0.22 && brightness < 0.54 && rms >= 0.035) {
     role = 'snare';
-  } else if (brightness >= 0.2 && brightness < 0.46 && rms >= 0.03 && rms < 0.16) role = 'snare';
-  else if (brightness >= 0.16 && brightness < 0.4 && rms >= 0.08) role = 'snare';
-  else if (brightness < 0.2 && rms < 0.1) role = 'kick';
+  } else if (brightness >= 0.28 && brightness < 0.46 && rms >= 0.04 && rms < 0.16) role = 'snare';
+  else if (brightness >= 0.24 && brightness < 0.4 && rms >= 0.1) role = 'snare';
+  else if (brightness < 0.22 && rms < 0.12) role = 'kick';
   else if (brightness >= 0.38 && brightness < 0.62 && centroid >= 0.22) role = 'clap';
   else if (brightness >= 0.52 || centroid >= 0.38) role = 'hat';
   else if (brightness >= 0.42) role = 'clap';
-  else role = snap >= low ? 'snare' : 'kick';
+  else role = snap >= low * 1.15 ? 'snare' : 'kick';
 
   if (!mask.hat && !mask.clap && (role === 'hat' || role === 'clap')) role = 'snare';
   if (!mask.hat && role === 'hat') role = mask.snare ? 'snare' : 'kick';
@@ -583,8 +586,21 @@ export function mergeVocalBoxOnsetBursts(
         if (hit.velocity > last.velocity) out[out.length - 1] = hit;
         continue;
       }
-      // Different roles (kick + snare): always keep both. Dropping the quieter "ka"
-      // next to a louder boom was the main "only kicks / snare missing" failure mode.
+      const dt = hit.startSec - last.startSec;
+      // Same mouth hit often spikes a false "ka" on the boom attack — keep kick.
+      if (
+        last.role === 'kick' &&
+        hit.role === 'snare' &&
+        dt < 0.07 &&
+        hit.velocity <= last.velocity + 10
+      ) {
+        continue;
+      }
+      if (last.role === 'snare' && hit.role === 'kick' && dt < 0.07) {
+        out[out.length - 1] = hit;
+        continue;
+      }
+      // Farther kick+snare pair: keep both (real boom then ka).
     }
     out.push(hit);
   }
