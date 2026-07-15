@@ -105,6 +105,7 @@ export type Se2BeatPadsPanelProps = {
   getSe2PlayheadBeat?: () => number;
   getSe2TransportOriginBeat?: () => number;
   onSe2TransportToggle?: () => void;
+  onSeekSe2Beat?: (beat: number) => void;
   se2BeatsPerBar?: number;
   /** SE2 — match chords / key / groove to harmony lanes. */
   harmonyTracks?: readonly Se2BeatPadsHarmonySourceTrack[];
@@ -212,6 +213,7 @@ export function Se2BeatPadsPanel({
   getSe2PlayheadBeat,
   getSe2TransportOriginBeat,
   onSe2TransportToggle,
+  onSeekSe2Beat,
   se2BeatsPerBar = 4,
   harmonyTracks,
   songKeyRoot = 0,
@@ -821,6 +823,7 @@ export function Se2BeatPadsPanel({
         getSe2PlayheadBeat={getSe2PlayheadBeat}
         getSe2TransportOriginBeat={getSe2TransportOriginBeat}
         onSe2TransportToggle={onSe2TransportToggle}
+        onSeekSe2Beat={onSeekSe2Beat}
         se2BeatsPerBar={se2BeatsPerBar}
         beatPads808Lab={
           harmonyTracks

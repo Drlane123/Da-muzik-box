@@ -805,13 +805,18 @@ export function BeatPadsOrchHitsPanel({
               left: 44,
               width: 12,
               marginLeft: -5,
-              zIndex: 5,
+              zIndex: 8,
               pointerEvents: disabled ? 'none' : 'auto',
               cursor: disabled ? 'default' : 'ew-resize',
               touchAction: disabled ? undefined : 'none',
               background: 'transparent',
               willChange: playing ? 'transform' : undefined,
-              transform: `translate3d(0,0,0)`,
+              // While playing WAAPI owns transform; while stopped keep parked column.
+              ...(playing
+                ? {}
+                : {
+                    transform: `translate3d(${Math.floor(playheadCol) * Math.max(1, colW)}px, 0, 0)`,
+                  }),
             }}
           >
             <div

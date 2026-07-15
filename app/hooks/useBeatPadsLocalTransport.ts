@@ -97,6 +97,8 @@ export function useBeatPadsLocalTransport({
   getAudioContext,
 }: UseBeatPadsLocalTransportOpts) {
   const [isPlaying, setIsPlaying] = useState(false);
+  /** React-owned parked column so the sequencer can keep transform after re-render. */
+  const [parkedCol, setParkedCol] = useState(0);
 
   const runningRef = useRef(false);
   const sessionStartRef = useRef(0);
@@ -333,6 +335,7 @@ export function useBeatPadsLocalTransport({
     }
     parkedColRef.current = parkCol;
     lastSeekColRef.current = parkCol;
+    setParkedCol(parkCol);
 
     runningRef.current = false;
     setIsPlaying(false);
@@ -365,6 +368,7 @@ export function useBeatPadsLocalTransport({
     }
     parkedColRef.current = 0;
     lastSeekColRef.current = 0;
+    setParkedCol(0);
     sessionStartRef.current = 0;
     nextStepIndexRef.current = 0;
     firedThroughRef.current = -1;
@@ -443,6 +447,7 @@ export function useBeatPadsLocalTransport({
       }
       lastSeekColRef.current = clamped;
       parkedColRef.current = clamped;
+      setParkedCol(clamped);
       nextStepIndexRef.current = clamped;
       firedThroughRef.current = clamped - 1;
       playlineLoopPrevPhaseRef.current = -1;
@@ -498,6 +503,8 @@ export function useBeatPadsLocalTransport({
     if (cols === prevCols) return;
     // Grid length changed — park at bar 1 (matches sequencer layout reset).
     parkedColRef.current = 0;
+    lastSeekColRef.current = 0;
+    setParkedCol(0);
     nextStepIndexRef.current = 0;
     firedThroughRef.current = -1;
     if (!runningRef.current) return;
@@ -569,6 +576,7 @@ export function useBeatPadsLocalTransport({
 
   return {
     isPlaying,
+    parkedCol,
     start,
     stop,
     stopOrResetToStart,

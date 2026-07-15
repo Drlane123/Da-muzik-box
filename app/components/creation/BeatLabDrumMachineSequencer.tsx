@@ -69,7 +69,6 @@ import { lab808PadAccentFromLabel } from '@/app/lib/creationStation/lab808PadCol
 import {
   BEAT_PADS_GRID_COL_W,
   beatPadsPlaylineXForCol,
-  resetBeatPadsPlaylineToStart,
 } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
 
 const MINT = '#7cf4c6';
@@ -409,11 +408,13 @@ export type BeatLabDrumMachineSequencerProps = {
   onLaneVoiceParam?: (param: BeatLabDrumPadVoiceParam, value: number) => void;
   transportPlaying?: boolean;
   playlineElRef?: RefObject<HTMLDivElement | null>;
+  /** Parked playhead column when stopped (keeps scrub position across React re-renders). */
+  transportParkedCol?: number;
   transportBpm?: number;
   onTransportPlay?: () => void;
   onTransportStop?: () => void;
   onTransportBpmChange?: (bpm: number) => void;
-  /** Scrub playhead to a grid column (local Beat Pads transport). */
+  /** Scrub playhead to a grid column (Beat Pads local sequencer). */
   onSeekPlayheadCol?: (col: number) => void;
   /** SE2 embedded — lock step grid to main transport. */
   se2SyncMode?: Se2BeatPadsSe2SyncMode;
@@ -451,6 +452,7 @@ export function BeatLabDrumMachineSequencer({
   onLaneVoiceParam,
   transportPlaying = false,
   playlineElRef,
+  transportParkedCol = 0,
   transportBpm,
   onTransportPlay,
   onTransportStop,
@@ -557,8 +559,8 @@ export function BeatLabDrumMachineSequencer({
     && typeof onTransportStop === 'function';
   const se2SyncActive = se2SyncMode !== 'off' && typeof onSe2SyncModeChange === 'function';
   const se2SyncSlave = se2SyncMode === 'slave';
-  const playheadScrubEnabled =
-    typeof onSeekPlayheadCol === 'function' && !se2SyncActive && !disabled;
+  // Beat Pads is its own sequencer inside SE2 — scrub whenever a seek handler is wired.
+  const playheadScrubEnabled = typeof onSeekPlayheadCol === 'function' && !disabled;
   const playlineScrubbingRef = useRef(false);
 
   const laneVoiceDefault = useCallback(
@@ -571,14 +573,11 @@ export function BeatLabDrumMachineSequencer({
   const barCount = Math.max(1, Math.ceil(cols / stepsPerBar));
   const gridW = cols * COL_W;
   const barChoices = useMemo(() => beatPadsLoopBarChoices(), []);
-  const playlineStartX = beatPadsPlaylineXForCol(0, COL_W);
-
-  // Only reset the parked playline when the grid length changes while stopped.
-  // Do not jump to column 0 on every Stop — transport parks in place.
-  useLayoutEffect(() => {
-    if (!playlineElRef?.current || transportPlaying) return;
-    resetBeatPadsPlaylineToStart(playlineElRef.current, COL_W);
-  }, [playlineElRef, cols, loopBars, stepsPerBar]);
+  const parkedColClamped = Math.max(
+    0,
+    Math.min(Math.max(0, cols - 1), Math.floor(transportParkedCol)),
+  );
+  const playlineParkedX = beatPadsPlaylineXForCol(parkedColClamped, COL_W);
 
   useEffect(() => {
     undoStackRef.current = [];
@@ -826,6 +825,21 @@ export function BeatLabDrumMachineSequencer({
       if (e.button !== 0) return;
       const cell = cellAt(e.clientX, e.clientY);
       if (!cell) return;
+
+      // Alt+drag on the step grid scrubs the Beat Pads playhead (separate SE2 sequencer).
+      if (playheadScrubEnabled && e.altKey && onSeekPlayheadCol) {
+        e.preventDefault();
+        e.stopPropagation();
+        playlineScrubbingRef.current = true;
+        onSeekPlayheadCol(cell.col);
+        try {
+          (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        } catch {
+          /* */
+        }
+        return;
+      }
+
       onSelectLane(cell.lane);
       setContextMenu(null);
 
@@ -874,11 +888,26 @@ export function BeatLabDrumMachineSequencer({
         }
       }
     },
-    [beginBrush, cellAt, disabled, editTool, onSelectLane, pattern],
+    [
+      beginBrush,
+      cellAt,
+      disabled,
+      editTool,
+      onSeekPlayheadCol,
+      onSelectLane,
+      pattern,
+      playheadScrubEnabled,
+    ],
   );
 
   const onGridPointerMove = useCallback(
     (e: React.PointerEvent) => {
+      if (playlineScrubbingRef.current && onSeekPlayheadCol) {
+        const cell = cellAt(e.clientX, e.clientY);
+        if (cell) onSeekPlayheadCol(cell.col);
+        return;
+      }
+
       const drag = dragRef.current;
       if (!drag) return;
 
@@ -939,11 +968,19 @@ export function BeatLabDrumMachineSequencer({
         }
       }
     },
-    [cellAt, cols, paintBrushSegment],
+    [cellAt, cols, onSeekPlayheadCol, paintBrushSegment],
   );
 
   const finishPointer = useCallback(
     (e: React.PointerEvent) => {
+      if (playlineScrubbingRef.current) {
+        playlineScrubbingRef.current = false;
+        try {
+          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch {
+          /* */
+        }
+      }
       const drag = dragRef.current;
       if (!drag) return;
 
@@ -1756,10 +1793,14 @@ export function BeatLabDrumMachineSequencer({
                     height: '100%',
                     marginLeft: -5,
                     pointerEvents: playheadScrubEnabled ? 'auto' : 'none',
-                    zIndex: 4,
+                    zIndex: 8,
                     background: 'transparent',
-                    transform: `translate3d(${playlineStartX}px, 0, 0)`,
-                    opacity: transportPlaying ? 1 : 0.7,
+                    // While playing, WAAPI owns transform. While stopped, React keeps the parked col
+                    // (do not hardcode 0 — that wiped scrub/seek on every re-render).
+                    ...(transportPlaying
+                      ? {}
+                      : { transform: `translate3d(${playlineParkedX}px, 0, 0)` }),
+                    opacity: transportPlaying ? 1 : 0.85,
                     cursor: playheadScrubEnabled ? 'ew-resize' : 'default',
                     touchAction: playheadScrubEnabled ? 'none' : undefined,
                   }}

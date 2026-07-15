@@ -17403,6 +17403,7 @@ export default function StudioEditor2Screen({
                     getSe2PlayheadBeat={() => displayBeatRef.current}
                     getSe2TransportOriginBeat={() => originBeatRef.current}
                     onSe2TransportToggle={() => void onTogglePlayPause()}
+                    onSeekSe2Beat={(beat) => seekSe2BeatFromBeatPads(beat)}
                     se2BeatsPerBar={beatsPerBar}
                     harmonyTracks={studioTracks}
                     songKeyRoot={songKeyRoot}
@@ -19718,6 +19719,21 @@ export default function StudioEditor2Screen({
     }
     await startTransport();
   }, [pauseTransport, startTransport]);
+
+  /** Beat Pads sequencer scrub → locate SE2 playhead (when Sync SE2 is linked). */
+  const seekSe2BeatFromBeatPads = useCallback(
+    (beat: number) => {
+      if (runningRef.current) pauseTransport();
+      const tb = Math.max(0, totalBeatsRef.current);
+      const b = Math.max(0, Math.min(tb, beat));
+      timelineUserSeekGuardUntilRef.current = performance.now() + 1200;
+      cursorBeatRef.current = b;
+      displayBeatRef.current = b;
+      applyPlayheadFull(b, { skipAutoScroll: true });
+      updateReadouts(b, true);
+    },
+    [applyPlayheadFull, pauseTransport, updateReadouts],
+  );
 
   useEffect(() => {
     if (!isScreenActive || !settings.keyboardShortcutsEnabled) return;

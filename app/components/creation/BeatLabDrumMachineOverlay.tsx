@@ -368,6 +368,8 @@ export type BeatLabDrumMachineOverlayProps = {
   getSe2PlayheadBeat?: () => number;
   getSe2TransportOriginBeat?: () => number;
   onSe2TransportToggle?: () => void;
+  /** Seek SE2 session playhead (beats) when Beat Pads Sync is linked. */
+  onSeekSe2Beat?: (beat: number) => void;
   se2BeatsPerBar?: number;
   sequencerMinVisibleLanes?: number;
 };
@@ -496,6 +498,7 @@ export function BeatLabDrumMachineOverlay({
   getSe2PlayheadBeat,
   getSe2TransportOriginBeat,
   onSe2TransportToggle,
+  onSeekSe2Beat,
   se2BeatsPerBar = 4,
   sequencerMinVisibleLanes,
 }: BeatLabDrumMachineOverlayProps) {
@@ -907,6 +910,32 @@ export function BeatLabDrumMachineOverlay({
   const handleTransportStop = se2SyncActive
     ? handleSe2SyncedTransportStop
     : beatPadsTransport.stopOrResetToStart;
+
+  /** Beat Pads grid scrub — local parked col; when Sync SE2 is on, also move the SE2 playhead. */
+  const handleSeekPlayheadCol = useCallback(
+    (col: number) => {
+      beatPadsTransport.seekCol(col);
+      if (!se2SyncActive || !onSeekSe2Beat) return;
+      const cols = beatPadsPatternCols(loopBars, gridStepsPerBar);
+      if (cols <= 0) return;
+      const bpb = Math.max(2, Math.min(16, Math.round(se2BeatsPerBar)));
+      const patternLoopBeats = loopBars * bpb;
+      const stepBeats = patternLoopBeats / Math.max(1, cols);
+      const origin = getSe2TransportOriginBeat?.() ?? 0;
+      const clamped = Math.max(0, Math.min(cols - 1, Math.floor(col)));
+      onSeekSe2Beat(origin + clamped * stepBeats);
+    },
+    [
+      beatPadsTransport,
+      getSe2TransportOriginBeat,
+      gridStepsPerBar,
+      loopBars,
+      onSeekSe2Beat,
+      se2BeatsPerBar,
+      se2SyncActive,
+    ],
+  );
+
   const handleTransportBpmChange = useCallback(
     (next: number) => {
       const clamped = clampBeatPadsBpm(next);
@@ -1312,11 +1341,12 @@ export function BeatLabDrumMachineOverlay({
         onLaneVoiceParam={undefined}
         transportPlaying={effectiveTransportPlaying}
         playlineElRef={playlineElRef}
+        transportParkedCol={beatPadsTransport.parkedCol}
         transportBpm={effectiveTransportBpm}
         onTransportPlay={handleTransportPlay}
         onTransportStop={handleTransportStop}
         onTransportBpmChange={handleTransportBpmChange}
-        onSeekPlayheadCol={se2SyncActive ? undefined : beatPadsTransport.seekCol}
+        onSeekPlayheadCol={handleSeekPlayheadCol}
         se2SyncMode={embedded ? se2SyncMode : undefined}
         onSe2SyncModeChange={embedded ? onSe2SyncModeChange : undefined}
         minVisibleLanes={sequencerMinVisibleLanes}
