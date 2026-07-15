@@ -8,6 +8,7 @@ function softClip(x: number): number {
 type PercVoiceHandle = { stop: (cutT: number) => void };
 let activeSnareVoice: PercVoiceHandle | null = null;
 let activeClapVoice: PercVoiceHandle | null = null;
+const activePercSources = new Set<AudioScheduledSourceNode>();
 
 function truncatePercVoice(handle: PercVoiceHandle | null, cutT: number): void {
   if (!handle) return;
@@ -16,6 +17,43 @@ function truncatePercVoice(handle: PercVoiceHandle | null, cutT: number): void {
   } catch {
     /* already stopped */
   }
+}
+
+function trackPercSources(sources: readonly AudioScheduledSourceNode[]): void {
+  for (const src of sources) {
+    activePercSources.add(src);
+    const prev = src.onended;
+    src.onended = (ev) => {
+      activePercSources.delete(src);
+      if (typeof prev === 'function') prev.call(src, ev);
+    };
+  }
+}
+
+/** Cut snare/clap tails + lookahead-scheduled perc (808 Lab Stop). */
+export function haltSe2Lab808PercPlayback(ctx?: AudioContext | null): void {
+  const now = ctx && ctx.state !== 'closed' ? ctx.currentTime : 0;
+  truncatePercVoice(activeSnareVoice, now);
+  truncatePercVoice(activeClapVoice, now);
+  activeSnareVoice = null;
+  activeClapVoice = null;
+  for (const src of [...activePercSources]) {
+    try {
+      src.stop(now);
+    } catch {
+      try {
+        src.stop();
+      } catch {
+        /* */
+      }
+    }
+    try {
+      src.disconnect();
+    } catch {
+      /* */
+    }
+  }
+  activePercSources.clear();
 }
 
 /** Tight 808 snare — short noise crack + brief body, loud snap (not a long loft snare). */
@@ -100,6 +138,7 @@ export function playSe2Lab808Snare(
   click.stop(t + 0.025);
   stoppable.push(click);
 
+  trackPercSources(stoppable);
   activeSnareVoice = {
     stop(cutT) {
       const end = cutT + 0.012;
@@ -159,6 +198,7 @@ export function playSe2Lab808Clap(
     stoppable.push(src);
   }
 
+  trackPercSources(stoppable);
   activeClapVoice = {
     stop(cutT) {
       const end = cutT + 0.01;

@@ -348,11 +348,75 @@ let activeKickVoice: KickVoiceHandle | null = null;
 let lastKeyboardMidi: number | null = null;
 let lastKeyboardTime = 0;
 
+/** All live / lookahead-scheduled 808 voices — cut on Stop (mirrors orchestra halt). */
+const active808Sources = new Set<AudioScheduledSourceNode>();
+const active808Gains = new Set<GainNode>();
+
+function trackEightZeroEightVoice(
+  sources: readonly AudioScheduledSourceNode[],
+  muteGain: GainNode,
+): void {
+  active808Gains.add(muteGain);
+  let remaining = sources.length;
+  if (remaining === 0) return;
+  for (const src of sources) {
+    active808Sources.add(src);
+    const prev = src.onended;
+    src.onended = (ev) => {
+      active808Sources.delete(src);
+      remaining -= 1;
+      if (remaining <= 0) active808Gains.delete(muteGain);
+      if (typeof prev === 'function') prev.call(src, ev);
+    };
+  }
+}
+
 /** Cut the currently playing keyboard 808 (fast choke ~14 ms). */
 export function truncateKickKeyboardVoice(ctx: AudioContext, whenSec = ctx.currentTime): void {
   if (!activeKickVoice) return;
   activeKickVoice.stop(whenSec);
   activeKickVoice = null;
+}
+
+/** Cut ringing + lookahead-scheduled 808 Lab / keyboard voices (Stop). */
+export function haltEightZeroEightPlayback(ctx?: AudioContext | null): void {
+  activeKickVoice = null;
+  lastKeyboardMidi = null;
+  lastKeyboardTime = 0;
+  const now = ctx && ctx.state !== 'closed' ? ctx.currentTime : 0;
+  for (const gain of [...active808Gains]) {
+    try {
+      if (ctx && ctx.state !== 'closed' && gain.context === ctx) {
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(0, now);
+      }
+    } catch {
+      /* */
+    }
+    try {
+      gain.disconnect();
+    } catch {
+      /* */
+    }
+  }
+  active808Gains.clear();
+  for (const src of [...active808Sources]) {
+    try {
+      src.stop(now);
+    } catch {
+      try {
+        src.stop();
+      } catch {
+        /* */
+      }
+    }
+    try {
+      src.disconnect();
+    } catch {
+      /* */
+    }
+  }
+  active808Sources.clear();
 }
 
 /** Snap keyboard window so the lowest visible row is always a C (pitch class 0). */
@@ -745,6 +809,9 @@ export function playEightZeroEight(
       },
     };
   }
+
+  // Track every voice (incl. future lookahead starts) so Stop can silence immediately.
+  trackEightZeroEightVoice(stoppable, kickBus ?? master);
 
   let voiceOut: AudioNode = master;
   const driveAmt = clamp(preset.drive ?? 0, 0, 1);

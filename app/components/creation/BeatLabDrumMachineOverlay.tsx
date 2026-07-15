@@ -30,8 +30,6 @@ import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808C
 import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 import { SE2_LAB808_DOCK_TECH_LABEL } from '@/app/lib/studio/se2Lab808UiTheme';
-import { se2BeatPads808LabHasHits } from '@/app/lib/studio/se2BeatPads808LabSync';
-import { se2BeatPadsOrchHitsHasHits } from '@/app/lib/studio/se2BeatPadsOrchHitsSync';
 import type { BeatPadsOrchHitsVoice } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import {
@@ -1721,12 +1719,7 @@ export function BeatLabDrumMachineOverlay({
                         e.preventDefault();
                         e.stopPropagation();
                         if (orchHitsOpen) {
-                          if (
-                            !beatPadsOrchHits.syncedToBeatPads &&
-                            se2BeatPadsOrchHitsHasHits(beatPadsOrchHits.voice)
-                          ) {
-                            beatPadsOrchHits.onSyncedToBeatPadsChange(true);
-                          }
+                          // Closing: keep pattern + Sync state as-is (user must arm Sync themselves).
                           setOrchHitsOpen(false);
                           return;
                         }
@@ -1830,13 +1823,7 @@ export function BeatLabDrumMachineOverlay({
                       onClick={() => {
                         setLab808Open((o) => {
                           if (o) {
-                            // Closing: keep pattern; auto-arm Sync so Beat Pads play includes 808 Lab.
-                            if (
-                              !beatPads808Lab.syncedToBeatPads &&
-                              se2BeatPads808LabHasHits(beatPads808Lab.voice)
-                            ) {
-                              beatPads808Lab.onSyncedToBeatPadsChange(true);
-                            }
+                            // Closing: keep pattern + Sync state as-is (user must arm Sync themselves).
                             return false;
                           }
                           setVocalBoxOpen(false);
@@ -1848,10 +1835,10 @@ export function BeatLabDrumMachineOverlay({
                         lab808Open
                           ? beatPads808Lab.syncedToBeatPads
                             ? 'Close 808 Lab — pattern kept · Synced to BeatPads'
-                            : 'Close 808 Lab — pattern kept (Sync so it plays with Beat Pads)'
+                            : 'Close 808 Lab — pattern kept (Sync stays off until you turn it on)'
                           : beatPads808Lab.syncedToBeatPads
                             ? '808 Lab — Synced to BeatPads (plays with drums)'
-                            : '808 Lab — piano-roll 808s (Sync to BeatPads, then play)'
+                            : '808 Lab — piano-roll 808s (turn Sync on to play with Beat Pads)'
                       }
                       aria-label="808 Lab — piano-roll 808s inside Beat Pads"
                       className="beat-pads-808lab-tab"
@@ -2326,12 +2313,6 @@ export function BeatLabDrumMachineOverlay({
               <button
                 type="button"
                 onClick={() => {
-                  if (
-                    !beatPadsOrchHits.syncedToBeatPads &&
-                    se2BeatPadsOrchHitsHasHits(beatPadsOrchHits.voice)
-                  ) {
-                    beatPadsOrchHits.onSyncedToBeatPadsChange(true);
-                  }
                   setOrchHitsOpen(false);
                 }}
                 style={{

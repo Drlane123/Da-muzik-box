@@ -18,8 +18,10 @@ import {
   se2Lab808ToneGridStepCount,
   type Se2Lab808ToneGridPattern,
 } from '@/app/lib/studio/se2Lab808DrumPattern';
+import { haltEightZeroEightPlayback } from '@/app/lib/creationStation/eightZeroEightVoice';
 import { refillSe2Lab808DrumOnTransport } from '@/app/lib/studio/se2Lab808DrumTransport';
 import { refillSe2Lab808PercOnTransport } from '@/app/lib/studio/se2Lab808PercTransport';
+import { haltSe2Lab808PercPlayback } from '@/app/lib/studio/se2Lab808PercVoice';
 import { SE2_AUDIO_START_FLOOR_SEC } from '@/app/lib/studio/se2TransportClock';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 
@@ -181,6 +183,8 @@ export function useSe2Lab808ToneGridTransport({
       if (ctx.state !== 'running' && ctx.state !== 'suspended') return;
       const clamped = Math.max(0, Math.min(stepCountRef.current - 1, Math.floor(col)));
       const v = voiceRef.current;
+      haltEightZeroEightPlayback(ctx);
+      haltSe2Lab808PercPlayback(ctx);
       originBeatRef.current = clamped * stepBeatsForVoice(v);
       sessionStartRef.current = ctx.currentTime + SE2_AUDIO_START_FLOOR_SEC;
       scheduledRef.current.clear();
@@ -202,7 +206,10 @@ export function useSe2Lab808ToneGridTransport({
     playheadColRef.current = 0;
     setPlayheadCol(0);
     setBeatPadsPlaylineAtCol(playlineElRef.current, 0, colWidthRef.current);
-  }, [clearLookahead, playlineElRef]);
+    const ctx = getAudioContext();
+    haltEightZeroEightPlayback(ctx);
+    haltSe2Lab808PercPlayback(ctx);
+  }, [clearLookahead, getAudioContext, playlineElRef]);
 
   const play = useCallback(async () => {
     if (disabled || stepCountRef.current < 1) return;
@@ -213,6 +220,8 @@ export function useSe2Lab808ToneGridTransport({
     }
     if (ctx.state !== 'running') return;
 
+    haltEightZeroEightPlayback(ctx);
+    haltSe2Lab808PercPlayback(ctx);
     scheduledRef.current.clear();
     runningRef.current = true;
     setPlaying(true);
@@ -280,6 +289,8 @@ export function useSe2Lab808ToneGridTransport({
     if (ctx.state === 'running') {
       const clampedCol = Math.floor(colF);
       const v = voiceRef.current;
+      haltEightZeroEightPlayback(ctx);
+      haltSe2Lab808PercPlayback(ctx);
       originBeatRef.current = clampedCol * stepBeatsForVoice(v);
       sessionStartRef.current = ctx.currentTime + SE2_AUDIO_START_FLOOR_SEC;
       scheduledRef.current.clear();
