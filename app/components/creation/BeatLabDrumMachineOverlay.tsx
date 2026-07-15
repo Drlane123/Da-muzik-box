@@ -1782,18 +1782,13 @@ export function BeatLabDrumMachineOverlay({
                     </span>
                   </button>
                   <span
-                    className="beat-pads-vocalbox-tagline"
-                    style={{
-                      fontSize: 10,
-                      fontWeight: 800,
-                      color: '#d4b84a',
-                      lineHeight: 1.25,
-                      flexShrink: 1,
-                      minWidth: 0,
-                      letterSpacing: '0.01em',
-                    }}
+                    className="se2-beat-pads-electric-title beat-pads-vocalbox-tagline pointer-events-none select-none shrink-0"
+                    title="VocalBox — create your own drum pattern with your mouth"
+                    aria-hidden
                   >
-                    {BEAT_PADS_VOCALBOX_TAGLINE}
+                    <span className="se2-beat-pads-electric-title-word beat-pads-vocalbox-tagline-word">
+                      {BEAT_PADS_VOCALBOX_TAGLINE}
+                    </span>
                   </span>
                   {beatPads808Lab ? (
                     <button

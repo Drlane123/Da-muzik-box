@@ -64,6 +64,27 @@
   letter-spacing: 0.28em;
 }
 
+/* VocalBox tagline — Chord Lock Technology electric face + platinum fill */
+[data-studio-editor-2] .beat-pads-vocalbox-tagline-word {
+  letter-spacing: 0.14em;
+  text-transform: none;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #eef2f5 18%,
+    #c5ced6 38%,
+    #f4f7f9 52%,
+    #9aa8b4 72%,
+    #dce3e9 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.65));
+  text-shadow: none;
+}
+
 /* Beat Pads dock — modern horizontal volume slider (24px — matches Export / Master / Slave) */
 [data-studio-beat-pads-dock] .se2-beat-pads-vol-strip {
   min-height: 24px;
