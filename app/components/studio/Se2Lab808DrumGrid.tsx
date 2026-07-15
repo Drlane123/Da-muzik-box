@@ -604,8 +604,13 @@ export function Se2Lab808DrumGrid({
             Stop
           </button>
           <span
-            className="text-[8px] font-bold tabular-nums shrink-0 inline-block text-center"
-            style={{ color: '#9a9aac', width: 56 }}
+            className="text-[8px] font-bold tabular-nums shrink-0 inline-block text-center font-mono"
+            style={{
+              color: '#9a9aac',
+              width: `${Math.max(5, String(Math.max(1, stepCount)).length * 2 + 1)}ch`,
+              marginLeft: 4,
+              marginRight: 6,
+            }}
             title="Playhead step (scrub on bar numbers above grid)"
           >
             {Math.floor(playheadCol) + 1}/{stepCount}

@@ -480,7 +480,24 @@ export function BeatPadsOrchHitsPanel({
           >
             Stop
           </button>
-          <span style={{ color: '#8a8070', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
+          <span
+            title="Playhead step"
+            style={{
+              color: '#8a8070',
+              fontSize: 9,
+              fontWeight: 700,
+              flexShrink: 0,
+              // Fixed ch-width slot so digit changes don't shove Sync + Vol.
+              display: 'inline-block',
+              width: `${Math.max(5, String(Math.max(1, cols)).length * 2 + 1)}ch`,
+              textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+              marginLeft: 4,
+              marginRight: 8,
+              boxSizing: 'border-box',
+            }}
+          >
             {Math.floor(playheadCol) + 1}/{cols}
           </span>
           <button
@@ -496,11 +513,12 @@ export function BeatPadsOrchHitsPanel({
               color: syncedToBeatPads ? '#4ade80' : accentHex,
               fontWeight: 700,
               flexShrink: 0,
+              marginLeft: 2,
             }}
           >
             {syncedToBeatPads ? 'Synced' : 'Sync to BeatPads'}
           </button>
-          <div style={{ flexShrink: 0, marginLeft: 4 }}>
+          <div style={{ flexShrink: 0, marginLeft: 8 }}>
             <BeatPadsInstrumentAnalogKnob
               label="Vol"
               value={Math.max(0, Math.min(1.5, voice.level ?? 1))}
