@@ -123,6 +123,13 @@ export function beatPadsRemoveNote(
   return setLane(pat, lane, laneNotes);
 }
 
+/** Wipe one pad lane only — keeps every other lane intact. */
+export function clearBeatPadsLane(pat: BeatPadsDrumPattern, lane: number): BeatPadsDrumPattern {
+  if (lane < 0 || lane >= BEAT_PADS_LANE_COUNT) return pat;
+  if (!(pat[lane]?.length)) return pat;
+  return setLane(pat, lane, []);
+}
+
 export function beatPadsRemoveAtColumn(
   pat: BeatPadsDrumPattern,
   lane: number,

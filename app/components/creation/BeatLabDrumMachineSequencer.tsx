@@ -329,6 +329,8 @@ export type BeatLabDrumMachineSequencerProps = {
   onNoteAdded?: (lane: number, col: number) => void;
   onLoopBarsChange: (bars: number) => void;
   onClear: () => void;
+  /** Clear only the selected pad lane (kick/snare/etc.). */
+  onClearLane?: () => void;
   onImportFromBeatLab?: () => void;
   onExportToBeatLab?: () => void;
   onExportToStudioEditor2?: () => void;
@@ -368,6 +370,7 @@ export function BeatLabDrumMachineSequencer({
   onNoteAdded,
   onLoopBarsChange,
   onClear,
+  onClearLane,
   onImportFromBeatLab,
   onExportToBeatLab,
   onExportToStudioEditor2,
@@ -1397,7 +1400,24 @@ export function BeatLabDrumMachineSequencer({
               ))}
             </select>
           </label>
-          <button type="button" disabled={disabled} onClick={onClear} style={{ ...toolBtn, opacity: disabled ? 0.45 : 1 }}>
+          <button
+            type="button"
+            disabled={disabled || !onClearLane}
+            onClick={onClearLane}
+            style={{ ...toolBtn, opacity: disabled || !onClearLane ? 0.45 : 1 }}
+            title="Clear only the selected pad lane"
+            aria-label="Clear selected lane"
+          >
+            <Eraser size={TOOLBAR_ICON} aria-hidden /> Clear lane
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onClear}
+            style={{ ...toolBtn, opacity: disabled ? 0.45 : 1 }}
+            title="Clear every pad lane"
+            aria-label="Clear all lanes"
+          >
             <Eraser size={TOOLBAR_ICON} aria-hidden /> Clear all
           </button>
           <button

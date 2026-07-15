@@ -48,7 +48,10 @@ import {
   beatLabDrumPadNoteRepeatRollLabel,
   type BeatLabDrumPadVoiceOpts,
 } from '@/app/lib/creationStation/beatLabDrumPadVoice';
-import { beatPadsConvertPatternGridSteps } from '@/app/lib/creationStation/beatPadsPatternEdit';
+import {
+  beatPadsConvertPatternGridSteps,
+  clearBeatPadsLane,
+} from '@/app/lib/creationStation/beatPadsPatternEdit';
 import type { PadSamplerFxRack } from '@/app/lib/creationStation/padSamplerFxRack';
 import type { PadSamplerPlaybackOpts } from '@/app/lib/padSampleStorage';
 import {
@@ -1052,6 +1055,10 @@ export function BeatLabDrumMachineOverlay({
     setPattern(emptyBeatPadsPattern(loopBars));
   }, [loopBars]);
 
+  const handleClearLane = useCallback(() => {
+    setPattern((prev) => clearBeatPadsLane(prev, editPad));
+  }, [editPad]);
+
   const handleImportFromBeatLab = useCallback(() => {
     const imported = onImportFromBeatLab?.();
     if (!imported) return;
@@ -1285,6 +1292,7 @@ export function BeatLabDrumMachineOverlay({
         onNoteAdded={handleNoteAdded}
         onLoopBarsChange={handleLoopBarsChange}
         onClear={handleClearPattern}
+        onClearLane={handleClearLane}
         onImportFromBeatLab={
           !embedded && typeof onImportFromBeatLab === 'function' ? handleImportFromBeatLab : undefined
         }
