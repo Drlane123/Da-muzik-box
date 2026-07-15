@@ -498,10 +498,12 @@ export function BeatLabDrumMachineSequencer({
   const barChoices = useMemo(() => beatPadsLoopBarChoices(), []);
   const playlineStartX = beatPadsPlaylineXForCol(0, COL_W);
 
+  // Only reset the parked playline when the grid length changes while stopped.
+  // Do not jump to column 0 on every Stop — transport parks in place.
   useLayoutEffect(() => {
     if (!playlineElRef?.current || transportPlaying) return;
     resetBeatPadsPlaylineToStart(playlineElRef.current, COL_W);
-  }, [playlineElRef, transportPlaying, cols, loopBars, stepsPerBar]);
+  }, [playlineElRef, cols, loopBars, stepsPerBar]);
 
   useEffect(() => {
     undoStackRef.current = [];
@@ -1199,7 +1201,11 @@ export function BeatLabDrumMachineSequencer({
                   color: transportPlaying ? '#fca5a5' : '#c8d0dc',
                   opacity: disabled && !transportPlaying ? 0.45 : 1,
                 }}
-                title="Stop loop"
+                title={
+                  transportPlaying
+                    ? 'Stop — parks playhead here (Play resumes from this spot)'
+                    : 'Reset playhead to the start of the grid'
+                }
               >
                 <Square size={12} fill="currentColor" aria-hidden />
               </button>

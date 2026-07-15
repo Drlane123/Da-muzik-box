@@ -904,7 +904,9 @@ export function BeatLabDrumMachineOverlay({
   }, [beatPadsTransport, onSe2TransportToggle, se2TransportPlaying]);
 
   const handleTransportPlay = se2SyncActive ? handleSe2SyncedTransportPlay : beatPadsTransport.start;
-  const handleTransportStop = se2SyncActive ? handleSe2SyncedTransportStop : beatPadsTransport.stop;
+  const handleTransportStop = se2SyncActive
+    ? handleSe2SyncedTransportStop
+    : beatPadsTransport.stopOrResetToStart;
   const handleTransportBpmChange = useCallback(
     (next: number) => {
       const clamped = clampBeatPadsBpm(next);

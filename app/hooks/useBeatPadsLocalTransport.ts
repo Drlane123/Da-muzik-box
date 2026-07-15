@@ -24,6 +24,7 @@ import {
   cancelBeatPadsPlaylineWapi,
   launchBeatPadsPlaylineWapi,
   relaunchBeatPadsPlaylineWapiForBpm,
+  setBeatPadsPlaylineAtCol,
   type BeatPadsPlaylineWapiRefs,
 } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
 import { setBeatPadsScreenActive, setBeatPadsTransportRunning } from '@/app/lib/creationStation/creationTransportSync';
@@ -101,6 +102,8 @@ export function useBeatPadsLocalTransport({
   const sessionStartRef = useRef(0);
   const nextStepIndexRef = useRef(0);
   const firedThroughRef = useRef(-1);
+  /** Parked grid column for Stop-in-place → Play resumes here. */
+  const parkedColRef = useRef(0);
   const lookaheadRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRafRef = useRef(0);
   const lab808ScheduledRef = useRef(new Set<string>());
@@ -317,14 +320,27 @@ export function useBeatPadsLocalTransport({
   }, [syncPlaylineScroll]);
 
   const stop = useCallback(() => {
+    const cols = Math.max(1, loopColsRef.current);
+    let parkCol = parkedColRef.current;
+    if (runningRef.current) {
+      const anim = wapiRefs.current.animRef.current;
+      const seg = wapiRefs.current.wapiSegStateRef.current;
+      if (anim && seg.durMs > 0) {
+        const colF = beatPadsPlayColFFromWapiAnim(Number(anim.currentTime ?? 0), seg);
+        parkCol = Math.max(0, Math.min(cols - 1, Math.floor(colF)));
+      }
+    }
+    parkedColRef.current = parkCol;
+
     runningRef.current = false;
     setIsPlaying(false);
     setBeatPadsTransportRunning(false);
     clearLookahead();
-    cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current);
+    cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current, { parkColF: parkCol });
     sessionStartRef.current = 0;
-    nextStepIndexRef.current = 0;
-    firedThroughRef.current = -1;
+    // Keep scheduler indices aligned with the parked column for the next Play.
+    nextStepIndexRef.current = parkCol;
+    firedThroughRef.current = parkCol - 1;
     playlineLoopPrevPhaseRef.current = -1;
     playlineLoopCycleRef.current = 0;
     lab808ScheduledRef.current.clear();
@@ -332,6 +348,29 @@ export function useBeatPadsLocalTransport({
     // Cut ~2.5s lookahead pad hits + synced ORCH tails immediately.
     haltPadSamplePlayback();
     haltOrchestraHitPlayback(getAudioContext?.() ?? null);
+  }, [clearLookahead, getAudioContext, playlineElRef]);
+
+  /** Explicit return to grid start (does not auto-play). */
+  const resetToStart = useCallback(() => {
+    const wasRunning = runningRef.current;
+    if (wasRunning) {
+      runningRef.current = false;
+      setIsPlaying(false);
+      setBeatPadsTransportRunning(false);
+      clearLookahead();
+      haltPadSamplePlayback();
+      haltOrchestraHitPlayback(getAudioContext?.() ?? null);
+    }
+    parkedColRef.current = 0;
+    sessionStartRef.current = 0;
+    nextStepIndexRef.current = 0;
+    firedThroughRef.current = -1;
+    playlineLoopPrevPhaseRef.current = -1;
+    playlineLoopCycleRef.current = 0;
+    lab808ScheduledRef.current.clear();
+    orchHitsScheduledRef.current.clear();
+    cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current, { resetToStart: true });
+    setBeatPadsPlaylineAtCol(playlineElRef.current, 0, BEAT_PADS_COL_W);
   }, [clearLookahead, getAudioContext, playlineElRef]);
 
   const start = useCallback(async () => {
@@ -345,10 +384,14 @@ export function useBeatPadsLocalTransport({
     }
     if (ctx.state !== 'running') return;
 
+    const cols = Math.max(1, loopColsRef.current);
+    const startCol = Math.max(0, Math.min(cols - 1, Math.floor(parkedColRef.current)));
+    const stepSec = beatPadsStepDurationSec(bpmRef.current, stepsPerBarRef.current);
     const tCapture = ctx.currentTime;
-    sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC;
-    nextStepIndexRef.current = 0;
-    firedThroughRef.current = -1;
+    // Anchor so the parked column fires at audio start floor (resume in place).
+    sessionStartRef.current = tCapture + SE2_AUDIO_START_FLOOR_SEC - startCol * stepSec;
+    nextStepIndexRef.current = startCol;
+    firedThroughRef.current = startCol - 1;
     playlineLoopPrevPhaseRef.current = -1;
     playlineLoopCycleRef.current = 0;
     lab808ScheduledRef.current.clear();
@@ -359,10 +402,10 @@ export function useBeatPadsLocalTransport({
 
     launchBeatPadsPlaylineWapi(wapiRefs.current, {
       el: playlineElRef.current,
-      colNow: 0,
+      colNow: startCol,
       play: true,
       bpm: bpmRef.current,
-      cols: loopColsRef.current,
+      cols,
       colW: BEAT_PADS_COL_W,
       stepsPerBar: stepsPerBarRef.current,
       immediateCompositorStart: true,
@@ -380,9 +423,9 @@ export function useBeatPadsLocalTransport({
 
   const restartFromBarOne = useCallback(async () => {
     const wasRunning = runningRef.current;
-    stop();
+    resetToStart();
     if (wasRunning) await start();
-  }, [start, stop]);
+  }, [resetToStart, start]);
 
   useEffect(() => {
     setBeatPadsScreenActive(open);
@@ -399,7 +442,12 @@ export function useBeatPadsLocalTransport({
     const prevCols = prevLoopColsRef.current;
     prevLoopColsRef.current = cols;
     loopColsRef.current = cols;
-    if (!runningRef.current || cols === prevCols) return;
+    if (cols === prevCols) return;
+    // Grid length changed — park at bar 1 (matches sequencer layout reset).
+    parkedColRef.current = 0;
+    nextStepIndexRef.current = 0;
+    firedThroughRef.current = -1;
+    if (!runningRef.current) return;
     relaunchBeatPadsPlaylineWapiForBpm(wapiRefs.current, {
       el: playlineElRef.current,
       play: true,
@@ -410,8 +458,6 @@ export function useBeatPadsLocalTransport({
       colF: 0,
       immediateCompositorStart: true,
     });
-    nextStepIndexRef.current = 0;
-    firedThroughRef.current = -1;
     lab808ScheduledRef.current.clear();
     orchHitsScheduledRef.current.clear();
     const ctx = getAudioContext?.();
@@ -459,10 +505,21 @@ export function useBeatPadsLocalTransport({
 
   useEffect(() => () => stop(), [stop]);
 
+  /** Stop parks in place; Stop again while already stopped returns to bar 1. */
+  const stopOrResetToStart = useCallback(() => {
+    if (runningRef.current) {
+      stop();
+      return;
+    }
+    resetToStart();
+  }, [resetToStart, stop]);
+
   return {
     isPlaying,
     start,
     stop,
+    stopOrResetToStart,
+    resetToStart,
     restartFromBarOne,
     togglePlay: () => (runningRef.current ? stop() : void start()),
   };

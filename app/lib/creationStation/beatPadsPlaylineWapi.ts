@@ -95,7 +95,16 @@ export function beatPadsPlaylineWapiLoopWrapped(
   return false;
 }
 
-export function cancelBeatPadsPlaylineWapi(refs: BeatPadsPlaylineWapiRefs, el: HTMLElement | null): void {
+/**
+ * Cancel the WAAPI playline. By default leaves the element transform parked
+ * (Stop-in-place). Pass `parkColF` to park at a column, or `resetToStart: true`
+ * to jump to column 0.
+ */
+export function cancelBeatPadsPlaylineWapi(
+  refs: BeatPadsPlaylineWapiRefs,
+  el: HTMLElement | null,
+  opts?: { parkColF?: number; resetToStart?: boolean },
+): void {
   const anim = refs.animRef.current;
   refs.animRef.current = null;
   if (anim) {
@@ -108,7 +117,13 @@ export function cancelBeatPadsPlaylineWapi(refs: BeatPadsPlaylineWapiRefs, el: H
   if (!el) return;
   el.getAnimations().forEach((a) => a.cancel());
   el.style.removeProperty('will-change');
-  resetBeatPadsPlaylineToStart(el, BEAT_PADS_GRID_COL_W);
+  if (opts?.resetToStart) {
+    resetBeatPadsPlaylineToStart(el, BEAT_PADS_GRID_COL_W);
+    return;
+  }
+  if (typeof opts?.parkColF === 'number' && Number.isFinite(opts.parkColF)) {
+    setBeatPadsPlaylineAtCol(el, Math.max(0, opts.parkColF), BEAT_PADS_GRID_COL_W);
+  }
 }
 
 export type BeatPadsPlaylineWapiOpts = {
