@@ -22,11 +22,17 @@ import { BeatLabDrumMachineSequencer } from '@/app/components/creation/BeatLabDr
 import { BeatPadsPatternBankSidebar } from '@/app/components/creation/BeatPadsPatternBankSidebar';
 import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TAGLINE, BEAT_PADS_VOCALBOX_PANEL_H_PX } from '@/app/components/creation/BeatPadsVocalBoxPanel';
 import { BeatPads808LabPanel, BEAT_PADS_808_LAB_ACCENT } from '@/app/components/creation/BeatPads808LabPanel';
+import {
+  BeatPadsOrchHitsPanel,
+  BEAT_PADS_ORCH_HITS_ACCENT,
+} from '@/app/components/creation/BeatPadsOrchHitsPanel';
 import type { Se2Lab808ChordLockHarmonyTrack } from '@/app/lib/studio/se2Lab808ChordLock';
 import type { Se2Lab808ToneGridRollNote } from '@/app/lib/studio/se2Lab808ToneGridExport';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
 import { SE2_LAB808_DOCK_TECH_LABEL } from '@/app/lib/studio/se2Lab808UiTheme';
 import { se2BeatPads808LabHasHits } from '@/app/lib/studio/se2BeatPads808LabSync';
+import { se2BeatPadsOrchHitsHasHits } from '@/app/lib/studio/se2BeatPadsOrchHitsSync';
+import type { BeatPadsOrchHitsVoice } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import {
   BeatLabDrumMachineFxPanel,
@@ -289,6 +295,25 @@ export type BeatLabDrumMachineOverlayProps = {
       sourceTrackName: string;
     }) => void;
   } | null;
+  /** SE2 embedded — ORCH hits round pad (Sound Families orchestra hits piano grid). */
+  beatPadsOrchHits?: {
+    trackId: string;
+    songKeyRoot: number;
+    songKeyMode: ChordMode;
+    studioTracks: readonly Se2Lab808ChordLockHarmonyTrack[];
+    lanePad?: number;
+    voice: BeatPadsOrchHitsVoice;
+    onVoiceChange: (voice: BeatPadsOrchHitsVoice) => void;
+    syncedToBeatPads: boolean;
+    onSyncedToBeatPadsChange: (synced: boolean) => void;
+    getPreviewDestination: (ctx: AudioContext) => AudioNode | null;
+    exportTrackOptions?: readonly { trackIndex: number; label: string }[];
+    onExportMidiToTrack?: (args: {
+      targetTrackIndex: number;
+      notes: { pitch: number; startBeat: number; durationBeats: number; velocity: number }[];
+      loopBars: number;
+    }) => boolean | void;
+  } | null;
   /** Beat Lab mixer (CH 1–16 pads) — toggle from top bar while overlay stays open. */
   beatLabMixerOpen?: boolean;
   onBeatLabMixerToggle?: () => void;
@@ -440,6 +465,7 @@ export function BeatLabDrumMachineOverlay({
   getAudioContext,
   getAudioOutput,
   beatPads808Lab = null,
+  beatPadsOrchHits = null,
   beatLabMixerOpen = false,
   onBeatLabMixerToggle,
   beatLabMixerSpreadActive = false,
@@ -485,6 +511,8 @@ export function BeatLabDrumMachineOverlay({
   const [vocalBoxOpen, setVocalBoxOpen] = useState(false);
   /** SE2 Beat Pads — miniature 808 Lab piano-roll tab (next to VocalBox). */
   const [lab808Open, setLab808Open] = useState(false);
+  /** SE2 Beat Pads — ORCH hits round pad (between pads and FX). */
+  const [orchHitsOpen, setOrchHitsOpen] = useState(false);
   const [internalLoopBars, setInternalLoopBars] = useState(BEAT_PADS_DEFAULT_LOOP_BARS);
   const [internalPattern, setInternalPattern] = useState<BeatPadsDrumPattern>(() =>
     emptyBeatPadsPattern(BEAT_PADS_DEFAULT_LOOP_BARS),
@@ -727,6 +755,15 @@ export function BeatLabDrumMachineOverlay({
             trackId: beatPads808Lab.trackId,
             voice: beatPads808Lab.voice,
             getDestination: beatPads808Lab.getPreviewDestination,
+          }
+        : null,
+    orchHitsLink:
+      beatPadsOrchHits != null
+        ? {
+            synced: beatPadsOrchHits.syncedToBeatPads,
+            trackId: beatPadsOrchHits.trackId,
+            voice: beatPadsOrchHits.voice,
+            getDestination: beatPadsOrchHits.getPreviewDestination,
           }
         : null,
     onWarmAudio,
@@ -1631,12 +1668,76 @@ export function BeatLabDrumMachineOverlay({
                     flexShrink: 0,
                   }}
                 >
+                  {beatPadsOrchHits ? (
+                    <button
+                      type="button"
+                      className="beat-pads-orch-hits-round"
+                      title="ORCH hits — Sound Families orchestra hits piano grid"
+                      aria-pressed={orchHitsOpen}
+                      aria-label="ORCH hits"
+                      disabled={patternActionsDisabled}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (orchHitsOpen) {
+                          if (
+                            !beatPadsOrchHits.syncedToBeatPads &&
+                            se2BeatPadsOrchHitsHasHits(beatPadsOrchHits.voice)
+                          ) {
+                            beatPadsOrchHits.onSyncedToBeatPadsChange(true);
+                          }
+                          setOrchHitsOpen(false);
+                          return;
+                        }
+                        setVocalBoxOpen(false);
+                        setLab808Open(false);
+                        setOrchHitsOpen(true);
+                      }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        padding: 0,
+                        border: orchHitsOpen
+                          ? `1.5px solid ${BEAT_PADS_ORCH_HITS_ACCENT}`
+                          : beatPadsOrchHits.syncedToBeatPads
+                            ? '1.5px solid #4ade80'
+                            : `1px solid ${BEAT_PADS_ORCH_HITS_ACCENT}99`,
+                        background: orchHitsOpen
+                          ? `radial-gradient(circle at 35% 30%, ${BEAT_PADS_ORCH_HITS_ACCENT}77, #1a1206 72%)`
+                          : beatPadsOrchHits.syncedToBeatPads
+                            ? 'radial-gradient(circle at 35% 30%, rgba(74,222,128,0.4), #12100a 72%)'
+                            : `radial-gradient(circle at 35% 30%, ${BEAT_PADS_ORCH_HITS_ACCENT}40, #100c06 72%)`,
+                        color:
+                          orchHitsOpen || beatPadsOrchHits.syncedToBeatPads
+                            ? '#fff8e8'
+                            : BEAT_PADS_ORCH_HITS_ACCENT,
+                        fontSize: 7,
+                        fontWeight: 800,
+                        letterSpacing: 0.2,
+                        lineHeight: 1.05,
+                        textAlign: 'center',
+                        cursor: patternActionsDisabled ? 'default' : 'pointer',
+                        opacity: patternActionsDisabled ? 0.5 : 1,
+                        boxShadow: orchHitsOpen
+                          ? `0 0 8px ${BEAT_PADS_ORCH_HITS_ACCENT}55`
+                          : 'none',
+                      }}
+                    >
+                      ORCH
+                      {beatPadsOrchHits.syncedToBeatPads && !orchHitsOpen ? (
+                        <span style={{ display: 'block', fontSize: 5, color: '#4ade80' }}>·</span>
+                      ) : null}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={patternActionsDisabled}
                     onClick={() => {
                       setVocalBoxOpen((o) => !o);
                       setLab808Open(false);
+                      setOrchHitsOpen(false);
                     }}
                     title={
                       vocalBoxOpen
@@ -1703,6 +1804,7 @@ export function BeatLabDrumMachineOverlay({
                             return false;
                           }
                           setVocalBoxOpen(false);
+                          setOrchHitsOpen(false);
                           return true;
                         });
                       }}
@@ -2152,6 +2254,82 @@ export function BeatLabDrumMachineOverlay({
               warmAudio={onWarmAudio}
               onExportToneGridToPianoRoll={beatPads808Lab.onExportToneGridToPianoRoll}
               onExportToneGridWavToTrack={beatPads808Lab.onExportToneGridWavToTrack}
+              fullBleed
+            />
+          </div>
+        ) : null}
+
+        {embedded && orchHitsOpen && beatPadsOrchHits ? (
+          <div
+            className="beat-pads-orch-hits-drop"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 120,
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '4px 6px 6px',
+              boxSizing: 'border-box',
+              pointerEvents: 'auto',
+              background: 'rgba(12, 8, 4, 0.96)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 8,
+                flexShrink: 0,
+                marginBottom: 4,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    !beatPadsOrchHits.syncedToBeatPads &&
+                    se2BeatPadsOrchHitsHasHits(beatPadsOrchHits.voice)
+                  ) {
+                    beatPadsOrchHits.onSyncedToBeatPadsChange(true);
+                  }
+                  setOrchHitsOpen(false);
+                }}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 800,
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: `1px solid ${BEAT_PADS_ORCH_HITS_ACCENT}`,
+                  background: `${BEAT_PADS_ORCH_HITS_ACCENT}22`,
+                  color: BEAT_PADS_ORCH_HITS_ACCENT,
+                  cursor: 'pointer',
+                }}
+              >
+                Close ORCH
+              </button>
+            </div>
+            <BeatPadsOrchHitsPanel
+              bpm={localBpm}
+              accentHex={BEAT_PADS_ORCH_HITS_ACCENT}
+              disabled={patternActionsDisabled}
+              trackId={beatPadsOrchHits.trackId}
+              songKeyRoot={beatPadsOrchHits.songKeyRoot}
+              songKeyMode={beatPadsOrchHits.songKeyMode}
+              studioTracks={beatPadsOrchHits.studioTracks}
+              lanePad={beatPadsOrchHits.lanePad}
+              voice={beatPadsOrchHits.voice}
+              onVoiceChange={beatPadsOrchHits.onVoiceChange}
+              syncedToBeatPads={beatPadsOrchHits.syncedToBeatPads}
+              onSyncedToBeatPadsChange={beatPadsOrchHits.onSyncedToBeatPadsChange}
+              getAudioContext={getAudioContext ?? (() => null)}
+              getPreviewDestination={beatPadsOrchHits.getPreviewDestination}
+              warmAudio={onWarmAudio}
+              exportTrackOptions={beatPadsOrchHits.exportTrackOptions}
+              onExportMidiToTrack={beatPadsOrchHits.onExportMidiToTrack}
               fullBleed
             />
           </div>

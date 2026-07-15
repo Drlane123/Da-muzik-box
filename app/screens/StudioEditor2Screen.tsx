@@ -68,6 +68,7 @@ import {
   studioDefaultMidiInstrumentForTrackName,
   studioMidiInstrumentLabel,
   studioNormalizeMidiInstrumentId,
+  studioNormalizeMidiInstrumentIdForDrumTrack,
 } from '@/app/lib/studio/studioEditor2Instruments';
 import { StudioMidiInstrumentPicker } from '@/app/components/studio/StudioMidiInstrumentPicker';
 import { StudioAddTrackDropdown, type StudioNewTrackKind } from '@/app/components/studio/StudioAddTrackDropdown';
@@ -336,6 +337,7 @@ import {
   stopBeatLabSynthV2HeldPreview,
   touchBeatLabSynthV2HeldPreview,
 } from '@/app/lib/creationStation/beatLabMelodicSynthV2Engine';
+import { truncateKickKeyboardVoice } from '@/app/lib/creationStation/eightZeroEightVoice';
 import { beatLabMelodicSynthV2AuditionPitch } from '@/app/lib/creationStation/beatLabMidiRoll';
 import {
   CREATION_METRO_VOLUME,
@@ -572,6 +574,12 @@ import {
   se2BeatPads808LabVoiceFromTrack,
 } from '@/app/lib/studio/se2BeatPads808LabSync';
 import {
+  cloneBeatPadsOrchHitsVoice,
+  se2BeatPadsOrchHitsVoiceFromTrack,
+} from '@/app/lib/studio/se2BeatPadsOrchHitsSync';
+import { refillBeatPadsOrchHitsOnTransport } from '@/app/lib/studio/se2BeatPadsOrchHitsTransport';
+import type { BeatPadsOrchHitsVoice } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
+import {
   se2BeatPadsHarmonyKey,
   se2BeatPadsHarmonySyncFromLane,
   se2BeatPadsLoadMatchedPattern,
@@ -641,6 +649,7 @@ import {
 } from '@/app/lib/studio/se2GuitarTrack';
 import type { Se2GuitarInstrumentId } from '@/app/lib/studio/se2GuitarInstruments';
 import {
+  haltSe2GuitarTransportNotes,
   previewSe2GuitarNote,
   scheduleSe2GuitarNote,
   warmupSe2GuitarInstrument,
@@ -650,7 +659,10 @@ import { resolveSe2GuitarAudioForTrack, resolveSe2GuitarDestination } from '@/ap
 import { neuralHumInstrumentMeta, type NeuralHumInstrumentId } from '@/app/lib/vocalLab/neuralHumToInstrument';
 import type { NeuralHumRollBarCount } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 import { parseChordSymbolToken } from '@/app/lib/creationStation/chordProgressionParse';
-import { getOrchestraHitDef } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
+import {
+  getOrchestraHitDef,
+  haltOrchestraHitPlayback,
+} from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
 import {
   newProgressionStepId,
   type GrooveProgressionStep,
@@ -714,14 +726,15 @@ import {
   getStudioInputMonitorStream,
   setStudioInputMonitorGain,
   setStudioInputMonitorKeepAlive,
+  setStudioInputMonitorSoftMuted,
   stopStudioInputMonitor,
   STUDIO_INPUT_MONITOR_GAIN,
-  STUDIO_INPUT_MONITOR_GAIN_RECORDING,
   studioInputMonitorConnectDest,
   studioInputMonitorDisconnectStrip,
 } from '@/app/lib/studio/studioInputMonitor';
 import { se2RemoveParallelTrackSlot } from '@/app/lib/studio/se2TrackParallelSlots';
 import {
+  haltStudioEditor2MidiInstrumentNotes,
   previewStudioEditor2MidiInstrumentNote,
   scheduleStudioEditor2MidiInstrumentNote,
   warmupStudioEditor2MidiInstrument,
@@ -1230,6 +1243,9 @@ type MockMusioTrack = {
   /** Beat Pads mini 808 Lab — survives closing the 808 Lab tab. */
   beatPads808LabVoice?: import('@/app/lib/studio/se2Lab808Types').Se2Lab808VoiceParams;
   beatPads808LabSynced?: boolean;
+  /** Beat Pads ORCH hits Lab — survives closing the ORCH pad panel. */
+  beatPadsOrchHitsVoice?: BeatPadsOrchHitsVoice;
+  beatPadsOrchHitsSynced?: boolean;
   /** Hum Capture lane — mic, key pads, melody roll. */
   humCaptureInstrumentId?: NeuralHumInstrumentId;
   humCaptureHarmonyTrackId?: string;
@@ -5776,7 +5792,6 @@ function MusioPianoRollPanel({
                 className="pr-toolbar-chip min-w-[9rem] max-w-[14rem] shrink-0"
                 value={track.midiInstrumentId}
                 accentHex={track.colorHex}
-                disabled={running}
                 title={
                   isDrumLane
                     ? `Drum kit for ${track.name} Â· Ch ${midiCh}`
@@ -6847,6 +6862,17 @@ export default function StudioEditor2Screen({
   const silenceSe2SynthPreviewVoices = useCallback(() => {
     haltBeatLabSynthV2TransportVoices();
     haltGenoUltraSynthTransportVoices();
+    haltStudioEditor2MidiInstrumentNotes();
+    haltSe2GuitarTransportNotes();
+    const ctx = ctxRef.current;
+    haltOrchestraHitPlayback(ctx);
+    if (ctx && ctx.state !== 'closed') {
+      try {
+        truncateKickKeyboardVoice(ctx, ctx.currentTime);
+      } catch {
+        /* */
+      }
+    }
     for (let ti = 0; ti < studioTracksRef.current.length; ti += 1) {
       const tr = studioTracksRef.current[ti];
       if (studioTrackIsGlideBassChannel(tr)) {
@@ -7460,12 +7486,21 @@ export default function StudioEditor2Screen({
     return () => setStudioInputMonitorKeepAlive(null);
   }, []);
 
-  /** Dim mic→strip monitor while recording so speaker/FX feed doesn't pump noise into the take. */
+  /**
+   * While recording: hard-mute software input monitor (mic must not reach speakers).
+   * Dry MediaRecorder still captures the mic stream; waveform peaks tap the silent fanout.
+   */
   useEffect(() => {
-    setStudioInputMonitorGain(
-      recording ? STUDIO_INPUT_MONITOR_GAIN_RECORDING : STUDIO_INPUT_MONITOR_GAIN,
-    );
-    return () => setStudioInputMonitorGain(STUDIO_INPUT_MONITOR_GAIN);
+    setStudioInputMonitorSoftMuted(recording);
+    if (!recording) {
+      setStudioInputMonitorGain(STUDIO_INPUT_MONITOR_GAIN);
+      // Re-resolve mic → strip/FX after unmute (monitor key alone may not change).
+      setPitchMonitorRouteTick((n) => n + 1);
+    }
+    return () => {
+      setStudioInputMonitorSoftMuted(false);
+      setStudioInputMonitorGain(STUDIO_INPUT_MONITOR_GAIN);
+    };
   }, [recording]);
 
   /** Record preflight â€” require a record-armed audio track (Studio One / Pro Tools model). */
@@ -8099,12 +8134,12 @@ export default function StudioEditor2Screen({
     ],
   );
 
-  const liveInputMonitorKey = studioLiveInputMonitorKey(
+  const liveInputMonitorKey = `${studioLiveInputMonitorKey(
     liveInputMonitorTarget,
     trackVocalFx,
     trackFxSlots,
     selectedTrackIndex,
-  );
+  )}|route${pitchMonitorRouteTick}|rec${recording ? 1 : 0}`;
 
   /** Live mic → track Vocal DSP entry (stable — not torn down on fader moves). */
   useEffect(() => {
@@ -8114,6 +8149,11 @@ export default function StudioEditor2Screen({
     }
     if (!liveInputMonitorTarget) {
       stopStudioInputMonitor();
+      return;
+    }
+    // Never open mic→speakers while a take is capturing (feedback loop).
+    if (recordingRef.current) {
+      setStudioInputMonitorSoftMuted(true);
       return;
     }
 
@@ -8188,7 +8228,7 @@ export default function StudioEditor2Screen({
 
     return () => {
       cancelled = true;
-      if (!runningRef.current) {
+      if (!runningRef.current && !recordingRef.current) {
         studioInputMonitorDisconnectStrip();
       }
     };
@@ -9254,6 +9294,22 @@ export default function StudioEditor2Screen({
             scheduled,
           });
         }
+        if (bpTr.beatPadsOrchHitsSynced && bpTr.beatPadsOrchHitsVoice) {
+          const orchVoice = se2BeatPadsOrchHitsVoiceFromTrack(bpTr);
+          refillBeatPadsOrchHitsOnTransport({
+            ctx,
+            ctSnap,
+            horizon,
+            chainFloor,
+            trackId: `${bpTr.id}__beatPadsOrchHits`,
+            voice: orchVoice,
+            stripIn,
+            originBeat: origin,
+            sessionStart,
+            spb,
+            scheduled,
+          });
+        }
         continue;
       }
 
@@ -9943,10 +9999,14 @@ export default function StudioEditor2Screen({
       }
 
       const ctRefill = Math.max(tCapture, audioNow(ctxLoop));
-      /* Schedule next lap first — avoids a gap between killing old sources and new downbeat. */
-      refillLoopPreviewOnce(ctxLoop, ctRefill);
+      /*
+       * Kill previous-lap voices/clips BEFORE scheduling the new lap.
+       * Silencing after refill was killing bar-1 notes just scheduled; dedupe keys then
+       * blocked the microtask top-up → silent first bar on every loop wrap.
+       */
       stopScheduledPreviewAudioClipsForLoopLap(scheduledPreviewAudioClipsRef.current, prevLap);
       silenceSe2SynthPreviewVoices();
+      refillLoopPreviewOnce(ctxLoop, ctRefill);
       queueMicrotask(() => {
         if (!runningRef.current) return;
         const ctx = ctxRef.current;
@@ -9954,7 +10014,7 @@ export default function StudioEditor2Screen({
         refillLoopPreviewOnce(ctx, Math.max(0, ctx.currentTime));
       });
     },
-    [cancelScheduledMetroNodes, refillLoopPreviewOnce],
+    [cancelScheduledMetroNodes, refillLoopPreviewOnce, silenceSe2SynthPreviewVoices],
   );
 
   const runMetroGridLoopSplice = useCallback(
@@ -10843,12 +10903,25 @@ export default function StudioEditor2Screen({
   }, [clearStudioVocalFxPlaybackCache]);
 
   const updateTrackMidiInstrument = useCallback((trackIndex: number, midiInstrumentId: string) => {
-    const nextId = studioNormalizeMidiInstrumentId(midiInstrumentId);
+    const tr0 = studioTracksRef.current[trackIndex];
+    const nextId = studioTrackIsDrumChannel(tr0)
+      ? studioNormalizeMidiInstrumentIdForDrumTrack(midiInstrumentId)
+      : studioNormalizeMidiInstrumentId(midiInstrumentId);
     setStudioTracks((prev) =>
       prev.map((t, i) =>
         i === trackIndex && studioTrackOutputsMidi(t) ? { ...t, midiInstrumentId: nextId } : t,
       ),
     );
+    // Mid-play instrument swap: drop queued keys for this lane so refill uses the new sound.
+    if (runningRef.current && tr0?.id) {
+      const tid = tr0.id;
+      for (const key of [...midiPreviewScheduledRef.current]) {
+        if (key.includes(tid)) midiPreviewScheduledRef.current.delete(key);
+      }
+      for (const key of [...midiHardwareScheduledRef.current]) {
+        if (key.includes(tid)) midiHardwareScheduledRef.current.delete(key);
+      }
+    }
     void (async () => {
       const ctx = await ensureCtx();
       const bus = midiPreviewBusRef.current;
@@ -10865,6 +10938,7 @@ export default function StudioEditor2Screen({
         masterOut,
       );
       await warmupStudioEditor2MidiInstrument(ctx, nextId, stripIn);
+      // Audition the new sound (short) even during play so the change is obvious.
       previewStudioEditor2MidiInstrumentNote({
         ctx,
         stripIn,
@@ -10873,7 +10947,7 @@ export default function StudioEditor2Screen({
         midi: 60,
         velocity: 100,
         when: ctx.currentTime + 0.01,
-        durationSec: 0.5,
+        durationSec: 0.35,
         bpm: bpmRef.current,
       });
     })();
@@ -13878,6 +13952,35 @@ export default function StudioEditor2Screen({
             ...t,
             beatPads808LabSynced: synced,
             ...(voice ? { beatPads808LabVoice: cloneSe2Lab808VoiceParams(voice) } : {}),
+          };
+        }),
+      );
+    },
+    [applyTracksMutation],
+  );
+
+  const updateBeatPadsOrchHitsVoice = useCallback(
+    (trackIndex: number, voice: BeatPadsOrchHitsVoice) => {
+      applyTracksMutation((prev) =>
+        prev.map((t, i) =>
+          i === trackIndex && studioTrackIsBeatPadsChannel(t)
+            ? { ...t, beatPadsOrchHitsVoice: cloneBeatPadsOrchHitsVoice(voice) }
+            : t,
+        ),
+      );
+    },
+    [applyTracksMutation],
+  );
+
+  const updateBeatPadsOrchHitsSynced = useCallback(
+    (trackIndex: number, synced: boolean, voice?: BeatPadsOrchHitsVoice) => {
+      applyTracksMutation((prev) =>
+        prev.map((t, i) => {
+          if (i !== trackIndex || !studioTrackIsBeatPadsChannel(t)) return t;
+          return {
+            ...t,
+            beatPadsOrchHitsSynced: synced,
+            ...(voice ? { beatPadsOrchHitsVoice: cloneBeatPadsOrchHitsVoice(voice) } : {}),
           };
         }),
       );
@@ -17350,6 +17453,11 @@ export default function StudioEditor2Screen({
                     }
                     onBeatPads808LabVoiceChange={updateBeatPads808LabVoice}
                     onBeatPads808LabSyncedChange={updateBeatPads808LabSynced}
+                    onBeatPadsOrchHitsVoiceChange={updateBeatPadsOrchHitsVoice}
+                    onBeatPadsOrchHitsSyncedChange={updateBeatPadsOrchHitsSynced}
+                    onExportBeatPadsOrchHitsMidiToTrack={({ targetTrackIndex, notes, loopBars }) =>
+                      exportBeatPadsSpreadMidiToTrack(targetTrackIndex, notes, loopBars)
+                    }
                   />
                 </Suspense>
               </Se2BeatPadsDockedPanel>
@@ -18020,6 +18128,10 @@ export default function StudioEditor2Screen({
                       ? cloneSe2Lab808VoiceParams(src.beatPads808LabVoice)
                       : undefined,
                     beatPads808LabSynced: src.beatPads808LabSynced,
+                    beatPadsOrchHitsVoice: src.beatPadsOrchHitsVoice
+                      ? cloneBeatPadsOrchHitsVoice(src.beatPadsOrchHitsVoice)
+                      : undefined,
+                    beatPadsOrchHitsSynced: src.beatPadsOrchHitsSynced,
                     notes: [],
                   }
               : {
@@ -19780,14 +19892,19 @@ export default function StudioEditor2Screen({
       const tr = studioTracksRef.current[trackIndex];
       if (!tr || tr.kind !== 'audio') return;
 
+      // Mute software monitor immediately — before any async mic/FX work (kills feedback).
+      setStudioInputMonitorSoftMuted(true);
+
       const deviceId = effectiveAudioInputDeviceId(tr, settings.audioInput);
       const ctx = await ensureCtx();
       const micOk = await ensureStudioInputMonitor(ctx, deviceId);
       if (!micOk) {
         console.error('[SE2 Record] Microphone unavailable — check Settings → Audio Input.');
+        setStudioInputMonitorSoftMuted(false);
         setRecording(false);
         return;
       }
+      setStudioInputMonitorSoftMuted(true);
 
       const stream =
         getStudioInputMonitorStream() ??
@@ -19890,6 +20007,7 @@ export default function StudioEditor2Screen({
         const stripIn = getStudioMixerStripInput(trackIndex);
         if (preStrip && stripIn) {
           try {
+            // Keep Vocal DSP inserts warm for after the take — do not feed mic to speakers.
             await routeStudioVocalLiveSignal({
               ctx,
               trackIndex,
@@ -19901,15 +20019,16 @@ export default function StudioEditor2Screen({
               carrierTracks: studioEditorVocoderCarrierTracks(studioTracksRef.current),
               bpm: bpmRef.current,
               clipStartBeat: startBeatSnapped,
-              connectMic: true,
+              connectMic: false,
               slots,
               rack,
             });
           } catch (e) {
-            console.warn('[SE2 Record] Live vocal monitor re-route failed.', e);
+            console.warn('[SE2 Record] Live vocal insert prep failed.', e);
           }
         }
       }
+      setStudioInputMonitorSoftMuted(true);
 
       const started = startSe2AudioRecording(stream, {
         startBeat: startBeatSnapped,
@@ -19925,6 +20044,7 @@ export default function StudioEditor2Screen({
             i !== trackIndex ? t : { ...t, audioClips: t.audioClips.filter((c) => c.id !== clipId) },
           ),
         );
+        setStudioInputMonitorSoftMuted(false);
         setRecording(false);
       }
     },
@@ -21719,7 +21839,6 @@ export default function StudioEditor2Screen({
                           className="w-full min-w-0 max-w-full self-stretch"
                           value={tr.midiInstrumentId}
                           accentHex={tr.colorHex}
-                          disabled={running}
                           title={
                             studioTrackIsDrumChannel(tr)
                               ? `Drum kit or 808 sub for ${tr.name} Â· MIDI Ch ${chNum}`
@@ -22528,7 +22647,6 @@ export default function StudioEditor2Screen({
                             className="w-full max-w-[92px]"
                             value={tr.midiInstrumentId}
                             accentHex={tr.colorHex}
-                            disabled={running}
                             title={
                               studioTrackIsDrumChannel(tr)
                                 ? `Drum kit or 808 sub · ${stripTrackLabel} · ${tr.name}`

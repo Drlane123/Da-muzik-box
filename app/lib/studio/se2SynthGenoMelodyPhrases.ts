@@ -71,6 +71,36 @@ const rnbPhrases: GenoPhraseTemplate[] = [
       { beat: 3.0, dur: 0.85, degrees: ['seventh', 'fifth'] },
     ],
   },
+  {
+    id: 'rnb-pocket16',
+    events: [
+      { beat: 0, dur: 0.25, degrees: ['root'] },
+      { beat: 0.5, dur: 0.5, degrees: ['third'] },
+      { beat: 1.25, dur: 0.25, degrees: ['fifth'] },
+      { beat: 1.75, dur: 0.75, degrees: ['third'] },
+      { beat: 2.75, dur: 0.5, degrees: ['seventh'] },
+      { beat: 3.5, dur: 0.4, degrees: ['fifth', 'third'] },
+    ],
+  },
+  {
+    id: 'neo-glide',
+    events: [
+      { beat: 0, dur: 0.75, degrees: ['third'] },
+      { beat: 1.0, dur: 0.5, degrees: ['fifth'] },
+      { beat: 1.75, dur: 0.25, degrees: ['seventh'] },
+      { beat: 2.25, dur: 1.0, degrees: ['root', 'third'] },
+      { beat: 3.5, dur: 0.4, degrees: ['fifth'] },
+    ],
+  },
+  {
+    id: 'neo-call',
+    events: [
+      { beat: 0.25, dur: 0.5, degrees: ['fifth'] },
+      { beat: 1.0, dur: 0.75, degrees: ['third'] },
+      { beat: 2.0, dur: 0.5, degrees: ['root'] },
+      { beat: 2.75, dur: 0.75, degrees: ['seventh', 'fifth'] },
+    ],
+  },
 ];
 
 const trapPhrases: GenoPhraseTemplate[] = [

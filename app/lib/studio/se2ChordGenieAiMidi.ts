@@ -134,12 +134,17 @@ export const SE2_MIDI_COMPOSER_HELP = {
     {
       heading: 'Melody, lead & bass',
       body:
-        'When Type is Melody, Lead, or Bass, notes go straight onto the piano roll as individual MIDI notes — not chord cards. You can move each note, change length, and edit velocity directly on the roll.',
+        'When Type is Melody, Lead, or Bass, notes go straight onto the piano roll as individual MIDI notes — not chord cards. Melodies are generated against a real chord bed for your genre (R&B, neo-soul, etc.) and snapped to the Note grid (1/8, 1/16, 1/32) so they lock with the changes.',
     },
     {
       heading: 'Full arrangement',
       body:
-        'Full arrangement gives you chord cards plus a top-line melody on the roll together — chords as cards, melody as editable notes.',
+        'Full arrangement gives you chord cards plus a top-line melody locked to those same chords — same key, same bar changes, same beat grid.',
+    },
+    {
+      heading: 'Note grid',
+      body:
+        'Pick Eighth / Sixteenth / Thirty-Second Notes to force attacks onto that grid. Any picks a genre default (R&B and neo-soul use sixteenths).',
     },
     {
       heading: 'Providers',

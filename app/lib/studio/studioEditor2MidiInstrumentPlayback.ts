@@ -31,6 +31,9 @@ const gmSchedulerByCtx = new WeakMap<BaseAudioContext, ReturnType<typeof Schedul
 let gmCacheCtx: BaseAudioContext | null = null;
 const destIds = new WeakMap<AudioNode, number>();
 let nextDestId = 1;
+/** Active smplr stop handles — cleared on SE2 Stop/Pause. */
+const activeGmStops = new Set<() => void>();
+let gmTransportEpoch = 0;
 
 export type StudioEditor2MidiPlaybackKind =
   | { kind: 'gm'; gmId: string }
@@ -148,12 +151,21 @@ function startGmVoice(
   durationSec: number,
 ): void {
   inst.output.pan = 0;
-  inst.start({
+  const rawStop = inst.start({
     note: Math.max(0, Math.min(127, Math.round(midi))),
     velocity: Math.max(1, Math.min(127, Math.round(velocity))),
     time: Math.max(when, 0),
     duration: Math.max(0.04, durationSec),
   });
+  const wrappedStop = () => {
+    activeGmStops.delete(wrappedStop);
+    try {
+      rawStop();
+    } catch {
+      /* already stopped */
+    }
+  };
+  activeGmStops.add(wrappedStop);
 }
 
 function scheduleGmNote(
@@ -168,6 +180,7 @@ function scheduleGmNote(
   allowLateLoad = false,
 ): void {
   const whenLocked = Math.max(when, ctx.currentTime + 0.001);
+  const epoch = gmTransportEpoch;
   const ready = readyGm(ctx, gmId, destination);
   if (ready) {
     try {
@@ -179,12 +192,45 @@ function scheduleGmNote(
   }
   void getStudioEditor2GmInstrument(ctx, gmId, destination)
     .then((inst) => {
+      if (gmTransportEpoch !== epoch) return;
       if (!allowLateLoad && whenLocked < ctx.currentTime - 0.04) return;
       startGmVoice(inst, midi, velocity, Math.max(whenLocked, ctx.currentTime + 0.001), durationSec);
     })
     .catch((err) => {
       console.warn('[SE2 MIDI] GM load failed:', gmId, err);
     });
+}
+
+/** Stop queued GM/synth/808 SE2 track-instrument notes on Stop/Pause. */
+export function haltStudioEditor2MidiInstrumentNotes(): void {
+  gmTransportEpoch += 1;
+  for (const stop of activeGmStops) {
+    try {
+      stop();
+    } catch {
+      /* */
+    }
+  }
+  activeGmStops.clear();
+  if (gmCacheCtx) {
+    try {
+      gmSchedulerByCtx.get(gmCacheCtx)?.stop();
+    } catch {
+      /* */
+    }
+  }
+  const ready = [...gmReady.values()];
+  if (ready.length > 0) {
+    queueMicrotask(() => {
+      for (const inst of ready) {
+        try {
+          inst.stop();
+        } catch {
+          /* */
+        }
+      }
+    });
+  }
 }
 
 function bassFilterFx(preset: EightZeroEightPresetDef) {

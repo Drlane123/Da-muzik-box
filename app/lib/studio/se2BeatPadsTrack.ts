@@ -12,6 +12,7 @@ import type { Se2DrumGenStyle } from '@/app/lib/studio/se2DrumGeneratorTrack';
 import type { Se2BeatPadsKickFollowMode } from '@/app/lib/studio/se2BeatPadsKickMatch';
 import type { Se2BeatPadsSpreadSnapshot } from '@/app/lib/studio/se2BeatPadsSpreadStore';
 import type { Se2Lab808VoiceParams } from '@/app/lib/studio/se2Lab808Types';
+import type { BeatPadsOrchHitsVoice } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
 
 export type Se2BeatPadsTrackFields = {
   kind: 'beatPads';
@@ -49,6 +50,13 @@ export type Se2BeatPadsTrackFields = {
   beatPads808LabVoice?: Se2Lab808VoiceParams;
   /** When true, 808 Lab tone/perc play locked to Beat Pads (local + SE2-linked transport). */
   beatPads808LabSynced?: boolean;
+  /**
+   * Beat Pads ORCH hits Lab — Sound Families orchestra hits on a piano grid.
+   * Survives closing the ORCH pad panel (never wipe on close).
+   */
+  beatPadsOrchHitsVoice?: BeatPadsOrchHitsVoice;
+  /** When true, ORCH hits play locked to Beat Pads (local + SE2-linked transport). */
+  beatPadsOrchHitsSynced?: boolean;
 };
 
 export type Se2BeatPadsTrack = StudioEditor2MidiTrack & Se2BeatPadsTrackFields;

@@ -135,15 +135,25 @@ export function genoGenerateMelodyPart(
   session: GenoMusicalSession,
   promptStyle?: 'lyrical' | 'riff' | 'arp',
 ): StudioEditor2GenNote[] {
+  const presetGenre = genoStylePreset(session.chordStyle).melodyGenre;
+  const style =
+    promptStyle === 'arp'
+      ? 'arp'
+      : promptStyle === 'riff'
+        ? presetGenre === 'rnb' || presetGenre === 'gospel'
+          ? 'rnbFunk'
+          : 'trap'
+        : presetGenre;
   return genoGenerateMelodyFromHarmony({
     harmony: session.harmony,
     barCount: session.barCount,
     beatsPerBar: session.beatsPerBar,
-    style: promptStyle === 'arp' ? 'arp' : promptStyle === 'riff' ? 'trap' : 'pop',
+    style,
     seed: session.seed,
     maxLeap: melodyMaxLeap(session),
     keyRoot: session.keyRoot,
     keyMode: session.keyMode,
+    lyricalGrid: style !== 'trap' && style !== 'arp',
   });
 }
 

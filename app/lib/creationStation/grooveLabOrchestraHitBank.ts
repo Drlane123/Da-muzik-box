@@ -264,6 +264,26 @@ export type PlayOrchestraHitSampleOpts = {
   targetMidi?: number;
 };
 
+const activeOrchestraHitSources = new Set<AudioBufferSourceNode>();
+
+/** Cut ringing cinematic / orchestra hit tails (SE2 Stop). */
+export function haltOrchestraHitPlayback(ctx?: AudioContext | null): void {
+  const now = ctx && ctx.state !== 'closed' ? ctx.currentTime : 0;
+  for (const src of [...activeOrchestraHitSources]) {
+    try {
+      src.stop(now);
+    } catch {
+      /* */
+    }
+    try {
+      src.disconnect();
+    } catch {
+      /* */
+    }
+  }
+  activeOrchestraHitSources.clear();
+}
+
 /**
  * Play one orchestra hit sample. Returns true if WAV played, false → caller uses synth fallback.
  */
@@ -301,6 +321,10 @@ export function playOrchestraHitSample(
   }
   connectOrchestraHitPlaybackChain(ctx, src, gainNode, def.playbackFilter, startAt);
   gainNode.connect(out);
+  activeOrchestraHitSources.add(src);
+  src.onended = () => {
+    activeOrchestraHitSources.delete(src);
+  };
   src.start(startAt);
   src.stop(startAt + buf.duration + 0.05);
   return true;

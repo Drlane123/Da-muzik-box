@@ -57,6 +57,12 @@ import {
   se2BeatPads808LabAlignLoopBars,
   se2BeatPads808LabVoiceFromTrack,
 } from '@/app/lib/studio/se2BeatPads808LabSync';
+import {
+  cloneBeatPadsOrchHitsVoice,
+  se2BeatPadsOrchHitsAlignLoopBars,
+  se2BeatPadsOrchHitsVoiceFromTrack,
+} from '@/app/lib/studio/se2BeatPadsOrchHitsSync';
+import type { BeatPadsOrchHitsVoice } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 
 export type Se2BeatPadsTimelineNote = {
@@ -164,6 +170,20 @@ export type Se2BeatPadsPanelProps = {
     synced: boolean,
     voice?: Se2Lab808VoiceParams,
   ) => void;
+  /** Persist ORCH hits Lab voice on the Beat Pads track (survives close). */
+  onBeatPadsOrchHitsVoiceChange?: (trackIndex: number, voice: BeatPadsOrchHitsVoice) => void;
+  /** Sync ORCH hits Lab playback to Beat Pads transport. */
+  onBeatPadsOrchHitsSyncedChange?: (
+    trackIndex: number,
+    synced: boolean,
+    voice?: BeatPadsOrchHitsVoice,
+  ) => void;
+  /** ORCH hits Lab — merge piano-grid MIDI into any SE2 instrument track. */
+  onExportBeatPadsOrchHitsMidiToTrack?: (args: {
+    targetTrackIndex: number;
+    notes: Se2BeatPadsTimelineNote[];
+    loopBars: number;
+  }) => boolean | void;
 };
 
 export function Se2BeatPadsPanel({
@@ -214,6 +234,9 @@ export function Se2BeatPadsPanel({
   onExportBeatPads808LabWavToTrack,
   onBeatPads808LabVoiceChange,
   onBeatPads808LabSyncedChange,
+  onBeatPadsOrchHitsVoiceChange,
+  onBeatPadsOrchHitsSyncedChange,
+  onExportBeatPadsOrchHitsMidiToTrack,
 }: Se2BeatPadsPanelProps) {
   const [loadingPattern, setLoadingPattern] = useState(false);
   const [regeneratingPad, setRegeneratingPad] = useState(false);
@@ -223,6 +246,11 @@ export function Se2BeatPadsPanel({
     [track.beatPads808LabVoice, track.id],
   );
   const beatPads808LabSynced = track.beatPads808LabSynced === true;
+  const beatPadsOrchHitsVoice = useMemo(
+    () => se2BeatPadsOrchHitsVoiceFromTrack(track),
+    [track.beatPadsOrchHitsVoice, track.id],
+  );
+  const beatPadsOrchHitsSynced = track.beatPadsOrchHitsSynced === true;
   const exportStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loopBars = track.beatPadsLoopBars ?? 8;
   const stepsPerBar = track.beatPadsStepsPerBar ?? 16;
@@ -287,6 +315,27 @@ export function Se2BeatPadsPanel({
       );
     },
     [beatPads808LabVoice, loopBars, onBeatPads808LabSyncedChange, trackIndex],
+  );
+
+  const handleBeatPadsOrchHitsVoiceChange = useCallback(
+    (voice: BeatPadsOrchHitsVoice) => {
+      onBeatPadsOrchHitsVoiceChange?.(trackIndex, cloneBeatPadsOrchHitsVoice(voice));
+    },
+    [onBeatPadsOrchHitsVoiceChange, trackIndex],
+  );
+
+  const handleBeatPadsOrchHitsSyncedChange = useCallback(
+    (synced: boolean) => {
+      const aligned = synced
+        ? se2BeatPadsOrchHitsAlignLoopBars(beatPadsOrchHitsVoice, loopBars)
+        : undefined;
+      onBeatPadsOrchHitsSyncedChange?.(
+        trackIndex,
+        synced,
+        aligned ? cloneBeatPadsOrchHitsVoice(aligned) : undefined,
+      );
+    },
+    [beatPadsOrchHitsVoice, loopBars, onBeatPadsOrchHitsSyncedChange, trackIndex],
   );
 
   const kickKeySemi = useMemo(() => {
@@ -810,6 +859,25 @@ export function Se2BeatPadsPanel({
                   onExportBeatPads808LabWavToTrack ?? onExportBeatPadsToAudioTrack,
               }
         }
+        beatPadsOrchHits={{
+          trackId: track.id,
+          songKeyRoot,
+          songKeyMode: songKeyMode as ChordMode,
+          studioTracks: (harmonyTracks ?? []) as readonly Se2Lab808ChordLockHarmonyTrack[],
+          lanePad: Math.max(2, String((harmonyTracks ?? []).length || 1).length),
+          voice: beatPadsOrchHitsVoice,
+          onVoiceChange: handleBeatPadsOrchHitsVoiceChange,
+          syncedToBeatPads: beatPadsOrchHitsSynced,
+          onSyncedToBeatPadsChange: handleBeatPadsOrchHitsSyncedChange,
+          getPreviewDestination: (ctx) =>
+            getTrackStripInput?.() ?? getMasterOutput?.() ?? ctx.destination,
+          exportTrackOptions: spreadMidiExportTrackOptions,
+          onExportMidiToTrack: onExportBeatPadsOrchHitsMidiToTrack
+            ? (args) => onExportBeatPadsOrchHitsMidiToTrack(args)
+            : onExportBeatPadsSpreadMidiToTrack
+              ? (args) => onExportBeatPadsSpreadMidiToTrack(args)
+              : undefined,
+        }}
       />
       </div>
     </div>

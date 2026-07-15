@@ -35,6 +35,7 @@ import {
 } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
 import { beatPadsLaneFromBooleanTemplate } from '@/app/lib/creationStation/beatPadsPatternEdit';
 import { BEAT_PADS_EXTENDED_GENRE_TEMPLATES } from '@/app/lib/creationStation/beatPadsLanePlacementExtendedGenres';
+import { BEAT_PADS_KICK_PACK_TEMPLATES } from '@/app/lib/creationStation/beatPadsLanePlacementKickPack';
 
 export type BeatPadsDrumRole = 'kick' | 'snare' | 'clap' | 'hihat' | 'openHat' | 'rim';
 
@@ -379,6 +380,7 @@ const ALL_TEMPLATES: readonly BeatPadsLanePlacementTemplate[] = [
   tpl('dance-rim-groove', 'Perc Groove', 'rim', 'dance', 'Offbeat perc rim layer', bar(2, 6, 10, 14)),
 
   ...BEAT_PADS_EXTENDED_GENRE_TEMPLATES,
+  ...BEAT_PADS_KICK_PACK_TEMPLATES,
 ];
 
 export function beatPadsPlacementGenreLabel(genre: BeatPadsPlacementGenre): string {

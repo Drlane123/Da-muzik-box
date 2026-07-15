@@ -59,18 +59,22 @@ export function audioInputConstraint(
 /** Full `audio` constraint for DAW record / mic check (device from settings + processing). */
 export function studioMicTrackConstraints(audioInputDeviceId: string): MediaTrackConstraints {
   const base = audioInputConstraint(audioInputDeviceId);
+  // Echo cancel + NS on — SE2 software-monitors through the same output; without these,
+  // speakers → mic forms a feedback loop the moment Record arms the strip.
   if (typeof base === 'boolean') {
     return {
       echoCancellation: true,
       noiseSuppression: true,
-      autoGainControl: true,
+      autoGainControl: false,
+      channelCount: 1,
     };
   }
   return {
     ...base,
     echoCancellation: true,
     noiseSuppression: true,
-    autoGainControl: true,
+    autoGainControl: false,
+    channelCount: 1,
   };
 }
 

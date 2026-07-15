@@ -5,9 +5,12 @@
 import { studioMicTrackConstraints } from '@/app/lib/audioRouting';
 
 /** Idle / armed monitoring into the strip — pad so mic + FX isn't slamming the bus. */
-export const STUDIO_INPUT_MONITOR_GAIN = 0.42;
-/** While MediaRecorder runs — further dim to stop speaker/headphone feed → mic bleed/noise. */
-export const STUDIO_INPUT_MONITOR_GAIN_RECORDING = 0.22;
+export const STUDIO_INPUT_MONITOR_GAIN = 0.38;
+/**
+ * While recording: software monitor must stay silent.
+ * MediaRecorder captures the dry MediaStream; feeding the strip→speakers causes feedback.
+ */
+export const STUDIO_INPUT_MONITOR_GAIN_RECORDING = 0;
 
 type MonitorNodes = {
   stream: MediaStream;
@@ -22,6 +25,8 @@ type MonitorNodes = {
 let nodes: MonitorNodes | null = null;
 let keepStreamAlive: (() => boolean) | null = null;
 let monitorGainLinear = STUDIO_INPUT_MONITOR_GAIN;
+/** Hard mute mic→speakers while MediaRecorder is armed (keeps stream + peak taps alive). */
+let softMuted = false;
 
 export function setStudioInputMonitorKeepAlive(fn: (() => boolean) | null): void {
   keepStreamAlive = fn;
@@ -51,14 +56,22 @@ export function getStudioInputMonitorScopeTrackIndex(): number {
   return nodes?.scopeTrackIndex ?? -1;
 }
 
+export function studioInputMonitorSoftMuted(): boolean {
+  return softMuted;
+}
+
+function applyFanoutGain(): void {
+  if (!nodes) return;
+  const t = nodes.fanout.context.currentTime;
+  const g = softMuted ? 0 : monitorGainLinear;
+  nodes.fanout.gain.cancelScheduledValues(t);
+  nodes.fanout.gain.setTargetAtTime(g, t, 0.015);
+}
+
 /** Soften/restore mic → strip monitor level (does not change dry MediaRecorder capture). */
 export function setStudioInputMonitorGain(linear: number): void {
   monitorGainLinear = Math.max(0, Math.min(1, linear));
-  if (nodes) {
-    const t = nodes.fanout.context.currentTime;
-    nodes.fanout.gain.cancelScheduledValues(t);
-    nodes.fanout.gain.setTargetAtTime(monitorGainLinear, t, 0.02);
-  }
+  applyFanoutGain();
 }
 
 export function getStudioInputMonitorGain(): number {
@@ -66,8 +79,43 @@ export function getStudioInputMonitorGain(): number {
 }
 
 /**
+ * Mute / unmute software input monitoring without tearing down the mic stream.
+ * Use while recording so speakers never form a feedback loop with the mic.
+ */
+export function setStudioInputMonitorSoftMuted(muted: boolean): void {
+  if (softMuted === muted) {
+    applyFanoutGain();
+    return;
+  }
+  softMuted = muted;
+  if (!nodes) return;
+
+  if (muted) {
+    if (nodes.stripInput) {
+      try {
+        nodes.fanout.disconnect(nodes.stripInput);
+      } catch {
+        /* */
+      }
+    }
+    applyFanoutGain();
+    return;
+  }
+
+  applyFanoutGain();
+  if (nodes.stripInput) {
+    try {
+      nodes.fanout.connect(nodes.stripInput);
+    } catch {
+      /* already connected */
+    }
+  }
+}
+
+/**
  * Route mic fanout → track entry / preStrip.
  * Only rewires the previous monitor dest — preserves parallel taps (live record peaks).
+ * While soft-muted (recording), updates the target but does not connect to the bus.
  */
 export function studioInputMonitorConnectDest(dest: AudioNode | null, trackIndex = -1): void {
   if (!nodes) return;
@@ -82,6 +130,11 @@ export function studioInputMonitorConnectDest(dest: AudioNode | null, trackIndex
     } catch {
       /* already disconnected */
     }
+  }
+
+  if (softMuted) {
+    applyFanoutGain();
+    return;
   }
 
   if (dest && dest !== prev) {
@@ -121,6 +174,7 @@ export async function ensureStudioInputMonitor(
     nodes.deviceId === want &&
     nodes.stream.getAudioTracks().some((t) => t.readyState === 'live')
   ) {
+    applyFanoutGain();
     return true;
   }
   stopStudioInputMonitor();
@@ -139,7 +193,7 @@ export async function ensureStudioInputMonitor(
     }
     const src = ctx.createMediaStreamSource(stream);
     const fanout = ctx.createGain();
-    fanout.gain.value = monitorGainLinear;
+    fanout.gain.value = softMuted ? 0 : monitorGainLinear;
     src.connect(fanout);
     nodes = { stream, src, fanout, deviceId: want, stripInput: null, scopeTrackIndex: -1 };
 
