@@ -165,7 +165,27 @@ export function Se2Lab808Panel({
   const [lowsTabOpen, setLowsTabOpen] = useState(false);
   const [lowsGenre, setLowsGenre] = useState<Se2Lab808SparseLowsGenre>('trap');
   const lowsSeedRef = useRef(1);
+  const lowsWrapRef = useRef<HTMLDivElement | null>(null);
   const exportStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close Lows panel on outside click (inline beside button — not a covering overlay).
+  useEffect(() => {
+    if (!lowsTabOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node | null;
+      if (!t || lowsWrapRef.current?.contains(t)) return;
+      setLowsTabOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLowsTabOpen(false);
+    };
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [lowsTabOpen]);
 
   const toneGridHasHits = useMemo(
     () => se2Lab808ToneGridHasHits(voice.toneGridSteps),
@@ -481,12 +501,12 @@ export function Se2Lab808Panel({
             <Se2Lab808TonePads {...tonePadsShared} padsOnly size={miniature ? 'default' : 'large'} />
 
             <aside
-              className="flex flex-col gap-2.5 shrink-0 min-w-0 overflow-visible"
-              style={{ width: miniature ? 188 : 210 }}
+              className="flex flex-col gap-2.5 shrink-0 min-w-0"
+              style={{ width: lowsTabOpen ? (miniature ? 340 : 370) : miniature ? 188 : 210 }}
             >
               <div className="flex flex-col gap-1">
                 <span style={sideLabel}>Lane</span>
-                <div className="flex items-stretch gap-2">
+                <div className="flex items-start gap-2">
                   <div className="flex flex-col gap-1 flex-1 min-w-0">
                     <button
                       type="button"
@@ -525,8 +545,8 @@ export function Se2Lab808Panel({
                       Regenerate
                     </button>
                   </div>
-                  {/* Lows button + flyout panel to its RIGHT (overlay — does not push layout down). */}
-                  <div className="relative flex flex-col gap-1 shrink-0 items-stretch">
+                  {/* Lows button + panel INLINE to its right (no overlay covering the grid). */}
+                  <div ref={lowsWrapRef} className="flex items-start gap-1.5 shrink-0">
                     <button
                       type="button"
                       disabled={disabled}
@@ -534,20 +554,18 @@ export function Se2Lab808Panel({
                       onClick={() => setLowsTabOpen((o) => !o)}
                       title="Dark sparse R&B / Trap lows — 2–3 hits/bar, chord roots or freelance"
                     >
-                      {lowsTabOpen ? 'Lows ◂' : 'Lows'}
+                      {lowsTabOpen ? 'Lows ✕' : 'Lows'}
                     </button>
                     {lowsTabOpen ? (
                       <div
-                        className="absolute top-0 left-full z-40 flex flex-col gap-1.5 rounded-md border px-1.5 py-1.5 shadow-lg"
+                        className="flex flex-col gap-1 rounded-md border px-1.5 py-1.5"
                         style={{
-                          marginLeft: 6,
-                          width: miniature ? 148 : 160,
+                          width: miniature ? 132 : 142,
                           borderColor: '#f5a62366',
-                          background: 'rgba(18, 14, 8, 0.98)',
-                          boxShadow: '0 8px 24px rgba(0,0,0,0.65)',
+                          background: 'rgba(245,166,35,0.08)',
                         }}
                       >
-                        <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows · 2–3 / bar</span>
+                        <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows</span>
                         <div className="flex flex-col gap-1">
                           {(
                             [
@@ -581,24 +599,27 @@ export function Se2Lab808Panel({
                             type="button"
                             disabled={disabled}
                             style={{ ...genBtn('#f5a623', !disabled, true), flex: 1, minWidth: 0 }}
-                            onClick={() => handleGenerateLows(lowsGenre)}
-                            title={`Generate dark ${lowsGenre === 'rnb' ? 'R&B' : lowsGenre === 'reggae' ? 'Reggae' : 'Trap'} lows — chord roots if locked, else freelance dark minor`}
+                            onClick={() => {
+                              handleGenerateLows(lowsGenre);
+                              setLowsTabOpen(false);
+                            }}
+                            title={`Generate dark ${lowsGenre === 'rnb' ? 'R&B' : lowsGenre === 'reggae' ? 'Reggae' : 'Trap'} lows — in key`}
                           >
-                            Gen lows
+                            Gen
                           </button>
                           <button
                             type="button"
                             disabled={disabled}
                             style={{ ...genBtn(accent, !disabled, true), flex: 1, minWidth: 0 }}
-                            onClick={handleRegenerateLows}
-                            title="Roll another dark lows melody (same genre)"
+                            onClick={() => {
+                              handleRegenerateLows();
+                              setLowsTabOpen(false);
+                            }}
+                            title="Roll another dark lows melody (same genre · in key)"
                           >
                             Regen
                           </button>
                         </div>
-                        <span className="text-[7px] leading-tight" style={{ color: '#9a8a70' }}>
-                          Always in key · roots if locked · freelance if not
-                        </span>
                       </div>
                     ) : null}
                   </div>
