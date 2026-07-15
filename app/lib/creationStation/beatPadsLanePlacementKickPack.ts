@@ -26,8 +26,26 @@ function tpl(
 /** Merged into ALL_TEMPLATES after core + extended banks. */
 export const BEAT_PADS_KICK_PACK_TEMPLATES: readonly BeatPadsLanePlacementTemplate[] = [
   // ═══════════════════════════════════════════════════════════════════════════
-  // TRAP — +30 kicks (+10 solid), +8 rim
+  // TRAP — +45 kicks (+15 AI pocket bank +10 solid), +8 rim
+  // Steps are 0–15 sixteenths (AI list was 1–16). Locked for snare on 4 & 12.
   // ═══════════════════════════════════════════════════════════════════════════
+  // 15 Trap kick mini-patterns (Beat Pads · Trap kit · Lane Placement)
+  tpl('trap-kick-ai-standard', 'Standard Beats', 'kick', 'trap', 'Foundational trap — 1 · 3 · late 3', bar(0, 8, 10)),
+  tpl('trap-kick-ai-double-tap', 'Double Tap Start', 'kick', 'trap', 'Quick open doubles into 3', bar(0, 2, 8, 10)),
+  tpl('trap-kick-ai-offbeat', 'Offbeat Bounce', 'kick', 'trap', 'Bouncy sync around snares', bar(0, 5, 8, 13)),
+  tpl('trap-kick-ai-heavy-drop', 'Heavy Drop', 'kick', 'trap', 'Aggressive hit into late 3', bar(0, 3, 10, 11)),
+  tpl('trap-kick-ai-rolling-tail', 'Rolling Tail', 'kick', 'trap', 'Bar-end kick rush into loop', bar(0, 8, 13, 14, 15)),
+  tpl('trap-kick-ai-minimalist', 'Modern Minimalist', 'kick', 'trap', 'Wide space — 1 · & of 3', bar(0, 10)),
+  tpl('trap-kick-ai-sync-mid', 'Syncopated Middle', 'kick', 'trap', 'Unexpected mid-bar pocket', bar(0, 6, 9, 10)),
+  tpl('trap-kick-ai-drive', 'Continuous Drive', 'kick', 'trap', 'Busy high-energy trap kick', bar(0, 2, 6, 8, 10, 14)),
+  tpl('trap-kick-ai-ghost-lead', 'Ghost Lead-In', 'kick', 'trap', 'Pickup into heavy beat 3', bar(0, 7, 8, 10)),
+  tpl('trap-kick-ai-delayed', 'Delayed Response', 'kick', 'trap', 'Skips classic 3 — halting groove', bar(0, 9, 11, 14)),
+  tpl('trap-kick-ai-double-triple', 'Double Triple', 'kick', 'trap', 'Machine-gun clusters on 1 and 3', bar(0, 1, 2, 8, 9)),
+  tpl('trap-kick-ai-anticipation', 'Anticipation Groove', 'kick', 'trap', 'Shifted off main beats', bar(0, 7, 11, 13)),
+  tpl('trap-kick-ai-counter', 'Fast Counter-Rhythm', 'kick', 'trap', 'Layers with snare on 4', bar(0, 3, 5, 10, 12)),
+  tpl('trap-kick-ai-peak', 'Peak Energy', 'kick', 'trap', 'Relentless populated grid', bar(0, 2, 5, 8, 11, 13)),
+  tpl('trap-kick-ai-poly', 'Poly-Bounce', 'kick', 'trap', 'Four-on-the-floor trap style', bar(0, 4, 8, 12)),
+
   tpl('trap-kick-drill-stomp', 'Drill Stomp', 'kick', 'trap', 'UK drill — 1 · late 2 · 3 · &4', bar(0, 7, 8, 14)),
   tpl('trap-kick-brooklyn', 'Brooklyn Bounce', 'kick', 'trap', 'East coast bounce — 1 · &2 · late 3', bar(0, 6, 11)),
   tpl('trap-kick-pluggnb', 'Pluggnb Soft', 'kick', 'trap', 'Soft plugg — 1 · ghost 3 · pickup', bar(0, 9, 14)),
