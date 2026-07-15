@@ -617,34 +617,28 @@ html.touch-coarse .cs-pad-hit {
   z-index: 80;
 }
 
-/* Same Michroma electric face as Chord Lock Technology — platinum instead of yellow. */
+/* Same Michroma electric face as Chord Lock Technology — larger white letters. */
 [data-studio-beat-pads-dock] .beat-pads-vocalbox-tagline {
-  font-size: 9px !important;
-  letter-spacing: 0.14em !important;
+  font-size: 13px !important;
+  letter-spacing: 0.12em !important;
   gap: 0 !important;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  color: #ffffff !important;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.22) !important;
 }
 
 [data-studio-beat-pads-dock] .beat-pads-vocalbox-tagline-word {
-  letter-spacing: 0.14em !important;
+  letter-spacing: 0.12em !important;
   text-transform: none;
-  background: linear-gradient(
-    180deg,
-    #ffffff 0%,
-    #eef2f5 18%,
-    #c5ced6 38%,
-    #f4f7f9 52%,
-    #9aa8b4 72%,
-    #dce3e9 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.65));
-  text-shadow: none;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  color: #ffffff !important;
+  filter: none;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
 }
 
 [data-studio-beat-pads-dock] .beat-pads-808lab-chord-lock {
