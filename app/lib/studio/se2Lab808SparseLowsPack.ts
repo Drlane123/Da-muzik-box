@@ -1,9 +1,9 @@
 /**
- * SE2 / Beat Pads 808 Lab — sparse dark R&B / Trap / Reggae low-808 melodies.
- * 2–3 hits per bar with pitch contours (not root-only drones).
+ * SE2 / Beat Pads 808 Lab — sparse dark R&B / Trap / Reggae / Dance low-808 melodies.
+ * Exactly 2 hits per bar (user draws the 3rd) with in-key pitch contours.
  */
 
-export type Se2Lab808SparseLowsGenre = 'rnb' | 'trap' | 'reggae';
+export type Se2Lab808SparseLowsGenre = 'rnb' | 'trap' | 'reggae' | 'dance';
 
 /** One hit: 16th step in the bar + semitone offset from the bar’s chord / freelance root. */
 export type Se2Lab808SparseLowsHit = {
@@ -27,6 +27,7 @@ function hit(step: number, interval = 0): Se2Lab808SparseLowsHit {
   };
 }
 
+/** Hard cap: 2 unique steps per bar — third hit is left for the user to draw. */
 function tpl(
   id: string,
   name: string,
@@ -36,16 +37,16 @@ function tpl(
 ): Se2Lab808SparseLowsTemplate {
   const uniq = new Map<number, number>();
   for (const h of hits) {
-    if (uniq.size >= 3) break;
+    if (uniq.size >= 2) break;
     if (!uniq.has(h.step)) uniq.set(h.step, h.interval);
   }
   let list = [...uniq.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([step, interval]) => hit(step, interval));
   if (list.length < 2) {
-    list = [hit(0, 0), hit(8, list[0]?.interval === 0 ? -5 : 0)];
+    list = [hit(0, 0), hit(8, list[0]?.interval === 0 ? 7 : 0)];
   }
-  return { id, name, genre, desc, hits: list };
+  return { id, name, genre, desc, hits: list.slice(0, 2) };
 }
 
 /** Dark R&B sparse low melodies — late, minor colors, octave dips. */
@@ -116,9 +117,28 @@ export const SE2_LAB808_TRAP_LOWS_TEMPLATES: readonly Se2Lab808SparseLowsTemplat
 export const SE2_LAB808_REGGAE_LOWS_TEMPLATES: readonly Se2Lab808SparseLowsTemplate[] = [
   tpl('reggae-lows-onedrop', 'One drop', 'reggae', '5 · root', [hit(8, 7), hit(14, 0)]),
   tpl('reggae-lows-13', 'Rocksteady', 'reggae', 'Root · 5', [hit(0, 0), hit(8, 7)]),
-  tpl('reggae-lows-off', 'Skank lean', 'reggae', 'Root · b7 · 5', [hit(0, 0), hit(6, 10), hit(8, 7)]),
+  tpl('reggae-lows-off', 'Skank lean', 'reggae', 'Root · b7', [hit(0, 0), hit(6, 10)]),
   tpl('reggae-lows-dub', 'Dub space', 'reggae', 'Root · late −8ve', [hit(0, 0), hit(11, -12)]),
-  tpl('reggae-lows-ragga', 'Ragga', 'reggae', 'Root · m3 · b7', [hit(0, 0), hit(8, 3), hit(14, 10)]),
+  tpl('reggae-lows-ragga', 'Ragga', 'reggae', 'Root · m3', [hit(0, 0), hit(8, 3)]),
+  tpl('reggae-lows-skank5', 'Skank 5', 'reggae', 'Root · & of 2 5th', [hit(0, 0), hit(6, 7)]),
+  tpl('reggae-lows-drop3', 'Drop 3', 'reggae', 'Beat 3 · pickup', [hit(8, 0), hit(14, 7)]),
+  tpl('reggae-lows-deep', 'Deep dub', 'reggae', '−8ve · root', [hit(0, -12), hit(8, 0)]),
+];
+
+/** Dance sparse lows — 2 hits/bar, four-on-floor lite (user draws the rest). */
+export const SE2_LAB808_DANCE_LOWS_TEMPLATES: readonly Se2Lab808SparseLowsTemplate[] = [
+  tpl('dance-lows-13', '1 & 3', 'dance', 'Root · 5', [hit(0, 0), hit(8, 7)]),
+  tpl('dance-lows-14', '1 & 4', 'dance', 'Root · beat 4', [hit(0, 0), hit(12, 0)]),
+  tpl('dance-lows-pump', 'Pump', 'dance', 'Root · & of 3', [hit(0, 0), hit(10, 7)]),
+  tpl('dance-lows-club', 'Club', 'dance', 'Root · late 3', [hit(0, 0), hit(11, 0)]),
+  tpl('dance-lows-rise', 'Rise', 'dance', 'Root · pickup 5', [hit(0, 0), hit(14, 7)]),
+  tpl('dance-lows-bounce', 'Bounce', 'dance', 'Root · &2 5th', [hit(0, 0), hit(6, 7)]),
+  tpl('dance-lows-floor', 'Floor', 'dance', 'Root · −8ve 3', [hit(0, 0), hit(8, -12)]),
+  tpl('dance-lows-drive', 'Drive', 'dance', '5 · root on 3', [hit(0, 7), hit(8, 0)]),
+  tpl('dance-lows-late', 'Late drop', 'dance', 'Root · late b7', [hit(0, 0), hit(13, 10)]),
+  tpl('dance-lows-pulse', 'Pulse', 'dance', 'Root · beat 2', [hit(0, 0), hit(4, 0)]),
+  tpl('dance-lows-glow', 'Glow', 'dance', 'Root · m3 on 3', [hit(0, 0), hit(8, 3)]),
+  tpl('dance-lows-mirror', 'Mirror', 'dance', '5 · −8ve', [hit(0, 7), hit(12, -12)]),
 ];
 
 export const SE2_LAB808_SPARSE_LOWS_BY_GENRE: Readonly<
@@ -127,6 +147,7 @@ export const SE2_LAB808_SPARSE_LOWS_BY_GENRE: Readonly<
   rnb: SE2_LAB808_RNB_LOWS_TEMPLATES,
   trap: SE2_LAB808_TRAP_LOWS_TEMPLATES,
   reggae: SE2_LAB808_REGGAE_LOWS_TEMPLATES,
+  dance: SE2_LAB808_DANCE_LOWS_TEMPLATES,
 };
 
 export function se2Lab808SparseLowsTemplates(
@@ -136,6 +157,6 @@ export function se2Lab808SparseLowsTemplates(
 }
 
 export function se2NormalizeLab808SparseLowsGenre(raw: string | undefined): Se2Lab808SparseLowsGenre {
-  if (raw === 'rnb' || raw === 'reggae' || raw === 'trap') return raw;
+  if (raw === 'rnb' || raw === 'reggae' || raw === 'trap' || raw === 'dance') return raw;
   return 'trap';
 }

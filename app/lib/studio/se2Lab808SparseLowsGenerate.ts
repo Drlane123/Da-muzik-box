@@ -1,8 +1,7 @@
 /**
  * SE2 / Beat Pads 808 Lab — sparse dark R&B / Trap lows.
- * 2–3 hits/bar with melodic motion, always snapped to song key
- * (except bare chord-root anchors when a progression is locked).
- * Does not alter {@link se2Lab808GenerateRootGridPattern}.
+ * Exactly 2 hits/bar with melodic motion, always snapped to song key
+ * (user draws any 3rd hit). Does not alter {@link se2Lab808GenerateRootGridPattern}.
  */
 import { LAB808_BEATS_PER_BAR, lab808ActiveRootIndexAtBeat } from '@/app/lib/creationStation/lab808ChordRoots';
 import type { Lab808ProgressionRoot } from '@/app/lib/creationStation/lab808ChordRoots';
@@ -31,6 +30,7 @@ const GENRE_LABEL: Record<Se2Lab808SparseLowsGenre, string> = {
   rnb: 'R&B lows',
   trap: 'Trap lows',
   reggae: 'Reggae lows',
+  dance: 'Dance lows',
 };
 
 /** Low C-ish center for freelance 808 melodies (fits kick / bass low pads). */
@@ -148,6 +148,7 @@ function rootMidiForBar(
  * Write sparse dark lows onto the tone grid — every hit stays in key.
  * With roots: follow progression anchors + in-key melodic contours.
  * Without roots: freelance diatonic phrase in the song key (major or minor).
+ * Always 2 hits per bar — never 3 (avoids doubles; user paints extras).
  */
 export function se2Lab808GenerateSparseLowsPattern(args: {
   roots: readonly Lab808ProgressionRoot[];
@@ -209,7 +210,7 @@ export function se2Lab808GenerateSparseLowsPattern(args: {
     if (usedNames.length < 4) usedNames.push(tpl.name);
 
     const barStartCol = bar * SE2_LAB808_TONE_GRID_STEPS_PER_BAR;
-    const hits = tpl.hits.slice(0, 3);
+    const hits = tpl.hits.slice(0, 2);
     for (const h of hits) {
       const col = barStartCol + h.step;
       // Contour interval from root, then force into key (G major stays G major, etc.).

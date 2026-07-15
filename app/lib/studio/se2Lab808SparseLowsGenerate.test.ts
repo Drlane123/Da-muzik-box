@@ -23,12 +23,11 @@ const roots: Lab808ProgressionRoot[] = [
 ];
 
 describe('se2Lab808 sparse lows pack', () => {
-  it('ships at least 25 R&B and 30 Trap templates with 2–3 hits each', () => {
+  it('ships R&B / Trap / Dance templates with exactly 2 hits each', () => {
     expect(SE2_LAB808_RNB_LOWS_TEMPLATES.length).toBeGreaterThanOrEqual(25);
     expect(SE2_LAB808_TRAP_LOWS_TEMPLATES.length).toBeGreaterThanOrEqual(30);
     for (const t of [...SE2_LAB808_RNB_LOWS_TEMPLATES, ...SE2_LAB808_TRAP_LOWS_TEMPLATES]) {
-      expect(t.hits.length).toBeGreaterThanOrEqual(2);
-      expect(t.hits.length).toBeLessThanOrEqual(3);
+      expect(t.hits.length).toBe(2);
     }
   });
 });
@@ -45,7 +44,7 @@ describe('se2Lab808SnapMidiToKeyScale', () => {
 });
 
 describe('se2Lab808GenerateSparseLowsPattern', () => {
-  it('places at most 3 hits per bar and stays in key with progression', () => {
+  it('places at most 2 hits per bar and stays in key with progression', () => {
     const keyRoot = 0; // C minor-ish progression but snap to C minor
     const keyMode = 'minor' as const;
     const scale = new Set(se2Lab808ScalePitchClasses(keyRoot, keyMode));
@@ -71,7 +70,7 @@ describe('se2Lab808GenerateSparseLowsPattern', () => {
           expect(scale.has(((midi % 12) + 12) % 12)).toBe(true);
         }
       }
-      expect(count).toBeLessThanOrEqual(3);
+      expect(count).toBeLessThanOrEqual(2);
     }
   });
 

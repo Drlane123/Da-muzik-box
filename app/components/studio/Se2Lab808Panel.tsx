@@ -501,8 +501,8 @@ export function Se2Lab808Panel({
             <Se2Lab808TonePads {...tonePadsShared} padsOnly size={miniature ? 'default' : 'large'} />
 
             <aside
-              className="flex flex-col gap-2.5 shrink-0 min-w-0"
-              style={{ width: lowsTabOpen ? (miniature ? 340 : 370) : miniature ? 188 : 210 }}
+              className="relative flex flex-col gap-2.5 shrink-0 min-w-0 overflow-visible"
+              style={{ width: miniature ? 188 : 210 }}
             >
               <div className="flex flex-col gap-1">
                 <span style={sideLabel}>Lane</span>
@@ -545,24 +545,26 @@ export function Se2Lab808Panel({
                       Regenerate
                     </button>
                   </div>
-                  {/* Lows button + panel INLINE to its right (no overlay covering the grid). */}
-                  <div ref={lowsWrapRef} className="flex items-start gap-1.5 shrink-0">
+                  {/* Lows beside Gen/Regen; menu is position:absolute so Bass + grid never move. */}
+                  <div ref={lowsWrapRef} className="relative shrink-0 self-start">
                     <button
                       type="button"
                       disabled={disabled}
                       style={genBtn(lowsTabOpen ? '#f5a623' : '#c4a574', true, true)}
                       onClick={() => setLowsTabOpen((o) => !o)}
-                      title="Dark sparse R&B / Trap lows — 2–3 hits/bar, chord roots or freelance"
+                      title="Dark sparse lows — 2 hits/bar in key (R&B · Trap · Reggae · Dance)"
                     >
                       {lowsTabOpen ? 'Lows ✕' : 'Lows'}
                     </button>
                     {lowsTabOpen ? (
                       <div
-                        className="flex flex-col gap-1 rounded-md border px-1.5 py-1.5"
+                        className="absolute top-0 left-full z-50 flex flex-col gap-1 rounded-md border px-1.5 py-1.5"
                         style={{
+                          marginLeft: 6,
                           width: miniature ? 132 : 142,
                           borderColor: '#f5a62366',
-                          background: 'rgba(245,166,35,0.08)',
+                          background: 'rgba(18, 14, 8, 0.98)',
+                          boxShadow: '0 6px 18px rgba(0,0,0,0.55)',
                         }}
                       >
                         <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows</span>
@@ -572,6 +574,7 @@ export function Se2Lab808Panel({
                               ['rnb', 'R&B lows'],
                               ['trap', 'Trap lows'],
                               ['reggae', 'Reggae'],
+                              ['dance', 'Dance'],
                             ] as const
                           ).map(([id, label]) => {
                             const on = lowsGenre === id;
@@ -603,7 +606,15 @@ export function Se2Lab808Panel({
                               handleGenerateLows(lowsGenre);
                               setLowsTabOpen(false);
                             }}
-                            title={`Generate dark ${lowsGenre === 'rnb' ? 'R&B' : lowsGenre === 'reggae' ? 'Reggae' : 'Trap'} lows — in key`}
+                            title={`Generate dark ${
+                              lowsGenre === 'rnb'
+                                ? 'R&B'
+                                : lowsGenre === 'reggae'
+                                  ? 'Reggae'
+                                  : lowsGenre === 'dance'
+                                    ? 'Dance'
+                                    : 'Trap'
+                            } lows — 2 hits/bar · in key`}
                           >
                             Gen
                           </button>
