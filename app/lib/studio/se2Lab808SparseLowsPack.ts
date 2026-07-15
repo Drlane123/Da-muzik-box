@@ -139,26 +139,3 @@ export function se2NormalizeLab808SparseLowsGenre(raw: string | undefined): Se2L
   if (raw === 'rnb' || raw === 'reggae' || raw === 'trap') return raw;
   return 'trap';
 }
-
-/**
- * Freelance dark minor progressions (semitone offsets from a key root)
- * when no chord lane is locked — still changes every bar so it isn’t one drone.
- */
-export const SE2_LAB808_FREELANCE_DARK_PROGRESSIONS: readonly (readonly number[])[] = [
-  // i – bVI – bIII – bVII
-  [0, 8, 3, 10],
-  // i – iv – v – i
-  [0, 5, 7, 0],
-  // i – bVII – bVI – bVII
-  [0, 10, 8, 10],
-  // i – bIII – iv – i
-  [0, 3, 5, 0],
-  // i – bVI – iv – v
-  [0, 8, 5, 7],
-  // i – v – bVI – bVII
-  [0, 7, 8, 10],
-  // i – bVII – iv – bVI
-  [0, 10, 5, 8],
-  // i – bIII – bVII – iv
-  [0, 3, 10, 5],
-];

@@ -1,7 +1,7 @@
 /**
  * SE2 / Beat Pads 808 Lab — sparse dark R&B / Trap lows.
- * 2–3 hits/bar with melodic intervals (not root-only).
- * Chord progression when roots exist; freelance dark minor when not.
+ * 2–3 hits/bar with melodic motion, always snapped to song key
+ * (except bare chord-root anchors when a progression is locked).
  * Does not alter {@link se2Lab808GenerateRootGridPattern}.
  */
 import { LAB808_BEATS_PER_BAR, lab808ActiveRootIndexAtBeat } from '@/app/lib/creationStation/lab808ChordRoots';
@@ -17,10 +17,10 @@ import {
 import {
   se2Lab808BaseMidiForRoots,
   se2Lab808LaneForRootMidi,
+  se2Lab808ScalePitchClasses,
   type Se2Lab808GenerateRootGridResult,
 } from '@/app/lib/studio/se2Lab808RootGridGenerate';
 import {
-  SE2_LAB808_FREELANCE_DARK_PROGRESSIONS,
   se2Lab808SparseLowsTemplates,
   se2NormalizeLab808SparseLowsGenre,
   type Se2Lab808SparseLowsGenre,
@@ -35,6 +35,21 @@ const GENRE_LABEL: Record<Se2Lab808SparseLowsGenre, string> = {
 
 /** Low C-ish center for freelance 808 melodies (fits kick / bass low pads). */
 const FREELANCE_BASE_MIDI = 36;
+
+/**
+ * Freelance bar roots as scale-degree indices (0–6 into major/minor scale PCs).
+ * Always diatonic — never chromatic out-of-key jumps.
+ */
+const FREELANCE_SCALE_DEGREE_PROGS: readonly (readonly number[])[] = [
+  [0, 3, 4, 0], // I–IV–V–I / i–iv–v–i
+  [0, 5, 3, 4], // I–vi–IV–V / i–bVI–iv–v
+  [0, 4, 5, 3], // I–V–vi–IV / i–v–bVI–iv
+  [0, 2, 3, 4], // I–iii–IV–V / i–bIII–iv–v
+  [0, 3, 5, 4], // I–IV–vi–V / i–iv–bVI–v
+  [0, 5, 4, 0], // I–vi–V–I / i–bVI–v–i
+  [0, 4, 3, 5], // I–V–IV–vi
+  [0, 1, 3, 4], // I–ii–IV–V / i–ii–iv–v
+];
 
 function pickTemplate(
   pool: readonly Se2Lab808SparseLowsTemplate[],
@@ -60,22 +75,56 @@ function placeHit(
   return true;
 }
 
-function clampLaneNear(rootLane: number, interval: number): number {
-  let lane = rootLane + interval;
-  // Keep melody on the 16-pad board; prefer dropping an octave over climbing bright.
-  while (lane > 15) lane -= 12;
-  while (lane < 0) lane += 12;
-  if (lane > 15) lane = 15;
-  if (lane < 0) lane = 0;
-  return lane;
+/** Snap any MIDI note to the nearest pitch class in the key scale (same octave preference). */
+export function se2Lab808SnapMidiToKeyScale(
+  midi: number,
+  keyRoot: number,
+  keyMode: 'major' | 'minor',
+): number {
+  const scale = se2Lab808ScalePitchClasses(keyRoot, keyMode);
+  const m = Math.round(midi);
+  const pc = ((m % 12) + 12) % 12;
+  if (scale.includes(pc)) return m;
+
+  let bestMidi = m;
+  let bestDist = 99;
+  for (const sp of scale) {
+    let delta = sp - pc;
+    if (delta > 6) delta -= 12;
+    if (delta < -6) delta += 12;
+    const cand = m + delta;
+    const dist = Math.abs(delta);
+    if (dist < bestDist || (dist === bestDist && Math.abs(cand - m) < Math.abs(bestMidi - m))) {
+      bestDist = dist;
+      bestMidi = cand;
+    }
+  }
+  return bestMidi;
+}
+
+function midiFromScaleDegree(
+  keyRoot: number,
+  keyMode: 'major' | 'minor',
+  degreeIndex: number,
+  baseMidi: number,
+): number {
+  const scale = se2Lab808ScalePitchClasses(keyRoot, keyMode);
+  const deg = ((Math.round(degreeIndex) % scale.length) + scale.length) % scale.length;
+  const pc = scale[deg]!;
+  const basePc = ((baseMidi % 12) + 12) % 12;
+  let midi = baseMidi - basePc + pc;
+  if (midi > baseMidi + 6) midi -= 12;
+  if (midi < baseMidi - 6) midi += 12;
+  return midi;
 }
 
 function rootMidiForBar(
   roots: readonly Lab808ProgressionRoot[],
   bar: number,
   loopBeats: number,
-  freelancePcs: readonly number[],
-  freelanceKeyPc: number,
+  freelanceDegrees: readonly number[],
+  keyRoot: number,
+  keyMode: 'major' | 'minor',
   freelanceBaseMidi: number,
 ): number {
   if (roots.length > 0) {
@@ -84,22 +133,21 @@ function rootMidiForBar(
       lab808ActiveRootIndexAtBeat(roots, barBeat + 0.01, loopBeats)
       ?? lab808ActiveRootIndexAtBeat(roots, barBeat, loopBeats)
       ?? 0;
-    return roots[rootIdx]?.midi ?? roots[0]!.midi;
+    // Chord root is authoritative; still snap in case a foreign chord slipped in.
+    return se2Lab808SnapMidiToKeyScale(
+      roots[rootIdx]?.midi ?? roots[0]!.midi,
+      keyRoot,
+      keyMode,
+    );
   }
-  const deg = freelancePcs[bar % freelancePcs.length] ?? 0;
-  const pc = (freelanceKeyPc + deg) % 12;
-  // Keep freelance roots in a low octave around base.
-  const basePc = ((freelanceBaseMidi % 12) + 12) % 12;
-  let midi = freelanceBaseMidi - basePc + pc;
-  if (midi > freelanceBaseMidi + 6) midi -= 12;
-  if (midi < freelanceBaseMidi - 6) midi += 12;
-  return midi;
+  const deg = freelanceDegrees[bar % freelanceDegrees.length] ?? 0;
+  return midiFromScaleDegree(keyRoot, keyMode, deg, freelanceBaseMidi);
 }
 
 /**
- * Write sparse dark lows onto the tone grid.
- * With roots: follow progression + dark interval contours.
- * Without roots: freelance dark minor phrase (still 2–3 hits/bar).
+ * Write sparse dark lows onto the tone grid — every hit stays in key.
+ * With roots: follow progression anchors + in-key melodic contours.
+ * Without roots: freelance diatonic phrase in the song key (major or minor).
  */
 export function se2Lab808GenerateSparseLowsPattern(args: {
   roots: readonly Lab808ProgressionRoot[];
@@ -107,26 +155,32 @@ export function se2Lab808GenerateSparseLowsPattern(args: {
   genre: Se2Lab808SparseLowsGenre | string;
   seed?: number;
   tonePadBaseMidi?: number;
-  /** Song / lock key root (0–11) for freelance mode. */
+  /** Song / lock key root (0–11). */
   keyRoot?: number;
+  /** Song / lock mode — freelance + interval snaps stay diatonic. */
+  keyMode?: 'major' | 'minor';
 }): Se2Lab808GenerateRootGridResult {
   const genre = se2NormalizeLab808SparseLowsGenre(
     typeof args.genre === 'string' ? args.genre : undefined,
   );
   const roots = args.roots;
   const freelance = roots.length === 0;
+  const keyRoot = ((Math.round(args.keyRoot ?? 0) % 12) + 12) % 12;
+  const keyMode: 'major' | 'minor' = args.keyMode === 'minor' ? 'minor' : 'major';
   const pool = se2Lab808SparseLowsTemplates(genre);
   const rng = mulberry32((args.seed ?? Date.now()) >>> 0);
 
   const freelanceProg =
-    SE2_LAB808_FREELANCE_DARK_PROGRESSIONS[
-      Math.floor(rng() * SE2_LAB808_FREELANCE_DARK_PROGRESSIONS.length)
-    ]!;
-  const freelanceKeyPc = ((Math.round(args.keyRoot ?? 0) % 12) + 12) % 12;
+    FREELANCE_SCALE_DEGREE_PROGS[Math.floor(rng() * FREELANCE_SCALE_DEGREE_PROGS.length)]!;
 
   const baseMidi = freelance
     ? (args.tonePadBaseMidi ?? FREELANCE_BASE_MIDI)
     : se2Lab808BaseMidiForRoots(roots);
+  // Align freelance base so the key tonic sits on a pad when possible.
+  const alignedBase = freelance
+    ? midiFromScaleDegree(keyRoot, keyMode, 0, baseMidi)
+    : baseMidi;
+
   const totalSteps = se2Lab808ToneGridStepCount(args.loopBars);
   const pattern = emptySe2Lab808ToneGridPattern(args.loopBars);
   const bars = Math.max(1, Math.round(args.loopBars));
@@ -141,10 +195,11 @@ export function se2Lab808GenerateSparseLowsPattern(args: {
       bar,
       loopBeats,
       freelanceProg,
-      freelanceKeyPc,
+      keyRoot,
+      keyMode,
       FREELANCE_BASE_MIDI,
     );
-    const rootLane = se2Lab808LaneForRootMidi(baseMidi, rootMidi);
+    const rootLane = se2Lab808LaneForRootMidi(alignedBase, rootMidi);
     if (rootLane == null) continue;
 
     const tpl = pickTemplate(pool, rng, recentIds);
@@ -157,18 +212,31 @@ export function se2Lab808GenerateSparseLowsPattern(args: {
     const hits = tpl.hits.slice(0, 3);
     for (const h of hits) {
       const col = barStartCol + h.step;
-      const lane = clampLaneNear(rootLane, h.interval);
-      if (placeHit(pattern, lane, col, totalSteps)) hitCount += 1;
+      // Contour interval from root, then force into key (G major stays G major, etc.).
+      const rawMidi = rootMidi + h.interval;
+      const inKeyMidi = se2Lab808SnapMidiToKeyScale(rawMidi, keyRoot, keyMode);
+      let lane = se2Lab808LaneForRootMidi(alignedBase, inKeyMidi);
+      if (lane == null) {
+        // Fall back: nearest in-key pad relative to root lane.
+        let probe = rootLane + (inKeyMidi - rootMidi);
+        while (probe > 15) probe -= 12;
+        while (probe < 0) probe += 12;
+        lane = Math.max(0, Math.min(15, probe));
+        const padMidi = alignedBase + lane;
+        const snapped = se2Lab808SnapMidiToKeyScale(padMidi, keyRoot, keyMode);
+        lane = se2Lab808LaneForRootMidi(alignedBase, snapped) ?? lane;
+      }
+      if (lane != null && placeHit(pattern, lane, col, totalSteps)) hitCount += 1;
     }
   }
 
   const sample = usedNames.length > 0 ? usedNames.join(' · ') : 'sparse';
-  const mode = freelance ? 'freelance dark' : 'chord roots';
+  const mode = freelance ? `freelance ${keyMode}` : `chord roots · ${keyMode}`;
   return {
     pattern,
-    tonePadBaseMidi: baseMidi || lab808DefaultTonePadBaseMidi(),
+    tonePadBaseMidi: alignedBase || lab808DefaultTonePadBaseMidi(),
     hitCount,
-    status: `${hitCount} · ${bars}b ${GENRE_LABEL[genre]} · ${mode} · ${sample}`,
+    status: `${hitCount} · ${bars}b ${GENRE_LABEL[genre]} · ${mode} · in key · ${sample}`,
   };
 }
 
