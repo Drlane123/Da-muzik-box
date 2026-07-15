@@ -104,6 +104,7 @@ export function useBeatPadsLocalTransport({
   const firedThroughRef = useRef(-1);
   /** Parked grid column for Stop-in-place → Play resumes here. */
   const parkedColRef = useRef(0);
+  const lastSeekColRef = useRef(-1);
   const lookaheadRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const scrollRafRef = useRef(0);
   const lab808ScheduledRef = useRef(new Set<string>());
@@ -331,6 +332,7 @@ export function useBeatPadsLocalTransport({
       }
     }
     parkedColRef.current = parkCol;
+    lastSeekColRef.current = parkCol;
 
     runningRef.current = false;
     setIsPlaying(false);
@@ -362,6 +364,7 @@ export function useBeatPadsLocalTransport({
       haltOrchestraHitPlayback(getAudioContext?.() ?? null);
     }
     parkedColRef.current = 0;
+    lastSeekColRef.current = 0;
     sessionStartRef.current = 0;
     nextStepIndexRef.current = 0;
     firedThroughRef.current = -1;
@@ -426,6 +429,56 @@ export function useBeatPadsLocalTransport({
     resetToStart();
     if (wasRunning) await start();
   }, [resetToStart, start]);
+
+  /** Scrub / park playhead at a grid column; re-anchors audio if currently playing. */
+  const seekCol = useCallback(
+    (col: number) => {
+      const cols = Math.max(1, loopColsRef.current);
+      const clamped = Math.max(0, Math.min(cols - 1, Math.floor(col)));
+      if (clamped === lastSeekColRef.current && clamped === parkedColRef.current) {
+        if (!runningRef.current) {
+          setBeatPadsPlaylineAtCol(playlineElRef.current, clamped, BEAT_PADS_COL_W);
+        }
+        return;
+      }
+      lastSeekColRef.current = clamped;
+      parkedColRef.current = clamped;
+      nextStepIndexRef.current = clamped;
+      firedThroughRef.current = clamped - 1;
+      playlineLoopPrevPhaseRef.current = -1;
+      playlineLoopCycleRef.current = 0;
+      lab808ScheduledRef.current.clear();
+      orchHitsScheduledRef.current.clear();
+
+      if (runningRef.current) {
+        haltPadSamplePlayback();
+        haltOrchestraHitPlayback(getAudioContext?.() ?? null);
+        const ctx = getAudioContext?.();
+        if (ctx && (ctx.state === 'running' || ctx.state === 'suspended')) {
+          if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+          const stepSec = beatPadsStepDurationSec(bpmRef.current, stepsPerBarRef.current);
+          sessionStartRef.current =
+            ctx.currentTime + SE2_AUDIO_START_FLOOR_SEC - clamped * stepSec;
+          launchBeatPadsPlaylineWapi(wapiRefs.current, {
+            el: playlineElRef.current,
+            colNow: clamped,
+            play: true,
+            bpm: bpmRef.current,
+            cols,
+            colW: BEAT_PADS_COL_W,
+            stepsPerBar: stepsPerBarRef.current,
+            immediateCompositorStart: true,
+          });
+          refillSchedule();
+        }
+        return;
+      }
+
+      cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current, { parkColF: clamped });
+      setBeatPadsPlaylineAtCol(playlineElRef.current, clamped, BEAT_PADS_COL_W);
+    },
+    [getAudioContext, playlineElRef, refillSchedule],
+  );
 
   useEffect(() => {
     setBeatPadsScreenActive(open);
@@ -521,6 +574,7 @@ export function useBeatPadsLocalTransport({
     stopOrResetToStart,
     resetToStart,
     restartFromBarOne,
+    seekCol,
     togglePlay: () => (runningRef.current ? stop() : void start()),
   };
 }

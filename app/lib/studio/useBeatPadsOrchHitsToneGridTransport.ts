@@ -55,6 +55,7 @@ export function useBeatPadsOrchHitsToneGridTransport({
   const scheduledRef = useRef(new Set<string>());
   const lookaheadRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playheadColRef = useRef(0);
+  const lastSeekColRef = useRef(-1);
 
   const voiceRef = useRef(voice);
   const bpmRef = useRef(bpm);
@@ -152,23 +153,54 @@ export function useBeatPadsOrchHitsToneGridTransport({
       scheduledRef.current.clear();
       playheadColRef.current = clamped;
       setPlayheadCol(clamped);
+      lastSeekColRef.current = clamped;
       refillSchedule();
     },
     [getAudioContext, refillSchedule, stepBeats],
   );
 
   const stop = useCallback(() => {
+    const cols = Math.max(1, stepCountRef.current);
+    let parkCol = Math.max(0, Math.min(cols - 1, Math.floor(playheadColRef.current)));
+    if (runningRef.current) {
+      const anim = wapiRefs.current.animRef.current;
+      const seg = wapiRefs.current.wapiSegStateRef.current;
+      if (anim && seg.durMs > 0) {
+        const colF = beatPadsPlayColFFromWapiAnim(Number(anim.currentTime ?? 0), seg);
+        parkCol = Math.max(0, Math.min(cols - 1, Math.floor(colF)));
+      }
+    }
+
     runningRef.current = false;
     setPlaying(false);
     clearLookahead();
-    cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current);
+    cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current, { parkColF: parkCol });
+    scheduledRef.current.clear();
+    sessionStartRef.current = 0;
+    originBeatRef.current = parkCol * stepBeats(voiceRef.current);
+    playheadColRef.current = parkCol;
+    lastSeekColRef.current = parkCol;
+    setPlayheadCol(parkCol);
+    setBeatPadsPlaylineAtCol(playlineElRef.current, parkCol, colWidthRef.current);
+    haltOrchestraHitPlayback(getAudioContext());
+  }, [clearLookahead, getAudioContext, playlineElRef, stepBeats]);
+
+  const resetToStart = useCallback(() => {
+    const wasRunning = runningRef.current;
+    if (wasRunning) {
+      runningRef.current = false;
+      setPlaying(false);
+      clearLookahead();
+      haltOrchestraHitPlayback(getAudioContext());
+    }
     scheduledRef.current.clear();
     sessionStartRef.current = 0;
     originBeatRef.current = 0;
     playheadColRef.current = 0;
+    lastSeekColRef.current = 0;
     setPlayheadCol(0);
+    cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current, { resetToStart: true });
     setBeatPadsPlaylineAtCol(playlineElRef.current, 0, colWidthRef.current);
-    haltOrchestraHitPlayback(getAudioContext());
   }, [clearLookahead, getAudioContext, playlineElRef]);
 
   const play = useCallback(async () => {
@@ -181,18 +213,21 @@ export function useBeatPadsOrchHitsToneGridTransport({
     }
     if (ctx.state !== 'running') return;
 
-    // Always start ORCH preview from column 1 (beat 1).
+    const cols = Math.max(1, stepCountRef.current);
+    const startCol = Math.max(0, Math.min(cols - 1, Math.floor(playheadColRef.current)));
+
     haltOrchestraHitPlayback(ctx);
     scheduledRef.current.clear();
-    playheadColRef.current = 0;
-    setPlayheadCol(0);
-    originBeatRef.current = 0;
+    playheadColRef.current = startCol;
+    lastSeekColRef.current = startCol;
+    setPlayheadCol(startCol);
+    originBeatRef.current = startCol * stepBeats(voiceRef.current);
     runningRef.current = true;
     setPlaying(true);
 
     sessionStartRef.current = ctx.currentTime + SE2_AUDIO_START_FLOOR_SEC;
 
-    launchPlayline(0, true, true);
+    launchPlayline(startCol, true, true);
     refillSchedule();
     queueMicrotask(() => {
       if (!runningRef.current) return;
@@ -210,22 +245,34 @@ export function useBeatPadsOrchHitsToneGridTransport({
     launchPlayline,
     refillSchedule,
     clearLookahead,
+    stepBeats,
     syncPlayheadColFromWapi,
   ]);
 
   const seekCol = useCallback(
     (col: number) => {
-      const clamped = Math.max(0, Math.min(stepCountRef.current - 1, col));
+      const clamped = Math.max(0, Math.min(stepCountRef.current - 1, Math.floor(col)));
+      if (clamped === lastSeekColRef.current && clamped === Math.floor(playheadColRef.current)) {
+        if (!runningRef.current) {
+          setBeatPadsPlaylineAtCol(playlineElRef.current, clamped, colWidthRef.current);
+        }
+        return;
+      }
+      lastSeekColRef.current = clamped;
       playheadColRef.current = clamped;
       setPlayheadCol(clamped);
+
       if (runningRef.current) {
+        haltOrchestraHitPlayback(getAudioContext());
         launchPlayline(clamped, true, true);
         reanchorAudioAtCol(clamped);
         return;
       }
+
+      cancelBeatPadsPlaylineWapi(wapiRefs.current, playlineElRef.current, { parkColF: clamped });
       setBeatPadsPlaylineAtCol(playlineElRef.current, clamped, colWidthRef.current);
     },
-    [launchPlayline, playlineElRef, reanchorAudioAtCol],
+    [getAudioContext, launchPlayline, playlineElRef, reanchorAudioAtCol],
   );
 
   useEffect(() => {
@@ -264,15 +311,28 @@ export function useBeatPadsOrchHitsToneGridTransport({
 
   /** Rewind playhead to bar 1; if currently playing, re-anchor audio from the top. */
   const restartFromStart = useCallback(async () => {
+    const wasRunning = runningRef.current;
+    resetToStart();
+    if (wasRunning) await play();
+  }, [play, resetToStart]);
+
+  /** Stop parks in place; Stop again while already stopped returns to bar 1. */
+  const stopOrResetToStart = useCallback(() => {
     if (runningRef.current) {
       stop();
-      await play();
       return;
     }
-    playheadColRef.current = 0;
-    setPlayheadCol(0);
-    setBeatPadsPlaylineAtCol(playlineElRef.current, 0, colWidthRef.current);
-  }, [play, playlineElRef, stop]);
+    resetToStart();
+  }, [resetToStart, stop]);
 
-  return { playing, playheadCol, play, stop, seekCol, restartFromStart };
+  return {
+    playing,
+    playheadCol,
+    play,
+    stop,
+    stopOrResetToStart,
+    resetToStart,
+    seekCol,
+    restartFromStart,
+  };
 }

@@ -1316,6 +1316,7 @@ export function BeatLabDrumMachineOverlay({
         onTransportPlay={handleTransportPlay}
         onTransportStop={handleTransportStop}
         onTransportBpmChange={handleTransportBpmChange}
+        onSeekPlayheadCol={se2SyncActive ? undefined : beatPadsTransport.seekCol}
         se2SyncMode={embedded ? se2SyncMode : undefined}
         onSe2SyncModeChange={embedded ? onSe2SyncModeChange : undefined}
         minVisibleLanes={sequencerMinVisibleLanes}

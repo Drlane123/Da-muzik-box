@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { setBeatPadsPlaylineAtCol } from '@/app/lib/creationStation/beatPadsPlaylineWapi';
@@ -50,6 +51,7 @@ import {
 } from '@/app/lib/studio/se2BeatPadsOrchHitsVoice';
 
 export const BEAT_PADS_ORCH_HITS_ACCENT = '#F5A623';
+const ORCH_HITS_LABEL_W = 44;
 
 export type BeatPadsOrchHitsExportTrackOption = {
   trackIndex: number;
@@ -140,6 +142,7 @@ export function BeatPadsOrchHitsPanel({
   const [colW, setColW] = useState(12);
   /** After Generate/Regen, restart ORCH preview once the new voice commits. */
   const pendingOrchRestartRef = useRef(false);
+  const scrubbingRef = useRef(false);
 
   const presets = useMemo(() => getBeatPadsOrchHitsPresets(presetGenre), [presetGenre]);
   useEffect(() => {
@@ -170,21 +173,74 @@ export function BeatPadsOrchHitsPanel({
     return () => ro?.disconnect();
   }, [cols]);
 
-  const { playing, playheadCol, play, stop, restartFromStart } = useBeatPadsOrchHitsToneGridTransport({
-    stepCount: cols,
-    bpm,
-    voice,
-    disabled,
-    colWidthPx: colW,
-    playlineElRef,
-    getAudioContext,
-    getPreviewDestination,
-  });
+  const { playing, playheadCol, play, stop, stopOrResetToStart, seekCol, restartFromStart } =
+    useBeatPadsOrchHitsToneGridTransport({
+      stepCount: cols,
+      bpm,
+      voice,
+      disabled,
+      colWidthPx: colW,
+      playlineElRef,
+      getAudioContext,
+      getPreviewDestination,
+    });
 
   useEffect(() => {
     if (playing) return;
     setBeatPadsPlaylineAtCol(playlineElRef.current, Math.floor(playheadCol), colW);
   }, [colW, playheadCol, playing]);
+
+  useEffect(() => {
+    if (cols > 0 && Math.floor(playheadCol) >= cols) seekCol(0);
+  }, [cols, playheadCol, seekCol]);
+
+  const seekColFromClientX = useCallback(
+    (clientX: number) => {
+      if (disabled || cols <= 0) return;
+      const grid = gridWrapRef.current?.querySelector('[data-orch-hits-grid]') as HTMLElement | null;
+      if (!grid) return;
+      const rect = grid.getBoundingClientRect();
+      const x = clientX - rect.left - ORCH_HITS_LABEL_W;
+      const cellW = Math.max(1, colW);
+      const col = Math.max(0, Math.min(cols - 1, Math.floor(x / cellW)));
+      seekCol(col);
+    },
+    [colW, cols, disabled, seekCol],
+  );
+
+  const onScrubPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLElement>) => {
+      if (disabled || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      scrubbingRef.current = true;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* */
+      }
+      seekColFromClientX(e.clientX);
+    },
+    [disabled, seekColFromClientX],
+  );
+
+  const onScrubPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLElement>) => {
+      if (!scrubbingRef.current) return;
+      seekColFromClientX(e.clientX);
+    },
+    [seekColFromClientX],
+  );
+
+  const endScrub = useCallback((e: ReactPointerEvent<HTMLElement>) => {
+    if (!scrubbingRef.current) return;
+    scrubbingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* */
+    }
+  }, []);
 
   const progressionRoots = useMemo(
     () =>
@@ -217,12 +273,13 @@ export function BeatPadsOrchHitsPanel({
     (bars: BeatPadsOrchHitsLoopBars) => {
       if (disabled || bars === voice.loopBars) return;
       if (playing) stop();
+      seekCol(0);
       patch({
         loopBars: bars,
         gridSteps: normalizeBeatPadsOrchHitsGrid(voice.gridSteps, bars),
       });
     },
-    [disabled, patch, playing, stop, voice.gridSteps, voice.loopBars],
+    [disabled, patch, playing, seekCol, stop, voice.gridSteps, voice.loopBars],
   );
 
   const toggleCell = useCallback(
@@ -397,16 +454,20 @@ export function BeatPadsOrchHitsPanel({
             disabled={disabled || playing}
             onClick={() => void handlePlay()}
             style={{ ...toolBtn(playing, accentHex), flexShrink: 0 }}
-            title="Play this ORCH loop by itself"
+            title="Play ORCH loop from the parked playhead"
           >
             Play
           </button>
           <button
             type="button"
-            disabled={disabled || !playing}
-            onClick={stop}
-            style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
-            title="Stop loop preview"
+            disabled={disabled}
+            onClick={stopOrResetToStart}
+            style={{ ...toolBtn(playing, accentHex), flexShrink: 0 }}
+            title={
+              playing
+                ? 'Stop — parks playhead here (Play resumes from this spot)'
+                : 'Reset playhead to the start of the grid'
+            }
           >
             Stop
           </button>
@@ -720,6 +781,7 @@ export function BeatPadsOrchHitsPanel({
 
       <div ref={gridWrapRef} className="relative min-h-0 flex-1 overflow-auto px-1 py-1">
         <div
+          data-orch-hits-grid
           style={{
             position: 'relative',
             display: 'grid',
@@ -731,29 +793,56 @@ export function BeatPadsOrchHitsPanel({
           <div
             ref={playlineElRef}
             aria-hidden
+            onPointerDown={onScrubPointerDown}
+            onPointerMove={onScrubPointerMove}
+            onPointerUp={endScrub}
+            onPointerCancel={endScrub}
+            title={disabled ? undefined : 'Drag playhead'}
             style={{
               position: 'absolute',
               top: 0,
               bottom: 0,
               left: 44,
-              width: 2,
-              marginLeft: -1,
+              width: 12,
+              marginLeft: -5,
               zIndex: 5,
-              pointerEvents: 'none',
-              background: playing ? accentHex : `${accentHex}99`,
-              boxShadow: playing ? `0 0 6px ${accentHex}88` : undefined,
+              pointerEvents: disabled ? 'none' : 'auto',
+              cursor: disabled ? 'default' : 'ew-resize',
+              touchAction: disabled ? undefined : 'none',
+              background: 'transparent',
               willChange: playing ? 'transform' : undefined,
               transform: `translate3d(0,0,0)`,
             }}
-          />
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: 5,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                background: playing ? accentHex : `${accentHex}99`,
+                boxShadow: playing ? `0 0 6px ${accentHex}88` : undefined,
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
           <div />
           {Array.from({ length: cols }, (_, c) => (
             <div
               key={`h${c}`}
+              onPointerDown={onScrubPointerDown}
+              onPointerMove={onScrubPointerMove}
+              onPointerUp={endScrub}
+              onPointerCancel={endScrub}
+              title={disabled ? undefined : 'Drag to move playhead'}
               style={{
                 fontSize: 8,
                 color: c % BEAT_PADS_ORCH_HITS_STEPS_PER_BAR === 0 ? accentHex : '#555',
                 textAlign: 'center',
+                cursor: disabled ? 'default' : 'ew-resize',
+                touchAction: disabled ? undefined : 'none',
+                userSelect: 'none',
               }}
             >
               {c % BEAT_PADS_ORCH_HITS_STEPS_PER_BAR === 0

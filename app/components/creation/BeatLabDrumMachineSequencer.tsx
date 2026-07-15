@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
 import {
@@ -161,15 +162,81 @@ function BeatPadsGridHeader({
   cols,
   gridW,
   stepsPerBar,
+  scrubEnabled = false,
+  onScrubCol,
 }: {
   barCount: number;
   cols: number;
   gridW: number;
   stepsPerBar: BeatPadsGridStepsPerBar;
+  scrubEnabled?: boolean;
+  onScrubCol?: (col: number) => void;
 }) {
   const subdiv = beatPadsStepsPerQuarter(stepsPerBar);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const scrubbingRef = useRef(false);
+
+  const colFromClientX = useCallback(
+    (clientX: number) => {
+      const el = headerRef.current;
+      if (!el || cols <= 0) return 0;
+      const rect = el.getBoundingClientRect();
+      const x = clientX - rect.left;
+      return Math.max(0, Math.min(cols - 1, Math.floor(x / COL_W)));
+    },
+    [cols],
+  );
+
+  const onHeaderPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!scrubEnabled || !onScrubCol || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      scrubbingRef.current = true;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* */
+      }
+      onScrubCol(colFromClientX(e.clientX));
+    },
+    [colFromClientX, onScrubCol, scrubEnabled],
+  );
+
+  const onHeaderPointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!scrubbingRef.current || !onScrubCol) return;
+      onScrubCol(colFromClientX(e.clientX));
+    },
+    [colFromClientX, onScrubCol],
+  );
+
+  const endHeaderScrub = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!scrubbingRef.current) return;
+    scrubbingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* */
+    }
+  }, []);
+
   return (
-    <div style={{ width: gridW, minWidth: gridW, flexShrink: 0 }}>
+    <div
+      ref={headerRef}
+      onPointerDown={onHeaderPointerDown}
+      onPointerMove={onHeaderPointerMove}
+      onPointerUp={endHeaderScrub}
+      onPointerCancel={endHeaderScrub}
+      title={scrubEnabled ? 'Drag to move playhead' : undefined}
+      style={{
+        width: gridW,
+        minWidth: gridW,
+        flexShrink: 0,
+        cursor: scrubEnabled ? 'ew-resize' : 'default',
+        touchAction: scrubEnabled ? 'none' : undefined,
+      }}
+    >
       <div style={{ display: 'flex', height: BAR_HEADER_H }}>
         {Array.from({ length: barCount }, (_, bi) => (
           <div
@@ -187,6 +254,7 @@ function BeatPadsGridHeader({
               borderLeft: bi === 0 ? beatPadsGridRowBorder() : '2px solid rgba(255, 255, 255, 0.34)',
               boxSizing: 'border-box',
               background: BEAT_PADS_SURFACE,
+              pointerEvents: 'none',
             }}
           >
             {bi + 1}
@@ -220,6 +288,7 @@ function BeatPadsGridHeader({
                 borderLeft: `1px solid ${beatPadsGridLineColor(col, stepsPerBar)}`,
                 boxSizing: 'border-box',
                 background: BEAT_PADS_SURFACE,
+                pointerEvents: 'none',
               }}
             >
               {atBeat ? beatNum : ''}
@@ -344,6 +413,8 @@ export type BeatLabDrumMachineSequencerProps = {
   onTransportPlay?: () => void;
   onTransportStop?: () => void;
   onTransportBpmChange?: (bpm: number) => void;
+  /** Scrub playhead to a grid column (local Beat Pads transport). */
+  onSeekPlayheadCol?: (col: number) => void;
   /** SE2 embedded — lock step grid to main transport. */
   se2SyncMode?: Se2BeatPadsSe2SyncMode;
   onSe2SyncModeChange?: (mode: Se2BeatPadsSe2SyncMode) => void;
@@ -384,6 +455,7 @@ export function BeatLabDrumMachineSequencer({
   onTransportPlay,
   onTransportStop,
   onTransportBpmChange,
+  onSeekPlayheadCol,
   se2SyncMode = 'off',
   onSe2SyncModeChange,
   minVisibleLanes = DEFAULT_MIN_VISIBLE_LANES,
@@ -485,6 +557,9 @@ export function BeatLabDrumMachineSequencer({
     && typeof onTransportStop === 'function';
   const se2SyncActive = se2SyncMode !== 'off' && typeof onSe2SyncModeChange === 'function';
   const se2SyncSlave = se2SyncMode === 'slave';
+  const playheadScrubEnabled =
+    typeof onSeekPlayheadCol === 'function' && !se2SyncActive && !disabled;
+  const playlineScrubbingRef = useRef(false);
 
   const laneVoiceDefault = useCallback(
     (param: BeatLabDrumPadVoiceParam) =>
@@ -569,6 +644,52 @@ export function BeatLabDrumMachineSequencer({
     },
     [cols],
   );
+
+  const seekColFromClientX = useCallback(
+    (clientX: number) => {
+      if (!onSeekPlayheadCol || !playheadScrubEnabled) return;
+      const el = gridBodyRef.current;
+      if (!el || cols <= 0) return;
+      const rect = el.getBoundingClientRect();
+      const col = Math.max(0, Math.min(cols - 1, Math.floor((clientX - rect.left) / COL_W)));
+      onSeekPlayheadCol(col);
+    },
+    [cols, onSeekPlayheadCol, playheadScrubEnabled],
+  );
+
+  const onPlaylinePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!playheadScrubEnabled || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      playlineScrubbingRef.current = true;
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* */
+      }
+      seekColFromClientX(e.clientX);
+    },
+    [playheadScrubEnabled, seekColFromClientX],
+  );
+
+  const onPlaylinePointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (!playlineScrubbingRef.current) return;
+      seekColFromClientX(e.clientX);
+    },
+    [seekColFromClientX],
+  );
+
+  const endPlaylineScrub = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!playlineScrubbingRef.current) return;
+    playlineScrubbingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* */
+    }
+  }, []);
 
   const applyPattern = useCallback(
     (next: BeatPadsDrumPattern) => {
@@ -1591,7 +1712,14 @@ export function BeatLabDrumMachineSequencer({
                   borderBottom: beatPadsGridRowBorder(),
                 }}
               >
-                <BeatPadsGridHeader barCount={barCount} cols={cols} gridW={gridW} stepsPerBar={stepsPerBar} />
+                <BeatPadsGridHeader
+                  barCount={barCount}
+                  cols={cols}
+                  gridW={gridW}
+                  stepsPerBar={stepsPerBar}
+                  scrubEnabled={playheadScrubEnabled}
+                  onScrubCol={onSeekPlayheadCol}
+                />
               </div>
 
               <div
@@ -1615,20 +1743,40 @@ export function BeatLabDrumMachineSequencer({
                 <div
                   ref={playlineElRef}
                   aria-hidden
+                  onPointerDown={onPlaylinePointerDown}
+                  onPointerMove={onPlaylinePointerMove}
+                  onPointerUp={endPlaylineScrub}
+                  onPointerCancel={endPlaylineScrub}
+                  title={playheadScrubEnabled ? 'Drag playhead' : undefined}
                   style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
-                    width: 2,
+                    width: 12,
                     height: '100%',
-                    pointerEvents: 'none',
-                    zIndex: 2,
-                    background: '#7cf4c6',
-                    boxShadow: '0 0 6px rgba(124, 244, 198, 0.55)',
+                    marginLeft: -5,
+                    pointerEvents: playheadScrubEnabled ? 'auto' : 'none',
+                    zIndex: 4,
+                    background: 'transparent',
                     transform: `translate3d(${playlineStartX}px, 0, 0)`,
-                    opacity: transportPlaying ? 1 : 0.45,
+                    opacity: transportPlaying ? 1 : 0.7,
+                    cursor: playheadScrubEnabled ? 'ew-resize' : 'default',
+                    touchAction: playheadScrubEnabled ? 'none' : undefined,
                   }}
-                />
+                >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 5,
+                      top: 0,
+                      width: 2,
+                      height: '100%',
+                      background: '#7cf4c6',
+                      boxShadow: '0 0 6px rgba(124, 244, 198, 0.55)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                </div>
                 {Array.from({ length: BEAT_PADS_LANE_COUNT }, (_, lane) => (
                   <div
                     key={`lane-bg-${lane}`}
