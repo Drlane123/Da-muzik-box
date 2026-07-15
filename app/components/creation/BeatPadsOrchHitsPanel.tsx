@@ -327,17 +327,38 @@ export function BeatPadsOrchHitsPanel({
         ...(fullBleed ? { height: '100%', width: '100%' } : { maxHeight: 520 }),
       }}
     >
+      {/* One control strip per row — nothing absolute / side-stacked that can overlap. */}
       <div
-        className="flex flex-wrap items-center gap-2 px-2 py-1.5"
-        style={{ borderBottom: `1px solid ${accentHex}44` }}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0,
+          flexShrink: 0,
+          borderBottom: `1px solid ${accentHex}44`,
+        }}
       >
-        <span style={{ color: accentHex, fontWeight: 700, fontSize: 12, letterSpacing: 0.4 }}>
-          ORCH hits
-        </span>
-        <span style={{ color: '#9a9080', fontSize: 10 }}>
-          Play the loop · place / generate · Sync or Export to SE2
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 8px',
+            overflowX: 'auto',
+          }}
+        >
+          <span
+            style={{
+              color: accentHex,
+              fontWeight: 700,
+              fontSize: 12,
+              letterSpacing: 0.4,
+              flexShrink: 0,
+            }}
+          >
+            ORCH hits
+          </span>
           {BEAT_PADS_ORCH_HITS_LOOP_BARS_OPTIONS.map((b) => (
             <button
               key={b}
@@ -346,11 +367,12 @@ export function BeatPadsOrchHitsPanel({
               onClick={() => setLoopBars(b)}
               style={{
                 fontSize: 10,
-                padding: '2px 8px',
+                padding: '3px 8px',
                 borderRadius: 4,
                 border: `1px solid ${loopBars === b ? accentHex : '#444'}`,
                 background: loopBars === b ? `${accentHex}33` : 'transparent',
                 color: loopBars === b ? accentHex : '#bbb',
+                flexShrink: 0,
               }}
             >
               {b} bars
@@ -360,7 +382,7 @@ export function BeatPadsOrchHitsPanel({
             type="button"
             disabled={disabled || playing}
             onClick={() => void handlePlay()}
-            style={toolBtn(playing, accentHex)}
+            style={{ ...toolBtn(playing, accentHex), flexShrink: 0 }}
             title="Play this ORCH loop by itself"
           >
             Play
@@ -369,12 +391,12 @@ export function BeatPadsOrchHitsPanel({
             type="button"
             disabled={disabled || !playing}
             onClick={stop}
-            style={toolBtn(false, accentHex)}
+            style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
             title="Stop loop preview"
           >
             Stop
           </button>
-          <span style={{ color: '#8a8070', fontSize: 9, fontWeight: 700, minWidth: 48 }}>
+          <span style={{ color: '#8a8070', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
             {Math.floor(playheadCol) + 1}/{cols}
           </span>
           <button
@@ -383,125 +405,129 @@ export function BeatPadsOrchHitsPanel({
             onClick={toggleSync}
             style={{
               fontSize: 10,
-              padding: '2px 8px',
+              padding: '3px 8px',
               borderRadius: 4,
               border: `1px solid ${syncedToBeatPads ? '#4ade80' : accentHex}`,
               background: syncedToBeatPads ? 'rgba(74,222,128,0.2)' : `${accentHex}22`,
               color: syncedToBeatPads ? '#4ade80' : accentHex,
               fontWeight: 700,
+              flexShrink: 0,
             }}
           >
             {syncedToBeatPads ? 'Synced' : 'Sync to BeatPads'}
           </button>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5" style={{ borderBottom: '1px solid #333' }}>
-        <label style={{ color: '#aaa', fontSize: 10 }}>Hit</label>
-        <select
-          disabled={disabled}
-          value={resolveBeatPadsOrchHitId(voice.hitId)}
-          onChange={(e) => {
-            const hitId = resolveBeatPadsOrchHitId(e.target.value);
-            patch({ hitId });
-            audition();
-          }}
+        <div
           style={{
-            fontSize: 11,
-            background: '#111',
-            color: '#eee',
-            border: '1px solid #555',
-            borderRadius: 4,
-            padding: '2px 6px',
-            maxWidth: 160,
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 8px',
+            borderTop: '1px solid #333',
+            overflowX: 'auto',
           }}
         >
-          {BEAT_PADS_ORCH_HIT_IDS.map((id, i) => (
-            <option key={id} value={id}>
-              {i + 1}. {BEAT_PADS_ORCH_HIT_LABELS[i]}
-            </option>
-          ))}
-        </select>
-        <div className="flex flex-wrap gap-1">
-          {BEAT_PADS_ORCH_HIT_IDS.map((id, i) => (
-            <button
-              key={id}
-              type="button"
-              title={BEAT_PADS_ORCH_HIT_LABELS[i]}
-              disabled={disabled}
-              onClick={() => {
-                patch({ hitId: id });
-                audition();
-              }}
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                fontSize: 9,
-                border: `1px solid ${selectedHitIdx === i ? accentHex : '#555'}`,
-                background: selectedHitIdx === i ? `${accentHex}44` : '#1a1a1a',
-                color: selectedHitIdx === i ? accentHex : '#999',
-              }}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/*
-        Two-column toolbar — chord lock stays left; Place / Clear / presets / export
-        line up across the right column (no absolute besideSource overlap).
-      */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(148px, 168px) minmax(0, 1fr)',
-          gap: 10,
-          alignItems: 'start',
-          padding: '8px 8px',
-          borderBottom: '1px solid #333',
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <Se2Lab808ChordLockPanel
-            lock={voice.chordLock}
-            rootCount={progressionRoots.length}
-            connected={chordConnected}
+          <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Hit</label>
+          <select
             disabled={disabled}
-            songKeyRoot={songKeyRoot}
-            songKeyMode={songKeyMode}
-            lab808TrackId={trackId}
-            tracks={studioTracks}
-            lanePad={lanePad}
-            onLockChange={(chordLock) => patch({ chordLock })}
-          />
+            value={resolveBeatPadsOrchHitId(voice.hitId)}
+            onChange={(e) => {
+              const hitId = resolveBeatPadsOrchHitId(e.target.value);
+              patch({ hitId });
+              audition();
+            }}
+            style={{
+              fontSize: 11,
+              background: '#111',
+              color: '#eee',
+              border: '1px solid #555',
+              borderRadius: 4,
+              padding: '2px 6px',
+              maxWidth: 150,
+              flexShrink: 0,
+            }}
+          >
+            {BEAT_PADS_ORCH_HIT_IDS.map((id, i) => (
+              <option key={id} value={id}>
+                {i + 1}. {BEAT_PADS_ORCH_HIT_LABELS[i]}
+              </option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'nowrap', gap: 4 }}>
+            {BEAT_PADS_ORCH_HIT_IDS.map((id, i) => (
+              <button
+                key={id}
+                type="button"
+                title={BEAT_PADS_ORCH_HIT_LABELS[i]}
+                disabled={disabled}
+                onClick={() => {
+                  patch({ hitId: id });
+                  audition();
+                }}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  fontSize: 9,
+                  border: `1px solid ${selectedHitIdx === i ? accentHex : '#555'}`,
+                  background: selectedHitIdx === i ? `${accentHex}44` : '#1a1a1a',
+                  color: selectedHitIdx === i ? accentHex : '#999',
+                  flexShrink: 0,
+                }}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div
           style={{
             display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            minWidth: 0,
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'flex-start',
+            gap: 10,
+            padding: '6px 8px',
+            borderTop: '1px solid #333',
+            overflowX: 'auto',
           }}
         >
+          <div style={{ width: 168, flexShrink: 0, overflow: 'hidden' }}>
+            <Se2Lab808ChordLockPanel
+              lock={voice.chordLock}
+              rootCount={progressionRoots.length}
+              connected={chordConnected}
+              disabled={disabled}
+              songKeyRoot={songKeyRoot}
+              songKeyMode={songKeyMode}
+              lab808TrackId={trackId}
+              tracks={studioTracks}
+              lanePad={lanePad}
+              onLockChange={(chordLock) => patch({ chordLock })}
+            />
+          </div>
           <div
             style={{
               display: 'flex',
-              flexWrap: 'wrap',
+              flexDirection: 'row',
+              flexWrap: 'nowrap',
               alignItems: 'center',
               gap: 6,
+              paddingTop: 16,
             }}
           >
-            <button type="button" disabled={disabled} onClick={placeRoots} style={toolBtn(false, accentHex)}>
+            <button type="button" disabled={disabled} onClick={placeRoots} style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}>
               Place on roots
             </button>
             <button
               type="button"
               disabled={disabled}
               onClick={clearGrid}
-              style={toolBtn(false, accentHex, true)}
+              style={{ ...toolBtn(false, accentHex, true), flexShrink: 0 }}
             >
               Clear
             </button>
@@ -509,144 +535,150 @@ export function BeatPadsOrchHitsPanel({
               type="button"
               disabled={disabled || !hasHits}
               onClick={duplicateFourBars}
-              style={toolBtn(false, accentHex)}
+              style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
               title="Copy bars 1–4 onto bars 5–8 (expands to 8 if needed)"
             >
               Duplicate 4→8
             </button>
           </div>
+        </div>
 
-          <div
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 8px',
+            borderTop: '1px solid #333',
+            overflowX: 'auto',
+          }}
+        >
+          <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Genre</label>
+          {BEAT_PADS_ORCH_HITS_PRESET_GENRES.map((g) => {
+            const on = presetGenre === g.id;
+            return (
+              <button
+                key={g.id}
+                type="button"
+                disabled={disabled}
+                onClick={() => setPresetGenre(g.id)}
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: '3px 9px',
+                  borderRadius: 4,
+                  border: `1px solid ${on ? accentHex : '#555'}`,
+                  background: on ? `${accentHex}33` : '#141210',
+                  color: on ? accentHex : '#ccc',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'nowrap',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 8px',
+            borderTop: '1px solid #333',
+            overflowX: 'auto',
+          }}
+        >
+          <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Placement</label>
+          <select
+            disabled={disabled}
+            value={presetId}
+            onChange={(e) => setPresetId(e.target.value)}
             style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: 6,
+              fontSize: 11,
+              background: '#111',
+              color: '#eee',
+              border: '1px solid #555',
+              borderRadius: 4,
+              padding: '3px 8px',
+              minWidth: 140,
+              flexShrink: 0,
             }}
           >
-            <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Genre</label>
-            <select
-              disabled={disabled}
-              value={presetGenre}
-              onChange={(e) => setPresetGenre(e.target.value as BeatPadsOrchHitsPresetGenre)}
-              style={{
-                fontSize: 11,
-                background: '#111',
-                color: '#eee',
-                border: '1px solid #555',
-                borderRadius: 4,
-                padding: '3px 8px',
-                minWidth: 96,
-              }}
-            >
-              {BEAT_PADS_ORCH_HITS_PRESET_GENRES.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.label}
-                </option>
-              ))}
-            </select>
-            <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Placement</label>
-            <select
-              disabled={disabled}
-              value={presetId}
-              onChange={(e) => setPresetId(e.target.value)}
-              style={{
-                fontSize: 11,
-                background: '#111',
-                color: '#eee',
-                border: '1px solid #555',
-                borderRadius: 4,
-                padding: '3px 8px',
-                minWidth: 120,
-                flex: '1 1 140px',
-                maxWidth: 220,
-              }}
-            >
-              {presets.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              disabled={disabled || !presets.length}
-              onClick={() => applySelectedPreset(genSeed || 1)}
-              style={toolBtn(false, accentHex)}
-              title="Generate hits from preset + chord roots"
-            >
-              Generate
-            </button>
-            <button
-              type="button"
-              disabled={disabled || !presets.length}
-              onClick={() => applySelectedPreset((genSeed || 1) + 1)}
-              style={toolBtn(false, accentHex)}
-              title="Regenerate with a new variation"
-            >
-              Regen
-            </button>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: 6,
-            }}
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={disabled || !presets.length}
+            onClick={() => applySelectedPreset(genSeed || 1)}
+            style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
+            title="Generate hits from preset + chord roots"
           >
-            {onExportMidiToTrack ? (
-              <>
-                <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>Export</label>
-                <select
-                  disabled={disabled || !exportTrackOptions.length || !hasHits}
-                  value={exportTrackIndex === '' ? '' : String(exportTrackIndex)}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setExportTrackIndex(v === '' ? '' : Number(v));
-                  }}
-                  style={{
-                    fontSize: 11,
-                    background: '#111',
-                    color: '#eee',
-                    border: '1px solid #555',
-                    borderRadius: 4,
-                    padding: '3px 8px',
-                    minWidth: 140,
-                    flex: '1 1 160px',
-                    maxWidth: 260,
-                  }}
-                  title="Export ORCH MIDI to any SE2 instrument track"
-                >
-                  {!exportTrackOptions.length ? (
-                    <option value="">No MIDI tracks</option>
-                  ) : (
-                    exportTrackOptions.map((o) => (
-                      <option key={o.trackIndex} value={o.trackIndex}>
-                        {o.label}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <button
-                  type="button"
-                  disabled={disabled || !hasHits || exportTrackIndex === ''}
-                  onClick={handleExport}
-                  style={toolBtn(false, accentHex)}
-                >
-                  Export to track
-                </button>
-              </>
-            ) : null}
-            {status ? (
-              <span style={{ color: accentHex, fontSize: 10, fontWeight: 600 }}>{status}</span>
-            ) : (
-              <span style={{ color: '#777', fontSize: 10 }}>
-                Chord lock follows song chords · Play to hear the loop
-              </span>
-            )}
-          </div>
+            Generate
+          </button>
+          <button
+            type="button"
+            disabled={disabled || !presets.length}
+            onClick={() => applySelectedPreset((genSeed || 1) + 1)}
+            style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
+            title="Regenerate with a new variation"
+          >
+            Regen
+          </button>
+          {onExportMidiToTrack ? (
+            <>
+              <label style={{ color: '#aaa', fontSize: 10, flexShrink: 0, marginLeft: 4 }}>Export</label>
+              <select
+                disabled={disabled || !exportTrackOptions.length || !hasHits}
+                value={exportTrackIndex === '' ? '' : String(exportTrackIndex)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setExportTrackIndex(v === '' ? '' : Number(v));
+                }}
+                style={{
+                  fontSize: 11,
+                  background: '#111',
+                  color: '#eee',
+                  border: '1px solid #555',
+                  borderRadius: 4,
+                  padding: '3px 8px',
+                  minWidth: 140,
+                  flexShrink: 0,
+                }}
+                title="Export ORCH MIDI to any SE2 instrument track"
+              >
+                {!exportTrackOptions.length ? (
+                  <option value="">No MIDI tracks</option>
+                ) : (
+                  exportTrackOptions.map((o) => (
+                    <option key={o.trackIndex} value={o.trackIndex}>
+                      {o.label}
+                    </option>
+                  ))
+                )}
+              </select>
+              <button
+                type="button"
+                disabled={disabled || !hasHits || exportTrackIndex === ''}
+                onClick={handleExport}
+                style={{ ...toolBtn(false, accentHex), flexShrink: 0 }}
+              >
+                Export to track
+              </button>
+            </>
+          ) : null}
+          {status ? (
+            <span style={{ color: accentHex, fontSize: 10, fontWeight: 600, flexShrink: 0 }}>{status}</span>
+          ) : null}
         </div>
       </div>
 
