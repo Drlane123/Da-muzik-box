@@ -67,7 +67,7 @@ export function Se2Lab808HumBox({
   const loopBars = se2Lab808NormalizeToneGridLoopBars(voice.toneGridLoopBars);
   const [captureBars, setCaptureBars] = useState<4 | 8>(() => captureBarsForLoop(loopBars));
   const [merge, setMerge] = useState(false);
-  const [status, setStatus] = useState('Hum bass · locks to Lab key');
+  const [status, setStatus] = useState('Hum bass · holds full notes · Lab key');
   const [busy, setBusy] = useState(false);
   const [isPrecounting, setIsPrecounting] = useState(false);
   const [precountBeat, setPrecountBeat] = useState<number | null>(null);
@@ -139,7 +139,7 @@ export function Se2Lab808HumBox({
           tonePadBaseMidi: applied.tonePadBaseMidi,
         });
         flash(
-          `${applied.hitCount} hit${applied.hitCount === 1 ? '' : 's'} → ${keyLabel}${
+          `${applied.noteCount} held note${applied.noteCount === 1 ? '' : 's'} → ${keyLabel}${
             merge ? ' · merged' : ' · replaced'
           }`,
         );

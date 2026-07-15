@@ -4,6 +4,7 @@ import {
   se2Lab808FoldMidiIntoToneWindow,
 } from '@/app/lib/studio/se2Lab808HumBoxApply';
 import { se2Lab808DefaultVoice } from '@/app/lib/studio/se2Lab808Types';
+import { se2Lab808ToneGridRunLengthFrom } from '@/app/lib/studio/se2Lab808ToneGridRuns';
 
 describe('se2Lab808FoldMidiIntoToneWindow', () => {
   it('folds high hummed pitches into the 16-pad window', () => {
@@ -21,7 +22,6 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
       tonePadBaseMidi: 36,
       toneGridLoopBars: 4 as const,
     };
-    // G major: G=43, A=45, B=47 — Ab=44 should snap toward G or A
     const result = se2Lab808ApplyHumNotesToToneGrid({
       notes: [
         { pitch: 43, startSec: 0, durationSec: 0.4, velocity: 100 },
@@ -43,8 +43,50 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     for (const hit of onCols) {
       const midi = 36 + (hit as { lane: number }).lane;
       const pc = ((midi % 12) + 12) % 12;
-      // G major scale PCs
       expect([7, 9, 11, 0, 2, 4, 6]).toContain(pc);
     }
+  });
+
+  it('paints a whole-bar held hum as a continuous run (not one chopped step)', () => {
+    const voice = {
+      ...se2Lab808DefaultVoice(),
+      soundLane: 'bass' as const,
+      tonePadBaseMidi: 36,
+      toneGridLoopBars: 4 as const,
+    };
+    // 120 BPM → 1 bar = 2s = 16 sixteenths
+    const result = se2Lab808ApplyHumNotesToToneGrid({
+      notes: [{ pitch: 36, startSec: 0, durationSec: 2.0, velocity: 110 }],
+      bpm: 120,
+      voice,
+      keyRoot: 0,
+      keyMode: 'major',
+      mode: 'replace',
+    });
+    expect(result.noteCount).toBe(1);
+    expect(result.hitCount).toBeGreaterThanOrEqual(14);
+    const lane = result.pattern.findIndex((row) => row.some(Boolean));
+    expect(lane).toBeGreaterThanOrEqual(0);
+    expect(se2Lab808ToneGridRunLengthFrom(result.pattern, lane, 0, 64)).toBeGreaterThanOrEqual(14);
+  });
+
+  it('paints a half-note hum across ~8 sixteenths', () => {
+    const voice = {
+      ...se2Lab808DefaultVoice(),
+      soundLane: 'bass' as const,
+      tonePadBaseMidi: 36,
+      toneGridLoopBars: 4 as const,
+    };
+    // Half note at 120 = 1s = 8 sixteenths
+    const result = se2Lab808ApplyHumNotesToToneGrid({
+      notes: [{ pitch: 43, startSec: 0, durationSec: 1.0, velocity: 100 }],
+      bpm: 120,
+      voice,
+      keyRoot: 7,
+      keyMode: 'major',
+      mode: 'replace',
+    });
+    expect(result.hitCount).toBeGreaterThanOrEqual(6);
+    expect(result.hitCount).toBeLessThanOrEqual(10);
   });
 });
