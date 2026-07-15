@@ -36,9 +36,34 @@ const MIN_RMS = 0.0025;
 const MIN_PITCH_CLARITY = 0.14;
 /** Vibrato tolerance inside one sung note (~0.65 semitone). Real pitch jumps still split. */
 const PITCH_RUN_TOLERANCE = 0.65;
-/** Bridge brief dropouts inside one sung note (~80 ms at hop 256). */
+/** Bridge brief dropouts inside one sung note (~58 ms at hop 256 / 22.05 kHz). */
 const MAX_VOICED_GAP_FRAMES = 5;
 const MAX_ANALYSIS_SEC = 120;
+
+/** Optional pitch-extract knobs (808 Lab Hum Box uses a stickier bass profile). */
+export type MonophonicPitchExtractOpts = {
+  fMinHz?: number;
+  fMaxHz?: number;
+  minRms?: number;
+  minPitchClarity?: number;
+  /** Semitones — how far pitch may wander inside one held note. */
+  pitchRunTolerance?: number;
+  /** Bridge unvoiced frames inside one held note (~11.6 ms each at default hop). */
+  maxVoicedGapFrames?: number;
+};
+
+/**
+ * Stickier / more sensitive extract for hummed 808 bass —
+ * quieter gate, longer dropout bridge, wider vibrato, lower bass floor.
+ */
+export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<Required<MonophonicPitchExtractOpts>> = {
+  fMinHz: 38,
+  fMaxHz: 900,
+  minRms: 0.0014,
+  minPitchClarity: 0.09,
+  pitchRunTolerance: 1.15,
+  maxVoicedGapFrames: 22, // ~255 ms bridge so held notes don't pop out
+};
 
 function spbFromBpm(bpm: number): number {
   const b = Math.max(30, Math.min(300, bpm));
@@ -74,9 +99,17 @@ function hann(i: number, n: number): number {
 }
 
 /** Return fundamental Hz or 0 if no clear pitch. */
-function autocorrPitchHz(samples: Float32Array, start: number, sr: number): number {
-  const lagMin = Math.max(2, Math.floor(sr / F_MAX));
-  const lagMax = Math.min(FRAME - 2, Math.floor(sr / F_MIN));
+function autocorrPitchHz(
+  samples: Float32Array,
+  start: number,
+  sr: number,
+  opts?: MonophonicPitchExtractOpts,
+): number {
+  const fMin = opts?.fMinHz ?? F_MIN;
+  const fMax = opts?.fMaxHz ?? F_MAX;
+  const minClarity = opts?.minPitchClarity ?? MIN_PITCH_CLARITY;
+  const lagMin = Math.max(2, Math.floor(sr / fMax));
+  const lagMax = Math.min(FRAME - 2, Math.floor(sr / fMin));
   if (lagMax <= lagMin + 2) return 0;
 
   const win = new Float32Array(FRAME);
@@ -104,7 +137,7 @@ function autocorrPitchHz(samples: Float32Array, start: number, sr: number): numb
   let rLag = 0;
   for (let i = 0; i < FRAME - bestLag; i++) rLag += win[i + bestLag]! * win[i + bestLag]!;
   const clarity = best / Math.sqrt(r0 * rLag + 1e-12);
-  if (clarity < MIN_PITCH_CLARITY) return 0;
+  if (clarity < minClarity) return 0;
 
   // Prefer fundamental over octave-doubled partial (common on hums / whistles).
   const doubleLag = bestLag * 2;
@@ -125,15 +158,15 @@ function autocorrPitchHz(samples: Float32Array, start: number, sr: number): numb
   }
 
   const f = sr / bestLag;
-  if (!Number.isFinite(f) || f < F_MIN || f > F_MAX) return 0;
+  if (!Number.isFinite(f) || f < fMin || f > fMax) return 0;
   return f;
 }
 
-function adaptiveRmsGate(rmses: readonly number[]): number {
-  const voiced = rmses.filter((r) => r > 0.0005).sort((a, b) => a - b);
-  if (voiced.length === 0) return MIN_RMS;
-  const ref = voiced[Math.floor(voiced.length * 0.15)] ?? MIN_RMS;
-  return Math.max(0.0018, Math.min(MIN_RMS, ref * 0.28));
+function adaptiveRmsGate(rmses: readonly number[], minRms = MIN_RMS): number {
+  const voiced = rmses.filter((r) => r > 0.0004).sort((a, b) => a - b);
+  if (voiced.length === 0) return minRms;
+  const ref = voiced[Math.floor(voiced.length * 0.12)] ?? minRms;
+  return Math.max(minRms * 0.55, Math.min(minRms, ref * 0.22));
 }
 
 function hzToMidi(f: number): number {
@@ -147,24 +180,31 @@ function median3(a: number, b: number, c: number): number {
 }
 
 /** Shared autocorrelation pass — frame indices for timed or beat-quantized output. */
-function extractMonophonicPitchRuns(buffer: AudioBuffer): PitchRun[] {
+function extractMonophonicPitchRuns(
+  buffer: AudioBuffer,
+  opts?: MonophonicPitchExtractOpts,
+): PitchRun[] {
   const { data, sr } = monoDecimate(buffer);
   const maxSamples = Math.min(data.length, Math.floor(MAX_ANALYSIS_SEC * sr));
   if (maxSamples < FRAME + HOP) return [];
+
+  const minRms = opts?.minRms ?? MIN_RMS;
+  const pitchTol = opts?.pitchRunTolerance ?? PITCH_RUN_TOLERANCE;
+  const maxGap = opts?.maxVoicedGapFrames ?? MAX_VOICED_GAP_FRAMES;
 
   const rmses: number[] = [];
   for (let start = 0; start + FRAME <= maxSamples; start += HOP) {
     rmses.push(frameRms(data.subarray(start, start + FRAME)));
   }
 
-  const gate = adaptiveRmsGate(rmses);
+  const gate = adaptiveRmsGate(rmses, minRms);
   const pitches: number[] = [];
   for (let i = 0, start = 0; start + FRAME <= maxSamples; start += HOP, i++) {
     if ((rmses[i] ?? 0) < gate) {
       pitches.push(NaN);
       continue;
     }
-    const hz = autocorrPitchHz(data, start, sr);
+    const hz = autocorrPitchHz(data, start, sr, opts);
     pitches.push(hz > 0 ? hzToMidi(hz) : NaN);
   }
 
@@ -174,16 +214,25 @@ function extractMonophonicPitchRuns(buffer: AudioBuffer): PitchRun[] {
     const b = pitches[i];
     const c = pitches[i + 1];
     if (!Number.isFinite(b)) {
-      smooth.push(NaN);
+      // Hold last pitch across a 1-frame dropout when neighbors agree (sticky hold).
+      if (
+        Number.isFinite(a) &&
+        Number.isFinite(c) &&
+        Math.abs((a as number) - (c as number)) <= pitchTol
+      ) {
+        smooth.push(((a as number) + (c as number)) * 0.5);
+      } else {
+        smooth.push(NaN);
+      }
       continue;
     }
     // Only smooth steady pitch — preserve fast jumps between notes.
     if (
       Number.isFinite(a) &&
       Number.isFinite(c) &&
-      Math.abs(a - c) < 1.1 &&
-      Math.abs(b - a) < 0.75 &&
-      Math.abs(c - b) < 0.75
+      Math.abs(a - c) < 1.35 &&
+      Math.abs(b - a) < 0.95 &&
+      Math.abs(c - b) < 0.95
     ) {
       smooth.push(median3(a, b, c));
     } else {
@@ -220,7 +269,7 @@ function extractMonophonicPitchRuns(buffer: AudioBuffer): PitchRun[] {
     if (!Number.isFinite(m)) {
       if (runStartFrame >= 0) {
         gapFrames += 1;
-        if (gapFrames <= MAX_VOICED_GAP_FRAMES) {
+        if (gapFrames <= maxGap) {
           runVelSum += velCand * 0.45;
           runVelN += 0.45;
           continue;
@@ -238,8 +287,8 @@ function extractMonophonicPitchRuns(buffer: AudioBuffer): PitchRun[] {
       runVelN = 1;
       continue;
     }
-    if (Math.abs(m - runPitch) <= PITCH_RUN_TOLERANCE) {
-      runPitch = runPitch * 0.55 + m * 0.45;
+    if (Math.abs(m - runPitch) <= pitchTol) {
+      runPitch = runPitch * 0.62 + m * 0.38;
       runVelSum += velCand;
       runVelN += 1;
     } else {
@@ -258,10 +307,13 @@ function extractMonophonicPitchRuns(buffer: AudioBuffer): PitchRun[] {
  * Extract monophonic notes with wall-clock timing (no BPM required).
  * Used by Neural Hum-to-Instrument offline render.
  */
-export function audioBufferToMonophonicTimedNotes(buffer: AudioBuffer): TimedMonophonicNote[] {
+export function audioBufferToMonophonicTimedNotes(
+  buffer: AudioBuffer,
+  opts?: MonophonicPitchExtractOpts,
+): TimedMonophonicNote[] {
   const { sr } = monoDecimate(buffer);
   const minDurSec = 0.016;
-  const notes = extractMonophonicPitchRuns(buffer).map((run) => {
+  const notes = extractMonophonicPitchRuns(buffer, opts).map((run) => {
     const startSec = (run.startFrame * HOP) / sr;
     const endSec = (run.endFrame * HOP) / sr;
     return {

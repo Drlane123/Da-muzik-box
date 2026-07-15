@@ -23,6 +23,7 @@ import {
   runSe2Precount,
   SE2_PRECOUNT_CLICK_VOLUME,
 } from '@/app/lib/studio/se2Precount';
+import { MONOPHONIC_PITCH_EXTRACT_HUM_BASS } from '@/app/lib/studio/audioToMidiNotes';
 import { analyzeNeuralHumMelody } from '@/app/lib/vocalLab/neuralHumToInstrument';
 
 const HUM_ACCENT = '#c4a0ff';
@@ -112,11 +113,15 @@ export function Se2Lab808HumBox({
         const takeSec = humBoxCaptureDurationSec(bpm, captureBars);
         const trimmed = trimAudioBufferFromSec(decoded, gridOriginFileSecRef.current, takeSec + 0.05);
         const scaleId = keyMode === 'minor' ? 'minor' : 'major';
-        const analyzed = analyzeNeuralHumMelody(trimmed, {
-          mode: 'manual',
-          keyRoot,
-          scaleId,
-        });
+        const analyzed = analyzeNeuralHumMelody(
+          trimmed,
+          {
+            mode: 'manual',
+            keyRoot,
+            scaleId,
+          },
+          MONOPHONIC_PITCH_EXTRACT_HUM_BASS,
+        );
         if (analyzed.notes.length === 0) {
           flash('No pitched notes — hum louder / closer.');
           return;

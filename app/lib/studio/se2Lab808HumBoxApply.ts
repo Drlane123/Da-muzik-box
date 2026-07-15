@@ -20,6 +20,41 @@ import {
 } from '@/app/lib/vocalLab/neuralHumKeyLock';
 import { quantizeTimedMonophonicNotes } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 
+/** Bridge same-pitch (or ±1 semitone wobble) fragments so held bass doesn't pop. */
+function stickyMergeHumBassNotes(
+  notes: readonly TimedMonophonicNote[],
+  maxGapSec = 0.42,
+  maxPitchDelta = 1.35,
+): TimedMonophonicNote[] {
+  if (notes.length === 0) return [];
+  const sorted = [...notes].sort((a, b) => a.startSec - b.startSec || a.pitch - b.pitch);
+  const out: TimedMonophonicNote[] = [];
+  let cur: TimedMonophonicNote | null = null;
+
+  for (const n of sorted) {
+    if (!cur) {
+      cur = { ...n };
+      continue;
+    }
+    const curEnd = cur.startSec + cur.durationSec;
+    const gap = n.startSec - curEnd;
+    const pitchClose = Math.abs(n.pitch - cur.pitch) <= maxPitchDelta;
+    if (pitchClose && gap >= -0.04 && gap <= maxGapSec) {
+      const end = Math.max(curEnd, n.startSec + n.durationSec);
+      const wCur = cur.durationSec;
+      const wNext = n.durationSec;
+      cur.pitch = Math.round((cur.pitch * wCur + n.pitch * wNext) / Math.max(0.001, wCur + wNext));
+      cur.durationSec = end - cur.startSec;
+      cur.velocity = Math.max(cur.velocity, n.velocity);
+      continue;
+    }
+    out.push(cur);
+    cur = { ...n };
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
 export type Se2Lab808HumBoxApplyMode = 'replace' | 'merge';
 
 /** Fold MIDI into the 16-pad chromatic window by octaves. */
@@ -58,16 +93,19 @@ function resolveHumLane(
 
 /**
  * Glue pitch-tracker fragments of the same bass pitch, then quantize starts/ends
- * so a hummed half-note / whole-note keeps its full length.
+ * so a hummed half-note / whole-note keeps its full length without popping out.
  */
 export function se2Lab808PrepareHumNotesForGrid(
   notes: readonly TimedMonophonicNote[],
   bpm: number,
 ): TimedMonophonicNote[] {
-  // Wider merge than default — held 808s wobble in pitch detect and fragment.
-  const cleaned = cleanNeuralHumMelodyNotes(notes, 0.04, 0.22);
-  const mono = enforceMonophonicHumNotes(cleaned, 0.04);
-  return quantizeTimedMonophonicNotes(mono, bpm, '1/16');
+  // Aggressive sticky merge — brief pitch dropouts / vibrato must not chop a held hum.
+  const cleaned = cleanNeuralHumMelodyNotes(notes, 0.03, 0.38);
+  const sticky = stickyMergeHumBassNotes(cleaned, 0.42, 1.35);
+  const mono = enforceMonophonicHumNotes(sticky, 0.03);
+  const quantized = quantizeTimedMonophonicNotes(mono, bpm, '1/16');
+  // Second sticky pass after quantize — closes 16th-grid gaps from tracker flicker.
+  return stickyMergeHumBassNotes(quantized, 0.28, 1.1);
 }
 
 export function se2Lab808ApplyHumNotesToToneGrid(args: {

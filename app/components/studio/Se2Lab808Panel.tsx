@@ -549,95 +549,89 @@ export function Se2Lab808Panel({
                       Regenerate
                     </button>
                   </div>
-                  {/* Lows beside Gen/Regen; menu is position:absolute so Bass + grid never move. */}
-                  <div ref={lowsWrapRef} className="relative shrink-0 self-start">
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      style={genBtn(lowsTabOpen ? '#f5a623' : '#c4a574', true, true)}
-                      onClick={() => setLowsTabOpen((o) => !o)}
-                      title="Dark sparse lows — 2 hits/bar in key (R&B · Trap · Reggae · Dance)"
-                    >
-                      {lowsTabOpen ? 'Lows ✕' : 'Lows'}
-                    </button>
-                    {lowsTabOpen ? (
-                      <div
-                        className="absolute top-0 left-full z-50 flex flex-col gap-1 rounded-md border px-1.5 py-1.5"
-                        style={{
-                          marginLeft: 6,
-                          width: miniature ? 132 : 142,
-                          borderColor: '#f5a62366',
-                          background: 'rgba(18, 14, 8, 0.98)',
-                          boxShadow: '0 6px 18px rgba(0,0,0,0.55)',
-                        }}
+                  {/* Miniature only — full Lab parks Lows to the right of Hum Box. */}
+                  {miniature ? (
+                    <div ref={lowsWrapRef} className="relative shrink-0 self-start">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        style={genBtn(lowsTabOpen ? '#f5a623' : '#c4a574', true, true)}
+                        onClick={() => setLowsTabOpen((o) => !o)}
+                        title="Dark sparse lows — 2 hits/bar in key (R&B · Trap · Reggae · Dance)"
                       >
-                        <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows</span>
-                        <div className="flex flex-col gap-1">
-                          {(
-                            [
-                              ['rnb', 'R&B lows'],
-                              ['trap', 'Trap lows'],
-                              ['reggae', 'Reggae'],
-                              ['dance', 'Dance'],
-                            ] as const
-                          ).map(([id, label]) => {
-                            const on = lowsGenre === id;
-                            return (
-                              <button
-                                key={id}
-                                type="button"
-                                disabled={disabled}
-                                onClick={() => setLowsGenre(id)}
-                                style={{
-                                  ...laneBtn(on, '#f5a623'),
-                                  fontSize: 8,
-                                  minHeight: 22,
-                                  padding: '3px 5px',
-                                }}
-                                title={`${label} — dark sparse melodies for drum tracks`}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
+                        {lowsTabOpen ? 'Lows ✕' : 'Lows'}
+                      </button>
+                      {lowsTabOpen ? (
+                        <div
+                          className="absolute top-0 left-full z-50 flex flex-col gap-1 rounded-md border px-1.5 py-1.5"
+                          style={{
+                            marginLeft: 6,
+                            width: 132,
+                            borderColor: '#f5a62366',
+                            background: 'rgba(18, 14, 8, 0.98)',
+                            boxShadow: '0 6px 18px rgba(0,0,0,0.55)',
+                          }}
+                        >
+                          <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows</span>
+                          <div className="flex flex-col gap-1">
+                            {(
+                              [
+                                ['rnb', 'R&B lows'],
+                                ['trap', 'Trap lows'],
+                                ['reggae', 'Reggae'],
+                                ['dance', 'Dance'],
+                              ] as const
+                            ).map(([id, label]) => {
+                              const on = lowsGenre === id;
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  disabled={disabled}
+                                  onClick={() => setLowsGenre(id)}
+                                  style={{
+                                    ...laneBtn(on, '#f5a623'),
+                                    fontSize: 8,
+                                    minHeight: 22,
+                                    padding: '3px 5px',
+                                  }}
+                                  title={`${label} — dark sparse melodies for drum tracks`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              style={{ ...genBtn('#f5a623', !disabled, true), flex: 1, minWidth: 0 }}
+                              onClick={() => {
+                                handleGenerateLows(lowsGenre);
+                                setLowsTabOpen(false);
+                              }}
+                              title="Generate dark lows — 2 hits/bar · in key"
+                            >
+                              Gen
+                            </button>
+                            <button
+                              type="button"
+                              disabled={disabled}
+                              style={{ ...genBtn(accent, !disabled, true), flex: 1, minWidth: 0 }}
+                              onClick={() => {
+                                handleRegenerateLows();
+                                setLowsTabOpen(false);
+                              }}
+                              title="Roll another dark lows melody (same genre · in key)"
+                            >
+                              Regen
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            disabled={disabled}
-                            style={{ ...genBtn('#f5a623', !disabled, true), flex: 1, minWidth: 0 }}
-                            onClick={() => {
-                              handleGenerateLows(lowsGenre);
-                              setLowsTabOpen(false);
-                            }}
-                            title={`Generate dark ${
-                              lowsGenre === 'rnb'
-                                ? 'R&B'
-                                : lowsGenre === 'reggae'
-                                  ? 'Reggae'
-                                  : lowsGenre === 'dance'
-                                    ? 'Dance'
-                                    : 'Trap'
-                            } lows — 2 hits/bar · in key`}
-                          >
-                            Gen
-                          </button>
-                          <button
-                            type="button"
-                            disabled={disabled}
-                            style={{ ...genBtn(accent, !disabled, true), flex: 1, minWidth: 0 }}
-                            onClick={() => {
-                              handleRegenerateLows();
-                              setLowsTabOpen(false);
-                            }}
-                            title="Roll another dark lows melody (same genre · in key)"
-                          >
-                            Regen
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 
@@ -746,6 +740,99 @@ export function Se2Lab808Panel({
                   onVoiceChange={onVoiceChange}
                   onStatus={(msg) => setGridStatus(msg)}
                 />
+                {/* Lows sits to the right of Hum Box (inline — no overlay on Hum / grid). */}
+                <div
+                  ref={lowsWrapRef}
+                  className="shrink-0 flex flex-col gap-1 rounded-md border px-1.5 py-1.5"
+                  style={{
+                    width: lowsTabOpen ? 142 : 72,
+                    borderColor: lowsTabOpen ? '#f5a62388' : '#f5a62344',
+                    background: 'linear-gradient(165deg, rgba(28,18,8,0.95) 0%, rgba(12,10,6,0.98) 100%)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.4)',
+                  }}
+                  data-se2-lab808-lows-beside-hum
+                >
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    style={{
+                      ...genBtn(lowsTabOpen ? '#f5a623' : '#c4a574', true, true),
+                      width: '100%',
+                    }}
+                    onClick={() => setLowsTabOpen((o) => !o)}
+                    title="Dark sparse lows — 2 hits/bar in key (R&B · Trap · Reggae · Dance)"
+                  >
+                    {lowsTabOpen ? 'Lows ✕' : 'Lows'}
+                  </button>
+                  {lowsTabOpen ? (
+                    <>
+                      <span style={{ ...sideLabel, color: '#f5a623' }}>Dark lows</span>
+                      <div className="flex flex-col gap-1">
+                        {(
+                          [
+                            ['rnb', 'R&B lows'],
+                            ['trap', 'Trap lows'],
+                            ['reggae', 'Reggae'],
+                            ['dance', 'Dance'],
+                          ] as const
+                        ).map(([id, label]) => {
+                          const on = lowsGenre === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => setLowsGenre(id)}
+                              style={{
+                                ...laneBtn(on, '#f5a623'),
+                                fontSize: 8,
+                                minHeight: 22,
+                                padding: '3px 5px',
+                              }}
+                              title={`${label} — dark sparse melodies for drum tracks`}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          style={{ ...genBtn('#f5a623', !disabled, true), flex: 1, minWidth: 0 }}
+                          onClick={() => {
+                            handleGenerateLows(lowsGenre);
+                            setLowsTabOpen(false);
+                          }}
+                          title={`Generate dark ${
+                            lowsGenre === 'rnb'
+                              ? 'R&B'
+                              : lowsGenre === 'reggae'
+                                ? 'Reggae'
+                                : lowsGenre === 'dance'
+                                  ? 'Dance'
+                                  : 'Trap'
+                          } lows — 2 hits/bar · in key`}
+                        >
+                          Gen
+                        </button>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          style={{ ...genBtn(accent, !disabled, true), flex: 1, minWidth: 0 }}
+                          onClick={() => {
+                            handleRegenerateLows();
+                            setLowsTabOpen(false);
+                          }}
+                          title="Roll another dark lows melody (same genre · in key)"
+                        >
+                          Regen
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
                 <Se2Lab808RootScope
                   dialSize={176}
                   keyRoot={lockKey.keyRoot}

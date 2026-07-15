@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   se2Lab808ApplyHumNotesToToneGrid,
   se2Lab808FoldMidiIntoToneWindow,
+  se2Lab808PrepareHumNotesForGrid,
 } from '@/app/lib/studio/se2Lab808HumBoxApply';
 import { se2Lab808DefaultVoice } from '@/app/lib/studio/se2Lab808Types';
 import { se2Lab808ToneGridRunLengthFrom } from '@/app/lib/studio/se2Lab808ToneGridRuns';
@@ -68,6 +69,21 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     const lane = result.pattern.findIndex((row) => row.some(Boolean));
     expect(lane).toBeGreaterThanOrEqual(0);
     expect(se2Lab808ToneGridRunLengthFrom(result.pattern, lane, 0, 64)).toBeGreaterThanOrEqual(14);
+  });
+
+  it('glues pitch-dropout fragments into one held note', () => {
+    // Tracker flicker: same pitch with ~180ms holes — must become one sustained note.
+    const prepared = se2Lab808PrepareHumNotesForGrid(
+      [
+        { pitch: 36, startSec: 0, durationSec: 0.35, velocity: 100 },
+        { pitch: 36, startSec: 0.48, durationSec: 0.4, velocity: 95 },
+        { pitch: 37, startSec: 1.0, durationSec: 0.5, velocity: 100 }, // ±1 wobble
+        { pitch: 36, startSec: 1.55, durationSec: 0.45, velocity: 90 },
+      ],
+      120,
+    );
+    expect(prepared.length).toBe(1);
+    expect(prepared[0]!.durationSec).toBeGreaterThan(1.8);
   });
 
   it('paints a half-note hum across ~8 sixteenths', () => {

@@ -11,6 +11,7 @@ import { getChordInstrument, type ChordInstrumentId } from '@/app/lib/creationSt
 import { BEAT_LAB_MELODIC_KIT } from '@/app/lib/creationStation/beatLabMelodicSoundfont';
 import {
   audioBufferToMonophonicTimedNotes,
+  type MonophonicPitchExtractOpts,
   type TimedMonophonicNote,
 } from '@/app/lib/studio/audioToMidiNotes';
 import {
@@ -118,6 +119,7 @@ async function decodeBlob(ctx: BaseAudioContext, blob: Blob): Promise<AudioBuffe
 export function analyzeNeuralHumMelody(
   sourceBuffer: AudioBuffer,
   keyLock?: NeuralHumKeyLockSettings,
+  extractOpts?: MonophonicPitchExtractOpts,
 ): {
   notes: TimedMonophonicNote[];
   /** Pitch-tracked notes before key lock — use to re-key from pads. */
@@ -128,7 +130,7 @@ export function analyzeNeuralHumMelody(
   effectiveKeyRoot: number;
   effectiveScaleId: NeuralHumKeyLockSettings['scaleId'];
 } {
-  const raw = audioBufferToMonophonicTimedNotes(sourceBuffer);
+  const raw = audioBufferToMonophonicTimedNotes(sourceBuffer, extractOpts);
   const lock: NeuralHumKeyLockSettings = keyLock ?? {
     mode: 'auto',
     keyRoot: 0,
