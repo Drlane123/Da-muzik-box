@@ -88,7 +88,7 @@ export function useBeatPadsOrchHitsToneGridTransport({
     const anim = wapiRefs.current.animRef.current;
     if (!anim) return;
     const seg = wapiRefs.current.wapiSegStateRef.current;
-    const colF = beatPadsPlayColFFromWapiAnim(anim.currentTime ?? 0, seg);
+    const colF = beatPadsPlayColFFromWapiAnim(Number(anim.currentTime ?? 0), seg);
     playheadColRef.current = colF;
     setPlayheadCol(colF);
   }, []);
@@ -228,7 +228,7 @@ export function useBeatPadsOrchHitsToneGridTransport({
     if (!runningRef.current) return;
 
     const colF = beatPadsPlayColFFromWapiAnim(
-      wapiRefs.current.animRef.current?.currentTime ?? 0,
+      Number(wapiRefs.current.animRef.current?.currentTime ?? 0),
       wapiRefs.current.wapiSegStateRef.current,
     );
     relaunchBeatPadsPlaylineWapiForBpm(wapiRefs.current, {
