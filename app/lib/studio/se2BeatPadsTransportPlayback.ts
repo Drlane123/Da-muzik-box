@@ -344,7 +344,8 @@ export function refillSe2BeatPadsPatternOnTransport(args: {
         if (!beatPadsLaneActiveAtStep(pattern[lane], col)) continue;
         const pitch = BEAT_PADS_LANE_GM_PITCH[lane] ?? 36 + lane;
 
-        const key = `bp:${track.id}:${col}:${lane}:${occurrenceBeat.toFixed(4)}@${Math.round(bpm)}`;
+        // Include sessionStart so loop-brace splice (new audio anchor) can reschedule.
+        const key = `bp:${track.id}:${col}:${lane}:${occurrenceBeat.toFixed(4)}@${Math.round(bpm)}@${sessionStart.toFixed(3)}`;
         if (tOn < ctSnap - 0.03) {
           if (occurrenceBeat < purgeBeforeBeat) scheduled.delete(key);
           else scheduled.add(key);
@@ -449,7 +450,7 @@ export function refillSe2BeatPadsSpreadOnTransport(args: {
       if (tOn > horizon + 1e-6) break;
 
       for (const note of notesAtCol) {
-        const key = `bps:${track.id}:${col}:${note.row}:${spreadCol}:${occurrenceBeat.toFixed(4)}@${Math.round(bpm)}`;
+        const key = `bps:${track.id}:${col}:${note.row}:${spreadCol}:${occurrenceBeat.toFixed(4)}@${Math.round(bpm)}@${sessionStart.toFixed(3)}`;
         if (tOn < ctSnap - 0.03) {
           if (occurrenceBeat < purgeBeforeBeat) scheduled.delete(key);
           else scheduled.add(key);

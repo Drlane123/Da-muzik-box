@@ -797,36 +797,25 @@ export function BeatLabDrumMachineOverlay({
     setLocalBpm(clampBeatPadsBpm(sessionBpm));
   }, [embedded, se2SyncMode, sessionBpm]);
 
-  useEffect(() => {
-    if (!embedded || se2SyncMode !== 'slave') return;
-    const bars = Math.max(1, Math.round(sessionLoopBars ?? loopBars));
-    if (bars === loopBars) return;
-    beatPadsTransport.stop();
-    if (patternControl) {
-      patternControl.onLoopBarsChange(bars);
-    } else {
-      setLoopBars(bars);
-      setPattern((prev) => resizeBeatPadsPattern(prev, bars, gridStepsRef.current));
-    }
-  }, [
-    beatPadsTransport,
-    embedded,
-    loopBars,
-    patternControl,
-    se2SyncMode,
-    sessionLoopBars,
-    setLoopBars,
-    setPattern,
-  ]);
+  // Slave follows SE2 BPM only — keep Beat Pads pattern length (e.g. 8 bars).
+  // Do not force-resize to sessionLoopBars; that truncated patterns to SE2 arrangement length.
 
   useEffect(() => {
     if (!embedded || !onReportLiveTransport) return;
     onReportLiveTransport({ bpm: clampBeatPadsBpm(localBpm), loopBars });
   }, [embedded, localBpm, loopBars, onReportLiveTransport]);
 
+  // When sync arms, park local transport once. Do not re-run on every render
+  // (beatPadsTransport object identity changes) — that was haltPadSamplePlayback()'ing
+  // SE2 lookahead and leaving dedupe keys stuck so only the first kick survived.
+  const stopLocalTransport = beatPadsTransport.stop;
+  const prevSe2SyncActiveRef = useRef(false);
   useEffect(() => {
-    if (se2SyncActive) beatPadsTransport.stop();
-  }, [se2SyncActive, beatPadsTransport]);
+    if (se2SyncActive && !prevSe2SyncActiveRef.current) {
+      stopLocalTransport();
+    }
+    prevSe2SyncActiveRef.current = se2SyncActive;
+  }, [se2SyncActive, stopLocalTransport]);
 
   const se2PlayheadColF = useCallback(
     (beat: number) => {

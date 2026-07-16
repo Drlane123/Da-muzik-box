@@ -323,9 +323,10 @@ export function useBeatPadsLocalTransport({
   }, [syncPlaylineScroll]);
 
   const stop = useCallback(() => {
+    const wasRunning = runningRef.current;
     const cols = Math.max(1, loopColsRef.current);
     let parkCol = parkedColRef.current;
-    if (runningRef.current) {
+    if (wasRunning) {
       const anim = wapiRefs.current.animRef.current;
       const seg = wapiRefs.current.wapiSegStateRef.current;
       if (anim && seg.durMs > 0) {
@@ -350,9 +351,12 @@ export function useBeatPadsLocalTransport({
     playlineLoopCycleRef.current = 0;
     lab808ScheduledRef.current.clear();
     orchHitsScheduledRef.current.clear();
-    // Cut ~2.5s lookahead pad hits + synced ORCH tails immediately.
-    haltPadSamplePlayback();
-    haltOrchestraHitPlayback(getAudioContext?.() ?? null);
+    // Only cut voices when local transport was actually running.
+    // Idle/synced keep-stopped must NOT halt SE2-scheduled pad lookahead.
+    if (wasRunning) {
+      haltPadSamplePlayback();
+      haltOrchestraHitPlayback(getAudioContext?.() ?? null);
+    }
   }, [clearLookahead, getAudioContext, playlineElRef]);
 
   /** Explicit return to grid start (does not auto-play). */
