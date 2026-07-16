@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from 'react';
 import {
+  ArrowLeft,
   Cable,
   ChevronDown,
   ChevronUp,
@@ -1457,6 +1458,59 @@ export function BeatLabDrumMachineSequencer({
                 <ChevronUp size={16} aria-hidden />
               </button>
             </label>
+            {/* Callout — Beat Pads Play/Stop/BPM (not the SE2 transport bar below). */}
+            <div
+              className="beat-pads-transport-callout"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                flexShrink: 0,
+                marginLeft: 2,
+                padding: '3px 8px 3px 6px',
+                borderRadius: 5,
+                border: '1px solid rgba(124, 244, 198, 0.4)',
+                background: 'rgba(124, 244, 198, 0.1)',
+                pointerEvents: 'none',
+                userSelect: 'none',
+              }}
+              title="Use these Play / Stop / BPM controls for Beat Pads — not the SE2 transport bar at the bottom"
+              aria-hidden
+            >
+              <ArrowLeft size={14} strokeWidth={2.75} color="#7cf4c6" aria-hidden />
+              <span
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  lineHeight: 1.15,
+                  gap: 1,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 900,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: '#7cf4c6',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Beat Pads transport
+                </span>
+                <span
+                  style={{
+                    fontSize: 7,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    color: 'rgba(124, 244, 198, 0.75)',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Play · Stop · BPM
+                </span>
+              </span>
+            </div>
             <span style={{ width: 1, height: 20, background: 'rgba(124, 244, 198, 0.2)', flexShrink: 0 }} aria-hidden />
           </>
         ) : null}
