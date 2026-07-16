@@ -61,8 +61,8 @@ export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<Required<MonophonicPitc
   fMaxHz: 900,
   minRms: 0.0014,
   minPitchClarity: 0.09,
-  pitchRunTolerance: 1.15,
-  maxVoicedGapFrames: 22, // ~255 ms bridge so held notes don't pop out
+  pitchRunTolerance: 1.85,
+  maxVoicedGapFrames: 34, // ~395 ms bridge so held notes don't pop out
 };
 
 function spbFromBpm(bpm: number): number {

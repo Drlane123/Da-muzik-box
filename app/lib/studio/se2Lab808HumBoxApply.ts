@@ -20,11 +20,14 @@ import {
 } from '@/app/lib/vocalLab/neuralHumKeyLock';
 import { quantizeTimedMonophonicNotes } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 
-/** Bridge same-pitch (or ±1 semitone wobble) fragments so held bass doesn't pop. */
+/** Semitone band that keeps a held hum on the previous locked degree. */
+const HUM_KEY_HYSTERESIS_ST = 1.75;
+
+/** Bridge nearby-pitch fragments so held bass doesn't pop between scale neighbors. */
 function stickyMergeHumBassNotes(
   notes: readonly TimedMonophonicNote[],
-  maxGapSec = 0.42,
-  maxPitchDelta = 1.35,
+  maxGapSec = 0.55,
+  maxPitchDelta = 2.6,
 ): TimedMonophonicNote[] {
   if (notes.length === 0) return [];
   const sorted = [...notes].sort((a, b) => a.startSec - b.startSec || a.pitch - b.pitch);
@@ -41,9 +44,10 @@ function stickyMergeHumBassNotes(
     const pitchClose = Math.abs(n.pitch - cur.pitch) <= maxPitchDelta;
     if (pitchClose && gap >= -0.04 && gap <= maxGapSec) {
       const end = Math.max(curEnd, n.startSec + n.durationSec);
-      const wCur = cur.durationSec;
-      const wNext = n.durationSec;
-      cur.pitch = Math.round((cur.pitch * wCur + n.pitch * wNext) / Math.max(0.001, wCur + wNext));
+      // Longer fragment wins — weighted average can round into the wrong degree.
+      if (n.durationSec > cur.durationSec) {
+        cur.pitch = Math.round(n.pitch);
+      }
       cur.durationSec = end - cur.startSec;
       cur.velocity = Math.max(cur.velocity, n.velocity);
       continue;
@@ -52,6 +56,73 @@ function stickyMergeHumBassNotes(
     cur = { ...n };
   }
   if (cur) out.push(cur);
+  return out;
+}
+
+/** Nearest MIDI with the locked pitch-class (prefer same octave as `around`). */
+function nearestMidiWithPitchClass(around: number, pitchClass: number): number {
+  const pc = ((Math.round(pitchClass) % 12) + 12) % 12;
+  const center = Math.round(around);
+  let best = center;
+  let bestDist = Infinity;
+  const baseOct = Math.floor(center / 12);
+  for (let oct = baseOct - 1; oct <= baseOct + 1; oct += 1) {
+    const cand = oct * 12 + pc;
+    if (cand < 0 || cand > 127) continue;
+    const dist = Math.abs(cand - around);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = cand;
+    }
+  }
+  return best;
+}
+
+/**
+ * Hysteresis scale lock — once a degree is grabbed, stay there until pitch
+ * clearly commits past the midpoint + margin toward another scale tone.
+ */
+export function stickySnapHumNotesToKeyScale(
+  notes: readonly TimedMonophonicNote[],
+  keyRoot: number,
+  keyMode: 'major' | 'minor',
+  hysteresisSt = HUM_KEY_HYSTERESIS_ST,
+): TimedMonophonicNote[] {
+  if (notes.length === 0) return [];
+  const sorted = [...notes].sort((a, b) => a.startSec - b.startSec || a.pitch - b.pitch);
+  const out: TimedMonophonicNote[] = [];
+  let lockedMidi: number | null = null;
+
+  for (const n of sorted) {
+    const raw = n.pitch;
+    const nearest = se2Lab808SnapMidiToKeyScale(raw, keyRoot, keyMode);
+
+    if (lockedMidi == null) {
+      lockedMidi = nearest;
+      out.push({ ...n, pitch: lockedMidi });
+      continue;
+    }
+
+    const stickCandidate = nearestMidiWithPitchClass(raw, lockedMidi);
+    const distToLocked = Math.abs(raw - stickCandidate);
+    if (distToLocked <= hysteresisSt) {
+      out.push({ ...n, pitch: stickCandidate });
+      lockedMidi = stickCandidate;
+      continue;
+    }
+
+    // Commit only when the new scale tone is clearly closer than staying put.
+    const distToNearest = Math.abs(raw - nearest);
+    if (distToNearest + 0.35 < distToLocked) {
+      lockedMidi = nearest;
+      out.push({ ...n, pitch: lockedMidi });
+      continue;
+    }
+
+    out.push({ ...n, pitch: stickCandidate });
+    lockedMidi = stickCandidate;
+  }
+
   return out;
 }
 
@@ -74,12 +145,15 @@ function resolveHumLane(
   keyRoot: number,
   keyMode: 'major' | 'minor',
 ): number | null {
-  const inKey = se2Lab808SnapMidiToKeyScale(pitch, keyRoot, keyMode);
-  const folded = se2Lab808FoldMidiIntoToneWindow(inKey, baseMidi);
+  // Notes are already hysteresis-locked; fold first, snap only if fold left us off-key.
+  const folded = se2Lab808FoldMidiIntoToneWindow(pitch, baseMidi);
   const snapped = se2Lab808SnapMidiToKeyScale(folded, keyRoot, keyMode);
-  let lane = se2Lab808LaneForRootMidi(baseMidi, snapped);
+  // Prefer folded pitch when already in key (avoids pad-edge nearest-neighbor flip).
+  const target =
+    snapped === folded ? folded : se2Lab808FoldMidiIntoToneWindow(snapped, baseMidi);
+  let lane = se2Lab808LaneForRootMidi(baseMidi, target);
   if (lane == null) {
-    let probe = Math.round(snapped) - baseMidi;
+    let probe = Math.round(target) - baseMidi;
     while (probe > 15) probe -= 12;
     while (probe < 0) probe += 12;
     lane = Math.max(0, Math.min(15, probe));
@@ -92,20 +166,23 @@ function resolveHumLane(
 }
 
 /**
- * Glue pitch-tracker fragments of the same bass pitch, then quantize starts/ends
- * so a hummed half-note / whole-note keeps its full length without popping out.
+ * Glue pitch-tracker fragments of the same bass pitch, hysteresis-lock to key,
+ * then quantize starts/ends so a hummed half-note / whole-note keeps its full length.
  */
 export function se2Lab808PrepareHumNotesForGrid(
   notes: readonly TimedMonophonicNote[],
   bpm: number,
+  keyRoot = 0,
+  keyMode: 'major' | 'minor' = 'major',
 ): TimedMonophonicNote[] {
   // Aggressive sticky merge — brief pitch dropouts / vibrato must not chop a held hum.
   const cleaned = cleanNeuralHumMelodyNotes(notes, 0.03, 0.38);
-  const sticky = stickyMergeHumBassNotes(cleaned, 0.42, 1.35);
+  const sticky = stickyMergeHumBassNotes(cleaned, 0.55, 2.6);
   const mono = enforceMonophonicHumNotes(sticky, 0.03);
-  const quantized = quantizeTimedMonophonicNotes(mono, bpm, '1/16');
+  const locked = stickySnapHumNotesToKeyScale(mono, keyRoot, keyMode);
+  const quantized = quantizeTimedMonophonicNotes(locked, bpm, '1/16');
   // Second sticky pass after quantize — closes 16th-grid gaps from tracker flicker.
-  return stickyMergeHumBassNotes(quantized, 0.28, 1.1);
+  return stickyMergeHumBassNotes(quantized, 0.4, 2.2);
 }
 
 export function se2Lab808ApplyHumNotesToToneGrid(args: {
@@ -133,7 +210,12 @@ export function se2Lab808ApplyHumNotesToToneGrid(args: {
       ? normalizeSe2Lab808ToneGridPattern(args.voice.toneGridSteps, loopBars).map((row) => [...row])
       : emptySe2Lab808ToneGridPattern(loopBars);
 
-  const quantized = se2Lab808PrepareHumNotesForGrid(args.notes, args.bpm);
+  const quantized = se2Lab808PrepareHumNotesForGrid(
+    args.notes,
+    args.bpm,
+    args.keyRoot,
+    args.keyMode,
+  );
 
   let hitCount = 0;
   let skipped = 0;
