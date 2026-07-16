@@ -409,8 +409,8 @@
 }
 
 [data-studio-transport] .se2-transport-mixer-island {
-  width: 4.75rem;
-  min-width: 4.75rem;
+  width: 7.75rem;
+  min-width: 7.75rem;
   flex-direction: column;
   align-items: center;
   gap: 0.125rem;
@@ -419,23 +419,25 @@
 [data-studio-transport] .se2-transport-mixer-island .se2-transport-mixer-label {
   font-size: 8px;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #8a8a98;
   line-height: 1;
   user-select: none;
+  white-space: nowrap;
 }
 
 [data-studio-transport] .se2-transport-mixer-btn {
   width: 100%;
   min-width: 0;
   height: 1.75rem;
-  padding: 0 0.45rem;
-  gap: 0.3rem;
+  padding: 0 0.55rem;
+  gap: 0.35rem;
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 [data-studio-transport] .se2-transport-metro-island {

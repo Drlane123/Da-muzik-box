@@ -21217,13 +21217,13 @@ export default function StudioEditor2Screen({
               aria-selected={showMixer}
               data-studio-se2-header-pill
               data-active={showMixer ? 'true' : 'false'}
-              title="Audio channel mixer"
+              title="SE2 Mixer — audio channel mixer"
               className={`transition-colors ${transportBtnBase}`}
               onClick={toggleStudioMixerView}
             >
               <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                Mix
-                <StudioEditor2HelpTip tab="mixer" title="Audio channel mixer" />
+                SE2 Mixer
+                <StudioEditor2HelpTip tab="mixer" title="SE2 Mixer — audio channel mixer" />
               </span>
             </button>
             <button
@@ -23730,12 +23730,12 @@ export default function StudioEditor2Screen({
             className="se2-transport-mixer-label se2-type-micro"
             style={{ color: showMixer ? '#7cf4c6' : '#8a8a98' }}
           >
-            Mixer
+            SE2 Mixer
           </span>
           <button
             type="button"
-            title={showMixer ? 'Hide mixer' : 'Show audio channel mixer'}
-            aria-label={showMixer ? 'Hide mixer' : 'Show mixer'}
+            title={showMixer ? 'Hide SE2 Mixer' : 'Show SE2 Mixer — audio channel mixer'}
+            aria-label={showMixer ? 'Hide SE2 Mixer' : 'Show SE2 Mixer'}
             aria-pressed={showMixer}
             className={`${transportBtnBase} se2-transport-mixer-btn rounded border shrink-0 inline-flex items-center justify-center`}
             style={{
@@ -23746,7 +23746,7 @@ export default function StudioEditor2Screen({
             onClick={toggleStudioMixerView}
           >
             <SlidersHorizontal size={13} strokeWidth={2} aria-hidden />
-            Mixer
+            SE2 Mixer
           </button>
         </div>
 
