@@ -184,9 +184,24 @@ function resolveHumLane(
   return lane;
 }
 
+/** Drop tracker blips — keep held hums only (≥ ~2.5 sixteenths / ~280 ms). */
+function humBassMinDurationSec(bpm: number): number {
+  const b = Math.max(30, Math.min(300, bpm));
+  const sixteenthSec = 60 / b / 4;
+  return Math.max(0.28, sixteenthSec * 2.5);
+}
+
+function dropShortHumBassNotes(
+  notes: readonly TimedMonophonicNote[],
+  minDurSec: number,
+): TimedMonophonicNote[] {
+  return notes.filter((n) => n.durationSec >= minDurSec - 1e-6);
+}
+
 /**
  * Glue same-pitch dropout fragments, key-lock with phrase hysteresis,
  * then quantize so held hums keep their full length as long grid runs.
+ * Short blips / fragments are cut — only sustained notes paint the grid.
  */
 export function se2Lab808PrepareHumNotesForGrid(
   notes: readonly TimedMonophonicNote[],
@@ -194,14 +209,17 @@ export function se2Lab808PrepareHumNotesForGrid(
   keyRoot = 0,
   keyMode: 'major' | 'minor' = 'major',
 ): TimedMonophonicNote[] {
+  const minDur = humBassMinDurationSec(bpm);
   // Same-pitch glue only — tone changes must remain separate notes.
-  const cleaned = cleanNeuralHumMelodyNotes(notes, 0.03, 0.28);
+  // Early cull of ultra-short blips before merge so they cannot spawn ghost lanes.
+  const cleaned = cleanNeuralHumMelodyNotes(notes, Math.min(0.12, minDur * 0.45), 0.28);
   const sticky = stickyMergeHumBassNotes(cleaned, 0.35, 1.15);
-  const mono = enforceMonophonicHumNotes(sticky, 0.03);
+  const mono = enforceMonophonicHumNotes(sticky, Math.min(0.12, minDur * 0.45));
   const locked = stickySnapHumNotesToKeyScale(mono, keyRoot, keyMode);
   const quantized = quantizeTimedMonophonicNotes(locked, bpm, '1/16');
   // Second pass: close 16th-grid holes on the same pitch only.
-  return stickyMergeHumBassNotes(quantized, 0.22, 0.85);
+  const glued = stickyMergeHumBassNotes(quantized, 0.22, 0.85);
+  return dropShortHumBassNotes(glued, minDur);
 }
 
 export function se2Lab808ApplyHumNotesToToneGrid(args: {

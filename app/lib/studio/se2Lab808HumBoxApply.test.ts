@@ -56,9 +56,9 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     };
     const result = se2Lab808ApplyHumNotesToToneGrid({
       notes: [
-        { pitch: 43, startSec: 0, durationSec: 0.4, velocity: 100 },
-        { pitch: 44, startSec: 0.5, durationSec: 0.4, velocity: 100 },
-        { pitch: 47, startSec: 1.0, durationSec: 0.4, velocity: 100 },
+        { pitch: 43, startSec: 0, durationSec: 0.5, velocity: 100 },
+        { pitch: 44, startSec: 0.6, durationSec: 0.5, velocity: 100 },
+        { pitch: 47, startSec: 1.2, durationSec: 0.5, velocity: 100 },
       ],
       bpm: 120,
       voice,
@@ -122,8 +122,8 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
   it('treats a clear tone change as a new note (C → D)', () => {
     const prepared = se2Lab808PrepareHumNotesForGrid(
       [
-        { pitch: 36, startSec: 0, durationSec: 0.45, velocity: 100 },
-        { pitch: 38, startSec: 0.5, durationSec: 0.45, velocity: 100 },
+        { pitch: 36, startSec: 0, durationSec: 0.5, velocity: 100 },
+        { pitch: 38, startSec: 0.55, durationSec: 0.5, velocity: 100 },
       ],
       120,
       0,
@@ -134,11 +134,28 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     expect(prepared[1]!.pitch).toBe(38);
   });
 
+  it('cuts short fragments and keeps only held notes', () => {
+    const prepared = se2Lab808PrepareHumNotesForGrid(
+      [
+        { pitch: 36, startSec: 0, durationSec: 0.8, velocity: 100 },
+        { pitch: 40, startSec: 0.85, durationSec: 0.08, velocity: 70 }, // blip
+        { pitch: 38, startSec: 1.1, durationSec: 0.12, velocity: 60 }, // blip
+        { pitch: 41, startSec: 1.4, durationSec: 0.7, velocity: 100 },
+      ],
+      120,
+      0,
+      'major',
+    );
+    expect(prepared.length).toBe(2);
+    expect(prepared.map((n) => n.pitch)).toEqual([36, 41]);
+    expect(prepared.every((n) => n.durationSec >= 0.28)).toBe(true);
+  });
+
   it('keeps stop-then-start different pitches as two notes', () => {
     const prepared = se2Lab808PrepareHumNotesForGrid(
       [
-        { pitch: 36, startSec: 0, durationSec: 0.4, velocity: 100 },
-        { pitch: 41, startSec: 0.85, durationSec: 0.5, velocity: 100 }, // breath gap + new tone
+        { pitch: 36, startSec: 0, durationSec: 0.5, velocity: 100 },
+        { pitch: 41, startSec: 0.95, durationSec: 0.55, velocity: 100 }, // breath gap + new tone
       ],
       120,
       0,
@@ -155,8 +172,8 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     };
     const result = se2Lab808ApplyHumNotesToToneGrid({
       notes: [
-        { pitch: 36, startSec: 0, durationSec: 0.4, velocity: 100 },
-        { pitch: 41, startSec: 0.85, durationSec: 0.5, velocity: 100 },
+        { pitch: 36, startSec: 0, durationSec: 0.5, velocity: 100 },
+        { pitch: 41, startSec: 0.95, durationSec: 0.55, velocity: 100 },
       ],
       bpm: 120,
       voice,
