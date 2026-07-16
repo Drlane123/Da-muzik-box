@@ -1464,12 +1464,13 @@ export function BeatLabDrumMachineSequencer({
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 4,
+                gap: 8,
                 flexShrink: 0,
-                marginLeft: 2,
-                padding: '3px 8px 3px 6px',
-                borderRadius: 5,
-                border: '1px solid rgba(124, 244, 198, 0.4)',
+                marginLeft: 14,
+                minWidth: 168,
+                padding: '6px 14px 6px 10px',
+                borderRadius: 6,
+                border: '1px solid rgba(124, 244, 198, 0.45)',
                 background: 'rgba(124, 244, 198, 0.1)',
                 pointerEvents: 'none',
                 userSelect: 'none',
@@ -1477,20 +1478,20 @@ export function BeatLabDrumMachineSequencer({
               title="Use these Play / Stop / BPM controls for Beat Pads — not the SE2 transport bar at the bottom"
               aria-hidden
             >
-              <ArrowLeft size={14} strokeWidth={2.75} color="#7cf4c6" aria-hidden />
+              <ArrowLeft size={18} strokeWidth={2.75} color="#7cf4c6" aria-hidden />
               <span
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  lineHeight: 1.15,
-                  gap: 1,
+                  lineHeight: 1.2,
+                  gap: 3,
                 }}
               >
                 <span
                   style={{
-                    fontSize: 9,
+                    fontSize: 12,
                     fontWeight: 900,
-                    letterSpacing: '0.06em',
+                    letterSpacing: '0.05em',
                     textTransform: 'uppercase',
                     color: '#7cf4c6',
                     whiteSpace: 'nowrap',
@@ -1500,10 +1501,10 @@ export function BeatLabDrumMachineSequencer({
                 </span>
                 <span
                   style={{
-                    fontSize: 7,
+                    fontSize: 10,
                     fontWeight: 700,
                     letterSpacing: '0.04em',
-                    color: 'rgba(124, 244, 198, 0.75)',
+                    color: 'rgba(124, 244, 198, 0.82)',
                     whiteSpace: 'nowrap',
                   }}
                 >
