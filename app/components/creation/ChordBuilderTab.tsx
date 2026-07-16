@@ -1,6 +1,22 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Download, Eraser, Link2, Pause, Play, Plus, Repeat, Send, Sparkles, Square, Volume2, Wand2, X } from 'lucide-react';
+import {
+  Download,
+  Eraser,
+  Link2,
+  MousePointer2,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  Repeat,
+  Send,
+  Sparkles,
+  Square,
+  Volume2,
+  Wand2,
+  X,
+} from 'lucide-react';
 
 import {
   GENRES,
@@ -363,6 +379,9 @@ export function ChordBuilderTab({
   const [loopEnabled, setLoopEnabled] = useState(true);
   const loopEnabledRef = useRef(true);
   loopEnabledRef.current = loopEnabled;
+  /** Piano-roll note tool — pointer (toggle/drag) · draw · erase. */
+  const [rollEditTool, setRollEditTool] = useState<'pointer' | 'draw' | 'erase'>('pointer');
+  const brushPaintRef = useRef<{ on: boolean; lastKey: string } | null>(null);
   /** The playhead lives at a specific *column* of the timeline (one column
    *  per 1/N-of-a-bar subdivision — typically 1/16 notes). This is finer
    *  than per-bar so the user can drop it anywhere inside a bar, like a
@@ -2002,33 +2021,55 @@ export function ChordBuilderTab({
     [manualEditsById, activeProg.id],
   );
 
-  /** Toggle a single note cell at (row, col) on the piano roll. `isAutoNote`
-   *  tells us whether the chord at that bar already generates a note here:
-   *    - auto note + click → add a "removed" override (hides the chord note)
-   *    - removed override + click → clear the override (chord note returns)
-   *    - empty cell + click → add a manual note overlay
-   *    - manual note + click → remove the manual note overlay */
-  function toggleNote(row: number, col: number, isAutoNote: boolean) {
+  /**
+   * Apply a note-cell edit. Pointer toggles; Draw paints empty cells; Erase
+   * removes lit cells (mirrors Beat Lab SYNTH brush).
+   */
+  function applyNoteCell(
+    row: number,
+    col: number,
+    isAutoNote: boolean,
+    isLit: boolean,
+    mode: 'pointer' | 'draw' | 'erase',
+  ) {
     const key = `${row},${col}`;
     const cur = editsForActive;
     const newAdded = new Set(cur.added);
     const newRemoved = new Set(cur.removed);
+    const newLengths = new Map(cur.lengths);
     let didAdd = false;
-    if (isAutoNote) {
-      if (newRemoved.has(key)) newRemoved.delete(key);
-      else newRemoved.add(key);
+
+    if (mode === 'erase') {
+      if (!isLit) return;
+      if (isAutoNote) {
+        newRemoved.add(key);
+        newLengths.delete(key);
+      } else {
+        newAdded.delete(key);
+        newLengths.delete(key);
+      }
+    } else if (mode === 'draw') {
+      if (isLit) return;
+      newRemoved.delete(key);
+      newAdded.add(key);
+      didAdd = true;
+    } else if (isAutoNote) {
+      if (newRemoved.has(key)) {
+        newRemoved.delete(key);
+        didAdd = true;
+      } else {
+        newRemoved.add(key);
+        newLengths.delete(key);
+      }
     } else if (newAdded.has(key)) {
       newAdded.delete(key);
+      newLengths.delete(key);
     } else {
       newRemoved.delete(key);
       newAdded.add(key);
       didAdd = true;
     }
-    // Trimming the lengths map: if we removed a manual note that had been
-    // stretched, drop its length entry too so a future re-add starts at 1.
-    const newLengths = new Map(cur.lengths);
-    if (!isAutoNote && !newAdded.has(key)) newLengths.delete(key);
-    if (isAutoNote && newRemoved.has(key)) newLengths.delete(key);
+
     setManualEditsById((prev) => ({
       ...prev,
       [activeProg.id]: { added: newAdded, removed: newRemoved, lengths: newLengths },
@@ -2040,6 +2081,26 @@ export function ChordBuilderTab({
         if (midi > 0) playPitch(midi);
       }
     }
+  }
+
+  function toggleNote(row: number, col: number, isAutoNote: boolean, isLit?: boolean) {
+    if (rollEditTool !== 'pointer') return;
+    const lit =
+      isLit ??
+      (isAutoNote
+        ? !editsForActive.removed.has(`${row},${col}`)
+        : editsForActive.added.has(`${row},${col}`));
+    applyNoteCell(row, col, isAutoNote, lit, 'pointer');
+  }
+
+  const brushMode = rollEditTool === 'draw' || rollEditTool === 'erase';
+
+  function onRollCellPointer(row: number, col: number, isAutoNote: boolean, isLit: boolean) {
+    if (!brushMode) return;
+    const key = `${row},${col}`;
+    if (brushPaintRef.current?.on && brushPaintRef.current.lastKey === key) return;
+    if (brushPaintRef.current?.on) brushPaintRef.current.lastKey = key;
+    applyNoteCell(row, col, isAutoNote, isLit, rollEditTool);
   }
 
   function applyRollEdits(edits: RollEdits) {
@@ -2867,6 +2928,8 @@ export function ChordBuilderTab({
         onStop={stopAndReset}
         loopEnabled={loopEnabled}
         onToggleLoop={() => setLoopEnabled((v) => !v)}
+        rollEditTool={rollEditTool}
+        onRollEditTool={setRollEditTool}
         onGenerate={onGenerateProgression}
         onSuggestNext={onSuggestNext}
         onClear={onClearTimeline}
@@ -3058,6 +3121,25 @@ export function ChordBuilderTab({
         onPlayPitch={playPitch}
         onPlayheadChange={setPlayhead}
         onToggleNote={toggleNote}
+        onCellPointer={
+          brushMode
+            ? (row, col, isAuto, isLit) => onRollCellPointer(row, col, isAuto, isLit)
+            : undefined
+        }
+        onBrushStrokeStart={
+          brushMode
+            ? () => {
+                brushPaintRef.current = { on: true, lastKey: '' };
+              }
+            : undefined
+        }
+        onBrushStrokeEnd={
+          brushMode
+            ? () => {
+                brushPaintRef.current = null;
+              }
+            : undefined
+        }
         onMoveNote={moveNote}
         onResizeNote={resizeNote}
         barSelRange={barSelRange}
@@ -3069,6 +3151,13 @@ export function ChordBuilderTab({
         hasEdits={editsForActive.added.size > 0 || editsForActive.removed.size > 0}
         sizeMode={pianoRollMode}
         onSizeModeChange={setPianoRollMode}
+        headerHint={
+          rollEditTool === 'draw'
+            ? 'DRAW — drag across cells to paint notes'
+            : rollEditTool === 'erase'
+              ? 'ERASE — drag across cells to remove notes'
+              : 'click / drag ruler = playhead  ·  click cell = add / remove  ·  drag note = move  ·  drag right edge = resize'
+        }
         headerTitle={
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             PIANO ROLL
@@ -3346,6 +3435,8 @@ function TopToolbar({
   onStop,
   loopEnabled,
   onToggleLoop,
+  rollEditTool,
+  onRollEditTool,
   onGenerate,
   onSuggestNext,
   onClear,
@@ -3393,6 +3484,8 @@ function TopToolbar({
   isPlaying: boolean;
   loopEnabled: boolean;
   onToggleLoop: () => void;
+  rollEditTool: 'pointer' | 'draw' | 'erase';
+  onRollEditTool: (tool: 'pointer' | 'draw' | 'erase') => void;
   bpm: number;
   onBpm: (v: number) => void;
   /** Currently selected sound-bank voice. The full bank lives in
@@ -3425,6 +3518,8 @@ function TopToolbar({
   onStop: () => void;
   loopEnabled: boolean;
   onToggleLoop: () => void;
+  rollEditTool: 'pointer' | 'draw' | 'erase';
+  onRollEditTool: (tool: 'pointer' | 'draw' | 'erase') => void;
   onGenerate: () => void;
   onSuggestNext: () => void;
   onClear: () => void;
@@ -4030,6 +4125,30 @@ function TopToolbar({
 
       <ToolbarButton onClick={onDuplicateLoop} icon={<Plus size={11} />} label="Dup loop" />
       <ToolbarButton
+        onClick={() => onRollEditTool('pointer')}
+        icon={<MousePointer2 size={11} />}
+        label="Select"
+        primary={rollEditTool === 'pointer'}
+        subdued={rollEditTool !== 'pointer'}
+        title="Select — click to toggle notes, drag to move/resize"
+      />
+      <ToolbarButton
+        onClick={() => onRollEditTool('draw')}
+        icon={<Pencil size={11} />}
+        label="Draw"
+        primary={rollEditTool === 'draw'}
+        subdued={rollEditTool !== 'draw'}
+        title="Draw — drag across the piano roll to paint notes"
+      />
+      <ToolbarButton
+        onClick={() => onRollEditTool('erase')}
+        icon={<Eraser size={11} />}
+        label="Erase"
+        primary={rollEditTool === 'erase'}
+        subdued={rollEditTool !== 'erase'}
+        title="Erase — drag across the piano roll to remove notes"
+      />
+      <ToolbarButton
         onClick={onCopyBars}
         icon={<span style={{ fontSize: 9, fontWeight: 900 }}>C</span>}
         label="Copy notes"
@@ -4046,6 +4165,7 @@ function TopToolbar({
         icon={<Eraser size={11} />}
         label="Clear notes"
         subdued
+        title="Clear all manual note edits on the piano roll"
       />
 
       <div style={{ flex: 1 }} />

@@ -66,6 +66,7 @@ export const CHORD_BUILDER_HELP_SECTIONS: readonly ChordBuilderHelpSection[] = [
     lines: [
       'Chord blocks paint across the roll — one bar (or more) per chord in the timeline.',
       'Click bar headers to place chords; click cells to add/remove individual notes.',
+      'Select / Draw / Erase tools — Draw paints notes, Erase removes them (drag across cells).',
       'Drag ruler for playhead; drag notes to move; drag right edge to resize length.',
       'Copy notes / Paste notes (toolbar or Ctrl+C/V) for bar-range note edits.',
       'Open AI SUGGESTIONS & CHORD GRID for beat-precise blocks and AI next-chord picks.',
