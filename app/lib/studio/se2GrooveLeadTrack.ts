@@ -10,14 +10,11 @@ import {
   type Se2GrooveLeadVoiceParams,
 } from '@/app/lib/studio/se2GrooveLeadTypes';
 import {
-  se2HarmonySourceSteps,
   se2ResolveGlideBassHarmonyTrack,
   type Se2HarmonySourceTrack,
 } from '@/app/lib/studio/se2GlideBassHarmony';
-import {
-  studioGenoUltraCanFollowChordsFromTrack,
-  type GenoUltraArpSe2TrackChordInput,
-} from '@/app/lib/studio/genoUltraArpSe2TrackImport';
+import { se2GrooveLeadCanFollowHarmonySource } from '@/app/lib/studio/se2GrooveLeadHarmonyMelody';
+import type { GenoUltraArpSe2TrackChordInput } from '@/app/lib/studio/genoUltraArpSe2TrackImport';
 
 export type Se2GrooveLeadTrackFields = {
   kind: 'grooveLead';
@@ -110,8 +107,7 @@ export function se2ResolveGrooveLeadHarmonyTrack<
       t.id !== grooveLeadId &&
       t.kind !== 'grooveLead' &&
       t.kind !== 'audio' &&
-      (se2HarmonySourceSteps(t).length > 0 ||
-        studioGenoUltraCanFollowChordsFromTrack(t as GenoUltraArpSe2TrackChordInput)),
+      se2GrooveLeadCanFollowHarmonySource(t as GenoUltraArpSe2TrackChordInput),
   );
 }
 

@@ -1,6 +1,6 @@
 import { Children, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
-import { Download, Eraser, Link2, Pause, Play, Plus, Send, Sparkles, Square, Volume2, Wand2, X } from 'lucide-react';
+import { Download, Eraser, Link2, Pause, Play, Plus, Repeat, Send, Sparkles, Square, Volume2, Wand2, X } from 'lucide-react';
 
 import {
   GENRES,
@@ -359,6 +359,10 @@ export function ChordBuilderTab({
   ]);
   const [activeId, setActiveId] = useState<string>(() => progressions[0]?.id ?? '');
   const [isPlaying, setIsPlaying] = useState(false);
+  /** Preview Loop — when on, progression wraps forever until Pause/Stop. */
+  const [loopEnabled, setLoopEnabled] = useState(true);
+  const loopEnabledRef = useRef(true);
+  loopEnabledRef.current = loopEnabled;
   /** The playhead lives at a specific *column* of the timeline (one column
    *  per 1/N-of-a-bar subdivision — typically 1/16 notes). This is finer
    *  than per-bar so the user can drop it anywhere inside a bar, like a
@@ -1603,6 +1607,7 @@ export function ChordBuilderTab({
         ? CHORD_BUILDER_PLAYLINE_WAPI_LEAD_SEC + chordBuilderPlaylineDacLeadSec(ctx)
         : 0;
       const beatForWapi = play ? beatNow + leadSec * (bpmRef.current / 60) : beatNow;
+      const looping = loopEnabledRef.current;
       launchCreationPlaylineWapi(cbPlaylineAnimRefs, {
         drumEl: gridPlayheadElRef.current,
         pianoEl: pianoPlayheadElRef.current,
@@ -1614,9 +1619,11 @@ export function ChordBuilderTab({
         pcols,
         drumColW: GRID_PX_PER_BEAT,
         pianoColW,
-        loopOn: true,
+        loopOn: looping,
         loopStartBeat: 0,
         loopEndBeat: loopBeats,
+        /** Keep WAAPI period aligned with audio content loop (not truncated by Total Bars). */
+        totalBeats: loopBeats,
         playMode: 'chainAB',
       });
     },
@@ -1640,9 +1647,10 @@ export function ChordBuilderTab({
         pcols,
         drumColW: GRID_PX_PER_BEAT,
         pianoColW,
-        loopOn: true,
+        loopOn: loopEnabledRef.current,
         loopStartBeat: 0,
         loopEndBeat: loopBeats,
+        totalBeats: loopBeats,
         playMode: 'chainAB',
       });
     },
@@ -1682,13 +1690,23 @@ export function ChordBuilderTab({
         scheduleTransportChord(chord, t0, sustainSec, prevChord);
       },
       () => runningRef.current,
+      loopEnabledRef.current,
     );
   };
 
+  const pausePlaybackRef = useRef<() => void>(() => {});
   const cbTransportOnFrameRef = useRef<(bDisplay: number) => void>(() => {});
   cbTransportOnFrameRef.current = (bDisplay) => {
     displayBeatRef.current = bDisplay;
-    const loopBeats = Math.max(1, totalBlockBeats(blocksRef.current) || totalBarsRef.current * BEATS_PER_BAR);
+    const loopBeats = Math.max(
+      1,
+      totalBlockBeats(blocksRef.current) || totalBarsRef.current * BEATS_PER_BAR,
+    );
+    if (!loopEnabledRef.current && bDisplay >= loopBeats - 1e-3) {
+      if (runningRef.current) pausePlaybackRef.current();
+      playheadColRef.current = Math.min(bDisplay, loopBeats);
+      return;
+    }
     const maxBeats = Math.max(0, totalBarsRef.current * colsPerBar);
     let pos = loopBeats > 0 ? bDisplay % loopBeats : bDisplay;
     if (maxBeats > 0 && pos >= maxBeats) pos = pos % maxBeats;
@@ -1743,6 +1761,7 @@ export function ChordBuilderTab({
       launchCbPlaylineNow(b, false);
     }
   }, [launchCbPlaylineNow, cancelTransportChords]);
+  pausePlaybackRef.current = pausePlayback;
 
   /** Stop button: stop playback AND return the playhead to column 0 (DAW
    *  convention — Stop = "rewind to start"). */
@@ -1826,7 +1845,7 @@ export function ChordBuilderTab({
   useEffect(() => {
     if (!isPlaying || !runningRef.current) return;
     launchCbPlaylineNow(displayBeatRef.current, true);
-  }, [localBpm, colsPerBar, activeProg.totalBars, isPlaying, launchCbPlaylineNow]);
+  }, [localBpm, colsPerBar, activeProg.totalBars, loopEnabled, isPlaying, launchCbPlaylineNow]);
 
   useEffect(() => {
     if (active) return;
@@ -2846,6 +2865,8 @@ export function ChordBuilderTab({
         onTapTempo={onTapTempo}
         onTogglePlay={onTogglePlay}
         onStop={stopAndReset}
+        loopEnabled={loopEnabled}
+        onToggleLoop={() => setLoopEnabled((v) => !v)}
         onGenerate={onGenerateProgression}
         onSuggestNext={onSuggestNext}
         onClear={onClearTimeline}
@@ -3323,6 +3344,8 @@ function TopToolbar({
   onTapTempo,
   onTogglePlay,
   onStop,
+  loopEnabled,
+  onToggleLoop,
   onGenerate,
   onSuggestNext,
   onClear,
@@ -3368,6 +3391,8 @@ function TopToolbar({
   barEditHint: string | null;
   chordCount: number;
   isPlaying: boolean;
+  loopEnabled: boolean;
+  onToggleLoop: () => void;
   bpm: number;
   onBpm: (v: number) => void;
   /** Currently selected sound-bank voice. The full bank lives in
@@ -3398,6 +3423,8 @@ function TopToolbar({
   onTapTempo: () => void;
   onTogglePlay: () => void;
   onStop: () => void;
+  loopEnabled: boolean;
+  onToggleLoop: () => void;
   onGenerate: () => void;
   onSuggestNext: () => void;
   onClear: () => void;
@@ -3506,6 +3533,37 @@ function TopToolbar({
         }}
       >
         <Square size={11} />
+      </button>
+
+      <button
+        type="button"
+        onClick={onToggleLoop}
+        aria-pressed={loopEnabled}
+        title={
+          loopEnabled
+            ? 'Loop ON — progression repeats until Pause/Stop'
+            : 'Loop OFF — play once then stop'
+        }
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+          height: 28,
+          padding: '0 8px',
+          borderRadius: 4,
+          border: `1px solid ${loopEnabled ? MINT : 'rgba(255,255,255,0.18)'}`,
+          background: loopEnabled ? MINT_BG_STRONG : 'rgba(255,255,255,0.04)',
+          color: loopEnabled ? MINT : '#cfd0d8',
+          cursor: 'pointer',
+          fontSize: 9,
+          fontWeight: 800,
+          letterSpacing: 0.4,
+          textTransform: 'uppercase',
+        }}
+      >
+        <Repeat size={11} />
+        Loop
       </button>
       <ChordBuilderHelpTip tab="transport" title="Transport & tempo help" />
 

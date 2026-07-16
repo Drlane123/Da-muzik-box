@@ -94,7 +94,11 @@ export function WaveLeafMelodyGenPanel({
   const applyGeneration = useCallback(
     (action: 'generate' | 'regenerate') => {
       if (disabled) {
-        setStatus('Build Groove chord columns first');
+        setStatus(
+          fullPhrase
+            ? 'Pick Chords from a lane with chords or roots first'
+            : 'Build Groove chord columns first',
+        );
         return;
       }
       const useSeed = action === 'regenerate' ? seed + 1 : seed;
@@ -118,11 +122,19 @@ export function WaveLeafMelodyGenPanel({
         fullPhrase,
       });
       if (chordColumns === 0) {
-        setStatus('Add green chord stacks (CH 34 roll) first');
+        setStatus(
+          fullPhrase
+            ? 'No chords/roots on the selected lane — add them then GENERATE'
+            : 'Add green chord stacks (CH 34 roll) first',
+        );
         return;
       }
       if (hits.length === 0) {
-        setStatus('No lead notes — add green chords (C3–A4) then GENERATE again');
+        setStatus(
+          fullPhrase
+            ? 'No lead notes generated — try another style or REGEN'
+            : 'No lead notes — add green chords (C3–A4) then GENERATE again',
+        );
         return;
       }
       onGenerated(hits, loopBars);

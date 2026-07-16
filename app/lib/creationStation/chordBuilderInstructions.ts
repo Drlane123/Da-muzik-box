@@ -28,7 +28,8 @@ export const CHORD_BUILDER_HELP_SECTIONS: readonly ChordBuilderHelpSection[] = [
       'Tap CHORD SCALE pads to audition — double-click adds to the timeline.',
       'Drag a pad onto any piano-roll bar to place that chord.',
       'Use PROGRESSION tabs for song sections — AUTO-GENERATE SONG builds a full plan.',
-      '▶ PLAY previews chords; Save MIDI / MIDI → SYNTH sends harmony to Beat Lab.',
+      '▶ PLAY previews chords — Loop keeps the progression repeating until Stop.',
+      'Save MIDI / MIDI → SYNTH sends harmony to Beat Lab.',
     ],
   },
   {
@@ -42,7 +43,8 @@ export const CHORD_BUILDER_HELP_SECTIONS: readonly ChordBuilderHelpSection[] = [
       'CHORD PROGRESSIONS strip loads genre presets (R&B, Gospel, Pop…) onto the roll.',
       'PROFESSIONAL CHORD PROGRESSIONS library — browse hit-song categories and tap to load.',
       'Generate fills empty bars; Suggest Next adds one smart chord from genre rules.',
-      'Dup loop doubles your bar range — extend a 4-bar loop to 8 before you export.',
+      'Dup loop doubles your bar range (content) — extend a 4-bar phrase to 8 before export.',
+      'Transport Loop (next to Play) repeats playback — different from Dup loop.',
     ],
   },
   {
@@ -110,9 +112,11 @@ export const CHORD_BUILDER_HELP_SECTIONS: readonly ChordBuilderHelpSection[] = [
     title: 'Transport & tempo',
     lines: [
       '▶ PLAY / ■ STOP previews the active progression tab with the selected voice.',
+      'Loop (default ON) repeats the progression forever — turn OFF to play once then stop.',
       'BPM sets preview tempo — SYNC links to project BPM when Beat Lab is running.',
       'TAP tempo for quick BPM entry; synced mode follows Creation Station session BPM.',
       'Session play-link can mirror Beat Lab transport start/stop when enabled.',
+      'Dup loop in the bars toolbar doubles timeline length — it is not the transport Loop.'
     ],
   },
 ] as const;

@@ -429,7 +429,10 @@ import {
   se2ResolveGrooveLeadHarmonyTrack,
   studioTrackIsGrooveLeadChannel,
 } from '@/app/lib/studio/se2GrooveLeadTrack';
-import { se2GrooveLeadMelodyFromHarmonySource } from '@/app/lib/studio/se2GrooveLeadHarmonyMelody';
+import {
+  se2GrooveLeadCanFollowHarmonySource,
+  se2GrooveLeadMelodyFromHarmonySource,
+} from '@/app/lib/studio/se2GrooveLeadHarmonyMelody';
 import type { GenoUltraArpSe2TrackChordInput } from '@/app/lib/studio/genoUltraArpSe2TrackImport';
 import {
   previewSe2GrooveLeadNote,
@@ -16270,7 +16273,8 @@ export default function StudioEditor2Screen({
       grooveLeadEligibleTrack,
       grooveLeadEligibleTrack.id,
     );
-    return (harmonyTr ? se2HarmonySourceSteps(harmonyTr).length : 0) > 0;
+    if (!harmonyTr) return false;
+    return se2GrooveLeadCanFollowHarmonySource(harmonyTr as GenoUltraArpSe2TrackChordInput);
   })();
   const grooveLeadToolbar = showGrooveLeadUi ? (
     <div className="pr-toolbar-row">

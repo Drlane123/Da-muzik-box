@@ -118,7 +118,9 @@ export function seedChordBuilderOnPlay(
 }
 
 /**
- * Lookahead refill — one fire per schedule event (per bar).
+ * Lookahead refill — one fire per schedule event.
+ * When `loopOn` is true, wraps forever across loop passes (preview Loop).
+ * When false, schedules only through the first pass then stops.
  */
 export function refillChordBuilderLookahead(
   ctx: AudioContext,
@@ -134,6 +136,7 @@ export function refillChordBuilderLookahead(
     eventIndex: number,
   ) => void,
   isRunning: () => boolean,
+  loopOn = true,
 ): void {
   if (!isRunning() || events.length === 0) return;
 
@@ -154,29 +157,49 @@ export function refillChordBuilderLookahead(
 
   const advanceEvent = () => {
     event += 1;
+    if (!loopOn && event >= events.length) {
+      tGrid = Number.POSITIVE_INFINITY;
+      return;
+    }
     const nextIdx = event % events.length;
     const nextLoopPass = Math.floor(event / events.length);
     const nextAbsBeat = starts[nextIdx]! + nextLoopPass * loopLen;
     tGrid = sessionStart + (nextAbsBeat - origin) * spb;
   };
 
-  if (tGrid <= ctSnap) {
-    const ev = events[event % events.length]!;
+  if (Number.isFinite(tGrid) && tGrid <= ctSnap) {
+    const idx = loopOn ? event % events.length : event;
+    if (!loopOn && idx >= events.length) {
+      refs.nextEventRef.current = event;
+      refs.nextTimeRef.current = Number.POSITIVE_INFINITY;
+      return;
+    }
+    const ev = events[idx]!;
     const durSec = Math.max(spb * 0.25, ev.durationBeats * spb);
     const overdue = Math.floor((ctSnap - tGrid) / durSec) + 1;
     const drop = Math.max(0, overdue - CHORD_MAX_EMIT_OVERDUE_PER_CALL);
     if (drop > 0) {
       event += drop;
-      const idx = event % events.length;
+      if (!loopOn && event >= events.length) {
+        refs.nextEventRef.current = event;
+        refs.nextTimeRef.current = Number.POSITIVE_INFINITY;
+        return;
+      }
+      const nextIdx = event % events.length;
       const loopPass = Math.floor(event / events.length);
-      const absBeat = starts[idx]! + loopPass * loopLen;
+      const absBeat = starts[nextIdx]! + loopPass * loopLen;
       tGrid = sessionStart + (absBeat - origin) * spb;
     }
   }
 
   let overdueEmitted = 0;
-  while (tGrid <= ctSnap && overdueEmitted < CHORD_MAX_EMIT_OVERDUE_PER_CALL) {
-    const idx = event % events.length;
+  while (
+    Number.isFinite(tGrid) &&
+    tGrid <= ctSnap &&
+    overdueEmitted < CHORD_MAX_EMIT_OVERDUE_PER_CALL
+  ) {
+    const idx = loopOn ? event % events.length : event;
+    if (!loopOn && idx >= events.length) break;
     const ev = events[idx]!;
     const t0 = Math.max(tGrid, chain);
     const sustainSec = Math.max(0.12, ev.durationBeats * spb * 0.92);
@@ -187,8 +210,13 @@ export function refillChordBuilderLookahead(
   }
 
   let scheduled = 0;
-  while (tGrid <= horizon && scheduled < CHORD_MAX_SCHEDULE_PER_CALL) {
-    const idx = event % events.length;
+  while (
+    Number.isFinite(tGrid) &&
+    tGrid <= horizon &&
+    scheduled < CHORD_MAX_SCHEDULE_PER_CALL
+  ) {
+    const idx = loopOn ? event % events.length : event;
+    if (!loopOn && idx >= events.length) break;
     const ev = events[idx]!;
     const t0 = Math.max(tGrid, chain);
     const sustainSec = Math.max(0.12, ev.durationBeats * spb * 0.92);

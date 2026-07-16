@@ -4,19 +4,17 @@ import React, { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'r
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import {
   GROOVE_LAB_QUANTIZE_DEFAULT,
-  type GrooveLabQuantize,
   type GrooveRollHit,
 } from '@/app/lib/creationStation/grooveLabRoll';
-import { progressionStepsToGrooveHits } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
 import { haltWaveLeafVoices, playWaveLeafNote } from '@/app/lib/creationStation/waveLeafEngine';
 import { waveLeafPreset } from '@/app/lib/creationStation/waveLeafPresets';
 import type { WaveLeafSe2ControlledSettings } from '@/app/components/creation/WaveLeafSynthPanel';
-import { se2HarmonySourceSteps } from '@/app/lib/studio/se2GlideBassHarmony';
 import {
   se2GrooveLeadCanFollowHarmonySource,
   se2GrooveLeadChordHitsFromHarmonySource,
   type Se2GrooveLeadHarmonyMelodyInput,
 } from '@/app/lib/studio/se2GrooveLeadHarmonyMelody';
+import { waveLeafMelodyGenColumnCount } from '@/app/lib/creationStation/waveLeafPhraseGen';
 import {
   se2GrooveRollHitsToMockNotes,
   se2MockNotesToGrooveRollHits,
@@ -164,23 +162,23 @@ export function Se2GrooveLeadPanel({
 
   const chordHits = useMemo((): GrooveRollHit[] => {
     if (!harmonySource) return [];
-    const fromLane = se2GrooveLeadChordHitsFromHarmonySource(
+    return se2GrooveLeadChordHitsFromHarmonySource(
       harmonySource as Se2GrooveLeadHarmonyMelodyInput,
       beatsPerBar,
       loopBars,
     );
-    if (fromLane.length > 0) return fromLane;
-    const steps = se2HarmonySourceSteps(harmonySource);
-    if (steps.length === 0) return [];
-    const built = progressionStepsToGrooveHits(steps, {
-      quantize: GROOVE_LAB_QUANTIZE_DEFAULT,
-      barCount: loopBars,
-      sustainSlots: 16,
-      beatsPerBar,
-    });
-    if ('message' in built) return [];
-    return built.chordHits;
   }, [harmonySource, loopBars, beatsPerBar]);
+
+  const chordColumnCount = useMemo(
+    () =>
+      waveLeafMelodyGenColumnCount(chordHits, {
+        barCount: loopBars,
+        keyRoot,
+        mode: keyMode,
+        bassRootMidi: 36,
+      }),
+    [chordHits, loopBars, keyRoot, keyMode],
+  );
 
   const se2Controlled: WaveLeafSe2ControlledSettings = useMemo(
     () => ({
@@ -276,13 +274,17 @@ export function Se2GrooveLeadPanel({
           </select>
           {!harmonySource || !se2GrooveLeadCanFollowHarmonySource(harmonySource as Se2GrooveLeadHarmonyMelodyInput) ? (
             <span className="se2-type-micro text-[7px]" style={{ color: '#6a6a78' }}>
-              Add chords on a synth or Progression+ lane, then Generate melody
+              Pick a lane with chords or root notes, then Generate melody
+            </span>
+          ) : chordColumnCount === 0 ? (
+            <span className="se2-type-micro text-[7px]" style={{ color: '#c09050' }}>
+              Source lane needs chords or roots on the roll
             </span>
           ) : null}
         </div>
       ) : (
         <p className="px-1 pt-1 se2-type-micro text-[7px]" style={{ color: '#6a6a78' }}>
-          Optional: add chord MIDI or Progression+ on another lane to lock Groove Lead roots.
+          Add chord MIDI, root notes, or Progression+ on another lane — then Generate melody.
         </p>
       )}
       <Se2GrooveLeadSynthErrorBoundary>
@@ -299,7 +301,7 @@ export function Se2GrooveLeadPanel({
               noteCount={notes.length}
               bpm={bpm}
               getAudioContext={getAudioContext}
-              chordColumnCount={chordHits.length}
+              chordColumnCount={chordColumnCount}
               chordHits={chordHits}
               barCount={loopBars}
               quantize={GROOVE_LAB_QUANTIZE_DEFAULT}
