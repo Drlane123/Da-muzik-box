@@ -1,6 +1,6 @@
 /**
  * 808 Lab Hum Box — hummed bassline → tone-grid steps (key-locked, octave-folded).
- * Held notes paint every 16th they cover so a whole-bar hum stays one sustained run.
+ * Each clear tone change is a new note; held hums paint long sustained runs.
  */
 import type { TimedMonophonicNote } from '@/app/lib/studio/audioToMidiNotes';
 import {
@@ -20,14 +20,19 @@ import {
 } from '@/app/lib/vocalLab/neuralHumKeyLock';
 import { quantizeTimedMonophonicNotes } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 
-/** Semitone band that keeps a held hum on the previous locked degree. */
-const HUM_KEY_HYSTERESIS_ST = 1.75;
+/** Within a continuous hold, stay on the grabbed degree past mid-interval wobble. */
+const HUM_KEY_HYSTERESIS_ST = 1.15;
+/** Silence longer than this = new attack → reset key stick (stop then start). */
+const HUM_PHRASE_GAP_RESET_SEC = 0.15;
 
-/** Bridge nearby-pitch fragments so held bass doesn't pop between scale neighbors. */
+/**
+ * Glue only same-pitch (or ±1 st wobble) fragments across brief dropouts.
+ * Intentional tone changes and stop→start attacks stay separate notes.
+ */
 function stickyMergeHumBassNotes(
   notes: readonly TimedMonophonicNote[],
-  maxGapSec = 0.55,
-  maxPitchDelta = 2.6,
+  maxGapSec = 0.35,
+  maxPitchDelta = 1.15,
 ): TimedMonophonicNote[] {
   if (notes.length === 0) return [];
   const sorted = [...notes].sort((a, b) => a.startSec - b.startSec || a.pitch - b.pitch);
@@ -41,8 +46,12 @@ function stickyMergeHumBassNotes(
     }
     const curEnd = cur.startSec + cur.durationSec;
     const gap = n.startSec - curEnd;
-    const pitchClose = Math.abs(n.pitch - cur.pitch) <= maxPitchDelta;
-    if (pitchClose && gap >= -0.04 && gap <= maxGapSec) {
+    const pitchDelta = Math.abs(n.pitch - cur.pitch);
+    const pitchClose = pitchDelta <= maxPitchDelta;
+    // After a clear stop, only bridge if pitch is essentially the same note.
+    const afterStop = gap > HUM_PHRASE_GAP_RESET_SEC;
+    const canBridge = afterStop ? pitchDelta <= 0.6 : pitchClose;
+    if (canBridge && gap >= -0.04 && gap <= maxGapSec) {
       const end = Math.max(curEnd, n.startSec + n.durationSec);
       // Longer fragment wins — weighted average can round into the wrong degree.
       if (n.durationSec > cur.durationSec) {
@@ -79,8 +88,8 @@ function nearestMidiWithPitchClass(around: number, pitchClass: number): number {
 }
 
 /**
- * Hysteresis scale lock — once a degree is grabbed, stay there until pitch
- * clearly commits past the midpoint + margin toward another scale tone.
+ * Hysteresis scale lock inside a phrase — mid-interval wobble stays put.
+ * Resets after silence so stop→start (or a clear tone change) can grab a new degree.
  */
 export function stickySnapHumNotesToKeyScale(
   notes: readonly TimedMonophonicNote[],
@@ -92,14 +101,21 @@ export function stickySnapHumNotesToKeyScale(
   const sorted = [...notes].sort((a, b) => a.startSec - b.startSec || a.pitch - b.pitch);
   const out: TimedMonophonicNote[] = [];
   let lockedMidi: number | null = null;
+  let prevEnd = -Infinity;
 
   for (const n of sorted) {
+    const gap = n.startSec - prevEnd;
+    if (gap > HUM_PHRASE_GAP_RESET_SEC) {
+      lockedMidi = null;
+    }
+
     const raw = n.pitch;
     const nearest = se2Lab808SnapMidiToKeyScale(raw, keyRoot, keyMode);
 
     if (lockedMidi == null) {
       lockedMidi = nearest;
       out.push({ ...n, pitch: lockedMidi });
+      prevEnd = n.startSec + n.durationSec;
       continue;
     }
 
@@ -108,19 +124,22 @@ export function stickySnapHumNotesToKeyScale(
     if (distToLocked <= hysteresisSt) {
       out.push({ ...n, pitch: stickCandidate });
       lockedMidi = stickCandidate;
+      prevEnd = n.startSec + n.durationSec;
       continue;
     }
 
-    // Commit only when the new scale tone is clearly closer than staying put.
+    // Clear tone change — commit to the new scale degree.
     const distToNearest = Math.abs(raw - nearest);
-    if (distToNearest + 0.35 < distToLocked) {
+    if (distToNearest + 0.25 < distToLocked || Math.abs(nearest - lockedMidi) >= 2) {
       lockedMidi = nearest;
       out.push({ ...n, pitch: lockedMidi });
+      prevEnd = n.startSec + n.durationSec;
       continue;
     }
 
     out.push({ ...n, pitch: stickCandidate });
     lockedMidi = stickCandidate;
+    prevEnd = n.startSec + n.durationSec;
   }
 
   return out;
@@ -145,7 +164,7 @@ function resolveHumLane(
   keyRoot: number,
   keyMode: 'major' | 'minor',
 ): number | null {
-  // Notes are already hysteresis-locked; fold first, snap only if fold left us off-key.
+  // Notes are already key-locked; fold first, snap only if fold left us off-key.
   const folded = se2Lab808FoldMidiIntoToneWindow(pitch, baseMidi);
   const snapped = se2Lab808SnapMidiToKeyScale(folded, keyRoot, keyMode);
   // Prefer folded pitch when already in key (avoids pad-edge nearest-neighbor flip).
@@ -166,8 +185,8 @@ function resolveHumLane(
 }
 
 /**
- * Glue pitch-tracker fragments of the same bass pitch, hysteresis-lock to key,
- * then quantize starts/ends so a hummed half-note / whole-note keeps its full length.
+ * Glue same-pitch dropout fragments, key-lock with phrase hysteresis,
+ * then quantize so held hums keep their full length as long grid runs.
  */
 export function se2Lab808PrepareHumNotesForGrid(
   notes: readonly TimedMonophonicNote[],
@@ -175,14 +194,14 @@ export function se2Lab808PrepareHumNotesForGrid(
   keyRoot = 0,
   keyMode: 'major' | 'minor' = 'major',
 ): TimedMonophonicNote[] {
-  // Aggressive sticky merge — brief pitch dropouts / vibrato must not chop a held hum.
-  const cleaned = cleanNeuralHumMelodyNotes(notes, 0.03, 0.38);
-  const sticky = stickyMergeHumBassNotes(cleaned, 0.55, 2.6);
+  // Same-pitch glue only — tone changes must remain separate notes.
+  const cleaned = cleanNeuralHumMelodyNotes(notes, 0.03, 0.28);
+  const sticky = stickyMergeHumBassNotes(cleaned, 0.35, 1.15);
   const mono = enforceMonophonicHumNotes(sticky, 0.03);
   const locked = stickySnapHumNotesToKeyScale(mono, keyRoot, keyMode);
   const quantized = quantizeTimedMonophonicNotes(locked, bpm, '1/16');
-  // Second sticky pass after quantize — closes 16th-grid gaps from tracker flicker.
-  return stickyMergeHumBassNotes(quantized, 0.4, 2.2);
+  // Second pass: close 16th-grid holes on the same pitch only.
+  return stickyMergeHumBassNotes(quantized, 0.22, 0.85);
 }
 
 export function se2Lab808ApplyHumNotesToToneGrid(args: {

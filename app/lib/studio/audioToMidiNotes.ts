@@ -61,7 +61,8 @@ export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<Required<MonophonicPitc
   fMaxHz: 900,
   minRms: 0.0014,
   minPitchClarity: 0.09,
-  pitchRunTolerance: 1.85,
+  // ~1.25 st: hold vibrato stays one note; a real tone change still splits.
+  pitchRunTolerance: 1.25,
   maxVoicedGapFrames: 34, // ~395 ms bridge so held notes don't pop out
 };
 

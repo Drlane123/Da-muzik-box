@@ -18,7 +18,7 @@ describe('se2Lab808FoldMidiIntoToneWindow', () => {
 });
 
 describe('stickySnapHumNotesToKeyScale', () => {
-  it('keeps mid-interval chromatics locked to the previous degree', () => {
+  it('keeps mid-interval chromatics locked inside a continuous phrase', () => {
     // C then C# (mid C–D) then C — must stay on C, not flip to D.
     const locked = stickySnapHumNotesToKeyScale(
       [
@@ -30,6 +30,20 @@ describe('stickySnapHumNotesToKeyScale', () => {
       'major',
     );
     expect(locked.every((n) => n.pitch === 36)).toBe(true);
+  });
+
+  it('resets after silence so a new attack can grab a new degree', () => {
+    const locked = stickySnapHumNotesToKeyScale(
+      [
+        { pitch: 36, startSec: 0, durationSec: 0.4, velocity: 100 },
+        { pitch: 38, startSec: 0.9, durationSec: 0.4, velocity: 100 }, // gap > 0.15
+      ],
+      0,
+      'major',
+    );
+    expect(locked).toHaveLength(2);
+    expect(locked[0]!.pitch).toBe(36);
+    expect(locked[1]!.pitch).toBe(38);
   });
 });
 
@@ -105,21 +119,34 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     expect(prepared[0]!.durationSec).toBeGreaterThan(1.8);
   });
 
-  it('glues neighbor scale-degree flicker (C/D/C) into one held note', () => {
-    // Nearest-neighbor snap artifacts: 2st flicker must stick as one pitch.
+  it('treats a clear tone change as a new note (C → D)', () => {
     const prepared = se2Lab808PrepareHumNotesForGrid(
       [
-        { pitch: 36, startSec: 0, durationSec: 0.4, velocity: 100 },
-        { pitch: 38, startSec: 0.45, durationSec: 0.35, velocity: 95 },
-        { pitch: 36, startSec: 0.9, durationSec: 0.5, velocity: 100 },
+        { pitch: 36, startSec: 0, durationSec: 0.45, velocity: 100 },
+        { pitch: 38, startSec: 0.5, durationSec: 0.45, velocity: 100 },
       ],
       120,
       0,
       'major',
     );
-    expect(prepared.length).toBe(1);
+    expect(prepared.length).toBe(2);
     expect(prepared[0]!.pitch).toBe(36);
-    expect(prepared[0]!.durationSec).toBeGreaterThan(1.2);
+    expect(prepared[1]!.pitch).toBe(38);
+  });
+
+  it('keeps stop-then-start different pitches as two notes', () => {
+    const prepared = se2Lab808PrepareHumNotesForGrid(
+      [
+        { pitch: 36, startSec: 0, durationSec: 0.4, velocity: 100 },
+        { pitch: 41, startSec: 0.85, durationSec: 0.5, velocity: 100 }, // breath gap + new tone
+      ],
+      120,
+      0,
+      'major',
+    );
+    expect(prepared.length).toBe(2);
+    expect(prepared[0]!.pitch).toBe(36);
+    expect(prepared[1]!.pitch).toBe(41);
 
     const voice = {
       ...se2Lab808DefaultVoice(),
@@ -129,8 +156,7 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
     const result = se2Lab808ApplyHumNotesToToneGrid({
       notes: [
         { pitch: 36, startSec: 0, durationSec: 0.4, velocity: 100 },
-        { pitch: 38, startSec: 0.45, durationSec: 0.35, velocity: 95 },
-        { pitch: 36, startSec: 0.9, durationSec: 0.5, velocity: 100 },
+        { pitch: 41, startSec: 0.85, durationSec: 0.5, velocity: 100 },
       ],
       bpm: 120,
       voice,
@@ -138,11 +164,13 @@ describe('se2Lab808ApplyHumNotesToToneGrid', () => {
       keyMode: 'major',
       mode: 'replace',
     });
-    expect(result.noteCount).toBe(1);
+    expect(result.noteCount).toBe(2);
     const activeLanes = result.pattern
       .map((row, lane) => (row.some(Boolean) ? lane : -1))
       .filter((l) => l >= 0);
-    expect(activeLanes).toEqual([0]);
+    expect(activeLanes.length).toBe(2);
+    expect(activeLanes).toContain(0);
+    expect(activeLanes).toContain(5); // F
   });
 
   it('paints a half-note hum across ~8 sixteenths', () => {
