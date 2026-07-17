@@ -1,7 +1,7 @@
 'use client';
 
-import { RefreshCw, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from 'react';
+import { ChevronDown, RefreshCw, Sparkles, Volume2, VolumeX, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { genreHasProgressionsForMode } from '@/app/lib/creationStation/chordBuilder';
@@ -351,6 +351,8 @@ export function Se2GenoChordCreatorPanel({
   const [composeHelpOpen, setComposeHelpOpen] = useState(false);
   const [midiComposerHelpOpen, setMidiComposerHelpOpen] = useState(false);
   const [aiMidiMode, setAiMidiMode] = useState<Se2ChordGenieAiMidiMode>('off');
+  const [deepRnbPickerOpen, setDeepRnbPickerOpen] = useState(false);
+  const deepRnbPickerRef = useRef<HTMLDivElement | null>(null);
 
   const composeGenrePeek = useMemo(() => {
     if (!composeText.trim()) return null;
@@ -376,6 +378,31 @@ export function Se2GenoChordCreatorPanel({
     () => se2ChordGeniePresetCatalog(keyRoot, keyMode),
     [keyRoot, keyMode],
   );
+
+  const deepRnbPresets = useMemo(
+    () => presetCatalog.filter((p) => p.genreId === 'deep-rnb'),
+    [presetCatalog],
+  );
+
+  useEffect(() => {
+    if (!deepRnbPickerOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      const el = deepRnbPickerRef.current;
+      if (!el) return;
+      if (e.target instanceof Node && !el.contains(e.target)) {
+        setDeepRnbPickerOpen(false);
+      }
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setDeepRnbPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [deepRnbPickerOpen]);
 
   const presetId = se2GenoChordCreatorPresetId(track) || presetCatalog[0]?.id || '';
   const presetLabel = useMemo(() => {
@@ -1035,40 +1062,142 @@ export function Se2GenoChordCreatorPanel({
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center shrink-0 self-center px-2 min-w-0">
+        <div
+          ref={deepRnbPickerRef}
+          className="relative flex flex-col items-center justify-center shrink-0 self-center px-2 min-w-0 z-30"
+        >
           <span className="block text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd] mb-1 text-center">
             Deep Cards
           </span>
           <button
             type="button"
-            disabled={disabled || !stylePacks.some((g) => g.id === 'deep-rnb')}
+            disabled={disabled || deepRnbPresets.length === 0}
+            aria-expanded={deepRnbPickerOpen}
+            aria-haspopup="listbox"
             onClick={() => {
-              if (!stylePacks.some((g) => g.id === 'deep-rnb')) return;
+              if (deepRnbPresets.length === 0) return;
               setStyleGenreId('deep-rnb');
-              const packPresets = presetCatalog.filter((p) => p.genreId === 'deep-rnb');
-              const pick =
-                packPresets.find((p) => p.id !== (catalogPresetId || presetId)) ?? packPresets[0];
-              if (pick) handlePresetPick(pick.id);
+              setDeepRnbPickerOpen((open) => !open);
             }}
-            className="inline-flex items-center justify-center rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-1.5 rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
             style={{
               height: controlH + 4,
-              minWidth: 132,
+              minWidth: 148,
               borderColor:
-                styleGenreId === 'deep-rnb' ? 'rgba(196,181,253,0.85)' : 'rgba(196,181,253,0.35)',
+                styleGenreId === 'deep-rnb' || deepRnbPickerOpen
+                  ? 'rgba(196,181,253,0.85)'
+                  : 'rgba(196,181,253,0.35)',
               background:
-                styleGenreId === 'deep-rnb' ? 'rgba(196,181,253,0.22)' : 'rgba(196,181,253,0.08)',
-              color: styleGenreId === 'deep-rnb' ? '#f5f3ff' : '#c4b5fd',
+                styleGenreId === 'deep-rnb' || deepRnbPickerOpen
+                  ? 'rgba(196,181,253,0.22)'
+                  : 'rgba(196,181,253,0.08)',
+              color: styleGenreId === 'deep-rnb' || deepRnbPickerOpen ? '#f5f3ff' : '#c4b5fd',
               boxShadow:
-                styleGenreId === 'deep-rnb' ? '0 0 12px rgba(196,181,253,0.25)' : undefined,
+                styleGenreId === 'deep-rnb' || deepRnbPickerOpen
+                  ? '0 0 12px rgba(196,181,253,0.25)'
+                  : undefined,
             }}
-            title="Load Deep R&B Cards — complex quiet-storm / neo-soul progressions"
+            title="Browse Deep R&B Cards — complex quiet-storm / neo-soul progressions"
           >
             Deep R&B Cards
+            <ChevronDown
+              size={12}
+              aria-hidden
+              style={{
+                transform: deepRnbPickerOpen ? 'rotate(180deg)' : undefined,
+                transition: 'transform 120ms ease',
+              }}
+            />
           </button>
-          <p className="mt-1 text-[8px] font-semibold leading-tight text-[#6a6280] text-center max-w-[9rem]">
-            28 progressive deep R&B chords
+          <p className="mt-1 text-[8px] font-semibold leading-tight text-[#6a6280] text-center max-w-[10rem]">
+            {deepRnbPresets.length} progressive deep R&B chords
           </p>
+
+          {deepRnbPickerOpen ? (
+            <div
+              role="listbox"
+              aria-label="Deep R&B Cards"
+              className="absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-lg border shadow-2xl"
+              style={{
+                width: 'min(92vw, 560px)',
+                maxWidth: '560px',
+                borderColor: 'rgba(196,181,253,0.45)',
+                background: 'linear-gradient(180deg, #1a1428 0%, #0c0a14 100%)',
+                boxShadow: '0 16px 40px rgba(0,0,0,0.65), 0 0 24px rgba(196,181,253,0.12)',
+                zIndex: 80,
+              }}
+            >
+              <div
+                className="flex items-center justify-between gap-2 px-3 py-2 border-b"
+                style={{ borderColor: 'rgba(196,181,253,0.22)' }}
+              >
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">
+                  Pick a Deep R&B card
+                </span>
+                <span className="text-[8px] font-semibold text-[#8a8098]">
+                  Scroll → · click to load
+                </span>
+              </div>
+              <div
+                className="flex gap-2 overflow-x-auto overflow-y-hidden px-3 py-3"
+                style={{
+                  scrollSnapType: 'x proximity',
+                  WebkitOverflowScrolling: 'touch',
+                }}
+              >
+                {deepRnbPresets.map((p) => {
+                  const selected = (catalogPresetId || presetId) === p.id;
+                  const shortName = p.progressionId
+                    ? p.label.replace(/^Deep R&B Cards ·\s*/i, '')
+                    : p.label;
+                  const chordLine = p.steps.map((s) => s.label).join(' – ');
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      disabled={disabled}
+                      onClick={() => {
+                        handlePresetPick(p.id);
+                        setDeepRnbPickerOpen(false);
+                      }}
+                      className="shrink-0 rounded-md border text-left disabled:opacity-40"
+                      style={{
+                        width: 168,
+                        minHeight: 88,
+                        scrollSnapAlign: 'start',
+                        padding: '8px 10px',
+                        borderColor: selected
+                          ? 'rgba(196,181,253,0.9)'
+                          : 'rgba(196,181,253,0.28)',
+                        background: selected
+                          ? 'rgba(196,181,253,0.2)'
+                          : 'rgba(8,8,16,0.92)',
+                        boxShadow: selected
+                          ? 'inset 0 0 0 1px rgba(196,181,253,0.35)'
+                          : undefined,
+                      }}
+                      title={chordLine}
+                    >
+                      <span
+                        className="block text-[10px] font-black leading-snug"
+                        style={{ color: selected ? '#f5f3ff' : '#e8e0f8' }}
+                      >
+                        {shortName}
+                      </span>
+                      <span
+                        className="mt-1.5 block text-[8px] font-semibold leading-snug"
+                        style={{ color: '#9a90b0' }}
+                      >
+                        {chordLine}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-col items-end gap-1 ml-auto shrink-0">

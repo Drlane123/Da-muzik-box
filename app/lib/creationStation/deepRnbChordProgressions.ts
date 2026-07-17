@@ -89,8 +89,8 @@ export const DEEP_RNB_GENRE: GenreDef = {
     },
     {
       id: 'deeprnb-late-sus',
-      name: 'Deep · Late Sus · 5',
-      chords: ['IVmaj7', 'Vsus4', 'V7', 'iii7', 'vi7'],
+      name: 'Deep · Late Sus · 7',
+      chords: ['IVmaj7', 'iii7', 'vi7', 'Vsus4', 'V7', 'ii7', 'Imaj7'],
     },
     {
       id: 'deeprnb-tender-half',
