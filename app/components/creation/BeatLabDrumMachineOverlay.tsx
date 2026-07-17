@@ -597,6 +597,9 @@ export function BeatLabDrumMachineOverlay({
   /** Grid performance record (Cnt / Mtr / Rec next to Play/Stop). */
   const [gridRecordPrecountEnabled, setGridRecordPrecountEnabled] = useState(true);
   const [gridRecordMetroEnabled, setGridRecordMetroEnabled] = useState(true);
+  const [gridRecordClickVolume, setGridRecordClickVolume] = useState(0.75);
+  const gridRecordClickVolumeRef = useRef(0.75);
+  gridRecordClickVolumeRef.current = gridRecordClickVolume;
   const [gridRecording, setGridRecording] = useState(false);
   const [gridRecordPrecounting, setGridRecordPrecounting] = useState(false);
   const [gridRecordBeatLabel, setGridRecordBeatLabel] = useState<string | null>(null);
@@ -1020,7 +1023,9 @@ export function BeatLabDrumMachineOverlay({
       src.buffer = buf;
       const g = ctx.createGain();
       const scale = opts?.volumeScale ?? 1;
-      g.gain.value = SE2_PRECOUNT_CLICK_VOLUME * (downbeat ? 1.15 : 0.85) * scale;
+      const userVol = Math.max(0, Math.min(1, gridRecordClickVolumeRef.current));
+      g.gain.value =
+        SE2_PRECOUNT_CLICK_VOLUME * (downbeat ? 1.15 : 0.85) * scale * userVol;
       src.connect(g);
       const dest = getAudioOutput?.() ?? ctx.destination;
       g.connect(dest);
@@ -1788,6 +1793,8 @@ export function BeatLabDrumMachineOverlay({
         onGridRecordPrecountToggle={() => setGridRecordPrecountEnabled((v) => !v)}
         gridRecordMetroEnabled={gridRecordMetroEnabled}
         onGridRecordMetroToggle={() => setGridRecordMetroEnabled((v) => !v)}
+        gridRecordClickVolume={gridRecordClickVolume}
+        onGridRecordClickVolumeChange={setGridRecordClickVolume}
         gridRecording={gridRecording}
         gridRecordPrecounting={gridRecordPrecounting}
         gridRecordBeatLabel={gridRecordBeatLabel}
