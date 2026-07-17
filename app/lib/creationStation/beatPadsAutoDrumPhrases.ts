@@ -93,6 +93,12 @@ export const GENRE_PROFILES: readonly AutoDrumGenreProfile[] = [
     medium: ['one drop', 'onedrop', 'steppers', 'island', 'rub a dub', 'rub-a-dub', 'riddim'],
     weak: ['offbeat', 'skank', 'rockers', 'lazy'],
   },
+  {
+    genre: 'lofi',
+    strong: ['lofi', 'lo-fi', 'lo fi', 'chill hop', 'chillhop', 'study beat', 'studybeat'],
+    medium: ['dusty', 'vinyl', 'cassette', 'bedroom', 'jazzy hip hop', 'boom bap soft'],
+    weak: ['chill', 'soft', 'lazy', 'mellow', 'warm', 'night'],
+  },
 ] as const;
 
 /** 2 & 4 backbeat + bar-end roll/fill — per genre. */
@@ -106,6 +112,7 @@ const SNARE_BACKBEAT_ROLL: Partial<Record<BeatPadsPlacementGenre, string>> = {
   soulBlues: 'soulblues-snare-fill',
   afro: 'afro-snare-fill',
   reggae: 'reggae-snare-fill',
+  lofi: 'lofi-snare-fill',
 };
 
 export const INSTRUCTION_RULES: readonly AutoDrumInstructionRule[] = [

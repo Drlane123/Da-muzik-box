@@ -22,7 +22,7 @@ export const BEAT_PADS_LANE_PLACEMENT_HELP = {
     {
       heading: 'Auto Drum — type & Go',
       body:
-        'Describe the groove in plain words: trap snare roll, 808 long kick bpm 97, soul blues shuffle kick, reggae one drop, kpop chorus kick. Genre in your phrase can switch the dropdown. Regen beside Go tries another match. Enter runs Go.',
+        'Describe the groove in plain words: trap snare roll, 808 long kick bpm 97, lo-fi dusty clap, soul blues shuffle kick, reggae one drop, kpop chorus kick. Genre in your phrase can switch the dropdown. Regen beside Go tries another match. Enter runs Go.',
     },
     {
       heading: 'Lane Placements vs Pattern Bank',

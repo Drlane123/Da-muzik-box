@@ -36,6 +36,7 @@ import {
 import { beatPadsLaneFromBooleanTemplate } from '@/app/lib/creationStation/beatPadsPatternEdit';
 import { BEAT_PADS_EXTENDED_GENRE_TEMPLATES } from '@/app/lib/creationStation/beatPadsLanePlacementExtendedGenres';
 import { BEAT_PADS_KICK_PACK_TEMPLATES } from '@/app/lib/creationStation/beatPadsLanePlacementKickPack';
+import { BEAT_PADS_LOFI_LANE_TEMPLATES } from '@/app/lib/creationStation/beatPadsLanePlacementLofiPack';
 
 export type BeatPadsDrumRole = 'kick' | 'snare' | 'clap' | 'hihat' | 'openHat' | 'rim';
 
@@ -48,7 +49,8 @@ export type BeatPadsPlacementGenre =
   | 'kpop'
   | 'soulBlues'
   | 'afro'
-  | 'reggae';
+  | 'reggae'
+  | 'lofi';
 
 export interface BeatPadsLanePlacementTemplate {
   id: string;
@@ -73,6 +75,7 @@ export const BEAT_PADS_PLACEMENT_GENRES: readonly {
   { id: 'soulBlues', label: 'Soul Blues' },
   { id: 'afro', label: 'Afro' },
   { id: 'reggae', label: 'Reggae' },
+  { id: 'lofi', label: 'Lo-Fi' },
 ] as const;
 
 export const BEAT_PADS_DRUM_ROLES: readonly {
@@ -381,6 +384,7 @@ const ALL_TEMPLATES: readonly BeatPadsLanePlacementTemplate[] = [
 
   ...BEAT_PADS_EXTENDED_GENRE_TEMPLATES,
   ...BEAT_PADS_KICK_PACK_TEMPLATES,
+  ...BEAT_PADS_LOFI_LANE_TEMPLATES,
 ];
 
 export function beatPadsPlacementGenreLabel(genre: BeatPadsPlacementGenre): string {
