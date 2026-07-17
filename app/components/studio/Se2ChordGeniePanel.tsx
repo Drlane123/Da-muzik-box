@@ -1035,6 +1035,42 @@ export function Se2GenoChordCreatorPanel({
           </div>
         </div>
 
+        <div className="flex flex-col items-center justify-center shrink-0 self-center px-2 min-w-0">
+          <span className="block text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd] mb-1 text-center">
+            Deep Cards
+          </span>
+          <button
+            type="button"
+            disabled={disabled || !stylePacks.some((g) => g.id === 'deep-rnb')}
+            onClick={() => {
+              if (!stylePacks.some((g) => g.id === 'deep-rnb')) return;
+              setStyleGenreId('deep-rnb');
+              const packPresets = presetCatalog.filter((p) => p.genreId === 'deep-rnb');
+              const pick =
+                packPresets.find((p) => p.id !== (catalogPresetId || presetId)) ?? packPresets[0];
+              if (pick) handlePresetPick(pick.id);
+            }}
+            className="inline-flex items-center justify-center rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
+            style={{
+              height: controlH + 4,
+              minWidth: 132,
+              borderColor:
+                styleGenreId === 'deep-rnb' ? 'rgba(196,181,253,0.85)' : 'rgba(196,181,253,0.35)',
+              background:
+                styleGenreId === 'deep-rnb' ? 'rgba(196,181,253,0.22)' : 'rgba(196,181,253,0.08)',
+              color: styleGenreId === 'deep-rnb' ? '#f5f3ff' : '#c4b5fd',
+              boxShadow:
+                styleGenreId === 'deep-rnb' ? '0 0 12px rgba(196,181,253,0.25)' : undefined,
+            }}
+            title="Load Deep R&B Cards — complex quiet-storm / neo-soul progressions"
+          >
+            Deep R&B Cards
+          </button>
+          <p className="mt-1 text-[8px] font-semibold leading-tight text-[#6a6280] text-center max-w-[9rem]">
+            28 progressive deep R&B chords
+          </p>
+        </div>
+
         <div className="flex flex-col items-end gap-1 ml-auto shrink-0">
           <div className="flex items-start gap-2 overflow-visible">
           <div className="flex flex-col gap-0.5 shrink-0 overflow-visible" style={{ width: presetColW }}>

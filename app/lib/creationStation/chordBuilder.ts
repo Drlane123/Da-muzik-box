@@ -1,6 +1,7 @@
 import { ERA_POP_RNB_DISCO_GENRES } from '@/app/lib/creationStation/eraPopRnbDiscoProgressions';
 import { ERA_SOUL_RNB_NEO_GENRES } from '@/app/lib/creationStation/eraSoulRnbNeoProgressions';
 import { ERA_BLUES_LATIN_KPOP_GENRES } from '@/app/lib/creationStation/eraBluesLatinKpopProgressions';
+import { DEEP_RNB_GENRES } from '@/app/lib/creationStation/deepRnbChordProgressions';
 import { GENRE_MINOR_EXPANSIONS } from '@/app/lib/creationStation/genreMinorExpansions';
 
 /**
@@ -745,6 +746,7 @@ export const PATTERNS: PatternDef[] = [
 export const GENRES: GenreDef[] = [
   ...ERA_POP_RNB_DISCO_GENRES,
   ...ERA_SOUL_RNB_NEO_GENRES,
+  ...DEEP_RNB_GENRES,
   ...ERA_BLUES_LATIN_KPOP_GENRES,
   {
     id: 'pop',

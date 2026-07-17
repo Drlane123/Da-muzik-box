@@ -28,6 +28,7 @@ export const GENRE_TEMPO_PROFILES: Record<string, GenreTempoProfile> = {
   'rnb-90s': { min: 64, max: 98, recommended: 82, note: '90s R&B groove' },
   rnb: { min: 62, max: 94, recommended: 78, note: 'Neo-soul / modern R&B' },
   'rnb-true': { min: 58, max: 90, recommended: 74, note: 'True R&B vocal lane' },
+  'deep-rnb': { min: 58, max: 88, recommended: 72, note: 'Deep R&B Cards · quiet-storm pocket' },
   hiphop: { min: 72, max: 98, recommended: 86, note: 'Hip-hop head-nod' },
   trap: { min: 130, max: 160, recommended: 142, note: 'Trap / drill grid' },
   house: { min: 118, max: 128, recommended: 124, note: 'Four-on-the-floor house' },
@@ -49,6 +50,9 @@ export const GENRE_TEMPO_PROFILES: Record<string, GenreTempoProfile> = {
 const PROGRESSION_TEMPO_OVERRIDES: Record<string, number> = {
   'rnb-90s::rnb90-ballad': 70,
   'rnb-true::truernb-slowjam': 68,
+  'deep-rnb::deeprnb-velvet-crawl': 70,
+  'deep-rnb::deeprnb-min-midnight': 66,
+  'deep-rnb::deeprnb-candle-glow': 72,
   'ballad-80s::ballad-endless': 64,
   'ballad-80s::ballad-careless': 70,
   'ballad-80s::ballad-saving': 76,

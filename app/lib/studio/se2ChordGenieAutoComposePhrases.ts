@@ -48,6 +48,12 @@ export const CHORD_GENIE_GENRE_PROFILES: readonly ChordGenieGenreProfile[] = [
     weak: ['soul'],
   },
   {
+    genreId: 'deep-rnb',
+    strong: ['deep rnb', 'deep r&b', 'deep cards', 'deep soul', 'deep rnb cards'],
+    medium: ['quiet storm', 'velvet crawl', 'candle glow', 'late neon', 'orchid haze'],
+    weak: ['deep', 'midnight', 'silk porch'],
+  },
+  {
     genreId: 'rnb-true',
     strong: ['modern rnb', 'true rnb', 'contemporary rnb', 'true r&b'],
     medium: ['silk', 'velvet', 'late night'],
