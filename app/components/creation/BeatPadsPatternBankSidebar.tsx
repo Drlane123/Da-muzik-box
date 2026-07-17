@@ -166,8 +166,8 @@ export function BeatPadsPatternBankSidebar({
               type="button"
               disabled={disabled || !canRandomizeBankPattern}
               onClick={() => onRandomizeBankPattern()}
-              title="Randomize beat in this bank — same sounds, new groove"
-              aria-label="Randomize Pattern Bank groove keeping pad sounds"
+              title="Invent a new groove in this bank’s style — same sounds, not a catalog pick"
+              aria-label="Generate a fresh Pattern Bank style groove keeping pad sounds"
               style={{
                 ...MINI_DICE,
                 height: 18,

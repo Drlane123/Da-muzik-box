@@ -78,12 +78,13 @@ import {
 } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
 import {
   presetToBeatPadsPattern,
-  pickAlternateBeatLabDrumPreset,
-  BEAT_LAB_USER_SAVES_BANK_ID,
-  countBeatLabDrumPresets,
   type BeatLabPatternBankId,
   type BeatLabPatternSlotId,
 } from '@/app/lib/creationStation/beatLabPatternBank';
+import {
+  canGenerateBeatPadsBankStylePattern,
+  generateBeatPadsBankStylePattern,
+} from '@/app/lib/creationStation/beatPadsBankStyleGenerate';
 import {
   applyBeatPadsLanePlacementTemplate,
   beatPadsDrumRoleFromLabel,
@@ -1240,44 +1241,28 @@ export function BeatLabDrumMachineOverlay({
     setActiveLaneTemplateIds(snap.templateIds);
   }, []);
 
-  const canRandomizeBankPattern = Boolean(
-    loadedPatternBankId
-      && loadedPatternBankId !== BEAT_LAB_USER_SAVES_BANK_ID
-      && countBeatLabDrumPresets(loadedPatternBankId) > 1,
-  );
-
-  const applyBeatPadsPatternGridOnly = useCallback(
-    (preset: PatternPreset) => {
-      const wasPlaying = beatPadsTransport.isPlaying;
-      const loaded = presetToBeatPadsPattern(preset, loopBars);
-      const spb = gridStepsRef.current;
-      setPattern((prev) => {
-        bankPatternDiceUndoRef.current = prev.map((lane) => lane.map((n) => ({ ...n })));
-        return normalizeBeatPadsPattern(loaded.pattern, loopBars, spb);
-      });
-      setCanUndoBankPatternDice(true);
-      scrollSequencerToStart();
-      if (wasPlaying) {
-        queueMicrotask(() => {
-          void beatPadsTransport.restartFromBarOne();
-        });
-      }
-    },
-    [beatPadsTransport, loopBars, scrollSequencerToStart],
-  );
+  const canRandomizeBankPattern = canGenerateBeatPadsBankStylePattern(loadedPatternBankId);
 
   const handleRandomizeBankPattern = useCallback(() => {
-    if (!loadedPatternBankId || loadedPatternBankId === BEAT_LAB_USER_SAVES_BANK_ID) return;
-    const pick = pickAlternateBeatLabDrumPreset(loadedPatternBankId, loadedPatternPresetId);
-    if (!pick) return;
-    applyBeatPadsPatternGridOnly(pick);
-    onPatternPresetHighlighted?.(pick);
-  }, [
-    applyBeatPadsPatternGridOnly,
-    loadedPatternBankId,
-    loadedPatternPresetId,
-    onPatternPresetHighlighted,
-  ]);
+    if (!loadedPatternBankId || !canGenerateBeatPadsBankStylePattern(loadedPatternBankId)) return;
+    const wasPlaying = beatPadsTransport.isPlaying;
+    const generated = generateBeatPadsBankStylePattern(
+      loadedPatternBankId,
+      loopBars,
+      gridStepsRef.current,
+    );
+    setPattern((prev) => {
+      bankPatternDiceUndoRef.current = prev.map((lane) => lane.map((n) => ({ ...n })));
+      return generated;
+    });
+    setCanUndoBankPatternDice(true);
+    scrollSequencerToStart();
+    if (wasPlaying) {
+      queueMicrotask(() => {
+        void beatPadsTransport.restartFromBarOne();
+      });
+    }
+  }, [beatPadsTransport, loadedPatternBankId, loopBars, scrollSequencerToStart]);
 
   const handleUndoBankPatternDice = useCallback(() => {
     const snap = bankPatternDiceUndoRef.current;
