@@ -1411,6 +1411,71 @@ export function BeatLabDrumMachineSequencer({
                 <Square size={12} fill="currentColor" aria-hidden />
               </button>
             </div>
+            {showGridRecord && typeof onGridRecordClickVolumeChange === 'function' ? (
+              <label
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  height: 28,
+                  padding: '0 8px',
+                  borderRadius: 5,
+                  border: '1px solid rgba(158, 200, 255, 0.45)',
+                  background: 'rgba(120, 180, 255, 0.12)',
+                  flexShrink: 0,
+                  cursor: disabled ? 'not-allowed' : 'default',
+                  opacity: disabled ? 0.45 : 1,
+                }}
+                title="Pre-count and metronome click volume"
+              >
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 900,
+                    letterSpacing: '0.03em',
+                    color: '#9ec8ff',
+                    textTransform: 'uppercase',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Met Vol
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  disabled={disabled}
+                  value={Math.round(Math.max(0, Math.min(1, gridRecordClickVolume)) * 100)}
+                  onChange={(e) => {
+                    onGridRecordClickVolumeChange(
+                      Math.max(0, Math.min(1, Number(e.target.value) / 100)),
+                    );
+                  }}
+                  aria-label="Pre-count and metronome volume"
+                  style={{
+                    width: 72,
+                    height: 16,
+                    margin: 0,
+                    padding: 0,
+                    accentColor: '#9ec8ff',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 800,
+                    color: '#c8d8f0',
+                    minWidth: 28,
+                    textAlign: 'right',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {Math.round(Math.max(0, Math.min(1, gridRecordClickVolume)) * 100)}%
+                </span>
+              </label>
+            ) : null}
             {showGridRecord ? (
               <div
                 style={{
@@ -1462,59 +1527,6 @@ export function BeatLabDrumMachineSequencer({
                 >
                   Cnt
                 </button>
-                {typeof onGridRecordClickVolumeChange === 'function' ? (
-                  <label
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      height: 26,
-                      padding: '0 6px 0 5px',
-                      borderRadius: 4,
-                      border: '1px solid rgba(158, 200, 255, 0.35)',
-                      background: 'rgba(120, 180, 255, 0.08)',
-                      flexShrink: 0,
-                      cursor: disabled ? 'not-allowed' : 'default',
-                      opacity: disabled ? 0.45 : 1,
-                    }}
-                    title="Pre-count & metronome click volume"
-                  >
-                    <span
-                      style={{
-                        fontSize: 8,
-                        fontWeight: 900,
-                        letterSpacing: '0.04em',
-                        color: '#9ec8ff',
-                        textTransform: 'uppercase',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Clk
-                    </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      disabled={disabled}
-                      value={Math.round(Math.max(0, Math.min(1, gridRecordClickVolume)) * 100)}
-                      onChange={(e) => {
-                        onGridRecordClickVolumeChange(
-                          Math.max(0, Math.min(1, Number(e.target.value) / 100)),
-                        );
-                      }}
-                      aria-label="Pre-count and metronome volume"
-                      style={{
-                        width: 64,
-                        height: 14,
-                        margin: 0,
-                        padding: 0,
-                        accentColor: '#9ec8ff',
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                      }}
-                    />
-                  </label>
-                ) : null}
                 <button
                   type="button"
                   disabled={disabled && !gridRecording && !gridRecordPrecounting}
