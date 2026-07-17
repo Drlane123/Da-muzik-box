@@ -81,13 +81,17 @@ const BAR_HEADER_H = 20;
 const BEAT_HEADER_H = 16;
 const HEADER_H = BAR_HEADER_H + BEAT_HEADER_H;
 const DEFAULT_MIN_VISIBLE_LANES = 7;
+/** Soft cap: show up to this many lanes; 15–16 stay on the inner scrollbar. */
+const VIEWPORT_LANE_CAP = 14;
+/** Extra scroll room so pads 15–16 clear the bottom edge / transport overlap. */
+const GRID_SCROLL_END_PAD_PX = 2 * ROW_H;
 const MIN_SEQ_VIEWPORT_H = HEADER_H + DEFAULT_MIN_VISIBLE_LANES * ROW_H;
 /** Pinned horizontal scrollbar track below the lane scroll area. */
 const BEAT_PADS_GRID_HBAR_H = 14;
 
-/** Full scroll-body height for all 16 pad lanes (header + rows). */
+/** Full scroll-body height for all 16 pad lanes (header + rows + end pad). */
 export function beatPadsSequencerFullContentH(): number {
-  return HEADER_H + BEAT_PADS_LANE_COUNT * ROW_H;
+  return HEADER_H + BEAT_PADS_LANE_COUNT * ROW_H + GRID_SCROLL_END_PAD_PX;
 }
 
 export function beatPadsSequencerMinViewportH(minVisibleLanes: number): number {
@@ -472,11 +476,14 @@ export function BeatLabDrumMachineSequencer({
   const [bpmDraft, setBpmDraft] = useState('');
   const gridExpanded = gridExpandedProp ?? gridExpandedInternal;
   const compactViewportMinH = beatPadsSequencerMinViewportH(minVisibleLanes);
-  // Keep compact/flex viewport (you still see ~14). Content is always 16 — scroll the last two.
+  // Expanded: min lanes + optional waveform lift. Collapsed: flex up to 14 — never all 16
+  // (host growing to full content clips 15–16 with no inner overflow).
   const seqViewportMinH = gridExpanded
     ? beatPadsGridScrollViewportH(minVisibleLanes, { liftPx: gridExpandedLiftPx })
     : compactViewportMinH;
+  const seqViewportMaxH = beatPadsSequencerMinViewportH(VIEWPORT_LANE_CAP);
   const gridHostMinH = seqViewportMinH + BEAT_PADS_GRID_HBAR_H;
+  const gridHostMaxH = seqViewportMaxH + BEAT_PADS_GRID_HBAR_H;
   const laneScrollContentH = beatPadsSequencerFullContentH();
 
   const setGridExpanded = useCallback(
@@ -1672,11 +1679,11 @@ export function BeatLabDrumMachineSequencer({
         style={{
           display: 'flex',
           flexDirection: 'column',
-          // Fill parent (keeps ~14 visible). Do not stretch to all 16 — that kills inner scroll.
+          // Cap host below full 16-lane content so overflowY can reach pads 15–16.
           flex: gridFillViewport ? '1 1 auto' : gridExpanded ? '0 0 auto' : '1 1 auto',
           minHeight: gridFillViewport ? 0 : gridHostMinH,
           height: gridExpanded ? gridHostMinH : undefined,
-          maxHeight: gridExpanded ? gridHostMinH : undefined,
+          maxHeight: gridFillViewport ? undefined : gridExpanded ? gridHostMinH : gridHostMaxH,
           minWidth: 0,
           overflow: 'hidden',
           background: BEAT_PADS_SURFACE,
@@ -1690,6 +1697,7 @@ export function BeatLabDrumMachineSequencer({
             // height:0 + flex:1 — nested flex scrollport so lanes 15–16 are reachable
             height: gridFillViewport ? undefined : 0,
             minHeight: 0,
+            maxHeight: gridFillViewport ? undefined : seqViewportMaxH,
             overflowX: 'hidden',
             overflowY: 'auto',
             overscrollBehavior: 'contain',
@@ -1698,12 +1706,13 @@ export function BeatLabDrumMachineSequencer({
           <div
             style={{
               display: 'flex',
-              alignItems: 'flex-start',
+              flexDirection: 'column',
               position: 'relative',
               height: laneScrollContentH,
               minHeight: laneScrollContentH,
             }}
           >
+          <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative', flexShrink: 0 }}>
             <div
               style={{
                 zIndex: 12,
@@ -1968,6 +1977,11 @@ export function BeatLabDrumMachineSequencer({
               </div>
             </div>
             </div>
+          </div>
+          <div
+            aria-hidden
+            style={{ height: GRID_SCROLL_END_PAD_PX, flexShrink: 0 }}
+          />
           </div>
         </div>
         <div
