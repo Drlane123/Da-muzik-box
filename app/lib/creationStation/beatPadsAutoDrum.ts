@@ -59,6 +59,9 @@ const GENRE_STRONG_WORDS = new Set([
   'techno',
   'lofi',
   'lo-fi',
+  'hiphop',
+  'hip hop',
+  'boom bap',
 ]);
 
 export function normalizeAutoDrumQuery(raw: string): string {
@@ -72,6 +75,9 @@ export function normalizeAutoDrumQuery(raw: string): string {
     .replace(/lo\s*-\s*fi/g, 'lofi')
     .replace(/lo\s+fi/g, 'lofi')
     .replace(/chill\s*hop/g, 'chillhop')
+    .replace(/hip\s*-\s*hop/g, 'hiphop')
+    .replace(/hip\s+hop/g, 'hiphop')
+    .replace(/boom\s*bap/g, 'boombap')
     .replace(/southern\s+soul/g, 'southern soul')
     .replace(/soul\s+blues/g, 'soul blues')
     .replace(/2\s+and\s+4/g, '2 & 4')

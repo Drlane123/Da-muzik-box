@@ -1,6 +1,6 @@
 /**
  * Beat Pads Lane Placements — Lo-Fi pack.
- * 20 snares · 20 claps · 20 closed hats · 20 open hats (one-lane 16th patterns).
+ * 20 each: kick · snare · clap · hihat · openHat · rim (one-lane 16th patterns).
  */
 import type {
   BeatPadsDrumRole,
@@ -25,6 +25,28 @@ function tpl(
 
 /** @internal Merged into ALL_TEMPLATES. */
 export const BEAT_PADS_LOFI_LANE_TEMPLATES: readonly BeatPadsLanePlacementTemplate[] = [
+  // ── LO-FI KICK (20) ──
+  tpl('lofi-kick-dusty', 'Dusty Trunk', 'kick', 'lofi', 'Soft 1 · &3 pocket', bar(0, 10)),
+  tpl('lofi-kick-study', 'Study Pulse', 'kick', 'lofi', '1 · 3 chill hop', bar(0, 8)),
+  tpl('lofi-kick-lazy', 'Lazy Pocket', 'kick', 'lofi', 'Late lean 1 · &3', bar(0, 11)),
+  tpl('lofi-kick-vinyl', 'Vinyl Knock', 'kick', 'lofi', 'Sparse vinyl knock', bar(0, 8, 14)),
+  tpl('lofi-kick-tape', 'Tape Boom', 'kick', 'lofi', '1 · late 3 · ghost', bar(0, 10, 15)),
+  tpl('lofi-kick-half', 'Half-Time', 'kick', 'lofi', 'Downbeat only', bar(0)),
+  tpl('lofi-kick-swing', 'Swing Lean', 'kick', 'lofi', 'Swung 1 · &2 · 3', bar(0, 6, 8)),
+  tpl('lofi-kick-night', 'Night Boom', 'kick', 'lofi', '1 · & of 3 soft', bar(0, 10, 14)),
+  tpl('lofi-kick-cassette', 'Cassette', 'kick', 'lofi', 'Warped 1 · 3 · &4', bar(0, 8, 14)),
+  tpl('lofi-kick-fog', 'Fog Sub', 'kick', 'lofi', 'Soft foggy trunk', bar(0, 7, 12)),
+  tpl('lofi-kick-brush', 'Brush Kick', 'kick', 'lofi', 'Soft brush pocket', bar(0, 8, 11)),
+  tpl('lofi-kick-pickup', 'Pickup Dust', 'kick', 'lofi', '1 + bar pickup', bar(0, 14, 15)),
+  tpl('lofi-kick-double', 'Soft Double', 'kick', 'lofi', 'Double on 1', bar(0, 1, 8)),
+  tpl('lofi-kick-skip', 'Skip 3', 'kick', 'lofi', '1 · late 4', bar(0, 14)),
+  tpl('lofi-kick-room', 'Room Knock', 'kick', 'lofi', 'Wide room 1 · 3', bar(0, 8, 12)),
+  tpl('lofi-kick-jazzy', 'Jazzy Lean', 'kick', 'lofi', 'Jazz lean 1 · &3 · &4', bar(0, 10, 14)),
+  tpl('lofi-kick-minimal', 'One Hit', 'kick', 'lofi', 'Single dusty knock', bar(0)),
+  tpl('lofi-kick-bounce', 'Soft Bounce', 'kick', 'lofi', '1 · &2 · 3', bar(0, 6, 8)),
+  tpl('lofi-kick-behind', 'Behind Grid', 'kick', 'lofi', 'Late pocket trunk', bar(0, 7, 11)),
+  tpl('lofi-kick-warm', 'Warm Sub', 'kick', 'lofi', 'Warm 1 · 3 · soft &4', bar(0, 8, 13)),
+
   // ── LO-FI SNARE (20) ──
   tpl('lofi-snare-24', 'Dusty 2 & 4', 'snare', 'lofi', 'Soft study-beat backbeat', bar(4, 12)),
   tpl('lofi-snare-late', 'Late Pocket', 'snare', 'lofi', 'Snare sits behind 2 & 4', bar(5, 13)),
@@ -112,4 +134,26 @@ export const BEAT_PADS_LOFI_LANE_TEMPLATES: readonly BeatPadsLanePlacementTempla
   tpl('lofi-oh-night', 'Night Sizzle', 'openHat', 'lofi', 'Night sizzle on 4', bar(12, 14)),
   tpl('lofi-oh-brush', 'Brush Open', 'openHat', 'lofi', 'Brushy open lift', bar(6)),
   tpl('lofi-oh-sparse2', 'Sparse &4', 'openHat', 'lofi', 'Sparse & of 4 only', bar(14)),
+
+  // ── LO-FI RIM / PERC (20) ──
+  tpl('lofi-rim-tick', 'Soft Tick', 'rim', 'lofi', 'Soft offbeat ticks', bar(2, 6, 10, 14)),
+  tpl('lofi-rim-vinyl', 'Vinyl Perc', 'rim', 'lofi', 'Irregular vinyl ticks', bar(1, 5, 9, 13)),
+  tpl('lofi-rim-shaker', 'Dust Shaker', 'rim', 'lofi', 'Soft shaker 8ths', bar(0, 2, 4, 6, 8, 10, 12, 14)),
+  tpl('lofi-rim-sparse', 'Sparse Rim', 'rim', 'lofi', 'Two soft rims', bar(6, 14)),
+  tpl('lofi-rim-ghost', 'Ghost Rim', 'rim', 'lofi', 'Ghost rim layer', bar(3, 7, 11, 15)),
+  tpl('lofi-rim-fill', 'Bar Dust', 'rim', 'lofi', 'Dusty bar-end perc', bar(13, 14, 15)),
+  tpl('lofi-rim-click', 'Click Quarters', 'rim', 'lofi', 'Soft quarter clicks', bar(0, 4, 8, 12)),
+  tpl('lofi-rim-swing', 'Swing Rim', 'rim', 'lofi', 'Swung skip ticks', bar(1, 3, 5, 7, 9, 11, 13, 15)),
+  tpl('lofi-rim-tape', 'Tape Perc', 'rim', 'lofi', 'Tape crackle ticks', bar(1, 4, 7, 10, 14)),
+  tpl('lofi-rim-fog', 'Fog Perc', 'rim', 'lofi', 'Foggy mid ticks', bar(2, 5, 10, 13)),
+  tpl('lofi-rim-cassette', 'Cassette Rim', 'rim', 'lofi', 'Warped rim accents', bar(3, 6, 11, 14)),
+  tpl('lofi-rim-brush', 'Brush Perc', 'rim', 'lofi', 'Brushy perc layer', bar(2, 6, 11, 15)),
+  tpl('lofi-rim-study', 'Study Tick', 'rim', 'lofi', 'Study-beat perc pocket', bar(2, 6, 10, 14)),
+  tpl('lofi-rim-night', 'Night Rim', 'rim', 'lofi', 'Sparse night rim', bar(6, 12)),
+  tpl('lofi-rim-side', 'Side Stick', 'rim', 'lofi', 'Side-stick on 2 & 4', bar(4, 12)),
+  tpl('lofi-rim-lazy', 'Lazy Perc', 'rim', 'lofi', 'Lazy offbeat rim', bar(7, 14)),
+  tpl('lofi-rim-room', 'Room Tick', 'rim', 'lofi', 'Wide room ticks', bar(2, 6, 10, 13, 14)),
+  tpl('lofi-rim-minimal', 'One Rim', 'rim', 'lofi', 'Single rim accent', bar(6)),
+  tpl('lofi-rim-push', 'Push Perc', 'rim', 'lofi', 'Perc into bar line', bar(14, 15)),
+  tpl('lofi-rim-double', 'Double Tick', 'rim', 'lofi', 'Double ticks on 4', bar(12, 13, 14)),
 ];

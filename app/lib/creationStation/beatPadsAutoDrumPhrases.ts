@@ -53,7 +53,7 @@ export const GENRE_PROFILES: readonly AutoDrumGenreProfile[] = [
   },
   {
     genre: 'house',
-    strong: ['house', 'chicago', 'deep house', 'garage', 'techno', 'tech house', 'deep'],
+    strong: ['house', 'chicago', 'deep house', 'garage', 'tech house', 'deep'],
     medium: ['four on the floor', 'fouronthefloor', 'four floor', 'driving', 'warehouse', 'jack'],
     weak: ['clap', 'rim', 'punch', 'groove'],
   },
@@ -99,6 +99,18 @@ export const GENRE_PROFILES: readonly AutoDrumGenreProfile[] = [
     medium: ['dusty', 'vinyl', 'cassette', 'bedroom', 'jazzy hip hop', 'boom bap soft'],
     weak: ['chill', 'soft', 'lazy', 'mellow', 'warm', 'night'],
   },
+  {
+    genre: 'techno',
+    strong: ['techno', 'berlin', 'warehouse', 'industrial techno', 'peak time', 'afterhours'],
+    medium: ['acid', 'minimal techno', 'detroit techno', 'hard techno', 'driving'],
+    weak: ['four floor', 'march', 'tribal', 'rave'],
+  },
+  {
+    genre: 'hiphop',
+    strong: ['hip hop', 'hiphop', 'hip-hop', 'boom bap', 'boombap', 'old school', 'golden era'],
+    medium: ['east coast', 'west coast', 'pocket', 'head nod', 'classic rap'],
+    weak: ['dusty', 'sample', 'crate', 'jazzy'],
+  },
 ] as const;
 
 /** 2 & 4 backbeat + bar-end roll/fill — per genre. */
@@ -113,6 +125,8 @@ const SNARE_BACKBEAT_ROLL: Partial<Record<BeatPadsPlacementGenre, string>> = {
   afro: 'afro-snare-fill',
   reggae: 'reggae-snare-fill',
   lofi: 'lofi-snare-fill',
+  techno: 'techno-snare-24-tail',
+  hiphop: 'hiphop-snare-bar-fill',
 };
 
 export const INSTRUCTION_RULES: readonly AutoDrumInstructionRule[] = [
