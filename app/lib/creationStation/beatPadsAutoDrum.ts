@@ -62,6 +62,7 @@ const GENRE_STRONG_WORDS = new Set([
   'hiphop',
   'hip hop',
   'boom bap',
+  'boombap',
 ]);
 
 export function normalizeAutoDrumQuery(raw: string): string {

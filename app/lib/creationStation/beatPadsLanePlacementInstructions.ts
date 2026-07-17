@@ -22,7 +22,7 @@ export const BEAT_PADS_LANE_PLACEMENT_HELP = {
     {
       heading: 'Auto Drum — type & Go',
       body:
-        'Describe the groove in plain words: trap snare roll, techno four floor kick, hip hop boom bap snare, lo-fi dusty clap, rim perc tick. Genre in your phrase can switch the dropdown. Regen beside Go tries another match. Enter runs Go.',
+        'Describe the groove in plain words: trap snare roll, techno four floor kick, boom bap hard snare, hip hop pocket, lo-fi dusty clap, rim perc tick. Genre in your phrase can switch the dropdown. Regen beside Go tries another match. Enter runs Go.',
     },
     {
       heading: 'Lane Placements vs Pattern Bank',

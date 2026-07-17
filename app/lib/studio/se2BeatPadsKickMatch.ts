@@ -129,6 +129,7 @@ const REGEN_GENRE_FALLBACKS: readonly BeatPadsPlacementGenre[] = [
   'lofi',
   'techno',
   'hiphop',
+  'boombap',
 ];
 
 function templatesForRole(

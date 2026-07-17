@@ -107,9 +107,15 @@ export const GENRE_PROFILES: readonly AutoDrumGenreProfile[] = [
   },
   {
     genre: 'hiphop',
-    strong: ['hip hop', 'hiphop', 'hip-hop', 'boom bap', 'boombap', 'old school', 'golden era'],
+    strong: ['hip hop', 'hiphop', 'hip-hop', 'old school', 'golden era'],
     medium: ['east coast', 'west coast', 'pocket', 'head nod', 'classic rap'],
     weak: ['dusty', 'sample', 'crate', 'jazzy'],
+  },
+  {
+    genre: 'boombap',
+    strong: ['boom bap', 'boombap', 'boom-bap', 'golden era boom', 'sample flip', 'sp-1200', 'mpc boom'],
+    medium: ['east coast boom', 'crate dig', 'dusty kick', 'hard snare', 'head nod boom'],
+    weak: ['vinyl', 'chop', 'breakbeat', 'classic'],
   },
 ] as const;
 
@@ -127,6 +133,7 @@ const SNARE_BACKBEAT_ROLL: Partial<Record<BeatPadsPlacementGenre, string>> = {
   lofi: 'lofi-snare-fill',
   techno: 'techno-snare-24-tail',
   hiphop: 'hiphop-snare-bar-fill',
+  boombap: 'boombap-snare-fill',
 };
 
 export const INSTRUCTION_RULES: readonly AutoDrumInstructionRule[] = [
