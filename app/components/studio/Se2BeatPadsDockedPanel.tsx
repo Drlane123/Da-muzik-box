@@ -181,7 +181,7 @@ export function Se2BeatPadsDockedPanel({
         ) : null}
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }

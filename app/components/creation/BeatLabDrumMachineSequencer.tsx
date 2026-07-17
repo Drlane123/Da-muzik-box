@@ -80,10 +80,15 @@ const COL_W = BEAT_PADS_GRID_COL_W;
 const BAR_HEADER_H = 20;
 const BEAT_HEADER_H = 16;
 const HEADER_H = BAR_HEADER_H + BEAT_HEADER_H;
-const DEFAULT_MIN_VISIBLE_LANES = BEAT_PADS_LANE_COUNT;
+const DEFAULT_MIN_VISIBLE_LANES = 7;
 const MIN_SEQ_VIEWPORT_H = HEADER_H + DEFAULT_MIN_VISIBLE_LANES * ROW_H;
 /** Pinned horizontal scrollbar track below the lane scroll area. */
 const BEAT_PADS_GRID_HBAR_H = 14;
+
+/** Full content height for all 16 pad lanes (header + rows) — scroll body, not viewport. */
+export function beatPadsSequencerFullContentH(): number {
+  return HEADER_H + BEAT_PADS_LANE_COUNT * ROW_H;
+}
 
 export function beatPadsSequencerMinViewportH(minVisibleLanes: number): number {
   const lanes = Math.max(1, Math.min(BEAT_PADS_LANE_COUNT, Math.round(minVisibleLanes)));
@@ -415,7 +420,7 @@ export type BeatLabDrumMachineSequencerProps = {
   /** SE2 embedded — lock step grid to main transport. */
   se2SyncMode?: Se2BeatPadsSe2SyncMode;
   onSe2SyncModeChange?: (mode: Se2BeatPadsSe2SyncMode) => void;
-  /** Minimum lane rows visible in the scroll viewport (default: all 16 pads). */
+  /** Minimum lane rows visible in the scroll viewport (default 7). Full 16 via inner scrollbar. */
   minVisibleLanes?: number;
   /** Controlled expand — lifts grid to full-workspace overlay when embedded. */
   gridExpanded?: boolean;
@@ -467,10 +472,12 @@ export function BeatLabDrumMachineSequencer({
   const [bpmDraft, setBpmDraft] = useState('');
   const gridExpanded = gridExpandedProp ?? gridExpandedInternal;
   const compactViewportMinH = beatPadsSequencerMinViewportH(minVisibleLanes);
-  const fullGridMinH = beatPadsSequencerMinViewportH(BEAT_PADS_LANE_COUNT);
-  // Expand must show all 16 pad lanes (not minVisibleLanes + waveform lift ≈ 14).
-  const seqViewportMinH = gridExpanded ? fullGridMinH : compactViewportMinH;
+  // Compact viewport (min/expand + optional waveform lift). Content stays 16 lanes — scroll inside.
+  const seqViewportMinH = gridExpanded
+    ? beatPadsGridScrollViewportH(minVisibleLanes, { liftPx: gridExpandedLiftPx })
+    : compactViewportMinH;
   const gridHostMinH = seqViewportMinH + BEAT_PADS_GRID_HBAR_H;
+  const laneScrollContentH = beatPadsSequencerFullContentH();
 
   const setGridExpanded = useCallback(
     (value: boolean | ((prev: boolean) => boolean)) => {
@@ -1665,10 +1672,11 @@ export function BeatLabDrumMachineSequencer({
         style={{
           display: 'flex',
           flexDirection: 'column',
-          flex: gridFillViewport ? '1 1 auto' : gridExpanded ? '0 0 auto' : '1 1 auto',
-          minHeight: gridFillViewport || gridExpanded ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : gridHostMinH,
-          height: gridExpanded ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : undefined,
-          maxHeight: gridExpanded ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : undefined,
+          flex: gridFillViewport ? '1 1 auto' : '0 0 auto',
+          // Cap host to viewport so overflowY on the grid scrolls through all 16 lanes.
+          minHeight: gridFillViewport ? 0 : gridHostMinH,
+          height: gridFillViewport ? undefined : gridHostMinH,
+          maxHeight: gridFillViewport ? undefined : gridHostMinH,
           minWidth: 0,
           background: BEAT_PADS_SURFACE,
         }}
@@ -1679,12 +1687,22 @@ export function BeatLabDrumMachineSequencer({
           style={{
             flex: '1 1 auto',
             minHeight: 0,
+            height: gridFillViewport ? undefined : seqViewportMinH,
+            maxHeight: gridFillViewport ? undefined : seqViewportMinH,
             overflowX: 'hidden',
             overflowY: 'auto',
             overscrollBehavior: 'contain',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              position: 'relative',
+              height: laneScrollContentH,
+              minHeight: laneScrollContentH,
+            }}
+          >
             <div
               style={{
                 zIndex: 12,
