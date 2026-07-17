@@ -448,8 +448,8 @@ export function BeatPadsLanePlacementPanel({
             type="button"
             disabled={disabled}
             onClick={handleRandomKitDice}
-            title="Random placements for all 6 drums — mix any genre"
-            aria-label="Random kit placements for kick, snare, clap, hi-hat, open hat, and rim"
+            title="Random kit — solid kick on 1, snare on 2 & 4; hats/perc any genre"
+            aria-label="Random kit placements with solid kick and snare"
             style={{
               ...REGEN_BTN,
               width: 24,

@@ -527,28 +527,94 @@ export function getBeatPadsLaneTemplatesForRole(
   return ALL_TEMPLATES.filter((t) => t.role === role);
 }
 
-/** Random template for a role from any genre pack. */
-export function pickRandomBeatPadsLaneTemplateAnyGenre(
+/** True when any two hits are adjacent 16ths (rolls / flam doubles). */
+export function beatPadsPlacementHasAdjacentHits(steps: readonly number[]): boolean {
+  const sorted = [...new Set(steps)].sort((a, b) => a - b);
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i]! - sorted[i - 1]! === 1) return true;
+  }
+  return false;
+}
+
+/**
+ * Dice kick rule: open on beat 1 (step 0), keep moving through the bar,
+ * and skip adjacent double/triple rolls. Not a lonely downbeat-only hit.
+ */
+export function isSolidBeatPadsKickPlacement(steps: readonly number[]): boolean {
+  const unique = [...new Set(steps)];
+  if (!unique.includes(0)) return false;
+  // Must start on 1 and keep going — not stuck on the downbeat alone.
+  if (unique.length < 2) return false;
+  if (beatPadsPlacementHasAdjacentHits(unique)) return false;
+  return true;
+}
+
+/**
+ * Dice snare rule: only classic backbeat spots — beat 2 and/or beat 4 (steps 4 / 12).
+ * No ghosts, fills, late taps, or roll doubles.
+ */
+export function isSolidBeatPadsSnarePlacement(steps: readonly number[]): boolean {
+  if (steps.length === 0) return false;
+  return steps.every((s) => s === 4 || s === 12);
+}
+
+/** Classic 2 & 4 snare (preferred for kit dice). */
+export function isClassicBeatPadsSnare24(steps: readonly number[]): boolean {
+  if (steps.length !== 2) return false;
+  const sorted = [...steps].sort((a, b) => a - b);
+  return sorted[0] === 4 && sorted[1] === 12;
+}
+
+/**
+ * Templates safe for kit dice — solid kick/snare; other roles unchanged.
+ * Snare pool prefers exact 2 & 4 when available.
+ */
+export function getBeatPadsKitDiceTemplatesForRole(
   role: BeatPadsDrumRole,
+): readonly BeatPadsLanePlacementTemplate[] {
+  const all = getBeatPadsLaneTemplatesForRole(role);
+  if (role === 'kick') {
+    return all.filter((t) => isSolidBeatPadsKickPlacement(t.steps));
+  }
+  if (role === 'snare') {
+    const solid = all.filter((t) => isSolidBeatPadsSnarePlacement(t.steps));
+    const classic = solid.filter((t) => isClassicBeatPadsSnare24(t.steps));
+    return classic.length > 0 ? classic : solid;
+  }
+  return all;
+}
+
+function pickFromTemplatePool(
+  list: readonly BeatPadsLanePlacementTemplate[],
   excludeId?: string | null,
 ): BeatPadsLanePlacementTemplate | undefined {
-  const list = getBeatPadsLaneTemplatesForRole(role);
   if (list.length === 0) return undefined;
   const alternates = excludeId ? list.filter((t) => t.id !== excludeId) : list;
   const pool = alternates.length > 0 ? alternates : list;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+/** Random template for a role from any genre pack. */
+export function pickRandomBeatPadsLaneTemplateAnyGenre(
+  role: BeatPadsDrumRole,
+  excludeId?: string | null,
+): BeatPadsLanePlacementTemplate | undefined {
+  return pickFromTemplatePool(getBeatPadsLaneTemplatesForRole(role), excludeId);
+}
+
 /**
  * One random placement per drum role, mixing genres (Boom Bap / Hip Hop / R&B / …).
- * Used by the Lane Placements dice control.
+ * Kick + snare use solid backbeat pools so dice kits stay steady.
  */
 export function pickRandomBeatPadsKitLanePlacements(
   excludeByRole?: Partial<Record<BeatPadsDrumRole, string | null>>,
 ): ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }> {
   const out: { role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }[] = [];
   for (const { id: role } of BEAT_PADS_DRUM_ROLES) {
-    const pick = pickRandomBeatPadsLaneTemplateAnyGenre(role, excludeByRole?.[role]);
+    const pick = pickFromTemplatePool(
+      getBeatPadsKitDiceTemplatesForRole(role),
+      excludeByRole?.[role],
+    );
     if (pick) out.push({ role, template: pick });
   }
   return out;
