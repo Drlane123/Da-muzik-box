@@ -80,7 +80,7 @@ const COL_W = BEAT_PADS_GRID_COL_W;
 const BAR_HEADER_H = 20;
 const BEAT_HEADER_H = 16;
 const HEADER_H = BAR_HEADER_H + BEAT_HEADER_H;
-const DEFAULT_MIN_VISIBLE_LANES = 7;
+const DEFAULT_MIN_VISIBLE_LANES = BEAT_PADS_LANE_COUNT;
 const MIN_SEQ_VIEWPORT_H = HEADER_H + DEFAULT_MIN_VISIBLE_LANES * ROW_H;
 /** Pinned horizontal scrollbar track below the lane scroll area. */
 const BEAT_PADS_GRID_HBAR_H = 14;
@@ -415,7 +415,7 @@ export type BeatLabDrumMachineSequencerProps = {
   /** SE2 embedded — lock step grid to main transport. */
   se2SyncMode?: Se2BeatPadsSe2SyncMode;
   onSe2SyncModeChange?: (mode: Se2BeatPadsSe2SyncMode) => void;
-  /** Minimum lane rows visible in the scroll viewport (default 7). */
+  /** Minimum lane rows visible in the scroll viewport (default: all 16 pads). */
   minVisibleLanes?: number;
   /** Controlled expand — lifts grid to full-workspace overlay when embedded. */
   gridExpanded?: boolean;
@@ -468,9 +468,8 @@ export function BeatLabDrumMachineSequencer({
   const gridExpanded = gridExpandedProp ?? gridExpandedInternal;
   const compactViewportMinH = beatPadsSequencerMinViewportH(minVisibleLanes);
   const fullGridMinH = beatPadsSequencerMinViewportH(BEAT_PADS_LANE_COUNT);
-  const seqViewportMinH = gridExpanded
-    ? beatPadsGridScrollViewportH(minVisibleLanes, { liftPx: gridExpandedLiftPx })
-    : compactViewportMinH;
+  // Expand must show all 16 pad lanes (not minVisibleLanes + waveform lift ≈ 14).
+  const seqViewportMinH = gridExpanded ? fullGridMinH : compactViewportMinH;
   const gridHostMinH = seqViewportMinH + BEAT_PADS_GRID_HBAR_H;
 
   const setGridExpanded = useCallback(
@@ -1667,9 +1666,9 @@ export function BeatLabDrumMachineSequencer({
           display: 'flex',
           flexDirection: 'column',
           flex: gridFillViewport ? '1 1 auto' : gridExpanded ? '0 0 auto' : '1 1 auto',
-          minHeight: gridFillViewport ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : gridHostMinH,
-          height: gridExpanded ? gridHostMinH : undefined,
-          maxHeight: gridExpanded ? gridHostMinH : undefined,
+          minHeight: gridFillViewport || gridExpanded ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : gridHostMinH,
+          height: gridExpanded ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : undefined,
+          maxHeight: gridExpanded ? fullGridMinH + BEAT_PADS_GRID_HBAR_H : undefined,
           minWidth: 0,
           background: BEAT_PADS_SURFACE,
         }}
