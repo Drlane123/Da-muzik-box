@@ -85,6 +85,7 @@ import {
   applyBeatPadsLanePlacementTemplate,
   beatPadsDrumRoleFromLabel,
   getBeatPadsLaneTemplateById,
+  resolveBeatPadsLaneForDrumRole,
   type BeatPadsDrumRole,
   type BeatPadsLanePlacementTemplate,
 } from '@/app/lib/creationStation/beatPadsLanePlacementTemplates';
@@ -1176,6 +1177,43 @@ export function BeatLabDrumMachineOverlay({
     [activeBank, editPad, loopBars, onSelectPad, onStrikePad, onWarmAudio],
   );
 
+  const handleApplyMultiRoleTemplates = useCallback(
+    (
+      picks: ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }>,
+    ) => {
+      if (picks.length === 0) return;
+      const spb = gridStepsRef.current;
+      const applications = picks.map(({ role, template }) => ({
+        lane: resolveBeatPadsLaneForDrumRole(role, padLabelForPad),
+        template,
+      }));
+      setPattern((prev) => {
+        let next = prev;
+        for (const { lane, template } of applications) {
+          next = applyBeatPadsLanePlacementTemplate(
+            next,
+            lane,
+            loopBars,
+            template.steps,
+            spb,
+          );
+        }
+        return next;
+      });
+      setActiveLaneTemplateIds((prev) => {
+        const next = { ...prev };
+        for (const { lane, template } of applications) {
+          next[`${activeBank}_${lane}`] = template.id;
+        }
+        return next;
+      });
+      void Promise.resolve(onWarmAudio?.());
+      const kickLane = resolveBeatPadsLaneForDrumRole('kick', padLabelForPad);
+      onStrikePad(kickLane, 0.88);
+    },
+    [activeBank, loopBars, onStrikePad, onWarmAudio, padLabelForPad],
+  );
+
   const handleLaneDrumRoleChange = useCallback(
     (role: BeatPadsDrumRole) => {
       setLaneDrumRoles((prev) => ({ ...prev, [laneKey]: role }));
@@ -1986,6 +2024,7 @@ export function BeatLabDrumMachineOverlay({
                   laneDrumRole={laneDrumRole}
                   onLaneDrumRoleChange={handleLaneDrumRoleChange}
                   onApplyLaneTemplate={handleApplyLaneTemplate}
+                  onApplyMultiRoleTemplates={handleApplyMultiRoleTemplates}
                   onLaneBpmChange={handleTransportBpmChange}
                   onAutoDrumPadSample={onAutoDrumPadSample}
                   activeLaneTemplateId={activeLaneTemplateId}

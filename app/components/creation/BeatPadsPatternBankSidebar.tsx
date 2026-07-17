@@ -29,6 +29,9 @@ export type BeatPadsPatternBankSidebarProps = {
   laneDrumRole?: BeatPadsDrumRole;
   onLaneDrumRoleChange?: (role: BeatPadsDrumRole) => void;
   onApplyLaneTemplate?: (template: BeatPadsLanePlacementTemplate) => void;
+  onApplyMultiRoleTemplates?: (
+    picks: ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }>,
+  ) => void;
   onLaneBpmChange?: (bpm: number) => void;
   onAutoDrumPadSample?: (
     targetPad: number,
@@ -51,6 +54,7 @@ export function BeatPadsPatternBankSidebar({
   laneDrumRole = 'kick',
   onLaneDrumRoleChange,
   onApplyLaneTemplate,
+  onApplyMultiRoleTemplates,
   onLaneBpmChange,
   onAutoDrumPadSample,
   activeLaneTemplateId = null,
@@ -243,6 +247,7 @@ export function BeatPadsPatternBankSidebar({
             drumRole={laneDrumRole}
             onDrumRoleChange={onLaneDrumRoleChange ?? (() => {})}
             onApplyTemplate={onApplyLaneTemplate}
+            onApplyMultiRoleTemplates={onApplyMultiRoleTemplates}
             onBpmChange={onLaneBpmChange}
             onAutoDrumPadSample={onAutoDrumPadSample}
             disabled={disabled}

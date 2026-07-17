@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { RefreshCw, Sparkles, X } from 'lucide-react';
+import { Dices, RefreshCw, Sparkles, X } from 'lucide-react';
 import {
   BEAT_PADS_DRUM_ROLES,
   BEAT_PADS_PLACEMENT_GENRES,
@@ -11,6 +11,7 @@ import {
   beatPadsPlacementStepPreview,
   getBeatPadsLaneTemplates,
   pickAlternateBeatPadsLaneTemplate,
+  pickRandomBeatPadsKitLanePlacements,
   type BeatPadsDrumRole,
   type BeatPadsLanePlacementTemplate,
   type BeatPadsPlacementGenre,
@@ -184,6 +185,10 @@ export type BeatPadsLanePlacementPanelProps = {
   drumRole: BeatPadsDrumRole;
   onDrumRoleChange: (role: BeatPadsDrumRole) => void;
   onApplyTemplate: (template: BeatPadsLanePlacementTemplate) => void;
+  /** Dice: apply one random placement per role (any genre mix) onto kit lanes. */
+  onApplyMultiRoleTemplates?: (
+    picks: ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }>,
+  ) => void;
   /** When Auto Drum phrase includes a tempo (e.g. "bpm 97"). */
   onBpmChange?: (bpm: number) => void;
   /** Load / swap pad sample on the selected lane to match typed instructions. */
@@ -203,6 +208,7 @@ export function BeatPadsLanePlacementPanel({
   drumRole,
   onDrumRoleChange,
   onApplyTemplate,
+  onApplyMultiRoleTemplates,
   onBpmChange,
   onAutoDrumPadSample,
   disabled = false,
@@ -238,6 +244,12 @@ export function BeatPadsLanePlacementPanel({
     const pick = pickAlternateBeatPadsLaneTemplate(drumRole, genre, activeTemplateId);
     if (pick) onApplyTemplate(pick);
   }, [activeTemplateId, drumRole, genre, onApplyTemplate]);
+
+  const handleRandomKitDice = useCallback(() => {
+    if (!onApplyMultiRoleTemplates) return;
+    const picks = pickRandomBeatPadsKitLanePlacements();
+    if (picks.length > 0) onApplyMultiRoleTemplates(picks);
+  }, [onApplyMultiRoleTemplates]);
 
   const applyAutoDrumResult = useCallback(
     async (result: NonNullable<ReturnType<typeof resolveBeatPadsAutoDrum>>) => {
@@ -431,6 +443,25 @@ export function BeatPadsLanePlacementPanel({
           <RefreshCw size={10} aria-hidden />
           Regen
         </button>
+        {typeof onApplyMultiRoleTemplates === 'function' ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={handleRandomKitDice}
+            title="Random placements for all 6 drums — mix any genre"
+            aria-label="Random kit placements for kick, snare, clap, hi-hat, open hat, and rim"
+            style={{
+              ...REGEN_BTN,
+              width: 24,
+              padding: 0,
+              gap: 0,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.45 : 1,
+            }}
+          >
+            <Dices size={11} aria-hidden />
+          </button>
+        ) : null}
       </div>
 
       <div

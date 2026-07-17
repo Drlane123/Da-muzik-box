@@ -520,6 +520,40 @@ export function pickRandomBeatPadsLaneTemplate(
   return list[Math.floor(Math.random() * list.length)];
 }
 
+/** All genre packs for one drum role (dice / multi-role random). */
+export function getBeatPadsLaneTemplatesForRole(
+  role: BeatPadsDrumRole,
+): readonly BeatPadsLanePlacementTemplate[] {
+  return ALL_TEMPLATES.filter((t) => t.role === role);
+}
+
+/** Random template for a role from any genre pack. */
+export function pickRandomBeatPadsLaneTemplateAnyGenre(
+  role: BeatPadsDrumRole,
+  excludeId?: string | null,
+): BeatPadsLanePlacementTemplate | undefined {
+  const list = getBeatPadsLaneTemplatesForRole(role);
+  if (list.length === 0) return undefined;
+  const alternates = excludeId ? list.filter((t) => t.id !== excludeId) : list;
+  const pool = alternates.length > 0 ? alternates : list;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+/**
+ * One random placement per drum role, mixing genres (Boom Bap / Hip Hop / R&B / …).
+ * Used by the Lane Placements dice control.
+ */
+export function pickRandomBeatPadsKitLanePlacements(
+  excludeByRole?: Partial<Record<BeatPadsDrumRole, string | null>>,
+): ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }> {
+  const out: { role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }[] = [];
+  for (const { id: role } of BEAT_PADS_DRUM_ROLES) {
+    const pick = pickRandomBeatPadsLaneTemplateAnyGenre(role, excludeByRole?.[role]);
+    if (pick) out.push({ role, template: pick });
+  }
+  return out;
+}
+
 /** Random template for role/genre, skipping the current one when possible. */
 export function pickAlternateBeatPadsLaneTemplate(
   role: BeatPadsDrumRole,
