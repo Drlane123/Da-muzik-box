@@ -421,6 +421,18 @@ export type BeatLabDrumMachineSequencerProps = {
   onTransportBpmChange?: (bpm: number) => void;
   /** Scrub playhead to a grid column (Beat Pads local sequencer). */
   onSeekPlayheadCol?: (col: number) => void;
+  /** Grid performance record — Cnt / Mtr / Rec next to Play/Stop. */
+  gridRecordPrecountEnabled?: boolean;
+  onGridRecordPrecountToggle?: () => void;
+  gridRecordMetroEnabled?: boolean;
+  onGridRecordMetroToggle?: () => void;
+  gridRecording?: boolean;
+  gridRecordPrecounting?: boolean;
+  gridRecordBeatLabel?: string | null;
+  onGridRecordToggle?: () => void;
+  /** One-shot: push this pattern onto the sequencer undo stack (grid record take). */
+  gridRecordUndoSeed?: BeatPadsDrumPattern | null;
+  onGridRecordUndoSeedConsumed?: () => void;
   /** SE2 embedded — lock step grid to main transport. */
   se2SyncMode?: Se2BeatPadsSe2SyncMode;
   onSe2SyncModeChange?: (mode: Se2BeatPadsSe2SyncMode) => void;
@@ -463,6 +475,16 @@ export function BeatLabDrumMachineSequencer({
   onTransportStop,
   onTransportBpmChange,
   onSeekPlayheadCol,
+  gridRecordPrecountEnabled = true,
+  onGridRecordPrecountToggle,
+  gridRecordMetroEnabled = true,
+  onGridRecordMetroToggle,
+  gridRecording = false,
+  gridRecordPrecounting = false,
+  gridRecordBeatLabel = null,
+  onGridRecordToggle,
+  gridRecordUndoSeed = null,
+  onGridRecordUndoSeedConsumed,
   se2SyncMode = 'off',
   onSe2SyncModeChange,
   minVisibleLanes = DEFAULT_MIN_VISIBLE_LANES,
@@ -566,6 +588,7 @@ export function BeatLabDrumMachineSequencer({
     typeof transportBpm === 'number'
     && typeof onTransportPlay === 'function'
     && typeof onTransportStop === 'function';
+  const showGridRecord = typeof onGridRecordToggle === 'function';
   const se2SyncActive = se2SyncMode !== 'off' && typeof onSe2SyncModeChange === 'function';
   const se2SyncSlave = se2SyncMode === 'slave';
   // Beat Pads is its own sequencer inside SE2 — scrub whenever a seek handler is wired.
@@ -592,6 +615,16 @@ export function BeatLabDrumMachineSequencer({
     undoStackRef.current = [];
     setCanUndo(false);
   }, [loopBars, stepsPerBar]);
+
+  useEffect(() => {
+    if (!gridRecordUndoSeed) return;
+    const stack = undoStackRef.current;
+    stack.push(cloneBeatPadsPattern(gridRecordUndoSeed));
+    if (stack.length > BEAT_PADS_UNDO_DEPTH) stack.shift();
+    undoStackRef.current = stack;
+    setCanUndo(true);
+    onGridRecordUndoSeedConsumed?.();
+  }, [gridRecordUndoSeed, onGridRecordUndoSeedConsumed]);
 
   useLayoutEffect(() => {
     const inner = hScrollRef.current;
@@ -1373,6 +1406,100 @@ export function BeatLabDrumMachineSequencer({
                 <Square size={12} fill="currentColor" aria-hidden />
               </button>
             </div>
+            {showGridRecord ? (
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 4px',
+                  borderRadius: 5,
+                  border: '1px solid rgba(213, 0, 249, 0.28)',
+                  background: 'rgba(8, 10, 14, 0.95)',
+                }}
+                title="Grid record — count-in, metronome, then play pads / MIDI / keys onto the loop"
+              >
+                <button
+                  type="button"
+                  disabled={disabled || gridRecording || gridRecordPrecounting}
+                  onClick={onGridRecordMetroToggle}
+                  style={{
+                    ...toolBtn,
+                    minWidth: 30,
+                    height: 26,
+                    padding: '0 5px',
+                    fontSize: 9,
+                    borderColor: gridRecordMetroEnabled ? 'rgba(120, 200, 255, 0.55)' : 'rgba(255,255,255,0.14)',
+                    color: gridRecordMetroEnabled ? '#9ec8ff' : '#666',
+                    background: gridRecordMetroEnabled ? 'rgba(120, 180, 255, 0.1)' : '#12121a',
+                    opacity: disabled || gridRecording || gridRecordPrecounting ? 0.45 : 1,
+                  }}
+                  title={gridRecordMetroEnabled ? 'Metronome during record' : 'Record metronome off'}
+                >
+                  Mtr
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled || gridRecording || gridRecordPrecounting}
+                  onClick={onGridRecordPrecountToggle}
+                  style={{
+                    ...toolBtn,
+                    minWidth: 30,
+                    height: 26,
+                    padding: '0 5px',
+                    fontSize: 9,
+                    borderColor: gridRecordPrecountEnabled ? 'rgba(255, 176, 128, 0.55)' : 'rgba(255,255,255,0.14)',
+                    color: gridRecordPrecountEnabled ? '#ffb080' : '#666',
+                    background: gridRecordPrecountEnabled ? 'rgba(255, 120, 60, 0.1)' : '#12121a',
+                    opacity: disabled || gridRecording || gridRecordPrecounting ? 0.45 : 1,
+                  }}
+                  title={gridRecordPrecountEnabled ? '1-bar count-in before record' : 'Count-in off'}
+                >
+                  Cnt
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled && !gridRecording && !gridRecordPrecounting}
+                  onClick={onGridRecordToggle}
+                  style={{
+                    ...toolBtn,
+                    minWidth: 40,
+                    height: 26,
+                    padding: '0 6px',
+                    fontSize: 9,
+                    fontWeight: 900,
+                    borderColor:
+                      gridRecording || gridRecordPrecounting
+                        ? '#e85d7588'
+                        : 'rgba(213, 0, 249, 0.5)',
+                    background:
+                      gridRecording || gridRecordPrecounting
+                        ? 'rgba(232, 93, 117, 0.18)'
+                        : 'rgba(213, 0, 249, 0.12)',
+                    color:
+                      gridRecording || gridRecordPrecounting ? '#ff8a9a' : '#e8b0f8',
+                    opacity: disabled && !gridRecording && !gridRecordPrecounting ? 0.45 : 1,
+                  }}
+                  title={
+                    gridRecording || gridRecordPrecounting
+                      ? 'Stop grid record'
+                      : 'Record pads onto the grid (keyboard / MIDI / mouse)'
+                  }
+                  aria-label={
+                    gridRecording || gridRecordPrecounting
+                      ? 'Stop grid record'
+                      : 'Start grid record'
+                  }
+                >
+                  {gridRecording || gridRecordPrecounting ? (
+                    <Square size={10} fill="currentColor" aria-hidden />
+                  ) : null}
+                  {gridRecording || gridRecordPrecounting
+                    ? (gridRecordBeatLabel ?? 'Rec')
+                    : 'Rec'}
+                </button>
+              </div>
+            ) : null}
             <label
               style={{
                 display: 'inline-flex',

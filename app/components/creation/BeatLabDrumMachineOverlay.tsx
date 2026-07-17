@@ -86,6 +86,21 @@ import {
   generateBeatPadsBankStylePattern,
 } from '@/app/lib/creationStation/beatPadsBankStyleGenerate';
 import {
+  beatPadsGridRecordAudioTimeToCol,
+  beatPadsGridRecordClonePattern,
+  beatPadsGridRecordMergeHit,
+  beatPadsGridRecordPadForKeyboardCode,
+  beatPadsGridRecordPadForMidiPitch,
+  beatPadsGridRecordWindowSec,
+} from '@/app/lib/creationStation/beatPadsGridRecord';
+import { requestMidiAccess } from '@/app/lib/midi/midiDevices';
+import {
+  createSe2PrecountRimshotBuffer,
+  ensureSe2PrecountRimshotBuffer,
+  runSe2Precount,
+  SE2_PRECOUNT_CLICK_VOLUME,
+} from '@/app/lib/studio/se2Precount';
+import {
   applyBeatPadsLanePlacementTemplate,
   beatPadsDrumRoleFromLabel,
   getBeatPadsLaneTemplateById,
@@ -579,6 +594,30 @@ export function BeatLabDrumMachineOverlay({
   const bankPatternDiceUndoRef = useRef<BeatPadsDrumPattern | null>(null);
   const [canUndoBankPatternDice, setCanUndoBankPatternDice] = useState(false);
 
+  /** Grid performance record (Cnt / Mtr / Rec next to Play/Stop). */
+  const [gridRecordPrecountEnabled, setGridRecordPrecountEnabled] = useState(true);
+  const [gridRecordMetroEnabled, setGridRecordMetroEnabled] = useState(true);
+  const [gridRecording, setGridRecording] = useState(false);
+  const [gridRecordPrecounting, setGridRecordPrecounting] = useState(false);
+  const [gridRecordBeatLabel, setGridRecordBeatLabel] = useState<string | null>(null);
+  const [gridRecordUndoSeed, setGridRecordUndoSeed] = useState<BeatPadsDrumPattern | null>(null);
+  const gridRecordLiveRef = useRef(false);
+  const gridRecordAnchorRef = useRef(0);
+  const gridRecordCancelRef = useRef(false);
+  const gridRecordStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gridRecordRafRef = useRef(0);
+  const gridRecordMetroNodesRef = useRef<AudioBufferSourceNode[]>([]);
+  const gridRecordBufRef = useRef<AudioBuffer | null>(null);
+  const gridRecordUndoRef = useRef<BeatPadsDrumPattern | null>(null);
+  const gridRecordUndoPushedRef = useRef(false);
+  const loopBarsRef = useRef(loopBars);
+  const localBpmRef = useRef(localBpm);
+  loopBarsRef.current = loopBars;
+  localBpmRef.current = localBpm;
+  const performPadRef = useRef<
+    ((padIndex: number, vel01: number, opts?: { skipStrike?: boolean }) => void) | null
+  >(null);
+
   useBeatPadsGenoSyncLock(
     patternControl
       ? undefined
@@ -733,6 +772,7 @@ export function BeatLabDrumMachineOverlay({
       const tick = () => {
         if (noteRepeatPadRef.current !== padIndex) return;
         onStrikePad(padIndex, noteRepeatVelRef.current);
+        performPadRef.current?.(padIndex, noteRepeatVelRef.current, { skipStrike: true });
         noteRepeatTimerRef.current = setTimeout(tick, intervalSec * 1000);
       };
       noteRepeatTimerRef.current = setTimeout(tick, intervalSec * 1000);
@@ -907,10 +947,324 @@ export function BeatLabDrumMachineOverlay({
     if (se2TransportPlaying) onSe2TransportToggle?.();
   }, [beatPadsTransport, onSe2TransportToggle, se2TransportPlaying]);
 
-  const handleTransportPlay = se2SyncActive ? handleSe2SyncedTransportPlay : beatPadsTransport.start;
-  const handleTransportStop = se2SyncActive
-    ? handleSe2SyncedTransportStop
-    : beatPadsTransport.stopOrResetToStart;
+  const cancelGridRecordMetroNodes = useCallback(() => {
+    for (const node of gridRecordMetroNodesRef.current) {
+      try {
+        node.stop();
+      } catch {
+        /* */
+      }
+    }
+    gridRecordMetroNodesRef.current = [];
+  }, []);
+
+  const stopGridRecordSession = useCallback(() => {
+    gridRecordCancelRef.current = true;
+    gridRecordLiveRef.current = false;
+    if (gridRecordStopTimerRef.current != null) {
+      clearTimeout(gridRecordStopTimerRef.current);
+      gridRecordStopTimerRef.current = null;
+    }
+    if (gridRecordRafRef.current) {
+      cancelAnimationFrame(gridRecordRafRef.current);
+      gridRecordRafRef.current = 0;
+    }
+    cancelGridRecordMetroNodes();
+    setGridRecording(false);
+    setGridRecordPrecounting(false);
+    setGridRecordBeatLabel(null);
+  }, [cancelGridRecordMetroNodes]);
+
+  const handleTransportPlay = useCallback(() => {
+    if (gridRecording || gridRecordPrecounting) return;
+    if (se2SyncActive) handleSe2SyncedTransportPlay();
+    else void beatPadsTransport.start();
+  }, [
+    beatPadsTransport,
+    gridRecordPrecounting,
+    gridRecording,
+    handleSe2SyncedTransportPlay,
+    se2SyncActive,
+  ]);
+
+  const handleTransportStop = useCallback(() => {
+    if (gridRecording || gridRecordPrecounting) {
+      stopGridRecordSession();
+      return;
+    }
+    if (se2SyncActive) handleSe2SyncedTransportStop();
+    else beatPadsTransport.stopOrResetToStart();
+  }, [
+    beatPadsTransport,
+    gridRecordPrecounting,
+    gridRecording,
+    handleSe2SyncedTransportStop,
+    se2SyncActive,
+    stopGridRecordSession,
+  ]);
+
+  const scheduleGridRecordClick = useCallback(
+    (
+      ctx: AudioContext,
+      idealT: number,
+      downbeat: boolean,
+      opts?: { volumeScale?: number },
+    ) => {
+      let buf = gridRecordBufRef.current;
+      if (!buf && ctx.state !== 'closed') {
+        buf = createSe2PrecountRimshotBuffer(ctx);
+        gridRecordBufRef.current = buf;
+      }
+      if (!buf) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      const scale = opts?.volumeScale ?? 1;
+      g.gain.value = SE2_PRECOUNT_CLICK_VOLUME * (downbeat ? 1.15 : 0.85) * scale;
+      src.connect(g);
+      const dest = getAudioOutput?.() ?? ctx.destination;
+      g.connect(dest);
+      const when = Math.max(ctx.currentTime, idealT);
+      try {
+        src.start(when);
+        gridRecordMetroNodesRef.current.push(src);
+      } catch {
+        /* */
+      }
+    },
+    [getAudioOutput],
+  );
+
+  const recordPadHitOntoGrid = useCallback(
+    (padIndex: number) => {
+      if (!gridRecordLiveRef.current) return;
+      const ctx = getAudioContext?.();
+      if (!ctx) return;
+      const bars = loopBarsRef.current;
+      const bpm = localBpmRef.current;
+      const spb = gridStepsRef.current;
+      const cols = beatPadsPatternCols(bars, spb);
+      const col = beatPadsGridRecordAudioTimeToCol(
+        ctx.currentTime,
+        gridRecordAnchorRef.current,
+        bpm,
+        spb,
+        cols,
+      );
+      if (!gridRecordUndoPushedRef.current) {
+        gridRecordUndoPushedRef.current = true;
+        if (gridRecordUndoRef.current) {
+          setGridRecordUndoSeed(gridRecordUndoRef.current);
+        }
+      }
+      setPattern((prev) => beatPadsGridRecordMergeHit(prev, padIndex, col, bars, spb));
+      onSelectPad?.(padIndex);
+    },
+    [getAudioContext, onSelectPad],
+  );
+
+  const performPad = useCallback(
+    (padIndex: number, vel01: number, opts?: { skipStrike?: boolean }) => {
+      if (!opts?.skipStrike) onStrikePad(padIndex, vel01);
+      recordPadHitOntoGrid(padIndex);
+    },
+    [onStrikePad, recordPadHitOntoGrid],
+  );
+  performPadRef.current = performPad;
+
+  const beginGridRecord = useCallback(async () => {
+    if (patternActionsDisabled) return;
+    stopGridRecordSession();
+    gridRecordCancelRef.current = false;
+    setGridRecordPrecounting(true);
+    setGridRecordBeatLabel(null);
+    beatPadsTransport.stop();
+
+    await Promise.resolve(onWarmAudio?.());
+    const ctx = getAudioContext?.();
+    if (!ctx) {
+      setGridRecordPrecounting(false);
+      return;
+    }
+    try {
+      if (ctx.state === 'suspended') await ctx.resume();
+    } catch {
+      /* */
+    }
+
+    gridRecordUndoRef.current = beatPadsGridRecordClonePattern(pattern);
+    gridRecordUndoPushedRef.current = false;
+
+    const bpm = clampBeatPadsBpm(localBpmRef.current);
+    const bars = loopBarsRef.current;
+    const windowSec = beatPadsGridRecordWindowSec(bpm, bars, 4);
+    let recordAnchor = ctx.currentTime + 0.08;
+
+    try {
+      if (gridRecordPrecountEnabled || gridRecordMetroEnabled) {
+        gridRecordBufRef.current = await ensureSe2PrecountRimshotBuffer(ctx);
+      }
+
+      if (gridRecordPrecountEnabled) {
+        cancelGridRecordMetroNodes();
+        const result = await runSe2Precount({
+          ctx,
+          bpm,
+          beatsPerBar: 4,
+          bars: 1,
+          scheduleClick: (idealT, downbeat) => scheduleGridRecordClick(ctx, idealT, downbeat),
+          onBeat: (beat, total) => {
+            setGridRecordBeatLabel(`${beat}/${total}`);
+          },
+          isCancelled: () => gridRecordCancelRef.current,
+        });
+        cancelGridRecordMetroNodes();
+        if (result.cancelled) {
+          setGridRecordPrecounting(false);
+          setGridRecordBeatLabel(null);
+          return;
+        }
+        recordAnchor = result.downbeatAudioTime;
+      }
+
+      if (gridRecordCancelRef.current) {
+        setGridRecordPrecounting(false);
+        return;
+      }
+
+      gridRecordAnchorRef.current = recordAnchor;
+      gridRecordLiveRef.current = true;
+      setGridRecordPrecounting(false);
+      setGridRecording(true);
+      setGridRecordBeatLabel('1');
+
+      if (gridRecordMetroEnabled) {
+        const spb = 60 / bpm;
+        const totalBeats = Math.ceil(windowSec / spb) + 1;
+        const metroVol = 0.68;
+        for (let i = 0; i < totalBeats; i += 1) {
+          scheduleGridRecordClick(ctx, recordAnchor + i * spb, i % 4 === 0, {
+            volumeScale: metroVol,
+          });
+        }
+      }
+
+      beatPadsTransport.seekCol(0);
+
+      const tickPlayhead = () => {
+        if (!gridRecordLiveRef.current) return;
+        const nowCtx = getAudioContext?.();
+        if (!nowCtx) return;
+        const spbGrid = gridStepsRef.current;
+        const cols = beatPadsPatternCols(loopBarsRef.current, spbGrid);
+        const col = beatPadsGridRecordAudioTimeToCol(
+          nowCtx.currentTime,
+          gridRecordAnchorRef.current,
+          localBpmRef.current,
+          spbGrid,
+          cols,
+        );
+        beatPadsTransport.seekCol(col);
+        const beatInBar = Math.floor(col / (spbGrid / 4)) % 4;
+        const barIdx = Math.floor(col / spbGrid) + 1;
+        setGridRecordBeatLabel(`${barIdx}.${beatInBar + 1}`);
+        gridRecordRafRef.current = requestAnimationFrame(tickPlayhead);
+      };
+      gridRecordRafRef.current = requestAnimationFrame(tickPlayhead);
+
+      gridRecordStopTimerRef.current = setTimeout(() => {
+        stopGridRecordSession();
+      }, windowSec * 1000 + 80);
+    } catch {
+      stopGridRecordSession();
+    }
+  }, [
+    beatPadsTransport,
+    cancelGridRecordMetroNodes,
+    getAudioContext,
+    gridRecordMetroEnabled,
+    gridRecordPrecountEnabled,
+    onWarmAudio,
+    pattern,
+    patternActionsDisabled,
+    scheduleGridRecordClick,
+    stopGridRecordSession,
+  ]);
+
+  const toggleGridRecord = useCallback(() => {
+    if (gridRecording || gridRecordPrecounting) {
+      stopGridRecordSession();
+      return;
+    }
+    void beginGridRecord();
+  }, [beginGridRecord, gridRecordPrecounting, gridRecording, stopGridRecordSession]);
+
+  useEffect(() => {
+    if (!open) stopGridRecordSession();
+  }, [open, stopGridRecordSession]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t) {
+        const tag = t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) {
+          return;
+        }
+      }
+      const pad = beatPadsGridRecordPadForKeyboardCode(e.code);
+      if (pad == null) return;
+      e.preventDefault();
+      void Promise.resolve(onWarmAudio?.());
+      performPad(pad, 0.88);
+      setLitPad(pad);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onWarmAudio, performPad]);
+
+  useEffect(() => {
+    if (!open) return;
+    let access: MIDIAccess | null = null;
+    let disposed = false;
+    const onMidi = (ev: MIDIMessageEvent) => {
+      const data = ev.data;
+      if (!data || data.length < 2) return;
+      const status = data[0]! & 0xf0;
+      if (status !== 0x90) return;
+      const vel = data[2] ?? 0;
+      if (vel <= 0) return;
+      const pitch = data[1]!;
+      const pad = beatPadsGridRecordPadForMidiPitch(pitch);
+      if (pad == null) return;
+      void Promise.resolve(onWarmAudio?.());
+      performPad(pad, Math.min(1, vel / 127));
+      setLitPad(pad);
+    };
+    void requestMidiAccess().then((a) => {
+      if (disposed || !a) return;
+      access = a;
+      for (const input of a.inputs.values()) {
+        input.addEventListener('midimessage', onMidi as EventListener);
+      }
+      a.addEventListener('statechange', () => {
+        if (!access) return;
+        for (const input of access.inputs.values()) {
+          input.removeEventListener('midimessage', onMidi as EventListener);
+          input.addEventListener('midimessage', onMidi as EventListener);
+        }
+      });
+    });
+    return () => {
+      disposed = true;
+      if (!access) return;
+      for (const input of access.inputs.values()) {
+        input.removeEventListener('midimessage', onMidi as EventListener);
+      }
+    };
+  }, [open, onWarmAudio, performPad]);
 
   /** Beat Pads grid scrub — local parked col; when Sync SE2 is on, also move the SE2 playhead. */
   const handleSeekPlayheadCol = useCallback(
@@ -1037,7 +1391,7 @@ export function BeatLabDrumMachineOverlay({
       e.preventDefault();
       const vel = pointerStrikeVelocity(e);
       void Promise.resolve(onWarmAudio?.());
-      onStrikePad(padIndex, vel);
+      performPad(padIndex, vel);
       startNoteRepeat(padIndex, vel);
       onSelectPad?.(padIndex);
       setLitPad(padIndex);
@@ -1047,7 +1401,7 @@ export function BeatLabDrumMachineOverlay({
         /* */
       }
     },
-    [onSelectPad, onStrikePad, onWarmAudio, startNoteRepeat],
+    [onSelectPad, onWarmAudio, performPad, startNoteRepeat],
   );
 
   const releaseLit = useCallback(() => {
@@ -1430,6 +1784,16 @@ export function BeatLabDrumMachineOverlay({
         onTransportStop={handleTransportStop}
         onTransportBpmChange={handleTransportBpmChange}
         onSeekPlayheadCol={handleSeekPlayheadCol}
+        gridRecordPrecountEnabled={gridRecordPrecountEnabled}
+        onGridRecordPrecountToggle={() => setGridRecordPrecountEnabled((v) => !v)}
+        gridRecordMetroEnabled={gridRecordMetroEnabled}
+        onGridRecordMetroToggle={() => setGridRecordMetroEnabled((v) => !v)}
+        gridRecording={gridRecording}
+        gridRecordPrecounting={gridRecordPrecounting}
+        gridRecordBeatLabel={gridRecordBeatLabel}
+        onGridRecordToggle={toggleGridRecord}
+        gridRecordUndoSeed={gridRecordUndoSeed}
+        onGridRecordUndoSeedConsumed={() => setGridRecordUndoSeed(null)}
         se2SyncMode={embedded ? se2SyncMode : undefined}
         onSe2SyncModeChange={embedded ? onSe2SyncModeChange : undefined}
         minVisibleLanes={sequencerMinVisibleLanes}
