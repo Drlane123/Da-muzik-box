@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Dices, RefreshCw, Sparkles, X } from 'lucide-react';
+import { Dices, RefreshCw, Sparkles, Undo2, X } from 'lucide-react';
 import {
   BEAT_PADS_DRUM_ROLES,
   BEAT_PADS_PLACEMENT_GENRES,
@@ -189,6 +189,9 @@ export type BeatPadsLanePlacementPanelProps = {
   onApplyMultiRoleTemplates?: (
     picks: ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }>,
   ) => void;
+  /** Undo last Lane Placements dice roll (previous kit pattern). */
+  onUndoKitDice?: () => void;
+  canUndoKitDice?: boolean;
   /** When Auto Drum phrase includes a tempo (e.g. "bpm 97"). */
   onBpmChange?: (bpm: number) => void;
   /** Load / swap pad sample on the selected lane to match typed instructions. */
@@ -209,6 +212,8 @@ export function BeatPadsLanePlacementPanel({
   onDrumRoleChange,
   onApplyTemplate,
   onApplyMultiRoleTemplates,
+  onUndoKitDice,
+  canUndoKitDice = false,
   onBpmChange,
   onAutoDrumPadSample,
   disabled = false,
@@ -444,23 +449,55 @@ export function BeatPadsLanePlacementPanel({
           Regen
         </button>
         {typeof onApplyMultiRoleTemplates === 'function' ? (
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={handleRandomKitDice}
-            title="Random kit — solid kick on 1, snare on 2 & 4; hats/perc any genre"
-            aria-label="Random kit placements with solid kick and snare"
+          <div
             style={{
-              ...REGEN_BTN,
-              width: 24,
-              padding: 0,
-              gap: 0,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              opacity: disabled ? 0.45 : 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              flexShrink: 0,
             }}
           >
-            <Dices size={11} aria-hidden />
-          </button>
+            <button
+              type="button"
+              disabled={disabled || !canUndoKitDice || typeof onUndoKitDice !== 'function'}
+              onClick={() => onUndoKitDice?.()}
+              title="Undo last randomize — restore previous kit pattern"
+              aria-label="Undo last kit randomize"
+              style={{
+                ...REGEN_BTN,
+                width: 24,
+                height: 14,
+                padding: 0,
+                gap: 0,
+                cursor:
+                  disabled || !canUndoKitDice || typeof onUndoKitDice !== 'function'
+                    ? 'not-allowed'
+                    : 'pointer',
+                opacity:
+                  disabled || !canUndoKitDice || typeof onUndoKitDice !== 'function' ? 0.35 : 1,
+              }}
+            >
+              <Undo2 size={9} aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={handleRandomKitDice}
+              title="Random kit — solid kick on 1, snare on 2 & 4; hats/perc any genre"
+              aria-label="Random kit placements with solid kick and snare"
+              style={{
+                ...REGEN_BTN,
+                width: 24,
+                padding: 0,
+                gap: 0,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.45 : 1,
+              }}
+            >
+              <Dices size={11} aria-hidden />
+            </button>
+          </div>
         ) : null}
       </div>
 

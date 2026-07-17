@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRef, type CSSProperties } from 'react';
+import { ChevronLeft, ChevronRight, Dices, Undo2 } from 'lucide-react';
 import { PatternBankPanel, type PatternBankPanelHandle } from '@/app/components/creation/PatternBankPanel';
 import { BeatPadsLanePlacementPanel } from '@/app/components/creation/BeatPadsLanePlacementPanel';
 import type { BeatLabPatternBankId, BeatLabPatternSlotId } from '@/app/lib/creationStation/beatLabPatternBank';
@@ -15,6 +15,19 @@ import type { PatternPreset } from '@/app/lib/patternPresets';
 const BEAT_PADS_SIDEBAR_W = 280;
 const MINT = '#7cf4c6';
 const MINT_DIM = 'rgba(124, 244, 198, 0.35)';
+
+const MINI_DICE: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 22,
+  padding: 0,
+  borderRadius: 4,
+  border: `1px solid ${MINT_DIM}`,
+  background: 'rgba(124, 244, 198, 0.08)',
+  color: MINT,
+  flexShrink: 0,
+};
 
 export type BeatPadsPatternBankSidebarProps = {
   onLoadPreset: (preset: PatternPreset) => void;
@@ -32,6 +45,13 @@ export type BeatPadsPatternBankSidebarProps = {
   onApplyMultiRoleTemplates?: (
     picks: ReadonlyArray<{ role: BeatPadsDrumRole; template: BeatPadsLanePlacementTemplate }>,
   ) => void;
+  onUndoKitDice?: () => void;
+  canUndoKitDice?: boolean;
+  /** Same-bank Pattern Bank dice — new groove, same pad sounds. */
+  onRandomizeBankPattern?: () => void;
+  onUndoBankPatternDice?: () => void;
+  canRandomizeBankPattern?: boolean;
+  canUndoBankPatternDice?: boolean;
   onLaneBpmChange?: (bpm: number) => void;
   onAutoDrumPadSample?: (
     targetPad: number,
@@ -55,6 +75,12 @@ export function BeatPadsPatternBankSidebar({
   onLaneDrumRoleChange,
   onApplyLaneTemplate,
   onApplyMultiRoleTemplates,
+  onUndoKitDice,
+  canUndoKitDice = false,
+  onRandomizeBankPattern,
+  onUndoBankPatternDice,
+  canRandomizeBankPattern = false,
+  canUndoBankPatternDice = false,
   onLaneBpmChange,
   onAutoDrumPadSample,
   activeLaneTemplateId = null,
@@ -111,6 +137,48 @@ export function BeatPadsPatternBankSidebar({
         >
           Pattern Bank
         </span>
+        {typeof onRandomizeBankPattern === 'function' ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              flexShrink: 0,
+            }}
+          >
+            <button
+              type="button"
+              disabled={disabled || !canUndoBankPatternDice}
+              onClick={() => onUndoBankPatternDice?.()}
+              title="Undo last Pattern Bank randomize"
+              aria-label="Undo last Pattern Bank randomize"
+              style={{
+                ...MINI_DICE,
+                height: 12,
+                cursor: disabled || !canUndoBankPatternDice ? 'not-allowed' : 'pointer',
+                opacity: disabled || !canUndoBankPatternDice ? 0.35 : 1,
+              }}
+            >
+              <Undo2 size={8} aria-hidden />
+            </button>
+            <button
+              type="button"
+              disabled={disabled || !canRandomizeBankPattern}
+              onClick={() => onRandomizeBankPattern()}
+              title="Randomize beat in this bank — same sounds, new groove"
+              aria-label="Randomize Pattern Bank groove keeping pad sounds"
+              style={{
+                ...MINI_DICE,
+                height: 18,
+                cursor: disabled || !canRandomizeBankPattern ? 'not-allowed' : 'pointer',
+                opacity: disabled || !canRandomizeBankPattern ? 0.45 : 1,
+              }}
+            >
+              <Dices size={10} aria-hidden />
+            </button>
+          </div>
+        ) : null}
         <div
           style={{
             flex: 1,
@@ -248,6 +316,8 @@ export function BeatPadsPatternBankSidebar({
             onDrumRoleChange={onLaneDrumRoleChange ?? (() => {})}
             onApplyTemplate={onApplyLaneTemplate}
             onApplyMultiRoleTemplates={onApplyMultiRoleTemplates}
+            onUndoKitDice={onUndoKitDice}
+            canUndoKitDice={canUndoKitDice}
             onBpmChange={onLaneBpmChange}
             onAutoDrumPadSample={onAutoDrumPadSample}
             disabled={disabled}

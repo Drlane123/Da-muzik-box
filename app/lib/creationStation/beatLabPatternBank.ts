@@ -108,6 +108,19 @@ export function countBeatLabDrumPresets(bankId: BeatLabPatternBankId): number {
   return getBeatLabDrumPresets(bankId).length;
 }
 
+/** Another preset in the same Pattern Bank column (Trap → Trap, R&B → R&B). */
+export function pickAlternateBeatLabDrumPreset(
+  bankId: BeatLabPatternBankId,
+  excludeId?: string | null,
+): PatternPreset | undefined {
+  if (bankId === BEAT_LAB_USER_SAVES_BANK_ID) return undefined;
+  const list = getBeatLabDrumPresets(bankId);
+  if (list.length === 0) return undefined;
+  const alternates = excludeId ? list.filter((p) => p.id !== excludeId) : list;
+  const pool = alternates.length > 0 ? alternates : list;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 /** Pattern bank column (Trap, R&B, …) for a preset genre string. */
 export function beatLabPatternBankIdForPresetGenre(genre: string): BeatLabPatternBankId | undefined {
   const normalized = genre === 'Miami' ? 'Up Tempo' : genre;

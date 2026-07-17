@@ -78,6 +78,9 @@ import {
 } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
 import {
   presetToBeatPadsPattern,
+  pickAlternateBeatLabDrumPreset,
+  BEAT_LAB_USER_SAVES_BANK_ID,
+  countBeatLabDrumPresets,
   type BeatLabPatternBankId,
   type BeatLabPatternSlotId,
 } from '@/app/lib/creationStation/beatLabPatternBank';
@@ -565,6 +568,15 @@ export function BeatLabDrumMachineOverlay({
   }, [gridStepsPerBar]);
   const [laneDrumRoles, setLaneDrumRoles] = useState<Record<string, BeatPadsDrumRole>>({});
   const [activeLaneTemplateIds, setActiveLaneTemplateIds] = useState<Record<string, string>>({});
+  const activeLaneTemplateIdsRef = useRef(activeLaneTemplateIds);
+  activeLaneTemplateIdsRef.current = activeLaneTemplateIds;
+  const kitDiceUndoRef = useRef<{
+    pattern: BeatPadsDrumPattern;
+    templateIds: Record<string, string>;
+  } | null>(null);
+  const [canUndoKitDice, setCanUndoKitDice] = useState(false);
+  const bankPatternDiceUndoRef = useRef<BeatPadsDrumPattern | null>(null);
+  const [canUndoBankPatternDice, setCanUndoBankPatternDice] = useState(false);
 
   useBeatPadsGenoSyncLock(
     patternControl
@@ -1188,6 +1200,10 @@ export function BeatLabDrumMachineOverlay({
         template,
       }));
       setPattern((prev) => {
+        kitDiceUndoRef.current = {
+          pattern: prev.map((lane) => lane.map((n) => ({ ...n }))),
+          templateIds: { ...activeLaneTemplateIdsRef.current },
+        };
         let next = prev;
         for (const { lane, template } of applications) {
           next = applyBeatPadsLanePlacementTemplate(
@@ -1200,6 +1216,7 @@ export function BeatLabDrumMachineOverlay({
         }
         return next;
       });
+      setCanUndoKitDice(true);
       setActiveLaneTemplateIds((prev) => {
         const next = { ...prev };
         for (const { lane, template } of applications) {
@@ -1213,6 +1230,62 @@ export function BeatLabDrumMachineOverlay({
     },
     [activeBank, loopBars, onStrikePad, onWarmAudio, padLabelForPad],
   );
+
+  const handleUndoKitDice = useCallback(() => {
+    const snap = kitDiceUndoRef.current;
+    if (!snap) return;
+    kitDiceUndoRef.current = null;
+    setCanUndoKitDice(false);
+    setPattern(snap.pattern);
+    setActiveLaneTemplateIds(snap.templateIds);
+  }, []);
+
+  const canRandomizeBankPattern = Boolean(
+    loadedPatternBankId
+      && loadedPatternBankId !== BEAT_LAB_USER_SAVES_BANK_ID
+      && countBeatLabDrumPresets(loadedPatternBankId) > 1,
+  );
+
+  const applyBeatPadsPatternGridOnly = useCallback(
+    (preset: PatternPreset) => {
+      const wasPlaying = beatPadsTransport.isPlaying;
+      const loaded = presetToBeatPadsPattern(preset, loopBars);
+      const spb = gridStepsRef.current;
+      setPattern((prev) => {
+        bankPatternDiceUndoRef.current = prev.map((lane) => lane.map((n) => ({ ...n })));
+        return normalizeBeatPadsPattern(loaded.pattern, loopBars, spb);
+      });
+      setCanUndoBankPatternDice(true);
+      scrollSequencerToStart();
+      if (wasPlaying) {
+        queueMicrotask(() => {
+          void beatPadsTransport.restartFromBarOne();
+        });
+      }
+    },
+    [beatPadsTransport, loopBars, scrollSequencerToStart],
+  );
+
+  const handleRandomizeBankPattern = useCallback(() => {
+    if (!loadedPatternBankId || loadedPatternBankId === BEAT_LAB_USER_SAVES_BANK_ID) return;
+    const pick = pickAlternateBeatLabDrumPreset(loadedPatternBankId, loadedPatternPresetId);
+    if (!pick) return;
+    applyBeatPadsPatternGridOnly(pick);
+    onPatternPresetHighlighted?.(pick);
+  }, [
+    applyBeatPadsPatternGridOnly,
+    loadedPatternBankId,
+    loadedPatternPresetId,
+    onPatternPresetHighlighted,
+  ]);
+
+  const handleUndoBankPatternDice = useCallback(() => {
+    const snap = bankPatternDiceUndoRef.current;
+    if (!snap) return;
+    bankPatternDiceUndoRef.current = null;
+    setCanUndoBankPatternDice(false);
+    setPattern(snap);
+  }, []);
 
   const handleLaneDrumRoleChange = useCallback(
     (role: BeatPadsDrumRole) => {
@@ -2025,6 +2098,12 @@ export function BeatLabDrumMachineOverlay({
                   onLaneDrumRoleChange={handleLaneDrumRoleChange}
                   onApplyLaneTemplate={handleApplyLaneTemplate}
                   onApplyMultiRoleTemplates={handleApplyMultiRoleTemplates}
+                  onUndoKitDice={handleUndoKitDice}
+                  canUndoKitDice={canUndoKitDice}
+                  onRandomizeBankPattern={handleRandomizeBankPattern}
+                  onUndoBankPatternDice={handleUndoBankPatternDice}
+                  canRandomizeBankPattern={canRandomizeBankPattern}
+                  canUndoBankPatternDice={canUndoBankPatternDice}
                   onLaneBpmChange={handleTransportBpmChange}
                   onAutoDrumPadSample={onAutoDrumPadSample}
                   activeLaneTemplateId={activeLaneTemplateId}
