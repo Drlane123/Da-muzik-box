@@ -1,7 +1,7 @@
 /**
  * Deep R&B Cards — original progressive chord packs for SE2 Chord Generator.
- * Quiet-storm / neo-soul / late-night R&B color (maj7, m7, ø7, sus→V7, borrowed).
- * Inspired feel only — not copied from any commercial MIDI / Ripchord bank.
+ * Quiet-storm / neo-soul / late-night R&B — lush maj9 / m9 / 13 / 13sus color.
+ * Inspired by common slow-jam harmonic language; not copied from any commercial pack.
  */
 
 import type { GenreDef } from '@/app/lib/creationStation/chordBuilder';
@@ -11,7 +11,88 @@ export const DEEP_RNB_GENRE: GenreDef = {
   label: 'Deep R&B Cards',
   mode: 'major',
   progressions: [
-    // ── Major / bright tonic deep cards (5–8 chords) ───────────────────────
+    // ── Front shelf: lush 5–6 note slow-jam cards (maj9 / m9 / 13) ──────────
+    {
+      id: 'deeprnb-lush-ninth-vamp',
+      name: 'Deep · Lush Ninth Vamp · 6',
+      chords: ['Imaj9', 'vi9', 'IVmaj9', 'V13', 'ii9', 'V13sus'],
+    },
+    {
+      id: 'deeprnb-quiet-storm-maj9',
+      name: 'Deep · Quiet Storm Maj9 · 8',
+      chords: ['Imaj9', 'vi9', 'ii9', 'V13', 'IVmaj9', 'iii9', 'vi9', 'V13'],
+    },
+    {
+      id: 'deeprnb-glasper-cycle',
+      name: 'Deep · Soft Jazz Cycle · 6',
+      chords: ['ii9', 'V13', 'Imaj9', 'bVIImaj9', 'IVmaj9', 'V13sus'],
+    },
+    {
+      id: 'deeprnb-bittersweet-ninth',
+      name: 'Deep · Bittersweet Ninth · 7',
+      chords: ['Imaj9', 'IVmaj9', 'iii9', 'bVIImaj9', 'vi9', 'ii9', 'V13'],
+    },
+    {
+      id: 'deeprnb-silk-13sus',
+      name: 'Deep · Silk 13sus · 7',
+      chords: ['Imaj9', 'V13sus', 'V13', 'vi9', 'IVmaj9', 'ii9', 'V13'],
+    },
+    {
+      id: 'deeprnb-candle-maj9',
+      name: 'Deep · Candle Maj9 · 8',
+      chords: ['Imaj9', 'IVmaj9', 'iii9', 'vi9', 'iiø7', 'V13', 'Imaj9', 'vi9'],
+    },
+    {
+      id: 'deeprnb-orchid-maj9',
+      name: 'Deep · Orchid Maj9 · 6',
+      chords: ['Imaj9', 'bVImaj9', 'bVIImaj9', 'IVmaj9', 'V13', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-honey-m9-line',
+      name: 'Deep · Honey m9 Line · 7',
+      chords: ['vi9', 'ii9', 'V13', 'Imaj9', 'IVmaj9', 'iii9', 'V13sus'],
+    },
+    {
+      id: 'deeprnb-falsetto-ninths',
+      name: 'Deep · Falsetto Ninths · 7',
+      chords: ['iii9', 'vi9', 'ii9', 'V13', 'Imaj9', 'IVmaj9', 'V13sus'],
+    },
+    {
+      id: 'deeprnb-widescreen-9',
+      name: 'Deep · Widescreen 9 · 7',
+      chords: ['Imaj9', 'bIIImaj9', 'IVmaj9', 'V13', 'vi9', 'ii9', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-min-smoky-m9',
+      name: 'Deep · Smoky Minor 9 · 7',
+      mode: 'minor',
+      chords: ['i9', 'VImaj9', 'iiø7', 'V13', 'i9', 'iv9', 'V13'],
+    },
+    {
+      id: 'deeprnb-min-liquid-spirit',
+      name: 'Deep · Liquid Minor · 6',
+      mode: 'minor',
+      chords: ['i9', 'iv9', 'VII7', 'bIIImaj9', 'VImaj9', 'V13'],
+    },
+    {
+      id: 'deeprnb-dor-im9-iv13',
+      name: 'Deep · Dorian im9–IV13 · 6',
+      mode: 'dorian',
+      chords: ['i9', 'IV13', 'i9', 'bVIImaj9', 'ii9', 'IV9'],
+    },
+    {
+      id: 'deeprnb-dor-modal-ninths',
+      name: 'Deep · Dorian Modal Ninths · 7',
+      mode: 'dorian',
+      chords: ['i9', 'ii9', 'bIIImaj9', 'IV13', 'i9', 'bVIImaj9', 'IV9'],
+    },
+    {
+      id: 'deeprnb-min-heartbreak-9',
+      name: 'Deep · Heartbreak m9 · 7',
+      mode: 'minor',
+      chords: ['i9', 'bVI', 'bVII', 'i9', 'iv9', 'V13', 'VImaj9'],
+    },
+    // ── Classic deep cards (maj7 / m7 color) ───────────────────────────────
     {
       id: 'deeprnb-velvet-crawl',
       name: 'Deep · Velvet Crawl · 6',
