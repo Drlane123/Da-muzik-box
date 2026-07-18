@@ -111,7 +111,7 @@ export default function PricingScreen({
               textTransform: 'uppercase',
             }}
           >
-            Loading Da Music Box…
+            Loading Da Muzik Box…
           </div>
           <style>{`@keyframes dmbPricingSpin { to { transform: rotate(360deg); } }`}</style>
         </div>
@@ -147,7 +147,7 @@ export default function PricingScreen({
               color: '#fff',
             }}
           >
-            Choose your Music Box
+            Choose your Muzik Box
           </h1>
           <p style={{ margin: '12px auto 0', maxWidth: 560, color: MUTED, fontSize: 15, lineHeight: 1.45 }}>
             Two tiers. Basic covers the suite for writing and arranging.
@@ -311,7 +311,7 @@ export default function PricingScreen({
                     opacity: loadingPlan && loadingPlan !== plan.id ? 0.5 : 1,
                   }}
                 >
-                  {loadingPlan === plan.id ? 'Loading…' : 'Open Music Box'}
+                  {loadingPlan === plan.id ? 'Loading…' : 'Open Muzik Box'}
                 </button>
 
                 <ul style={{ listStyle: 'none', margin: '20px 0 0', padding: 0, display: 'grid', gap: 10 }}>

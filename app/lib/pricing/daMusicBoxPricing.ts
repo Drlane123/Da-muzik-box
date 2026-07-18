@@ -102,7 +102,7 @@ export const DA_MUSIC_BOX_PRICING_FEATURES: readonly PricingFeatureRow[] = [
 export const DA_MUSIC_BOX_PRICING_FAQS: readonly { q: string; a: string }[] = [
   {
     q: 'What is locked on Basic?',
-    a: 'Beat Lab, Beat Pads (in Studio Editor 2), and Mastering Bay are Premium only. Open Music Box on Basic hides those from Modules and the SE2 add-track menu. Premium unlocks all three.',
+    a: 'Beat Lab, Beat Pads (in Studio Editor 2), and Mastering Bay are Premium only. Open Muzik Box on Basic hides those from Modules and the SE2 add-track menu. Premium unlocks all three.',
   },
   {
     q: 'Can I switch plans later?',
@@ -110,7 +110,7 @@ export const DA_MUSIC_BOX_PRICING_FAQS: readonly { q: string; a: string }[] = [
   },
   {
     q: 'Is this charged yet?',
-    a: 'Not yet. For now, Open Music Box loads the full app so you can preview the pricing page. Stripe and Cloudflare D1 entitlements come later — no features are locked today.',
+    a: 'Not yet. For now, Open Muzik Box loads the full app so you can preview the pricing page. Stripe and Cloudflare D1 entitlements come later — no features are locked today.',
   },
 ] as const;
 
