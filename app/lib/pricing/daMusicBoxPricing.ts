@@ -61,7 +61,25 @@ export const DA_MUSIC_BOX_PRICING_PLANS: readonly PricingPlan[] = [
 export const DA_MUSIC_BOX_PRICING_FEATURES: readonly PricingFeatureRow[] = [
   { label: 'Studio Editor 2', detail: 'Full DAW timeline, mix, and arrangement', basic: true, premium: true },
   { label: 'SE2 Chord Generator & MIDI Composer', basic: true, premium: true },
-  { label: 'Synth Geno · Drum Generator · Groove Lead', basic: true, premium: true },
+  {
+    label: 'Geno Ultra Synth',
+    detail: 'Deep instrument synth for leads, pads, and evolving tones',
+    basic: true,
+    premium: true,
+  },
+  {
+    label: 'Geno Bass Synth',
+    detail: 'Dedicated bass synth voice built for low-end and 808-style lines',
+    basic: true,
+    premium: true,
+  },
+  {
+    label: 'Hum / Melody Capture',
+    detail: 'Hum, sing, whistle, or play a single line — captures melody as editable MIDI (pitch, timing, loudness)',
+    basic: true,
+    premium: true,
+  },
+  { label: 'Drum Generator · Groove Lead', basic: true, premium: true },
   { label: 'Groove Lab', detail: 'Progressions, Orchid strip, WaveLeaf', basic: true, premium: true },
   { label: 'Chord Builder', basic: true, premium: true },
   { label: '808 Lab', basic: true, premium: true },
