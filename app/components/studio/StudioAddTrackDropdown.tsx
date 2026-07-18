@@ -1,8 +1,11 @@
 'use client';
 
 import { ChevronDown, Copy, Plus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+
+import { canUseBeatPads } from '@/app/lib/pricing/planEntitlements';
+import { useAppPlan } from '@/app/lib/pricing/useAppPlan';
 
 const GENO_CYAN = '#00E5FF';
 const GENO_CYAN_SOFT = '#9defff';
@@ -31,8 +34,8 @@ const TRACK_KIND_OPTIONS: { value: StudioNewTrackKind; label: string; hint: stri
 /** Two-line rows — label + hint; must match fixed button minHeight below. */
 const TRACK_KIND_MENU_ITEM_H_PX = 56;
 const TRACK_KIND_MENU_PAD_PX = 8;
-function trackKindMenuHeightPx(): number {
-  return TRACK_KIND_OPTIONS.length * TRACK_KIND_MENU_ITEM_H_PX + TRACK_KIND_MENU_PAD_PX;
+function trackKindMenuHeightPx(optionCount: number): number {
+  return optionCount * TRACK_KIND_MENU_ITEM_H_PX + TRACK_KIND_MENU_PAD_PX;
 }
 
 /** Duplicate control — fixed width; track-type dropdown takes the rest of the row. */
@@ -51,13 +54,25 @@ export function StudioAddTrackDropdown({
   onAdd,
   onDuplicate,
 }: StudioAddTrackDropdownProps) {
+  const plan = useAppPlan();
+  const kindOptions = useMemo(
+    () =>
+      canUseBeatPads(plan)
+        ? TRACK_KIND_OPTIONS
+        : TRACK_KIND_OPTIONS.filter((o) => o.value !== 'beatPads'),
+    [plan],
+  );
   const [kind, setKind] = useState<StudioNewTrackKind>('midi');
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const selected = TRACK_KIND_OPTIONS.find((o) => o.value === kind) ?? TRACK_KIND_OPTIONS[0]!;
+  useEffect(() => {
+    if (kind === 'beatPads' && !canUseBeatPads(plan)) setKind('midi');
+  }, [kind, plan]);
+
+  const selected = kindOptions.find((o) => o.value === kind) ?? kindOptions[0]!;
 
   useEffect(() => {
     if (!open) return;
@@ -90,7 +105,7 @@ export function StudioAddTrackDropdown({
         if (left + minW > vw - 8) left = Math.max(8, vw - minW - 8);
         const gap = 4;
         const pad = 8;
-        const naturalH = trackKindMenuHeightPx();
+        const naturalH = trackKindMenuHeightPx(kindOptions.length);
         const spaceBelow = window.innerHeight - r.bottom - pad;
         const spaceAbove = r.top - pad;
         const openBelow = spaceBelow >= naturalH || spaceBelow >= spaceAbove;
@@ -107,7 +122,7 @@ export function StudioAddTrackDropdown({
       }
       setOpen((o) => !o);
     },
-    [disabled, open],
+    [disabled, open, kindOptions.length],
   );
 
   const menuEl =
@@ -126,7 +141,7 @@ export function StudioAddTrackDropdown({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {TRACK_KIND_OPTIONS.map((opt) => {
+        {kindOptions.map((opt) => {
           const sel = opt.value === kind;
           return (
             <button

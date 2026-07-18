@@ -30,6 +30,12 @@ import {
   prefetchModuleScreen,
 } from '@/app/lib/navigation/prefetchModuleScreens';
 import {
+  creationSubAllowedForPlan,
+  defaultCreationSubForPlan,
+  screenAllowedForPlan,
+} from '@/app/lib/pricing/planEntitlements';
+import { useAppPlan } from '@/app/lib/pricing/useAppPlan';
+import {
   isVocalLabScreen,
   VOCAL_LAB_SUB_SCREENS,
   type VocalLabSubScreenId,
@@ -106,12 +112,16 @@ export default function ModulesMenu({
   activeVocalLabSubScreen = 'vocal-lab',
   onVocalLabSubScreenChange,
 }: ModulesMenuProps) {
+  const plan = useAppPlan();
   const rootRef = useRef<HTMLDivElement>(null);
   const submenuLeaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [open, setOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const [submenuAnchor, setSubmenuAnchor] = useState<DOMRect | null>(null);
-  const items = DEFAULT_NAV_ITEMS;
+  const items = DEFAULT_NAV_ITEMS.filter((item) => screenAllowedForPlan(item.id, plan));
+  const creationSubs = CREATION_SUB_SCREENS_NAV.filter((sub) =>
+    creationSubAllowedForPlan(sub.id, plan),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -292,9 +302,9 @@ export default function ModulesMenu({
             aria-expanded={openSubmenu === item.id}
             style={menuRowStyle(parentActive)}
             onClick={() => {
-              /** First click opens Beat Lab immediately — submenu hover is for switching tools. */
+              /** First click opens default lab for plan — submenu hover is for switching tools. */
               prefetchModuleScreen('creation-station');
-              onCreationSubScreenChange('beat-lab');
+              onCreationSubScreenChange(defaultCreationSubForPlan(plan));
               onScreenChange('creation-station');
               closeMenu();
             }}
@@ -313,7 +323,7 @@ export default function ModulesMenu({
           </button>
           {renderSubmenuPanel(
               item.id,
-              CREATION_SUB_SCREENS_NAV.map((sub) => ({
+              creationSubs.map((sub) => ({
                 id: sub.id,
                 label: sub.label,
                 active: parentActive && activeCreationSubScreen === sub.id,

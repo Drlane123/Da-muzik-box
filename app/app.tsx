@@ -41,6 +41,15 @@ import {
 import { useScreenModule, type ScreenComponent } from '@/app/lib/navigation/useScreenModule';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import {
+  canUseBeatLab,
+  canUseMasteringBay,
+  clearAppPlan,
+  creationSubAllowedForPlan,
+  defaultCreationSubForPlan,
+  screenAllowedForPlan,
+  setAppPlan,
+} from '@/app/lib/pricing/planEntitlements';
+import {
   screenToVocalLabSubScreen,
   type VocalLabSubScreenId,
 } from '@/app/lib/vocalLab/vocalLabSubScreens';
@@ -344,12 +353,11 @@ function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [showOverview, setShowOverview] = useState(false);
   /**
-   * Always land on Pricing for every full load (preview / gate UI).
-   * Do NOT pre-mount Studio Editor 2 — its portals were painting over Pricing after the first visit.
-   * Plan CTAs call navigateToScreen('studio-editor-2') with no paywall yet.
+   * Always land on Pricing for every full load.
+   * Open Music Box sets Basic or Premium, then enters the app with that plan’s feature gate.
    */
   const [activeScreen, setActiveScreen] = useState<ScreenId>('pricing');
-  const [creationSubScreen, setCreationSubScreen] = useState<CreationSubScreenId>('beat-lab');
+  const [creationSubScreen, setCreationSubScreenState] = useState<CreationSubScreenId>('groove-lab');
   const [vocalLabSubScreen, setVocalLabSubScreen] = useState<VocalLabSubScreenId>('vocal-lab');
   /** Passed to Studio Editor when navigating from Vocal Lab with a recorded/uploaded blob. */
   const [pendingStudioAudioBlob, setPendingStudioAudioBlob] = useState<Blob | null>(null);
@@ -372,7 +380,20 @@ function AppContent() {
   );
   const { settings } = useSettings();
 
+  useEffect(() => {
+    clearAppPlan();
+  }, []);
+
+  const setCreationSubScreen = useCallback((sub: CreationSubScreenId) => {
+    if (!creationSubAllowedForPlan(sub)) {
+      setCreationSubScreenState(defaultCreationSubForPlan());
+      return;
+    }
+    setCreationSubScreenState(sub);
+  }, []);
+
   const navigateToScreen = useCallback((id: ScreenId) => {
+    if (!screenAllowedForPlan(id)) return;
     prefetchModuleScreen(id);
     setVisitedScreens((prev) => {
       if (prev.has(id)) return prev;
@@ -721,12 +742,14 @@ function AppContent() {
                   pendingBeatPadsStudioImport={pendingBeatPadsStudioImport}
                   onPendingBeatPadsStudioConsumed={clearPendingBeatPadsStudio}
                   onOpenBeatLab={() => {
+                    if (!canUseBeatLab()) return;
                     setCreationSubScreen('beat-lab');
                     navigateToScreen('creation-station');
                   }}
                   pendingAiMatchStudioImport={pendingAiMatchStudioImport}
                   onPendingAiMatchStudioConsumed={clearPendingAiMatchStudio}
                   onExportToMasteringBay={(payload: MasteringBaySourcePayload) => {
+                    if (!canUseMasteringBay()) return;
                     setPendingMasteringBayImport(payload);
                     navigateToScreen('master-arranger');
                   }}
@@ -773,7 +796,13 @@ function AppContent() {
             screenId="pricing"
           >
             {(PricingScreen) => (
-              <PricingScreen onEnterApp={() => navigateToScreen('studio-editor-2')} />
+              <PricingScreen
+                onEnterApp={(planId) => {
+                  setAppPlan(planId);
+                  setCreationSubScreen(defaultCreationSubForPlan(planId));
+                  navigateToScreen('studio-editor-2');
+                }}
+              />
             )}
           </DeferredScreenMount>
         </main>

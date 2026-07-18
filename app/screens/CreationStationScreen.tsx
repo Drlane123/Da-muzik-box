@@ -432,6 +432,10 @@ import {
   creationSubScreenToTab,
   type CreationSubScreenId,
 } from '@/app/lib/creationStation/creationSubScreens';
+import {
+  creationSubAllowedForPlan,
+  defaultCreationSubForPlan,
+} from '@/app/lib/pricing/planEntitlements';
 import ChordSequencerScreen from '@/app/screens/ChordSequencerScreen';
 import GrooveLabScreen, { type GrooveLabNewSynthExportArgs } from '@/app/screens/GrooveLabScreen';
 import {
@@ -6929,9 +6933,10 @@ function CreationStationScreenBody({
 
   const goToCreationSub = useCallback(
     (sub: CreationSubScreenId) => {
-      onCreationSubScreenChange?.(sub);
-      setTab(creationSubScreenToTab(sub));
-      if (sub === 'drum-kit-generator') setDrumKitGenOpen(true);
+      const next = creationSubAllowedForPlan(sub) ? sub : defaultCreationSubForPlan();
+      onCreationSubScreenChange?.(next);
+      setTab(creationSubScreenToTab(next));
+      if (next === 'drum-kit-generator') setDrumKitGenOpen(true);
     },
     [onCreationSubScreenChange],
   );

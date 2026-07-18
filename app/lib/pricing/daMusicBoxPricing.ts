@@ -102,7 +102,7 @@ export const DA_MUSIC_BOX_PRICING_FEATURES: readonly PricingFeatureRow[] = [
 export const DA_MUSIC_BOX_PRICING_FAQS: readonly { q: string; a: string }[] = [
   {
     q: 'What is locked on Basic?',
-    a: 'On the finished product, Beat Lab, Beat Pads (in Studio Editor 2), and Mastering Bay will require Premium. Right now nothing is locked — Open Music Box loads the full suite so you can judge the page.',
+    a: 'Beat Lab, Beat Pads (in Studio Editor 2), and Mastering Bay are Premium only. Open Music Box on Basic hides those from Modules and the SE2 add-track menu. Premium unlocks all three.',
   },
   {
     q: 'Can I switch plans later?',
