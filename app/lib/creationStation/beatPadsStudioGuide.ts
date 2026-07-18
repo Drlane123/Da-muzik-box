@@ -1,5 +1,6 @@
 /**
- * Beat Pads studio guide — Lane Placements & Pad Spread highlighted for SE2 dock help (?).
+ * Beat Pads studio guide — SE2 dock help (?).
+ * Highlighted: VocalBox, Lane Placements, Auto Drum, Pad Spread, Match Chords.
  */
 
 export type BeatPadsGuideBlock = {
@@ -15,14 +16,41 @@ export type BeatPadsGuideSection = {
 };
 
 /** One short post — copy from the blue ? help modal. */
-export const BEAT_PADS_SOCIAL_BLURB = `Da Music Box Beat Pads: 16 pads + step sequencer inside Studio Editor 2. VocalBox lets you beatbox a beat with your mouth — boom/ka/ts on a count-in and it lands real kicks, snares & hats on the grid. Lane Placements paints genre drum patterns row-by-row (Trap, R&B, Drill, Afro & more), and Auto Drum builds a groove from a plain-English phrase like "trap hi-hat roll 140". Pad Spread turns one 808 into a 16-pitch chromatic roll on CH 17. Pattern Bank, match chords, sync to SE2 transport. Make drums by mouth, by phrase, or by hand — without leaving the session.`;
+export const BEAT_PADS_SOCIAL_BLURB = `Da Muzik Box Beat Pads lives inside Studio Editor 2 — a full 16-pad drum machine on your song timeline. VocalBox: beatbox boom/ka/ts on a count-in and hits land on kick, snare & hats. Lane Placements paints Trap, R&B, Drill, Afro grooves one lane at a time. Auto Drum builds from plain English (“trap hi-hat roll 140”). Pad Spread turns one 808 into a chromatic roll. Match Chords locks the pocket to your progression. Pattern Bank, Slave sync to SE2, then Stereo mix → Mastering Bay when the song is ready.`;
 
 export const BEAT_PADS_STUDIO_GUIDE = {
-  title: 'Beat Pads — full guide',
-  subtitle: 'VocalBox, Lane Placements, Auto Drum & Pad Spread are the power moves. Everything else supports them.',
+  title: 'Beat Pads — inside Studio Editor 2',
+  subtitle:
+    'VocalBox · Lane Placements · Auto Drum · Pad Spread · Match Chords are the power moves. Pattern Bank and SE2 sync support them.',
   socialBlurb: BEAT_PADS_SOCIAL_BLURB,
-  /** Featured first — Lane Placements & Pad Spread. */
   highlights: [
+    {
+      id: 'vocalBox',
+      title: 'VocalBox',
+      badge: '★ HIGHLIGHT',
+      blocks: [
+        {
+          heading: 'What it is',
+          body:
+            'VocalBox turns your mouth into the drummer. Open the purple VocalBox tab in the Beat Pads action bar, beatbox into the mic — “boom” for kick, “ka” for snare, “ts” for hats — and it detects every hit and lays them on a grid mapped to your Kick / Snare / Hat / Clap pads.',
+        },
+        {
+          heading: 'What it offers',
+          body:
+            'BPM, quantize (1/4 down to 1/16), 1–2 bar takes, count-in (“1, 2, 3, 4”), metronome, and a visual hit map so you can see and nudge timing before you commit. Preview plays the take back through your real pad samples.',
+        },
+        {
+          heading: 'How to use it',
+          body:
+            '1) Load samples on kick / snare / hat / clap pads. 2) Open VocalBox. 3) Set BPM, quantize, bars; turn on Count + MTR. 4) Record — beatbox right on the first click after count-in. 5) Preview, tweak the grid, merge into Beat Pads.',
+        },
+        {
+          heading: 'Why it matters',
+          body:
+            'Fastest path to a human pocket — perform the feel instead of clicking every step. Works alongside Lane Placements and Auto Drum on the same Beat Pads lane.',
+        },
+      ],
+    },
     {
       id: 'lanePlacements',
       title: 'Lane Placements',
@@ -31,22 +59,49 @@ export const BEAT_PADS_STUDIO_GUIDE = {
         {
           heading: 'What it is',
           body:
-            'Lane Placements is how you paint real drum patterns onto individual sequencer rows — one lane at a time. Highlight a pad row on the 16-lane grid, open Lane Placements in the Pattern Bank sidebar, and drop genre-specific kicks, snares, claps, hats, rims, and FX onto that lane only.',
+            'Lane Placements paints real drum patterns onto individual sequencer rows — one lane at a time. Highlight a pad row on the 16-lane grid, open Lane Placements in the Pattern Bank sidebar, and drop genre grooves onto that lane only.',
         },
         {
           heading: 'What it offers',
           body:
-            'Dozens of genres: Trap, R&B, Pop, Drill, Lo-Fi, K-Pop, Soul Blues, Afro, Reggae, House, and more. Each placement is a proven 16-step groove (● = hit, · = rest) built for that drum type. Kick placements sit low on the grid; snares and claps in the middle; hats and percussion up top — but you choose the lane.',
+            'Drum types: Kick, Snare, Clap, Hi-Hat, Open Hat, Rim. Genres: Trap, R&B, Pop, Drill, Lo-Fi, K-Pop, Soul Blues, Afro, Reggae, House, and more. Each card is a proven 16-step groove (● = hit). Regen rolls another pattern in the same family.',
         },
         {
           heading: 'How to use it',
           body:
-            '1) Click a lane on the step grid. 2) Pick drum type — Kick, Snare, Clap, Hi-Hat, Open Hat, Rim. 3) Pick Genre. 4) Tap a card under Pick placement or hit Regen for a surprise. Auto Drum: type a phrase (“trap snare roll bpm 140”) and Go.',
+            '1) Click a lane on the step grid. 2) Pick drum type. 3) Pick genre. 4) Tap a placement card — or use Auto Drum with a phrase. Pattern Bank loads full loops; Lane Placements sculpts kicks, snares, and hats independently on CH 1–16.',
         },
         {
           heading: 'Why it matters',
           body:
-            'Pattern Bank loads full loops fast; Lane Placements lets you sculpt lane-by-lane like a real drum programmer. Swap only the kick, only the snare, or only the hats without touching the rest of the beat. This is CH 1–16 — your main drum kit.',
+            'Program like a real drummer — swap only the kick or only the hats without wiping the whole beat. This is the main kit on CH 1–16.',
+        },
+      ],
+    },
+    {
+      id: 'autoDrum',
+      title: 'Auto Drum',
+      badge: '★ HIGHLIGHT',
+      blocks: [
+        {
+          heading: 'What it is',
+          body:
+            'Auto Drum is the type-a-phrase builder inside Lane Placements. Describe the drum and the vibe in plain English and it drops a matching 16-step pattern on the selected lane.',
+        },
+        {
+          heading: 'What it offers',
+          body:
+            'Understands drum type, genre, and tempo from words — “trap hi-hat roll bpm 140”, “boom bap snare”, “afro kick”. Can swap the pad sample to fit and set BPM when you name one. Regen serves another match for the same phrase.',
+        },
+        {
+          heading: 'How to use it',
+          body:
+            '1) Click the lane on the grid. 2) Type the prompt (sound + genre). 3) Hit Go. 4) Tap Regen for another feel. Pair with VocalBox or hand-painted steps on other lanes.',
+        },
+        {
+          heading: 'Why it matters',
+          body:
+            'Describe what you hear and get drums instantly — then refine with Lane Placements or VocalBox.',
         },
       ],
     },
@@ -58,109 +113,82 @@ export const BEAT_PADS_STUDIO_GUIDE = {
         {
           heading: 'What it is',
           body:
-            'Pad Spread is an 808-style chromatic pitch tool on mixer CH 17–32. Load any one-shot on a pad (808, kick, clap, vocal chop). Tap PAD SPREAD ↓16 or ↑16 in the pad FX bar. A mini pitch roll opens — 16 rows, each row one semitone from the last. Your 16 sampler pads are never replaced.',
+            'Pad Spread is an 808-style chromatic pitch tool on mixer CH 17–32. Load any one-shot (808, kick, clap, vocal chop), tap PAD SPREAD ↓16 or ↑16 in the pad FX bar, and draw on a mini pitch roll — your main 16 pads stay untouched.',
         },
         {
           heading: 'What it offers',
           body:
-            'One sample becomes a full chromatic scale: row 1 = original pitch, each row steps down (↓16) or up (↑16). Draw hits in the mini roll like a piano roll. Pick 2, 4, or 8 bar loop. Play previews at session BPM. Export MIDI or WAV to any SE2 track when locked in.',
+            'One sample becomes a chromatic scale: each row one semitone. 2 / 4 / 8 bar loops, preview at session BPM, export MIDI or WAV to another SE2 track. Optional 808 in key follows matched chord roots bar-by-bar.',
         },
         {
           heading: 'How to use it',
           body:
-            '1) Load a hit on a pad and select that pad. 2) PAD SPREAD → ↓16 or ↑16. 3) Draw your pattern in the roll. 4) Play inside the roll to preview. 5) Export to a regular track or play Beat Pads transport — spread hits on CH 17+ while lane-placement drums play on CH 1–16.',
+            '1) Load a hit and select that pad. 2) PAD SPREAD → ↓16 or ↑16. 3) Draw the pattern. 4) Preview. 5) Export or play with Beat Pads transport — lane drums on CH 1–16, spread on CH 17+.',
         },
         {
-          heading: '808 in key (optional)',
+          heading: '808 in key',
           body:
-            'Turn on 808 in key to follow chord roots from a matched harmony lane bar-by-bar. Regenerate spread roots to try another octave. Match chords strip links Beat Pads to your progression lane for tempo, key, and groove family.',
+            'Turn on 808 in key when Match Chords (or a harmony link) is active so spread roots follow the progression. Regenerate spread roots to try another octave.',
         },
       ],
     },
     {
-      id: 'vocalBox',
-      title: 'VocalBox',
+      id: 'matchChords',
+      title: 'Match Chords',
       badge: '★ HIGHLIGHT',
       blocks: [
         {
           heading: 'What it is',
           body:
-            'VocalBox lets you build a beat with your mouth. Open it from the purple VocalBox tab in the Beat Pads action bar, beatbox into the mic — "boom" for kick, "ka" for snare, "ts" for hats — and it listens to your take, detects every hit, and lays them onto a drum grid mapped to your pads.',
+            'Match Chords links Beat Pads to harmony on the session — Progression+, Rhythm Edit, SE2 Chord Generator, or Synth Geno — so tempo, key, loop bars, and groove family follow the chart you built.',
         },
         {
           heading: 'What it offers',
           body:
-            'Turns mouth percussion into real, placed drum hits on Kick, Snare, Hat, and Clap lanes. Set BPM, quantize (1/4 down to 1/16), and bars. A full count-in ("1, 2, 3, 4") drops you onto the metronome, and a visual grid shows exactly where each hit landed so you can see and nudge your timing before you commit. Preview plays the take back through your pads.',
+            'Lock follows the linked lane. Style chips (Pop, Trap, R&B…) set which groove family Load groove uses. Kick key lock tunes kick/808 to the session root. Regenerate pad rewrites one lane to the linked chord rhythm.',
         },
         {
           heading: 'How to use it',
           body:
-            '1) Load samples on your kick / snare / hat / clap pads. 2) Open VocalBox. 3) Set BPM, quantize (1/16), and bars, and turn on Count (pre-count) + MTR (metronome). 4) Hit Record — after the "1, 2, 3, 4" count-in, beatbox right on the first metronome click. 5) Preview, tweak hits on the grid, then send the pattern to your Beat Pads.',
+            '1) Put chords on Geno, Chord Generator, or Progression+. 2) On Beat Pads, pick that lane in Match Chords. 3) Lock + Load groove (or Lane Placements / VocalBox). 4) Keep Sync to SE2 on Slave so Play drives drums with the song.',
         },
         {
           heading: 'Why it matters',
           body:
-            'It is the fastest way to a human, natural groove — perform the beat with your voice instead of clicking steps one at a time. Great for sketching a feel the moment you hear it in your head.',
+            'Drums stay in the pocket with your harmony — then Mix the song and send Stereo mix → Mastering Bay when you are ready to finish.',
         },
       ],
     },
   ] as const satisfies readonly BeatPadsGuideSection[],
-  /** Rest of Beat Pads — after the two highlights. */
   sections: [
     {
       id: 'overview',
       title: 'Beat Pads overview',
       blocks: [
         {
-          heading: 'The machine',
+          heading: 'Inside Studio Editor 2',
           body:
-            'Beat Pads is a full drum machine inside Studio Editor 2 and Beat Lab: 16 sample pads, producer kits, per-pad FX, a 16-lane step sequencer, Pattern Bank, Lane Placements, Pad Spread, and session export. It is its own track type — the groove lives on the Beat Pads lane until you bounce or spread elsewhere.',
+            'Beat Pads is a dedicated SE2 track type — a full drum machine on your arrangement timeline with its own mixer strip. Add it from the track-type menu (+ Beat Pads). It is not a generic MIDI piano-roll lane; use the pads machine and 16-lane step grid.',
         },
         {
           heading: 'Pads & kits',
           body:
-            'Tap pads to audition. Load Trap Kit folders (808s, kicks, snares, claps, hats). Each pad holds its own sample and FX. Kit saves store all 16 pads together.',
+            'Tap pads to audition. Load Trap Kit / producer folders (808s, kicks, snares, claps, hats). Each pad holds its own sample and FX. Kit saves store all 16 pads together. Duplicate the Beat Pads track to stack a second kit.',
         },
         {
           heading: 'Step grid',
           body:
-            'Rows = pads/lanes. Columns = steps across the loop (16ths default). Click to toggle, drag to paint. Transport Play moves the playline and triggers hits in time.',
+            'Rows = pads/lanes. Columns = steps (16ths default; 32nds available). Click to toggle, drag to paint. SE2 Play (when Slave sync is on) moves the playline and triggers hits with the song metronome.',
         },
         {
           heading: 'Pattern Bank',
           body:
-            'Genre tabs with full preset loops — fastest way to a complete beat. Slots A/B flip between two patterns. Great starting point before Lane Placements fine-tuning.',
+            'Genre tabs with full preset loops — fastest complete beat. Slots A/B flip between two patterns. Start here, then refine with Lane Placements, VocalBox, or Auto Drum.',
         },
         {
           heading: 'Sync & export',
           body:
-            'Sync to SE2: Slave (follow session), Master (push BPM), or Off (local loop). Export loop WAV, spread MIDI/WAV to other tracks. Mixer strip per Beat Pads lane in Mix view.',
-        },
-      ],
-    },
-    {
-      id: 'autoDrum',
-      title: 'Auto Drum',
-      blocks: [
-        {
-          heading: 'What it is',
-          body:
-            'Auto Drum is the type-a-phrase groove builder inside Lane Placements. Describe the drum and the vibe in plain English and it drops a matching pattern onto the selected lane — no scrolling through placement cards.',
-        },
-        {
-          heading: 'What it offers',
-          body:
-            'It understands the drum type, genre, and even tempo from your words — "trap hi-hat roll bpm 140", "boom bap snare", "afro kick". It picks a matching 16-step placement, can swap the pad sample to fit the sound, and sets BPM when you name one. Regen serves up a different match for the same phrase.',
-        },
-        {
-          heading: 'How to use it',
-          body:
-            '1) Click the lane you want on the step grid. 2) Type your prompt in the Auto Drum box — the sound plus the genre. 3) Hit Go. It places the groove and shows a short one-line result (e.g. "Auto Drum: Trap Kick"). 4) Tap Regen to try another feel.',
-        },
-        {
-          heading: 'Why it matters',
-          body:
-            'Describe what you hear and get drums instantly. It pairs with Lane Placements and VocalBox so you can build the same beat by phrase, by hand, or by mouth — whatever is fastest in the moment.',
+            'Sync to SE2: Slave (follow session — recommended), Master (push BPM), or Off (local loop). Export loop WAV; Pad Spread MIDI/WAV to other tracks. When the arrangement is done: Stereo mix → Mastering Bay (Bass X → DMB Match → Master X1).',
         },
       ],
     },

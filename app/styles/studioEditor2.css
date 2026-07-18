@@ -37,21 +37,21 @@
 [data-studio-editor-2] .se2-beat-pads-electric-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.45em;
+  gap: 0.55em;
   font-family: 'Michroma', 'Orbitron', 'Audiowide', system-ui, sans-serif;
   font-weight: 400;
-  font-size: 11px;
+  font-size: 17px;
   line-height: 1;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.42em;
   text-transform: uppercase;
   white-space: nowrap;
   color: #f2f2f2;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.18);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.22);
 }
 
 [data-studio-editor-2] .se2-beat-pads-electric-title-bracket {
   font-family: 'Orbitron', 'Michroma', system-ui, sans-serif;
-  font-size: 10px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
@@ -61,7 +61,8 @@
 }
 
 [data-studio-editor-2] .se2-beat-pads-electric-title-word {
-  letter-spacing: 0.28em;
+  letter-spacing: 0.48em;
+  padding-right: 0.12em;
 }
 
 /* VocalBox tagline — Chord Lock Technology electric face, larger white */

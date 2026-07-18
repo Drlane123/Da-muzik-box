@@ -60,7 +60,10 @@ export function Se2BeatPadsCollapsedStrip({
     >
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <ChevronUp size={14} strokeWidth={2.5} style={{ color: accentHex, flexShrink: 0 }} aria-hidden />
-        <span className="se2-type-micro truncate text-[9px] font-black" style={{ color: accentHex }}>
+        <span
+          className="se2-type-micro truncate font-black uppercase"
+          style={{ color: accentHex, fontSize: 12, letterSpacing: '0.14em' }}
+        >
           {trackName} — Beat Pads
         </span>
       </span>
@@ -127,7 +130,7 @@ export function Se2BeatPadsDockedPanel({
             {trackName}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5">
-            <BeatPadsStudioGuideHelp title="Beat Pads guide — VocalBox, Lane Placements, Auto Drum, Pad Spread & copy for social" />
+            <BeatPadsStudioGuideHelp title="Beat Pads guide — VocalBox, Lane Placements, Auto Drum, Pad Spread, Match Chords & copy for social" />
             <StudioEditor2HelpTextLink
               tab="beatPadsSe2"
               expanded

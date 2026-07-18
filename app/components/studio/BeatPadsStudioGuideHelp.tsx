@@ -183,7 +183,7 @@ function BeatPadsStudioGuideModal({ open, onClose }: { open: boolean; onClose: (
   return createPortal(
     <div
       role="dialog"
-      aria-label="Beat Pads guide — VocalBox, Lane Placements, Auto Drum & Pad Spread"
+      aria-label="Beat Pads guide — VocalBox, Lane Placements, Auto Drum, Pad Spread & Match Chords"
       style={{
         position: 'fixed',
         inset: 0,
@@ -374,7 +374,7 @@ function BeatPadsStudioGuideModal({ open, onClose }: { open: boolean; onClose: (
 
 /** Blue ? — Beat Pads quick guide with social copy (dock header). */
 export function BeatPadsStudioGuideHelp({
-  title = 'Beat Pads guide — VocalBox, Lane Placements, Auto Drum & Pad Spread',
+  title = 'Beat Pads guide — VocalBox, Lane Placements, Auto Drum, Pad Spread & Match Chords',
 }: {
   title?: string;
 }) {
