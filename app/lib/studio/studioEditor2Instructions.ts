@@ -384,7 +384,8 @@ export const STUDIO_EDITOR2_HELP_SECTIONS: readonly StudioEditor2HelpSection[] =
     highlight: true,
     lines: [
       'Add **Hum Capture** from the track-type menu — its own MIDI lane with mic, pitch scope, and melody roll.',
-      'Hum or sing into the mic; notes land on the **melody roll** and sync to the piano roll below.',
+      'Hum or sing into the mic; after you stop, **Spotify Basic Pitch** (free, on-device) turns the take into MIDI on the **melody roll** and piano roll.',
+      '**Basic Pitch tune** — Onset / Frame sliders + Min note (ghost filter). Hit **Re-run** after adjusting. **Quantize** snaps notes to 1/16, 1/8, etc.',
       '**12 key pads** and **key lock** snap pitches to scale — link **Match chords** to a Progression+ / rhythm lane for context.',
       'Pick an **instrument** (piano, guitar, brass, synth…) — transport plays through this lane\'s mixer strip.',
       '**Hide** collapses the panel to a thin bar; click **Show** to expand again. **Clear notes** wipes MIDI only.',

@@ -24,7 +24,7 @@ import {
   SE2_PRECOUNT_CLICK_VOLUME,
 } from '@/app/lib/studio/se2Precount';
 import { MONOPHONIC_PITCH_EXTRACT_HUM_BASS } from '@/app/lib/studio/audioToMidiNotes';
-import { analyzeNeuralHumMelody } from '@/app/lib/vocalLab/neuralHumToInstrument';
+import { analyzeNeuralHumMelodyAsync } from '@/app/lib/vocalLab/neuralHumToInstrument';
 
 const HUM_ACCENT = '#c4a0ff';
 const BEATS_PER_BAR = 4;
@@ -113,7 +113,7 @@ export function Se2Lab808HumBox({
         const takeSec = humBoxCaptureDurationSec(bpm, captureBars);
         const trimmed = trimAudioBufferFromSec(decoded, gridOriginFileSecRef.current, takeSec + 0.05);
         const scaleId = keyMode === 'minor' ? 'minor' : 'major';
-        const analyzed = analyzeNeuralHumMelody(
+        const analyzed = await analyzeNeuralHumMelodyAsync(
           trimmed,
           {
             mode: 'manual',

@@ -21,7 +21,7 @@ const TRACK_KIND_OPTIONS: { value: StudioNewTrackKind; label: string; hint: stri
   { value: 'genoChordCreator', label: 'SE2 Chord Generator', hint: '4/8 bar card sketch — generate, edit, export to this lane' },
   { value: 'beatPads', label: 'Beat Pads', hint: 'Full drum machine lane — 16 pads, grid, Geno sync' },
   { value: 'drumGenerator', label: 'Drum Generator', hint: 'Generate grooves that match your chords & bass' },
-  { value: 'humCapture', label: 'Hum Capture', hint: 'Hum melodies — mic, key pads, melody roll on this lane' },
+  { value: 'humCapture', label: 'Hum Capture', hint: 'Hum → MIDI via Basic Pitch — mic, key pads, melody roll' },
   { value: 'glideBass', label: 'Bass Glide', hint: 'Synth bass + glide FX — sync from Progression+' },
   { value: 'synthGeno', label: 'Synth Geno', hint: 'Dedicated synth builder — describe & generate sounds' },
   { value: 'grooveLead', label: 'Groove Lead', hint: 'R&B / gospel lead synth from Groove Lab — full preset bank' },

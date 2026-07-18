@@ -1,7 +1,7 @@
 /**
  * Neural Hum-to-Instrument — open-source browser pipeline (no paid APIs).
  *
- * 1. Monophonic pitch → timed MIDI notes (`audioToMidiNotes` autocorrelation)
+ * 1. Monophonic pitch → timed MIDI notes (Spotify Basic Pitch ML, ACF fallback)
  * 2. GM instrument render via smplr MusyngKite soundfont (free CDN)
  * 3. Offline synth fallback via Chord Builder voices if samples are unavailable
  */
@@ -14,6 +14,10 @@ import {
   type MonophonicPitchExtractOpts,
   type TimedMonophonicNote,
 } from '@/app/lib/studio/audioToMidiNotes';
+import {
+  transcribeAudioBufferToTimedNotes,
+  type BasicPitchTranscribeOpts,
+} from '@/app/lib/studio/basicPitchTranscribe';
 import {
   neuralHumKeyLabel,
   processNeuralHumMelody,
@@ -115,12 +119,7 @@ async function decodeBlob(ctx: BaseAudioContext, blob: Blob): Promise<AudioBuffe
   return ctx.decodeAudioData(bytes.slice(0));
 }
 
-/** Pitch → timed notes + Dubler-style key lock (mathematical, no ML). */
-export function analyzeNeuralHumMelody(
-  sourceBuffer: AudioBuffer,
-  keyLock?: NeuralHumKeyLockSettings,
-  extractOpts?: MonophonicPitchExtractOpts,
-): {
+export type NeuralHumMelodyAnalysis = {
   notes: TimedMonophonicNote[];
   /** Pitch-tracked notes before key lock — use to re-key from pads. */
   rawNotes: TimedMonophonicNote[];
@@ -129,8 +128,45 @@ export function analyzeNeuralHumMelody(
   detectedKey: NeuralHumDetectedKey | null;
   effectiveKeyRoot: number;
   effectiveScaleId: NeuralHumKeyLockSettings['scaleId'];
-} {
+  /** Which transcription engine produced `rawNotes`. */
+  engine?: 'basic-pitch' | 'acf-fallback' | 'acf';
+};
+
+/** Sync ACF path — kept for tests / offline callers that cannot await. */
+export function analyzeNeuralHumMelody(
+  sourceBuffer: AudioBuffer,
+  keyLock?: NeuralHumKeyLockSettings,
+  extractOpts?: MonophonicPitchExtractOpts,
+): NeuralHumMelodyAnalysis {
   const raw = audioBufferToMonophonicTimedNotes(sourceBuffer, extractOpts);
+  return finalizeNeuralHumMelody(raw, keyLock, 'acf');
+}
+
+/**
+ * Preferred Hum Capture analyze: Spotify Basic Pitch (free, on-device), then key lock.
+ * Falls back to autocorrelation if the model fails to load/run.
+ */
+export async function analyzeNeuralHumMelodyAsync(
+  sourceBuffer: AudioBuffer,
+  keyLock?: NeuralHumKeyLockSettings,
+  extractOpts?: MonophonicPitchExtractOpts,
+  onProgress?: (percent: number, message: string) => void,
+  decodeOpts?: BasicPitchTranscribeOpts,
+): Promise<NeuralHumMelodyAnalysis> {
+  const { notes: raw, engine } = await transcribeAudioBufferToTimedNotes(
+    sourceBuffer,
+    (p) => onProgress?.(p.percent, p.message),
+    extractOpts,
+    decodeOpts,
+  );
+  return finalizeNeuralHumMelody(raw, keyLock, engine);
+}
+
+function finalizeNeuralHumMelody(
+  raw: TimedMonophonicNote[],
+  keyLock: NeuralHumKeyLockSettings | undefined,
+  engine: NeuralHumMelodyAnalysis['engine'],
+): NeuralHumMelodyAnalysis {
   const lock: NeuralHumKeyLockSettings = keyLock ?? {
     mode: 'auto',
     keyRoot: 0,
@@ -149,6 +185,7 @@ export function analyzeNeuralHumMelody(
     detectedKey: processed.detectedKey,
     effectiveKeyRoot: processed.effectiveKeyRoot,
     effectiveScaleId: processed.effectiveScaleId,
+    engine,
   };
 }
 
@@ -265,7 +302,7 @@ async function renderWithSynthFallbackAsync(
 
 /**
  * Full hum / whistle / vocal melody → instrument performance.
- * Uses only open-source browser audio (autocorrelation + smplr + Web Audio synth).
+ * Open-source browser audio (Basic Pitch + smplr + Web Audio synth).
  */
 export async function transformNeuralHumToInstrument(
   liveCtx: AudioContext,
@@ -286,9 +323,11 @@ export async function transformNeuralHumToInstrument(
   report('decode', 8, 'Decoding recording…');
   const sourceBuffer = await decodeBlob(liveCtx, sourceBlob);
 
-  report('analyze', 28, 'Analyzing melody…');
+  report('analyze', 18, 'Analyzing melody (Basic Pitch)…');
   const keyLock = options.keyLock ?? { mode: 'auto' as const, keyRoot: 0, scaleId: 'major' as const };
-  const analyzed = analyzeNeuralHumMelody(sourceBuffer, keyLock);
+  const analyzed = await analyzeNeuralHumMelodyAsync(sourceBuffer, keyLock, undefined, (pct, message) => {
+    report('analyze', 18 + Math.round(pct * 28), message);
+  });
   const notes = analyzed.notes;
   if (notes.length < MIN_NOTES) {
     throw new Error(

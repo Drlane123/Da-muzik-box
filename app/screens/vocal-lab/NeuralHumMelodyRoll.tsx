@@ -65,6 +65,8 @@ type NeuralHumMelodyRollProps = {
   bpm: number;
   quantize: NeuralHumRollQuantize;
   onQuantizeChange: (q: NeuralHumRollQuantize) => void;
+  /** One-click snap all notes to the selected grid (1/16, 1/8, …). */
+  onQuantizeNow?: () => void;
   instrumentId: NeuralHumInstrumentId;
   transpose: number;
   dynamics: number;
@@ -91,6 +93,7 @@ export default function NeuralHumMelodyRoll({
   bpm,
   quantize,
   onQuantizeChange,
+  onQuantizeNow,
   instrumentId,
   transpose,
   dynamics,
@@ -402,7 +405,7 @@ export default function NeuralHumMelodyRoll({
           onChange={(e) => onQuantizeChange(e.target.value as NeuralHumRollQuantize)}
           className="text-xs rounded px-2 py-1"
           style={{ background: '#121218', color: '#ccc', border: '1px solid #333' }}
-          title="Snap notes to this grid"
+          title="Grid size for Quantize"
         >
           {NEURAL_HUM_QUANTIZE_OPTIONS.map((q) => (
             <option key={q} value={q}>
@@ -410,6 +413,20 @@ export default function NeuralHumMelodyRoll({
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => onQuantizeNow?.()}
+          disabled={!onQuantizeNow || rollNotes.length === 0}
+          className="px-2 py-1 rounded text-xs font-bold uppercase tracking-wide"
+          style={{
+            background: rollNotes.length > 0 ? '#00E5FF22' : '#121218',
+            color: rollNotes.length > 0 ? '#00E5FF' : '#444',
+            border: `1px solid ${rollNotes.length > 0 ? '#00E5FF66' : '#333'}`,
+          }}
+          title="Snap note starts to the selected grid — fixes human timing"
+        >
+          Quantize
+        </button>
         <span className="text-10px font-mono" style={{ color: NH_SCALE.primary }} title="Project tempo">
           {Math.round(bpm)} BPM
         </span>

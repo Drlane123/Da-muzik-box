@@ -46,16 +46,19 @@ import {
   type NeuralHumRollQuantize,
 } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 import {
-  analyzeNeuralHumMelody,
+  analyzeNeuralHumMelodyAsync,
   downloadNeuralHumWav,
   NEURAL_HUM_INSTRUMENTS,
   renderNeuralHumNotesToInstrument,
   transformNeuralHumToInstrument,
   type NeuralHumInstrumentId,
+  type NeuralHumMelodyAnalysis,
   type NeuralHumTransformResult,
 } from '@/app/lib/vocalLab/neuralHumToInstrument';
 import { previewNeuralHumNote, scheduleNeuralHumRollAudition, stopNeuralHumPreview } from '@/app/lib/vocalLab/neuralHumPreview';
 import type { TimedMonophonicNote } from '@/app/lib/studio/audioToMidiNotes';
+import { BASIC_PITCH_DEFAULT_THRESHOLDS } from '@/app/lib/studio/basicPitchEngine';
+import { BASIC_PITCH_DEFAULT_MIN_NOTE_SEC } from '@/app/lib/studio/basicPitchTranscribe';
 import { VocalLabHelpTip } from '@/app/components/vocalLab/VocalLabHelpHub';
 
 export type NeuralHumSe2LaneBinding = {
@@ -96,13 +99,19 @@ export default function NeuralHumPanel({
   const [keyLockMode, setKeyLockMode] = useState<NeuralHumKeyLockMode>('auto');
   const [keyRoot, setKeyRoot] = useState(0);
   const [scaleId, setScaleId] = useState<NeuralHumScaleId>('major');
-  const [melodyPreview, setMelodyPreview] = useState<ReturnType<typeof analyzeNeuralHumMelody> | null>(
+  const [melodyPreview, setMelodyPreview] = useState<NeuralHumMelodyAnalysis | null>(
     null,
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [rollBars, setRollBars] = useState<NeuralHumRollBarCount>(se2Lane?.rollBars ?? 8);
   const [rollNotes, setRollNotes] = useState<NeuralHumRollNote[]>([]);
   const [quantize, setQuantize] = useState<NeuralHumRollQuantize>(NEURAL_HUM_QUANTIZE_DEFAULT);
+  /** Basic Pitch sensitivity — applied on next analyze / Re-run. */
+  const [onsetThreshold, setOnsetThreshold] = useState(BASIC_PITCH_DEFAULT_THRESHOLDS.onsetThreshold);
+  const [frameThreshold, setFrameThreshold] = useState(BASIC_PITCH_DEFAULT_THRESHOLDS.frameThreshold);
+  /** Ghost-note filter in ms (default 50). */
+  const [minNoteMs, setMinNoteMs] = useState(Math.round(BASIC_PITCH_DEFAULT_MIN_NOTE_SEC * 1000));
+  const [analyzeNonce, setAnalyzeNonce] = useState(0);
 
   const [selected, setSelected] = useState<NeuralHumInstrumentId>(se2Lane?.instrumentId ?? 'piano');
   const [keyboardOctave, setKeyboardOctave] = useState(4);
@@ -137,6 +146,18 @@ export default function NeuralHumPanel({
   /** After Clear all — do not refill roll from cached analyze until a new recording. */
   const skipAutoFillRef = useRef(false);
   const rollUserEditedRef = useRef(false);
+  const se2CommitRef = useRef<NeuralHumSe2LaneBinding['onRollNotesCommit'] | undefined>(undefined);
+  se2CommitRef.current = se2Lane?.onRollNotesCommit;
+  const decodeOptsRef = useRef({
+    onsetThreshold,
+    frameThreshold,
+    minNoteSec: minNoteMs / 1000,
+  });
+  decodeOptsRef.current = {
+    onsetThreshold,
+    frameThreshold,
+    minNoteSec: minNoteMs / 1000,
+  };
 
   useEffect(() => {
     if (se2Lane) return;
@@ -300,6 +321,7 @@ export default function NeuralHumPanel({
 
     let cancelled = false;
     setIsAnalyzing(true);
+    setProgress(4);
 
     void (async () => {
       try {
@@ -323,6 +345,7 @@ export default function NeuralHumPanel({
           const lock = keyLockSettingsRef.current;
           setMelodyPreview({
             notes: processed.notes,
+            rawNotes: padNotes,
             rawNoteCount: padNotes.length,
             keyLabel:
               lock.mode === 'off'
@@ -331,9 +354,19 @@ export default function NeuralHumPanel({
             detectedKey: processed.detectedKey,
             effectiveKeyRoot: processed.effectiveKeyRoot,
             effectiveScaleId: processed.effectiveScaleId,
+            engine: 'acf',
           });
+          setProgress(100);
         } else {
-          const analyzed = analyzeNeuralHumMelody(buffer, keyLockSettingsRef.current);
+          const analyzed = await analyzeNeuralHumMelodyAsync(
+            buffer,
+            keyLockSettingsRef.current,
+            undefined,
+            (pct, _message) => {
+              if (!cancelled) setProgress(Math.max(4, Math.round(pct * 100)));
+            },
+            decodeOptsRef.current,
+          );
           if (cancelled) return;
           if (skipAutoFillRef.current) return;
           rawMelodyNotesRef.current = analyzed.rawNotes;
@@ -343,18 +376,24 @@ export default function NeuralHumPanel({
             setKeyRoot(analyzed.effectiveKeyRoot);
             setScaleId(analyzed.effectiveScaleId);
           }
+          setProgress(100);
         }
       } catch {
         if (!cancelled) setMelodyPreview(null);
       } finally {
-        if (!cancelled) setIsAnalyzing(false);
+        if (!cancelled) {
+          setIsAnalyzing(false);
+          window.setTimeout(() => {
+            if (!cancelled) setProgress(0);
+          }, 600);
+        }
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [audioBlob, clearRekeyHistory, getOrCreateAudioContext]);
+  }, [analyzeNonce, audioBlob, clearRekeyHistory, getOrCreateAudioContext]);
 
   /** Map analyzed MIDI → quantized roll grid (BPM + quantize). */
   useEffect(() => {
@@ -365,6 +404,8 @@ export default function NeuralHumPanel({
     }
     const mapped = timedNotesToRollNotes(melodyPreview.notes, bpm, rollBars, quantize);
     setRollNotes(mapped);
+    // Push onto SE2 piano roll / timeline as soon as auto-analyze fills the melody roll.
+    se2CommitRef.current?.(enforceMonophonicRollNotes(mapped));
   }, [bpm, melodyPreview, quantize, rollBars]);
 
   useEffect(() => {
@@ -394,6 +435,24 @@ export default function NeuralHumPanel({
     },
     [se2Lane],
   );
+
+  const handleQuantizeNow = useCallback(() => {
+    if (rollNotes.length === 0) return;
+    rollUserEditedRef.current = true;
+    const snapped = quantizeNeuralHumRollNotes(rollNotes, quantize, rollBars);
+    setRollNotes(snapped);
+    se2CommitRef.current?.(snapped);
+  }, [quantize, rollBars, rollNotes]);
+
+  const handleRerunBasicPitch = useCallback(() => {
+    if (!audioBlob || audioBlob.size === 0 || isAnalyzing) return;
+    skipAutoFillRef.current = false;
+    rollUserEditedRef.current = false;
+    // Prefer Basic Pitch path (ignore pad-locked notes from the take).
+    padCaptureUsedRef.current = false;
+    setResult(null);
+    setAnalyzeNonce((n) => n + 1);
+  }, [audioBlob, isAnalyzing]);
 
   const auditionMelodyNotes = useCallback(
     (notes: TimedMonophonicNote[]) => {
@@ -440,6 +499,7 @@ export default function NeuralHumPanel({
       if (snap.melodyMeta && snap.melodyNotes.length > 0) {
         setMelodyPreview({
           notes: snap.melodyNotes,
+          rawNotes: snap.melodyNotes,
           rawNoteCount: snap.melodyMeta.rawNoteCount,
           keyLabel: snap.melodyMeta.keyLabel,
           detectedKey: snap.melodyMeta.detectedKey,
@@ -823,7 +883,7 @@ export default function NeuralHumPanel({
             <VocalLabHelpTip tab="hum-capture" title="Hum Capture — melody from your voice" />
           </span>
           <p className="text-xs mt-1" style={{ color: '#888' }}>
-            Hum → scope → melody roll (4/8 bars). Edit MIDI here, audition, then export or render.
+            Hum → Basic Pitch → melody roll (4/8 bars). Edit MIDI here, audition, then export or render.
           </p>
         </div>
       ) : null}
@@ -868,8 +928,8 @@ export default function NeuralHumPanel({
               Key lock
             </span>
             {isAnalyzing && (
-              <span className="text-xs ml-auto" style={{ color: '#666' }}>
-                Analyzing…
+              <span className="text-xs ml-auto" style={{ color: '#00E5FF' }}>
+                Basic Pitch…
               </span>
             )}
             {melodyPreview && !isAnalyzing && rollNotes.length > 0 && (
@@ -979,7 +1039,7 @@ export default function NeuralHumPanel({
 
         {!isAnalyzing && hasAudio && melodyPreview && melodyPreview.notes.length === 0 && (
           <p className="text-xs font-semibold" style={{ color: '#ffaa44' }}>
-            No MIDI notes detected — try a longer hum, closer to the mic, or turn Key Lock off.
+            No MIDI notes detected — raise Min note / Onset, hum longer, or turn Key Lock off.
           </p>
         )}
 
@@ -988,6 +1048,80 @@ export default function NeuralHumPanel({
             Hum into the mic — scope tracks pitch live. MIDI appears in the melody roll below.
           </p>
         )}
+
+        {/* Basic Pitch cleanup — thresholds + ghost filter (apply via Re-run) */}
+        <div
+          className="rounded-md p-2.5 flex flex-col gap-2"
+          style={{ background: '#0a1218', border: '1px solid #1a3a4a' }}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: '#00E5FF' }}>
+              Basic Pitch tune
+            </span>
+            <button
+              type="button"
+              onClick={handleRerunBasicPitch}
+              disabled={!hasAudio || isAnalyzing}
+              className="ml-auto px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide"
+              style={{
+                background: hasAudio && !isAnalyzing ? '#00E5FF22' : '#121218',
+                color: hasAudio && !isAnalyzing ? '#00E5FF' : '#555',
+                border: `1px solid ${hasAudio && !isAnalyzing ? '#00E5FF66' : '#333'}`,
+              }}
+              title="Re-run transcription with the slider settings below"
+            >
+              {isAnalyzing ? 'Running…' : 'Re-run'}
+            </button>
+          </div>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold flex justify-between" style={{ color: '#8ab' }}>
+              Onset <span className="font-mono text-[#00E5FF]">{onsetThreshold.toFixed(2)}</span>
+            </span>
+            <input
+              type="range"
+              min={0.1}
+              max={0.9}
+              step={0.01}
+              value={onsetThreshold}
+              onChange={(e) => setOnsetThreshold(Number(e.target.value))}
+              className="w-full accent-[#00E5FF]"
+              title="Higher = fewer note starts (less breath / click noise)"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold flex justify-between" style={{ color: '#8ab' }}>
+              Frame <span className="font-mono text-[#00E5FF]">{frameThreshold.toFixed(2)}</span>
+            </span>
+            <input
+              type="range"
+              min={0.1}
+              max={0.9}
+              step={0.01}
+              value={frameThreshold}
+              onChange={(e) => setFrameThreshold(Number(e.target.value))}
+              className="w-full accent-[#00E5FF]"
+              title="Higher = drop quieter / shorter held notes"
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold flex justify-between" style={{ color: '#8ab' }}>
+              Min note <span className="font-mono text-[#00E5FF]">{minNoteMs} ms</span>
+            </span>
+            <input
+              type="range"
+              min={20}
+              max={200}
+              step={5}
+              value={minNoteMs}
+              onChange={(e) => setMinNoteMs(Number(e.target.value))}
+              className="w-full accent-[#00E5FF]"
+              title="Delete ghost notes shorter than this (breath / mouth clicks)"
+            />
+          </label>
+          <p className="text-[9px] leading-snug" style={{ color: '#567' }}>
+            Adjust, then <strong style={{ color: '#8ab' }}>Re-run</strong>. Use <strong style={{ color: '#8ab' }}>Quantize</strong> on the roll to snap timing to the grid.
+          </p>
+        </div>
       </div>
 
       <div
@@ -1007,6 +1141,7 @@ export default function NeuralHumPanel({
           bpm={bpm}
           quantize={quantize}
           onQuantizeChange={setQuantize}
+          onQuantizeNow={handleQuantizeNow}
           instrumentId={selected}
           transpose={transpose}
           dynamics={dynamics}
@@ -1146,7 +1281,7 @@ export default function NeuralHumPanel({
             : `Render ${selectedMeta?.label ?? 'instrument'}${result?.keyLabel ? ` · ${result.keyLabel}` : ''}`}
         </button>
 
-        {(isTransforming || progress > 0) && !error && (
+        {(isTransforming || isAnalyzing || progress > 0) && !error && (
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-sm" style={{ color: '#888' }}>
               <span>{stage}</span>
