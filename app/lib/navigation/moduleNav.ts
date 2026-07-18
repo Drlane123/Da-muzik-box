@@ -12,7 +12,8 @@ export type ScreenId =
   | 'studio-editor-2'
   | 'my-projects'
   | 'master-arranger'
-  | 'export';
+  | 'export'
+  | 'pricing';
 
 export interface NavItem {
   id: ScreenId;
@@ -21,7 +22,7 @@ export interface NavItem {
   groupId?: string;
 }
 
-const NAV_ITEM_ORDER_VERSION = 4;
+const NAV_ITEM_ORDER_VERSION = 5;
 const NAV_ITEM_ORDER_VERSION_KEY = 'navItemOrderVersion';
 
 /** Modules menu — top-to-bottom order (Studio One–style workflow). */
@@ -34,6 +35,7 @@ export const DEFAULT_NAV_ITEMS: NavItem[] = [
   { id: 'my-projects', label: 'My Projects' },
   { id: 'export', label: 'Export / Playback' },
   { id: 'ai-song', label: 'AI Song Generator' },
+  { id: 'pricing', label: 'Pricing', badge: 'NEW' },
 ];
 
 export function loadNavItemsFromStorage(): NavItem[] {

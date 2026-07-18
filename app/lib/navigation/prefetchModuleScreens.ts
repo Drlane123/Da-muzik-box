@@ -22,6 +22,7 @@ export const SCREEN_MODULE_LOADERS: Record<ScreenId, Loader> = {
   'my-projects': () => import('@/app/screens/MyProjectsScreen'),
   'master-arranger': () => import('@/app/screens/MasterArrangerScreen'),
   export: () => import('@/app/screens/ExportScreen'),
+  pricing: () => import('@/app/screens/PricingScreen'),
 };
 
 export function prefetchModuleScreen(id: ScreenId | string): void {

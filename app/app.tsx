@@ -343,7 +343,12 @@ function ScreenMount({
 function AppContent() {
   const [showSettings, setShowSettings] = useState(false);
   const [showOverview, setShowOverview] = useState(false);
-  const [activeScreen, setActiveScreen] = useState<ScreenId>(() => 'studio-editor-2');
+  /**
+   * Always land on Pricing for every full load (preview / gate UI).
+   * Do NOT pre-mount Studio Editor 2 — its portals were painting over Pricing after the first visit.
+   * Plan CTAs call navigateToScreen('studio-editor-2') with no paywall yet.
+   */
+  const [activeScreen, setActiveScreen] = useState<ScreenId>('pricing');
   const [creationSubScreen, setCreationSubScreen] = useState<CreationSubScreenId>('beat-lab');
   const [vocalLabSubScreen, setVocalLabSubScreen] = useState<VocalLabSubScreenId>('vocal-lab');
   /** Passed to Studio Editor when navigating from Vocal Lab with a recorded/uploaded blob. */
@@ -360,9 +365,10 @@ function AppContent() {
   /**
    * Keep a module mounted after its first open (SE2-style). Conditional unmount + Suspense
    * made the first Modules click look dead until you left and came back.
+   * Pricing only at boot — SE2 joins after Open Music Box (or Modules).
    */
   const [visitedScreens, setVisitedScreens] = useState<ReadonlySet<ScreenId>>(
-    () => new Set<ScreenId>(['studio-editor-2']),
+    () => new Set<ScreenId>(['pricing']),
   );
   const { settings } = useSettings();
 
@@ -406,12 +412,6 @@ function AppContent() {
     const sub = screenToVocalLabSubScreen(activeScreen);
     if (sub) setVocalLabSubScreen(sub);
   }, [activeScreen]);
-
-  /**
-   * Do NOT force `setActiveScreen('studio-editor-2')` on mount — initial state already is SE2.
-   * A post-paint force was racing the first Modules click and snapping back to SE2
-   * (Beat Lab / Vocal Lab / Mastering Bay looked like they “wouldn’t load” until a second visit).
-   */
 
   /** Tag <body> so CSS can hide SE2/Beat Lab body portals when another module is active. */
   useEffect(() => {
@@ -706,7 +706,7 @@ function AppContent() {
           </DeferredScreenMount>
           <DeferredScreenMount
             active={activeScreen === 'studio-editor-2'}
-            enabled
+            enabled={shouldMountScreen('studio-editor-2')}
             moduleName="Studio Editor 2"
             screenId="studio-editor-2"
           >
@@ -765,6 +765,16 @@ function AppContent() {
             screenId="export"
           >
             {(ExportScreen) => <ExportScreen />}
+          </DeferredScreenMount>
+          <DeferredScreenMount
+            active={activeScreen === 'pricing'}
+            enabled
+            moduleName="Pricing"
+            screenId="pricing"
+          >
+            {(PricingScreen) => (
+              <PricingScreen onEnterApp={() => navigateToScreen('studio-editor-2')} />
+            )}
           </DeferredScreenMount>
         </main>
       </div>

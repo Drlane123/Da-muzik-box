@@ -89,6 +89,7 @@ export default function TitleBar({
     'harmony-match',
     'my-projects',
     'export',
+    'pricing',
     'studio-editor-2',
     'creation-station',
     'master-arranger',

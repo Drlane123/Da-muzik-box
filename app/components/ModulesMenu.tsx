@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 import {
+  BadgeDollarSign,
   ChevronDown,
   ChevronRight,
   Download,
@@ -61,6 +62,8 @@ function navIcon(id: ScreenId, size = 14) {
       return <Sliders size={size} />;
     case 'export':
       return <Download size={size} />;
+    case 'pricing':
+      return <BadgeDollarSign size={size} />;
     default:
       return null;
   }
