@@ -316,7 +316,7 @@ export default function PricingScreen({
 
                 <ul style={{ listStyle: 'none', margin: '20px 0 0', padding: 0, display: 'grid', gap: 10 }}>
                   {DA_MUSIC_BOX_PRICING_FEATURES.map((row) => {
-                    const included = plan.id === 'basic' ? row.basic : row.premium;
+                    const included = !row.comingSoon && (plan.id === 'basic' ? row.basic : row.premium);
                     return (
                       <li
                         key={`${plan.id}-${row.label}`}
@@ -357,7 +357,12 @@ export default function PricingScreen({
                             }}
                           >
                             {row.label}
-                            {row.premiumOnly && plan.id === 'premium' && (
+                            {row.comingSoon && (
+                              <span style={{ marginLeft: 6, color: GOLD, fontSize: 10, fontWeight: 900 }}>
+                                COMING SOON
+                              </span>
+                            )}
+                            {!row.comingSoon && row.premiumOnly && plan.id === 'premium' && (
                               <span style={{ marginLeft: 6, color: GOLD, fontSize: 10, fontWeight: 900 }}>
                                 PREMIUM
                               </span>
@@ -368,7 +373,21 @@ export default function PricingScreen({
                               {row.detail}
                             </span>
                           )}
-                          {!included && (
+                          {row.comingSoon ? (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                marginTop: 2,
+                                fontSize: 10,
+                                color: GOLD,
+                                fontWeight: 700,
+                              }}
+                            >
+                              Coming soon
+                            </span>
+                          ) : !included ? (
                             <span
                               style={{
                                 display: 'inline-flex',
@@ -382,7 +401,7 @@ export default function PricingScreen({
                             >
                               <Lock size={10} /> Premium only
                             </span>
-                          )}
+                          ) : null}
                         </span>
                       </li>
                     );

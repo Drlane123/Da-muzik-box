@@ -14,6 +14,8 @@ export interface PricingFeatureRow {
   premium: boolean;
   /** Call out Premium-only rows in the UI. */
   premiumOnly?: boolean;
+  /** Not shipping yet — show unchecked + Coming soon on both plans. */
+  comingSoon?: boolean;
 }
 
 export interface PricingPlan {
@@ -66,7 +68,13 @@ export const DA_MUSIC_BOX_PRICING_FEATURES: readonly PricingFeatureRow[] = [
   { label: 'Chord / Bass Sequencer', basic: true, premium: true },
   { label: 'AI Vocal Lab', basic: true, premium: true },
   { label: 'AI Music Match', basic: true, premium: true },
-  { label: 'AI Song Generator', basic: true, premium: true },
+  {
+    label: 'AI Song Generator',
+    detail: 'Not built into the system yet',
+    basic: false,
+    premium: false,
+    comingSoon: true,
+  },
   { label: 'My Projects & Export', basic: true, premium: true },
   {
     label: 'Beat Lab',
