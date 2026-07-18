@@ -13,6 +13,10 @@ import {
   defaultPadSamplerPlaybackOpts,
   type PadSamplerPlaybackOpts,
 } from '@/app/lib/padSampleStorage';
+import {
+  registerSe2BeatPadsVuTap,
+  scheduleSe2BeatPadsVuPulse,
+} from '@/app/lib/studio/se2BeatPadsVuTap';
 
 export type PlayPadSampleBufferOpts = {
   /** Override output (e.g. SE2 track strip). Defaults to master gain or destination. */
@@ -21,6 +25,8 @@ export type PlayPadSampleBufferOpts = {
   skipMeter?: boolean;
   /** Extra linear trim after pad velocity / padLevel (SE2 Beat Pads uses this). */
   outputGain?: number;
+  /** SE2 Beat Pads dock VU — tap this voice’s real level (velocity / sample loudness). */
+  registerSe2VuTap?: boolean;
 };
 
 type ActivePadVoice = {
@@ -84,8 +90,14 @@ export function playPadSampleBuffer(
   const panNode = ctx.createStereoPanner();
   panNode.pan.value = Math.max(-1, Math.min(1, rawPan + padPan));
   const meterAnalyser = ctx.createAnalyser();
-  meterAnalyser.fftSize = 1024;
-  meterAnalyser.smoothingTimeConstant = 0.14;
+  // SE2 dock VU needs a tight buffer; Beat Lab CH meters keep the smoother path.
+  if (playOpts?.registerSe2VuTap) {
+    meterAnalyser.fftSize = 256;
+    meterAnalyser.smoothingTimeConstant = 0;
+  } else {
+    meterAnalyser.fftSize = 1024;
+    meterAnalyser.smoothingTimeConstant = 0.14;
+  }
   const master = (window as unknown as { __daMusicMasterGain?: GainNode | null }).__daMusicMasterGain;
   const dest =
     playOpts?.outputNode ??
@@ -354,14 +366,21 @@ export function playPadSampleBuffer(
     }
 
     src.start(whenPlay, t0, playDur);
+    const voiceUntil = whenPlay + Math.min(playDur + fxTailSec + 0.35, 6);
     if (!playOpts?.skipMeter) {
       registerBeatLabMeterVoice(
         chId,
         meterAnalyser,
         rawPan,
         whenPlay,
-        whenPlay + Math.min(playDur + fxTailSec + 0.35, 6),
+        voiceUntil,
       );
+    }
+    if (playOpts?.registerSe2VuTap) {
+      const vuPan = rawPan + padPan;
+      const attackPeak = Math.min(1, vol * (snap < 1e-4 ? 1 : 1 + snap * 0.85));
+      scheduleSe2BeatPadsVuPulse(ctx, whenPlay, attackPeak, vuPan);
+      registerSe2BeatPadsVuTap(meterAnalyser, vuPan, whenPlay, voiceUntil);
     }
   } catch {
     disposeGraph();

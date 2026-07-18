@@ -646,6 +646,136 @@ html.touch-coarse .cs-pad-hit {
   letter-spacing: 0.08em !important;
 }
 
+[data-studio-beat-pads-dock] .beat-pads-pad-bank-cluster {
+  position: relative;
+}
+
+/**
+ * Stereo VU in the SE2 bank↔pads gap — SE2 mixer glass/LED look.
+ * Absolute only; no layout resize. No outer glow (avoids edge bleed).
+ */
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  overflow: hidden;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__glass {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 2px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  border: 1px solid #1a1008;
+  background-color: #3a2410;
+  background-image:
+    linear-gradient(#020204, #020204),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, transparent 36%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.12) 2px,
+      rgba(0, 0, 0, 0.12) 2.5px
+    ),
+    repeating-linear-gradient(
+      94deg,
+      #1e1208 0px,
+      #5a3a20 4px,
+      #2e1c0c 7px,
+      #3a2410 10px,
+      #1e1208 13px
+    );
+  background-size: 2px 100%, auto, auto, auto;
+  background-position: center center, 0 0, 0 0, 0 0;
+  background-repeat: no-repeat, repeat, repeat, repeat;
+  box-shadow:
+    inset 0 3px 6px rgba(0, 0, 0, 0.75),
+    inset 0 1px 2px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__col {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid #050508;
+  background:
+    repeating-linear-gradient(
+      to top,
+      transparent 0px,
+      transparent 4px,
+      rgba(0, 0, 0, 0.45) 4px,
+      rgba(0, 0, 0, 0.45) 5px
+    ),
+    linear-gradient(180deg, #0c0c12 0%, #060608 100%);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__col:first-child {
+  border-radius: 1px 0 0 1px;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__col:last-child {
+  border-radius: 0 1px 1px 0;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__led {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  pointer-events: none;
+  /* Crisp LED segments — no soft glow / edge bloom */
+  -webkit-mask-image: repeating-linear-gradient(
+    to top,
+    #000 0px,
+    #000 4px,
+    transparent 4px,
+    transparent 5px
+  );
+  mask-image: repeating-linear-gradient(
+    to top,
+    #000 0px,
+    #000 4px,
+    transparent 4px,
+    transparent 5px
+  );
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 22%);
+  mix-blend-mode: screen;
+  opacity: 0.35;
+}
+
+[data-studio-beat-pads-dock] .se2-beat-pads-stereo-vu__labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: rgba(220, 235, 228, 0.65);
+  line-height: 1;
+  text-align: center;
+  flex-shrink: 0;
+}
+
 [data-studio-beat-pads-dock] .beat-pads-pad-grid {
   margin-left: 0.5in;
   /* Visual-only: slide right + widen 50% — layout box unchanged so FX panel stays put */

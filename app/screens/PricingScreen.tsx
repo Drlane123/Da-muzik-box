@@ -1,9 +1,9 @@
 /**
- * Da Music Box — pricing page (Ace Studio–style two-tier layout).
- * Preview mode: plan CTAs load the app (no paywall / Stripe yet).
+ * Da Music Box — pricing / Payment Center (Ace Studio–style two-tier layout).
+ * Preview mode: plan CTAs load the app with full access (no Stripe charge yet).
  */
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Check, Lock, Sparkles, X } from 'lucide-react';
 
 import {
@@ -15,6 +15,11 @@ import {
   type PricingBillingCycle,
   type PricingPlanId,
 } from '@/app/lib/pricing/daMusicBoxPricing';
+import {
+  LOCAL_BILLING_STATUS,
+  type BillingCenterStatus,
+} from '@/app/lib/pricing/billingPreview';
+import { fetchBillingStatus } from '@/app/lib/pricing/fetchBillingStatus';
 
 const BG = '#07090c';
 const PANEL = 'rgba(12, 16, 22, 0.92)';
@@ -48,9 +53,16 @@ export default function PricingScreen({
 } = {}) {
   const [cycle, setCycle] = useState<PricingBillingCycle>('yearly');
   const [loadingPlan, setLoadingPlan] = useState<PricingPlanId | null>(null);
+  const [billing, setBilling] = useState<BillingCenterStatus>(LOCAL_BILLING_STATUS);
 
   const plans = DA_MUSIC_BOX_PRICING_PLANS;
   const yearlyOffPct = yearlyDiscountPercent(plans[0]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    void fetchBillingStatus(ac.signal).then(setBilling);
+    return () => ac.abort();
+  }, []);
 
   const onChoose = (planId: PricingPlanId) => {
     if (loadingPlan) return;
@@ -154,7 +166,88 @@ export default function PricingScreen({
             Premium unlocks <strong style={{ color: GOLD }}>Beat Lab</strong>,{' '}
             <strong style={{ color: GOLD }}>Beat Pads</strong>, and{' '}
             <strong style={{ color: GOLD }}>Mastering Bay</strong>.
+            Right now this is a <strong style={{ color: CYAN }}>preview</strong> — Open Muzik Box keeps full access until Stripe is connected.
           </p>
+
+          <section
+            aria-label="Payment Center status"
+            style={{
+              margin: '22px auto 0',
+              maxWidth: 720,
+              textAlign: 'left',
+              padding: '14px 16px',
+              borderRadius: 12,
+              border: `1px solid rgba(0,229,255,0.28)`,
+              background: 'rgba(0, 229, 255, 0.06)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'Orbitron, sans-serif',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  letterSpacing: 1,
+                  color: CYAN,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {billing.paymentCenter}
+              </span>
+              <span
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  border: `1px solid ${billing.mode === 'preview' ? 'rgba(212,175,55,0.45)' : 'rgba(0,229,255,0.45)'}`,
+                  color: billing.mode === 'preview' ? GOLD : CYAN,
+                  fontSize: 10,
+                  fontWeight: 900,
+                  letterSpacing: 0.6,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {billing.mode}
+              </span>
+            </div>
+            <p style={{ margin: 0, color: MUTED, fontSize: 13, lineHeight: 1.45 }}>{billing.message}</p>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 10,
+                marginTop: 10,
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                color: PLATINUM,
+              }}
+            >
+              <span style={{ color: billing.d1Ready ? '#5dff9a' : MUTED }}>
+                D1 {billing.d1Ready ? 'ready' : 'pending'}
+              </span>
+              <span style={{ opacity: 0.35 }}>·</span>
+              <span style={{ color: billing.stripeConnected ? '#5dff9a' : MUTED }}>
+                Stripe {billing.stripeConnected ? 'connected' : 'not connected'}
+              </span>
+              <span style={{ opacity: 0.35 }}>·</span>
+              <span style={{ color: billing.unlockAll ? '#5dff9a' : MUTED }}>
+                Access {billing.unlockAll ? 'full (preview)' : 'entitlement-gated'}
+              </span>
+              <span style={{ opacity: 0.35 }}>·</span>
+              <span style={{ color: billing.apiReached ? CYAN : MUTED }}>
+                API {billing.apiReached ? 'online' : 'local fallback'}
+              </span>
+            </div>
+          </section>
 
           <div
             style={{

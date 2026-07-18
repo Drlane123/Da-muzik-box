@@ -20,6 +20,7 @@ import { resetBeatPadsPlaylineToStart, BEAT_PADS_GRID_COL_W, setBeatPadsPlayline
 import { pointerStrikeVelocity } from '@/app/lib/creationStation/eightZeroEightVoice';
 import { BeatLabDrumMachineSequencer } from '@/app/components/creation/BeatLabDrumMachineSequencer';
 import { BeatPadsPatternBankSidebar } from '@/app/components/creation/BeatPadsPatternBankSidebar';
+import { Se2BeatPadsStereoVu } from '@/app/components/studio/Se2BeatPadsStereoVu';
 import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TAGLINE, BEAT_PADS_VOCALBOX_PANEL_H_PX } from '@/app/components/creation/BeatPadsVocalBoxPanel';
 import { BeatPads808LabPanel, BEAT_PADS_808_LAB_ACCENT } from '@/app/components/creation/BeatPads808LabPanel';
 import {
@@ -390,6 +391,8 @@ export type BeatLabDrumMachineOverlayProps = {
   onSeekSe2Beat?: (beat: number) => void;
   se2BeatsPerBar?: number;
   sequencerMinVisibleLanes?: number;
+  /** SE2 embedded — mixer strip index for bank↔pads stereo VU (absolute; no layout resize). */
+  se2MeterTrackIndex?: number;
 };
 
 export function BeatLabDrumMachineOverlay({
@@ -519,6 +522,7 @@ export function BeatLabDrumMachineOverlay({
   onSeekSe2Beat,
   se2BeatsPerBar = 4,
   sequencerMinVisibleLanes,
+  se2MeterTrackIndex,
 }: BeatLabDrumMachineOverlayProps) {
   const noteRepeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteRepeatPadRef = useRef<number | null>(null);
@@ -2423,7 +2427,9 @@ export function BeatLabDrumMachineOverlay({
           }}
         >
           <div
+            className="beat-pads-pad-bank-cluster"
             style={{
+              position: embedded && typeof se2MeterTrackIndex === 'number' ? 'relative' : undefined,
               flexShrink: 0,
               display: 'flex',
               flexDirection: 'row',
@@ -2469,6 +2475,9 @@ export function BeatLabDrumMachineOverlay({
                 />
               ) : null}
             </div>
+            {embedded && typeof se2MeterTrackIndex === 'number' ? (
+              <Se2BeatPadsStereoVu trackIndex={se2MeterTrackIndex} active={open && showEmbeddedMachineChrome} />
+            ) : null}
             <div
               className="beat-pads-pad-grid"
               style={{

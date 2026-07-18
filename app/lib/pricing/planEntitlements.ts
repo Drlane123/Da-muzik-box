@@ -1,11 +1,13 @@
 /**
  * Session plan from Pricing → Open Music Box.
- * Basic locks Beat Lab, Beat Pads, and Mastering Bay (nav + add-track).
+ * Basic locks Beat Lab, Beat Pads, and Mastering Bay (nav + add-track) — only when
+ * BILLING_PREVIEW_UNLOCK_ALL is false (after Stripe + D1 go live).
  * Persist in sessionStorage so a refresh mid-session keeps the choice until a full new Pricing entry.
  * Full page load still starts on Pricing (app.tsx); choosing a plan overwrites this.
  */
 
 import type { PricingPlanId } from '@/app/lib/pricing/daMusicBoxPricing';
+import { BILLING_PREVIEW_UNLOCK_ALL } from '@/app/lib/pricing/billingPreview';
 import type { CreationSubScreenId } from '@/app/lib/creationStation/creationSubScreens';
 import type { ScreenId } from '@/app/lib/navigation/moduleNav';
 
@@ -73,17 +75,26 @@ export function subscribeAppPlan(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/**
+ * Plan used for feature gates. Preview unlock forces Premium so you never lose access
+ * while the Payment Center is being built (before Stripe).
+ */
+export function effectiveAppPlan(plan: AppPlanId | null = currentPlan): AppPlanId | null {
+  if (BILLING_PREVIEW_UNLOCK_ALL) return 'premium';
+  return plan;
+}
+
 export function isPremiumPlan(plan: AppPlanId | null = currentPlan): boolean {
-  return plan === 'premium';
+  return effectiveAppPlan(plan) === 'premium';
 }
 
 export function isBasicPlan(plan: AppPlanId | null = currentPlan): boolean {
-  return plan === 'basic';
+  return effectiveAppPlan(plan) === 'basic';
 }
 
 /** Premium-only top-level modules. */
 export function screenAllowedForPlan(screen: ScreenId, plan: AppPlanId | null = currentPlan): boolean {
-  if (plan !== 'basic') return true;
+  if (effectiveAppPlan(plan) !== 'basic') return true;
   if (screen === 'master-arranger') return false;
   return true;
 }
@@ -93,23 +104,23 @@ export function creationSubAllowedForPlan(
   sub: CreationSubScreenId,
   plan: AppPlanId | null = currentPlan,
 ): boolean {
-  if (plan !== 'basic') return true;
+  if (effectiveAppPlan(plan) !== 'basic') return true;
   if (sub === 'beat-lab' || sub === 'drum-kit-generator') return false;
   return true;
 }
 
 export function defaultCreationSubForPlan(plan: AppPlanId | null = currentPlan): CreationSubScreenId {
-  return plan === 'basic' ? 'groove-lab' : 'beat-lab';
+  return effectiveAppPlan(plan) === 'basic' ? 'groove-lab' : 'beat-lab';
 }
 
 export function canUseBeatPads(plan: AppPlanId | null = currentPlan): boolean {
-  return plan !== 'basic';
+  return effectiveAppPlan(plan) !== 'basic';
 }
 
 export function canUseMasteringBay(plan: AppPlanId | null = currentPlan): boolean {
-  return plan !== 'basic';
+  return effectiveAppPlan(plan) !== 'basic';
 }
 
 export function canUseBeatLab(plan: AppPlanId | null = currentPlan): boolean {
-  return plan !== 'basic';
+  return effectiveAppPlan(plan) !== 'basic';
 }

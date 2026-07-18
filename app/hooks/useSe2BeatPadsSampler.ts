@@ -632,6 +632,7 @@ export function useSe2BeatPadsSampler({
           {
             outputNode: outNode,
             skipMeter: true,
+            registerSe2VuTap: true,
             outputGain: getSe2BeatPadsMainVolume(),
           },
         );
@@ -1078,6 +1079,7 @@ export function useSe2BeatPadsSampler({
           {
             outputNode: getTrackStripInput?.() ?? undefined,
             skipMeter: true,
+            registerSe2VuTap: true,
             outputGain: getSe2BeatPadsMainVolume(),
           },
         );
@@ -1495,6 +1497,7 @@ export function useSe2BeatPadsSampler({
           {
             outputNode: getTrackStripInput?.() ?? undefined,
             skipMeter: true,
+            registerSe2VuTap: true,
             outputGain: getSe2BeatPadsMainVolume(),
           },
         );
@@ -1649,6 +1652,7 @@ export function useSe2BeatPadsSampler({
     overlayProps: {
       open: true,
       embedded: true,
+      se2MeterTrackIndex: trackIndex,
       onClose: onClose ?? (() => {}),
       activeBank: 0,
       selectedPad,

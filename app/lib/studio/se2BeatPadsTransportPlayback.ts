@@ -212,7 +212,12 @@ export function triggerSe2BeatPadsPad(
     Math.max(1, opts?.sessionBpm ?? 120),
     when == null,
     0,
-    { outputNode: dest, skipMeter: true, outputGain: getSe2BeatPadsMainVolume() },
+    {
+      outputNode: dest,
+      skipMeter: true,
+      registerSe2VuTap: true,
+      outputGain: getSe2BeatPadsMainVolume(),
+    },
   );
   return true;
 }
@@ -268,7 +273,12 @@ export function triggerSe2BeatPadsSpreadRow(
     Math.max(1, opts?.sessionBpm ?? voice.rootBpm),
     false,
     detuneCents,
-    { outputNode: dest, skipMeter: true, outputGain: getSe2BeatPadsMainVolume() },
+    {
+      outputNode: dest,
+      skipMeter: true,
+      registerSe2VuTap: true,
+      outputGain: getSe2BeatPadsMainVolume(),
+    },
   );
   return true;
 }

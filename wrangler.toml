@@ -1,0 +1,20 @@
+# Da Muzik Box — Cloudflare Pages + D1 (billing / entitlements)
+# D1 = database for plan state. Stripe = charges (wire later).
+#
+# Create the DB once (Dashboard or CLI), then paste database_id below:
+#   bunx wrangler d1 create da-muzik-box-billing
+# Apply schema:
+#   bunx wrangler d1 migrations apply da-muzik-box-billing --remote
+# Local:
+#   bunx wrangler d1 migrations apply da-muzik-box-billing --local
+
+name = "da-muzik-box-f1"
+compatibility_date = "2024-11-12"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "da-muzik-box-billing"
+# Replace after: bunx wrangler d1 create da-muzik-box-billing
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations/billing"

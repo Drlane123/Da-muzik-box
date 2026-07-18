@@ -1,6 +1,7 @@
 /**
- * Da Music Box — display pricing (Stripe + D1 entitlements come later).
- * Edit amounts here; the Pricing screen reads this file only.
+ * Da Music Box — display pricing catalog.
+ * Payment Center: Cloudflare D1 stores entitlements; Stripe (later) takes payments.
+ * Edit amounts here; Pricing screen + /api/billing/plans read this shape.
  */
 
 export type PricingPlanId = 'basic' | 'premium';
@@ -102,15 +103,19 @@ export const DA_MUSIC_BOX_PRICING_FEATURES: readonly PricingFeatureRow[] = [
 export const DA_MUSIC_BOX_PRICING_FAQS: readonly { q: string; a: string }[] = [
   {
     q: 'What is locked on Basic?',
-    a: 'Beat Lab, Beat Pads (in Studio Editor 2), and Mastering Bay are Premium only. Open Muzik Box on Basic hides those from Modules and the SE2 add-track menu. Premium unlocks all three.',
+    a: 'When paid billing is live: Beat Lab, Beat Pads (Studio Editor 2), and Mastering Bay are Premium only. Right now Payment Center is in preview — Open Muzik Box keeps full access on every plan.',
+  },
+  {
+    q: 'What is Cloudflare D1 vs Stripe?',
+    a: 'D1 is the database that remembers your plan (Basic / Premium). Stripe is the payment processor that charges the card. D1 does not take payments — Stripe does. We store entitlements in D1 after Stripe confirms a subscription.',
   },
   {
     q: 'Can I switch plans later?',
-    a: 'Yes. When Stripe checkout is live you will be able to upgrade from Basic to Premium (and manage billing) from your account. This page is the plan preview until that wires up.',
+    a: 'Yes. When Stripe checkout is live you will upgrade or manage billing from this Payment Center. Until then, Open Muzik Box is a full-access preview.',
   },
   {
     q: 'Is this charged yet?',
-    a: 'Not yet. For now, Open Muzik Box loads the full app so you can preview the pricing page. Stripe and Cloudflare D1 entitlements come later — no features are locked today.',
+    a: 'No. Stripe is not connected. Nothing is billed. The Payment Center UI and plan list work in preview; Cloudflare D1 schema is ready for entitlements when you connect Stripe.',
   },
 ] as const;
 

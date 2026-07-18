@@ -28,5 +28,13 @@
     }
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "dist", "vite.config.ts", "external", "musio-create", "_musio-create-ref"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "vite.config.ts",
+    "external",
+    "musio-create",
+    "_musio-create-ref",
+    "functions"
+  ]
 }

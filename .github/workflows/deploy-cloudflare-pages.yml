@@ -74,6 +74,9 @@ jobs:
         run: |
           bunx wrangler@3.114.0 whoami
           bunx wrangler@3.114.0 pages project create da-muzik-box-f1 --production-branch=main || true
+          # Pages Functions (/functions) + D1 binding from wrangler.toml deploy with the site.
+          # After first D1 create, paste database_id into wrangler.toml, then optionally:
+          #   bunx wrangler@3.114.0 d1 migrations apply da-muzik-box-billing --remote
           bunx wrangler@3.114.0 pages deploy dist --project-name=da-muzik-box-f1 --branch=main --commit-dirty=true
 
       - name: Retire old da-muzik-box Pages project
