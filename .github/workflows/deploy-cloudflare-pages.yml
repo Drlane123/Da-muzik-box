@@ -73,5 +73,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         run: |
           bunx wrangler@3.114.0 whoami
-          bunx wrangler@3.114.0 pages project create da-muzik-box --production-branch=main || true
-          bunx wrangler@3.114.0 pages deploy dist --project-name=da-muzik-box --branch=main --commit-dirty=true
+          bunx wrangler@3.114.0 pages project create da-muzik-box-f1 --production-branch=main || true
+          bunx wrangler@3.114.0 pages deploy dist --project-name=da-muzik-box-f1 --branch=main --commit-dirty=true
+          # Retire old public URL (da-muzik-box.pages.dev). Safe if already gone.
+          bunx wrangler@3.114.0 pages project delete da-muzik-box --yes || true

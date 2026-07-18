@@ -4,7 +4,7 @@
 Timestamp: Friday Jul 10, 2026 — 6:29 PM Central (UTC-5)
 User: dale lane (Drlane123)
 Workspace: E:\Da-Music-Box-v4-SOURCE-COMPLETE (E: drive only)
-Live site: https://da-muzik-box.pages.dev
+Live site: https://da-muzik-box-f1.pages.dev (old da-muzik-box.pages.dev retired)
 GitHub: https://github.com/Drlane123/Da-muzik-box (branch: main)
 
 TO RESUME IN CURSOR
@@ -40,7 +40,7 @@ WHAT WE FIXED THIS SESSION (evening — pushed to GitHub)
 DEPLOY / TEST ON OTHER MACHINES
 ------------------------------
 - Push to GitHub triggers GitHub Actions → Cloudflare Pages
-- Test URL: https://da-muzik-box.pages.dev
+- Test URL: https://da-muzik-box-f1.pages.dev
 - Hard refresh after deploy: Ctrl+Shift+R
 - Local dev: bun run dev → http://localhost:5173
 
