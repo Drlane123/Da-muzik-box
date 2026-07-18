@@ -323,7 +323,7 @@ export async function transformNeuralHumToInstrument(
   report('decode', 8, 'Decoding recording…');
   const sourceBuffer = await decodeBlob(liveCtx, sourceBlob);
 
-  report('analyze', 18, 'Analyzing melody (Basic Pitch)…');
+  report('analyze', 18, 'Analyzing melody…');
   const keyLock = options.keyLock ?? { mode: 'auto' as const, keyRoot: 0, scaleId: 'major' as const };
   const analyzed = await analyzeNeuralHumMelodyAsync(sourceBuffer, keyLock, undefined, (pct, message) => {
     report('analyze', 18 + Math.round(pct * 28), message);

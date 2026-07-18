@@ -67,6 +67,10 @@ type NeuralHumMelodyRollProps = {
   onQuantizeChange: (q: NeuralHumRollQuantize) => void;
   /** One-click snap all notes to the selected grid (1/16, 1/8, …). */
   onQuantizeNow?: () => void;
+  /** SE2 Hum / Melody — push the edited draft onto the lane piano roll / timeline. */
+  onApplyToTrack?: () => void;
+  applyToTrackDirty?: boolean;
+  applyToTrackFlash?: boolean;
   instrumentId: NeuralHumInstrumentId;
   transpose: number;
   dynamics: number;
@@ -94,6 +98,9 @@ export default function NeuralHumMelodyRoll({
   quantize,
   onQuantizeChange,
   onQuantizeNow,
+  onApplyToTrack,
+  applyToTrackDirty = false,
+  applyToTrackFlash = false,
   instrumentId,
   transpose,
   dynamics,
@@ -417,16 +424,40 @@ export default function NeuralHumMelodyRoll({
           type="button"
           onClick={() => onQuantizeNow?.()}
           disabled={!onQuantizeNow || rollNotes.length === 0}
-          className="px-2 py-1 rounded text-xs font-bold uppercase tracking-wide"
+          className="nh-quantize-btn px-2 py-1 rounded text-xs font-bold uppercase tracking-wide"
           style={{
-            background: rollNotes.length > 0 ? '#00E5FF22' : '#121218',
-            color: rollNotes.length > 0 ? '#00E5FF' : '#444',
+            background: rollNotes.length > 0 ? undefined : '#121218',
+            color: rollNotes.length > 0 ? undefined : '#444',
             border: `1px solid ${rollNotes.length > 0 ? '#00E5FF66' : '#333'}`,
           }}
           title="Snap note starts to the selected grid — fixes human timing"
         >
           Quantize
         </button>
+        {onApplyToTrack ? (
+          <button
+            type="button"
+            onClick={onApplyToTrack}
+            disabled={rollNotes.length === 0}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide disabled:opacity-40"
+            style={{
+              background: applyToTrackFlash
+                ? 'rgba(0,255,136,0.22)'
+                : applyToTrackDirty
+                  ? 'linear-gradient(135deg, #00E5FF33, #00b8d428)'
+                  : '#121218',
+              color: applyToTrackFlash ? '#00ff88' : applyToTrackDirty ? '#7df9ff' : '#666',
+              border: `1px solid ${
+                applyToTrackFlash ? '#00ff8866' : applyToTrackDirty ? '#00E5FF88' : '#333'
+              }`,
+              boxShadow: applyToTrackDirty ? '0 0 10px rgba(0,229,255,0.2)' : undefined,
+            }}
+            title="Edit on this melody roll first, then send the MIDI to this SE2 track’s piano roll"
+          >
+            <Send size={11} />
+            {applyToTrackFlash ? 'Applied' : applyToTrackDirty ? 'Apply to track' : 'On track'}
+          </button>
+        ) : null}
         <span className="text-10px font-mono" style={{ color: NH_SCALE.primary }} title="Project tempo">
           {Math.round(bpm)} BPM
         </span>

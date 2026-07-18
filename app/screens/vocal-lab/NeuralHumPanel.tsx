@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
 import { Download, Lock, Pause, Play, Send, Volume2 } from 'lucide-react';
 
@@ -59,7 +59,19 @@ import { previewNeuralHumNote, scheduleNeuralHumRollAudition, stopNeuralHumPrevi
 import type { TimedMonophonicNote } from '@/app/lib/studio/audioToMidiNotes';
 import { BASIC_PITCH_DEFAULT_THRESHOLDS } from '@/app/lib/studio/basicPitchEngine';
 import { BASIC_PITCH_DEFAULT_MIN_NOTE_SEC } from '@/app/lib/studio/basicPitchTranscribe';
+import {
+  createSe2PrecountRimshotBuffer,
+  ensureSe2PrecountRimshotBuffer,
+  runSe2Precount,
+  SE2_PRECOUNT_CLICK_VOLUME,
+} from '@/app/lib/studio/se2Precount';
+import { trimAudioBufferFromSec } from '@/app/lib/creationStation/beatPadsVocalBoxAnalyze';
 import { VocalLabHelpTip } from '@/app/components/vocalLab/VocalLabHelpHub';
+import '@/app/styles/neuralHumBasicPitch.css';
+
+const HUM_PRECOUNT_BEATS_PER_BAR = 4;
+/** Soft click through a long take so timing stays locked after count-in. */
+const HUM_RECORD_METRO_MAX_SEC = 120;
 
 export type NeuralHumSe2LaneBinding = {
   /** Changes when lane / notes seed changes — re-hydrates melody roll. */
@@ -112,6 +124,15 @@ export default function NeuralHumPanel({
   /** Ghost-note filter in ms (default 50). */
   const [minNoteMs, setMinNoteMs] = useState(Math.round(BASIC_PITCH_DEFAULT_MIN_NOTE_SEC * 1000));
   const [analyzeNonce, setAnalyzeNonce] = useState(0);
+  /** 1-bar count-in (1–2–3–4) before the hum take — same idea as VocalBox / 808 Lab. */
+  const [precountEnabled, setPrecountEnabled] = useState(true);
+  /** Soft quarter-note click while recording after the count-in. */
+  const [recordMetroEnabled, setRecordMetroEnabled] = useState(true);
+  const [isPrecounting, setIsPrecounting] = useState(false);
+  const [precountBeatUi, setPrecountBeatUi] = useState<{ beat: number; total: number } | null>(null);
+  /** SE2: melody roll is a draft until user hits Apply to track. */
+  const [se2TrackDirty, setSe2TrackDirty] = useState(false);
+  const [se2ApplyFlash, setSe2ApplyFlash] = useState(false);
 
   const [selected, setSelected] = useState<NeuralHumInstrumentId>(se2Lane?.instrumentId ?? 'piano');
   const [keyboardOctave, setKeyboardOctave] = useState(4);
@@ -158,6 +179,11 @@ export default function NeuralHumPanel({
     frameThreshold,
     minNoteSec: minNoteMs / 1000,
   };
+  const precountCancelRef = useRef(false);
+  const precountBufRef = useRef<AudioBuffer | null>(null);
+  const scheduledClickNodesRef = useRef<AudioBufferSourceNode[]>([]);
+  /** Leading seconds to strip from the take (count-in recorded into the blob). */
+  const countInTrimSecRef = useRef(0);
 
   useEffect(() => {
     if (se2Lane) return;
@@ -174,6 +200,7 @@ export default function NeuralHumPanel({
     setRollNotes(enforceMonophonicRollNotes(se2Lane.initialRollNotes));
     rollUserEditedRef.current = false;
     skipAutoFillRef.current = false;
+    setSe2TrackDirty(false);
   }, [se2Lane?.trackKey, se2Lane]);
 
   const keyLockSettings = useMemo(
@@ -244,7 +271,23 @@ export default function NeuralHumPanel({
     }
     const notes = padCapture.flushNotes();
     if (notes.length > 0 && padCapture.wasUsed()) {
-      padCapturedNotesRef.current = notes;
+      const trim = countInTrimSecRef.current;
+      padCapturedNotesRef.current =
+        trim > 0.002
+          ? notes
+              .map((n) => {
+                const startSec = n.startSec - trim;
+                const endSec = startSec + n.durationSec;
+                if (endSec <= 0.02) return null;
+                const clippedStart = Math.max(0, startSec);
+                return {
+                  ...n,
+                  startSec: clippedStart,
+                  durationSec: Math.max(0.04, endSec - clippedStart),
+                };
+              })
+              .filter((n): n is TimedMonophonicNote => n != null)
+          : notes;
       padCaptureUsedRef.current = true;
     }
   }, [capture.isRecording, padCapture]);
@@ -265,6 +308,49 @@ export default function NeuralHumPanel({
     previewGainRef.current.gain.value = volume / 100;
     return previewGainRef.current;
   }, [getOrCreateAudioContext, se2Lane, volume]);
+
+  const cancelScheduledClicks = useCallback(() => {
+    for (const n of scheduledClickNodesRef.current) {
+      try {
+        n.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    scheduledClickNodesRef.current = [];
+  }, []);
+
+  const scheduleHumClick = useCallback(
+    (ctx: AudioContext, idealT: number, downbeat: boolean) => {
+      let buf = precountBufRef.current;
+      if (!buf && ctx.state !== 'closed') {
+        buf = createSe2PrecountRimshotBuffer(ctx);
+        precountBufRef.current = buf;
+      }
+      if (!buf) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = downbeat ? SE2_PRECOUNT_CLICK_VOLUME * 1.12 : SE2_PRECOUNT_CLICK_VOLUME * 0.85;
+      src.connect(g);
+      g.connect(getPreviewDestination());
+      try {
+        src.start(Math.max(ctx.currentTime, idealT));
+        scheduledClickNodesRef.current.push(src);
+      } catch {
+        /* */
+      }
+    },
+    [getPreviewDestination],
+  );
+
+  useEffect(
+    () => () => {
+      precountCancelRef.current = true;
+      cancelScheduledClicks();
+    },
+    [cancelScheduledClicks],
+  );
 
   const handleKeyboardNoteDown = useCallback(
     (midi: number) => {
@@ -327,7 +413,10 @@ export default function NeuralHumPanel({
       try {
         const ctx = getOrCreateAudioContext();
         const bytes = await audioBlob.arrayBuffer();
-        const buffer = await ctx.decodeAudioData(bytes.slice(0));
+        const decoded = await ctx.decodeAudioData(bytes.slice(0));
+        if (cancelled) return;
+        // Strip count-in bar so melody / quantize lock to the first hummed beat.
+        const buffer = trimAudioBufferFromSec(decoded, countInTrimSecRef.current);
         if (cancelled) return;
 
         const padNotes = padCapturedNotesRef.current;
@@ -404,9 +493,9 @@ export default function NeuralHumPanel({
     }
     const mapped = timedNotesToRollNotes(melodyPreview.notes, bpm, rollBars, quantize);
     setRollNotes(mapped);
-    // Push onto SE2 piano roll / timeline as soon as auto-analyze fills the melody roll.
-    se2CommitRef.current?.(enforceMonophonicRollNotes(mapped));
-  }, [bpm, melodyPreview, quantize, rollBars]);
+    // Draft on the melody roll first — user Applies to the SE2 track when ready.
+    if (se2Lane) setSe2TrackDirty(true);
+  }, [bpm, melodyPreview, quantize, rollBars, se2Lane]);
 
   useEffect(() => {
     if (!audioBlob || audioBlob.size === 0) {
@@ -414,7 +503,18 @@ export default function NeuralHumPanel({
     }
   }, [audioBlob]);
 
+  const handleStopRecord = useCallback(() => {
+    precountCancelRef.current = true;
+    cancelScheduledClicks();
+    setIsPrecounting(false);
+    setPrecountBeatUi(null);
+    if (capture.isRecording) capture.stopRecord();
+    else capture.releaseMic();
+  }, [cancelScheduledClicks, capture]);
+
   const handleStartRecord = useCallback(() => {
+    if (disabled || capture.isRecording || isPrecounting) return;
+
     skipAutoFillRef.current = false;
     rollUserEditedRef.current = false;
     clearTrail();
@@ -423,15 +523,107 @@ export default function NeuralHumPanel({
     setArmedPadMidi(null);
     clearRekeyHistory();
     setResult(null);
-    void capture.startRecord();
-  }, [capture, clearRekeyHistory, clearTrail]);
+    // Count-in plays before MediaRecorder starts — take begins on the downbeat.
+    countInTrimSecRef.current = 0;
+
+    void (async () => {
+      const ctx = getOrCreateAudioContext();
+      if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+      if (ctx.state !== 'running') {
+        alert('Audio not ready — click anywhere once, then Record again.');
+        return;
+      }
+
+      const micOk = await capture.armMic();
+      if (!micOk) return;
+
+      precountCancelRef.current = false;
+      setIsPrecounting(Boolean(precountEnabled));
+      setPrecountBeatUi(null);
+
+      try {
+        if (precountEnabled || recordMetroEnabled) {
+          precountBufRef.current = await ensureSe2PrecountRimshotBuffer(ctx);
+        }
+        cancelScheduledClicks();
+
+        let downbeatAudioTime = ctx.currentTime + 0.02;
+        if (precountEnabled) {
+          // Hear 1–2–3–4, then arm the take on the next downbeat (file time 0).
+          const result = await runSe2Precount({
+            ctx,
+            bpm,
+            beatsPerBar: HUM_PRECOUNT_BEATS_PER_BAR,
+            bars: 1,
+            scheduleClick: (idealT, downbeat) => scheduleHumClick(ctx, idealT, downbeat),
+            onBeat: (beat, total) => setPrecountBeatUi({ beat, total }),
+            isCancelled: () => precountCancelRef.current,
+          });
+          cancelScheduledClicks();
+          if (result.cancelled) {
+            capture.releaseMic();
+            return;
+          }
+          downbeatAudioTime = result.downbeatAudioTime;
+        }
+
+        setIsPrecounting(false);
+        setPrecountBeatUi(null);
+        await capture.startRecord();
+
+        if (recordMetroEnabled) {
+          const spb = 60 / Math.max(30, Math.min(300, bpm));
+          const totalBeats = Math.ceil(HUM_RECORD_METRO_MAX_SEC / spb) + 1;
+          // First click at/near the take start so hums land on the grid.
+          const t0 = Math.max(ctx.currentTime + 0.01, downbeatAudioTime);
+          for (let i = 0; i < totalBeats; i += 1) {
+            scheduleHumClick(ctx, t0 + i * spb, i % HUM_PRECOUNT_BEATS_PER_BAR === 0);
+          }
+        }
+      } catch (err) {
+        console.error('[hum-capture] count-in / record failed', err);
+        cancelScheduledClicks();
+        capture.releaseMic();
+        if (capture.isRecording) capture.stopRecord();
+      } finally {
+        setIsPrecounting(false);
+        setPrecountBeatUi(null);
+      }
+    })();
+  }, [
+    bpm,
+    cancelScheduledClicks,
+    capture,
+    clearRekeyHistory,
+    clearTrail,
+    disabled,
+    getOrCreateAudioContext,
+    isPrecounting,
+    precountEnabled,
+    recordMetroEnabled,
+    scheduleHumClick,
+  ]);
+
+  const handleDeleteCapture = useCallback(() => {
+    countInTrimSecRef.current = 0;
+    capture.handleDelete();
+  }, [capture]);
+
+  const handleUploadCapture = useCallback(
+    (file: File) => {
+      countInTrimSecRef.current = 0;
+      capture.handleUpload(file);
+    },
+    [capture],
+  );
 
   const handleRollNotesChange = useCallback(
     (notes: NeuralHumRollNote[]) => {
       rollUserEditedRef.current = true;
       const mono = enforceMonophonicRollNotes(notes);
       setRollNotes(mono);
-      se2Lane?.onRollNotesCommit(mono);
+      // SE2 lane: keep edits on the melody roll until Apply to track.
+      if (se2Lane) setSe2TrackDirty(true);
     },
     [se2Lane],
   );
@@ -441,8 +633,18 @@ export default function NeuralHumPanel({
     rollUserEditedRef.current = true;
     const snapped = quantizeNeuralHumRollNotes(rollNotes, quantize, rollBars);
     setRollNotes(snapped);
-    se2CommitRef.current?.(snapped);
-  }, [quantize, rollBars, rollNotes]);
+    if (se2Lane) setSe2TrackDirty(true);
+  }, [quantize, rollBars, rollNotes, se2Lane]);
+
+  const handleApplyToSe2Track = useCallback(() => {
+    if (!se2Lane || rollNotes.length === 0) return;
+    const mono = enforceMonophonicRollNotes(rollNotes);
+    setRollNotes(mono);
+    se2CommitRef.current?.(mono);
+    setSe2TrackDirty(false);
+    setSe2ApplyFlash(true);
+    window.setTimeout(() => setSe2ApplyFlash(false), 1200);
+  }, [rollNotes, se2Lane]);
 
   const handleRerunBasicPitch = useCallback(() => {
     if (!audioBlob || audioBlob.size === 0 || isAnalyzing) return;
@@ -879,33 +1081,80 @@ export default function NeuralHumPanel({
       {!se2Lane ? (
         <div>
           <span className="text-sm font-bold uppercase tracking-widest inline-flex items-center gap-1.5" style={{ color: '#00E5FF' }}>
-            Hum Capture
-            <VocalLabHelpTip tab="hum-capture" title="Hum Capture — melody from your voice" />
+            Hum / Melody Capture
+            <VocalLabHelpTip
+              tab="hum-capture"
+              title="Hum / Melody Capture — humming, singing, whistling, or a single instrument line → MIDI"
+            />
           </span>
           <p className="text-xs mt-1" style={{ color: '#888' }}>
-            Hum → Basic Pitch → melody roll (4/8 bars). Edit MIDI here, audition, then export or render.
+            Hum / Melody Capture — humming, singing, whistling, or a single instrument line. Turns that
+            audio into MIDI notes (pitch, timing, loudness, bends).
           </p>
         </div>
       ) : null}
 
       <div
         className="rounded-lg p-3 flex flex-col gap-3"
-        style={{ background: '#0d0d14', border: '1px solid #00E5FF22' }}
+        style={{
+          background: 'linear-gradient(180deg, #0e1620 0%, #0d0d14 40%, #0c1016 100%)',
+          border: '1px solid #00E5FF33',
+          boxShadow: 'inset 0 1px 0 #00E5FF14',
+        }}
       >
         <div className="flex flex-wrap gap-4 items-start justify-between">
           <div className="flex-1 min-w-[200px]">
             <VocalCapturePanel
-              title="Hum capture"
+              title="Hum / Melody"
               accentColor="#00E5FF"
               showPreviewPlay={false}
               hasAudio={capture.hasAudio}
               isRecording={capture.isRecording}
+              isPrecounting={isPrecounting}
+              statusLabel={
+                isPrecounting && precountBeatUi
+                  ? `Count-in ${precountBeatUi.beat}/${precountBeatUi.total}`
+                  : null
+              }
               recordingTime={capture.recordingTime}
               onStartRecord={handleStartRecord}
-              onStopRecord={capture.stopRecord}
-              onDelete={capture.handleDelete}
-              onUpload={capture.handleUpload}
+              onStopRecord={handleStopRecord}
+              onDelete={handleDeleteCapture}
+              onUpload={handleUploadCapture}
               meterStream={capture.captureStream}
+              recordDisabled={disabled || isAnalyzing}
+              leadingControls={
+                <>
+                  <button
+                    type="button"
+                    disabled={disabled || capture.isRecording || isPrecounting}
+                    onClick={() => setPrecountEnabled((v) => !v)}
+                    className="px-2 py-1.5 rounded text-[10px] font-black uppercase tracking-wide disabled:opacity-40"
+                    style={{
+                      border: `1px solid ${precountEnabled ? '#ffb08088' : '#333'}`,
+                      color: precountEnabled ? '#ffb080' : '#666',
+                      background: precountEnabled ? 'rgba(255,176,128,0.12)' : '#121218',
+                    }}
+                    title={precountEnabled ? '1-bar count-in on (1-2-3-4)' : 'Count-in off'}
+                  >
+                    Cnt
+                  </button>
+                  <button
+                    type="button"
+                    disabled={disabled || capture.isRecording || isPrecounting}
+                    onClick={() => setRecordMetroEnabled((v) => !v)}
+                    className="px-2 py-1.5 rounded text-[10px] font-black uppercase tracking-wide disabled:opacity-40"
+                    style={{
+                      border: `1px solid ${recordMetroEnabled ? '#00E5FF88' : '#333'}`,
+                      color: recordMetroEnabled ? '#7df9ff' : '#666',
+                      background: recordMetroEnabled ? 'rgba(0,229,255,0.12)' : '#121218',
+                    }}
+                    title={recordMetroEnabled ? 'Metronome while recording' : 'Record metronome off'}
+                  >
+                    Mtr
+                  </button>
+                </>
+              }
             />
           </div>
           <NeuralHumPitchScope
@@ -914,7 +1163,7 @@ export default function NeuralHumPanel({
             liveMidi={liveScopeMidi}
             trail={trail}
             keyLabel={scopeKeyLabel}
-            isRecording={capture.isRecording}
+            isRecording={capture.isRecording || isPrecounting}
           />
         </div>
 
@@ -929,7 +1178,7 @@ export default function NeuralHumPanel({
             </span>
             {isAnalyzing && (
               <span className="text-xs ml-auto" style={{ color: '#00E5FF' }}>
-                Basic Pitch…
+                Capturing…
               </span>
             )}
             {melodyPreview && !isAnalyzing && rollNotes.length > 0 && (
@@ -1043,83 +1292,101 @@ export default function NeuralHumPanel({
           </p>
         )}
 
-        {!capture.hasAudio && !capture.isRecording && rollNotes.length === 0 && (
+        {!capture.hasAudio && !capture.isRecording && !isPrecounting && rollNotes.length === 0 && (
           <p className="text-xs" style={{ color: '#666' }}>
-            Hum into the mic — scope tracks pitch live. MIDI appears in the melody roll below.
+            Hit Record — hear the count-in (Cnt), then hum on 1. Mtr keeps the click while you sing.
           </p>
         )}
 
-        {/* Basic Pitch cleanup — thresholds + ghost filter (apply via Re-run) */}
-        <div
-          className="rounded-md p-2.5 flex flex-col gap-2"
-          style={{ background: '#0a1218', border: '1px solid #1a3a4a' }}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: '#00E5FF' }}>
-              Basic Pitch tune
-            </span>
+        {/* Capture tune — onset / frame / ghost filter */}
+        <div className="nh-bp-strip" data-hum-melody-capture-strip>
+          <div className="nh-bp-strip__head">
+            <div className="nh-bp-strip__brand">
+              <span className="nh-bp-strip__badge">MIDI</span>
+              <div className="nh-bp-strip__titles">
+                <span className="nh-bp-strip__title">Capture tune</span>
+                <span className="nh-bp-strip__sub">
+                  Hum · sing · whistle · instrument → pitch · timing · loudness · bends
+                </span>
+              </div>
+            </div>
             <button
               type="button"
               onClick={handleRerunBasicPitch}
               disabled={!hasAudio || isAnalyzing}
-              className="ml-auto px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide"
-              style={{
-                background: hasAudio && !isAnalyzing ? '#00E5FF22' : '#121218',
-                color: hasAudio && !isAnalyzing ? '#00E5FF' : '#555',
-                border: `1px solid ${hasAudio && !isAnalyzing ? '#00E5FF66' : '#333'}`,
-              }}
-              title="Re-run transcription with the slider settings below"
+              className="nh-bp-strip__rerun"
+              title="Re-run transcription with these settings"
             >
               {isAnalyzing ? 'Running…' : 'Re-run'}
             </button>
           </div>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-semibold flex justify-between" style={{ color: '#8ab' }}>
-              Onset <span className="font-mono text-[#00E5FF]">{onsetThreshold.toFixed(2)}</span>
-            </span>
-            <input
-              type="range"
-              min={0.1}
-              max={0.9}
-              step={0.01}
-              value={onsetThreshold}
-              onChange={(e) => setOnsetThreshold(Number(e.target.value))}
-              className="w-full accent-[#00E5FF]"
-              title="Higher = fewer note starts (less breath / click noise)"
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-semibold flex justify-between" style={{ color: '#8ab' }}>
-              Frame <span className="font-mono text-[#00E5FF]">{frameThreshold.toFixed(2)}</span>
-            </span>
-            <input
-              type="range"
-              min={0.1}
-              max={0.9}
-              step={0.01}
-              value={frameThreshold}
-              onChange={(e) => setFrameThreshold(Number(e.target.value))}
-              className="w-full accent-[#00E5FF]"
-              title="Higher = drop quieter / shorter held notes"
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[10px] font-semibold flex justify-between" style={{ color: '#8ab' }}>
-              Min note <span className="font-mono text-[#00E5FF]">{minNoteMs} ms</span>
-            </span>
-            <input
-              type="range"
-              min={20}
-              max={200}
-              step={5}
-              value={minNoteMs}
-              onChange={(e) => setMinNoteMs(Number(e.target.value))}
-              className="w-full accent-[#00E5FF]"
-              title="Delete ghost notes shorter than this (breath / mouth clicks)"
-            />
-          </label>
-          <p className="text-[9px] leading-snug" style={{ color: '#567' }}>
-            Adjust, then <strong style={{ color: '#8ab' }}>Re-run</strong>. Use <strong style={{ color: '#8ab' }}>Quantize</strong> on the roll to snap timing to the grid.
+
+          <div className="nh-bp-strip__meters">
+            <label className="nh-bp-meter" title="Higher = fewer note starts (less breath / click noise)">
+              <span className="nh-bp-meter__top">
+                <span className="nh-bp-meter__name">Onset</span>
+                <span className="nh-bp-meter__val">{onsetThreshold.toFixed(2)}</span>
+              </span>
+              <input
+                type="range"
+                className="nh-bp-meter__range"
+                min={0.1}
+                max={0.9}
+                step={0.01}
+                value={onsetThreshold}
+                onChange={(e) => setOnsetThreshold(Number(e.target.value))}
+                style={
+                  {
+                    '--nh-bp-fill': `${((onsetThreshold - 0.1) / 0.8) * 100}%`,
+                  } as CSSProperties
+                }
+              />
+            </label>
+            <label className="nh-bp-meter" title="Higher = drop quieter / shorter held notes">
+              <span className="nh-bp-meter__top">
+                <span className="nh-bp-meter__name">Frame</span>
+                <span className="nh-bp-meter__val">{frameThreshold.toFixed(2)}</span>
+              </span>
+              <input
+                type="range"
+                className="nh-bp-meter__range"
+                min={0.1}
+                max={0.9}
+                step={0.01}
+                value={frameThreshold}
+                onChange={(e) => setFrameThreshold(Number(e.target.value))}
+                style={
+                  {
+                    '--nh-bp-fill': `${((frameThreshold - 0.1) / 0.8) * 100}%`,
+                  } as CSSProperties
+                }
+              />
+            </label>
+            <label className="nh-bp-meter" title="Delete ghost notes shorter than this (breath / mouth clicks)">
+              <span className="nh-bp-meter__top">
+                <span className="nh-bp-meter__name">Min note</span>
+                <span className="nh-bp-meter__val">{minNoteMs}ms</span>
+              </span>
+              <input
+                type="range"
+                className="nh-bp-meter__range"
+                min={20}
+                max={200}
+                step={5}
+                value={minNoteMs}
+                onChange={(e) => setMinNoteMs(Number(e.target.value))}
+                style={
+                  {
+                    '--nh-bp-fill': `${((minNoteMs - 20) / 180) * 100}%`,
+                  } as CSSProperties
+                }
+              />
+            </label>
+          </div>
+
+          <p className="nh-bp-strip__hint">
+            Tune → <em>Re-run</em> · edit / <em>Quantize</em> on the roll · then{' '}
+            <em>Apply to track</em>
           </p>
         </div>
       </div>
@@ -1142,6 +1409,9 @@ export default function NeuralHumPanel({
           quantize={quantize}
           onQuantizeChange={setQuantize}
           onQuantizeNow={handleQuantizeNow}
+          onApplyToTrack={se2Lane ? handleApplyToSe2Track : undefined}
+          applyToTrackDirty={se2TrackDirty}
+          applyToTrackFlash={se2ApplyFlash}
           instrumentId={selected}
           transpose={transpose}
           dynamics={dynamics}

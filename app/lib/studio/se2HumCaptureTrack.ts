@@ -35,7 +35,7 @@ export function studioTrackIsHumCaptureChannel(
 
 export function nextHumCaptureTrackName(tracks: readonly { kind?: string; name?: string }[]): string {
   const n = tracks.filter((t) => t.kind === 'humCapture').length + 1;
-  return n === 1 ? 'Hum Capture' : `Hum Capture ${n}`;
+  return n === 1 ? 'Hum / Melody Capture' : `Hum / Melody Capture ${n}`;
 }
 
 export function se2DefaultHumCaptureTrackFields(): Se2HumCaptureTrackFields {

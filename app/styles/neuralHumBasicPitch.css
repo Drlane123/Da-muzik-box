@@ -1,0 +1,230 @@
+/* Hum Capture — Basic Pitch control strip (modern compact meters) */
+
+.nh-bp-strip {
+  --nh-bp-cyan: #00e5ff;
+  --nh-bp-ink: #061018;
+  --nh-bp-panel: linear-gradient(145deg, #0b1a24 0%, #071018 55%, #0a1420 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--nh-bp-cyan) 28%, transparent);
+  background: var(--nh-bp-panel);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--nh-bp-cyan) 18%, transparent),
+    0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.nh-bp-strip__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nh-bp-strip__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nh-bp-strip__badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-width: 28px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #041018;
+  background: linear-gradient(135deg, #7df9ff 0%, #00e5ff 45%, #00b8d4 100%);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--nh-bp-cyan) 45%, transparent);
+}
+
+.nh-bp-strip__titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.nh-bp-strip__title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #e8fbff;
+}
+
+.nh-bp-strip__sub {
+  font-size: 9px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--nh-bp-cyan) 55%, #6a8090);
+}
+
+.nh-bp-strip__rerun {
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--nh-bp-cyan) 50%, transparent);
+  background: color-mix(in srgb, var(--nh-bp-cyan) 14%, transparent);
+  color: var(--nh-bp-cyan);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+.nh-bp-strip__rerun:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--nh-bp-cyan) 26%, transparent);
+  border-color: color-mix(in srgb, var(--nh-bp-cyan) 75%, transparent);
+}
+
+.nh-bp-strip__rerun:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.nh-bp-strip__meters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.nh-bp-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px 8px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+.nh-bp-meter__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.nh-bp-meter__name {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7e93a4;
+}
+
+.nh-bp-meter__val {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--nh-bp-cyan);
+  tabular-nums: true;
+  font-variant-numeric: tabular-nums;
+}
+
+.nh-bp-meter__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  outline: none;
+  background: linear-gradient(
+    90deg,
+    var(--nh-bp-cyan) 0%,
+    var(--nh-bp-cyan) var(--nh-bp-fill, 50%),
+    rgba(255, 255, 255, 0.1) var(--nh-bp-fill, 50%),
+    rgba(255, 255, 255, 0.1) 100%
+  );
+  cursor: pointer;
+}
+
+.nh-bp-meter__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f0feff;
+  border: 2px solid var(--nh-bp-cyan);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--nh-bp-cyan) 55%, transparent);
+  margin-top: -4px;
+}
+
+.nh-bp-meter__range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #f0feff;
+  border: 2px solid var(--nh-bp-cyan);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--nh-bp-cyan) 55%, transparent);
+}
+
+.nh-bp-meter__range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.nh-bp-meter__range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.nh-bp-strip__hint {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #5f7384;
+}
+
+.nh-bp-strip__hint em {
+  font-style: normal;
+  color: color-mix(in srgb, var(--nh-bp-cyan) 70%, #9ab);
+}
+
+@media (max-width: 560px) {
+  .nh-bp-strip__meters {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Melody-roll Quantize CTA */
+.nh-quantize-btn {
+  border-radius: 999px !important;
+  padding: 4px 10px !important;
+  letter-spacing: 0.06em;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #00e5ff 20%, transparent);
+}
+
+.nh-quantize-btn:not(:disabled) {
+  background: linear-gradient(135deg, #00e5ff28, #00b8d422) !important;
+  color: #7df9ff !important;
+  border-color: #00e5ff66 !important;
+}
+
+/* SE2 dock — capability tagline next to Hum / Melody Capture */
+.se2-hum-capture-meta {
+  flex-shrink: 1;
+  min-width: 0;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: color-mix(in srgb, #00e5ff 70%, #8a9);
+  opacity: 0.95;
+}

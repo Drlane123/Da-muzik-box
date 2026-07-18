@@ -12,7 +12,7 @@ export const SE2_FEATURE_SHOWCASE_LABELS = [
   'Beat Pads',
   '808 Lab',
   'Drum Generator',
-  'Hum Capture',
+  'Hum / Melody Capture',
   'Geno Bass Synth',
   'Groove Lead',
   'Geno Ultra Synth',

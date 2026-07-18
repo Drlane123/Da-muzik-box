@@ -38,8 +38,8 @@ class Se2HumCapturePanelErrorBoundary extends Component<
           className="rounded border px-3 py-3 text-[10px] font-semibold leading-relaxed"
           style={{ borderColor: '#e85d7566', background: '#1a1014', color: '#e8a0a8' }}
         >
-          Hum Capture could not load on this lane. Try reloading the page, or close and reopen the
-          panel.
+          Hum / Melody Capture could not load on this lane. Try reloading the page, or close and reopen
+          the panel.
           <pre
             className="mt-2 max-h-24 overflow-auto text-[9px] font-mono whitespace-pre-wrap"
             style={{ color: '#9a7a80' }}

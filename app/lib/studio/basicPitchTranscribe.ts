@@ -130,13 +130,13 @@ export async function transcribeAudioBufferToTimedNotes(
   try {
     onProgress?.({ percent: 0.02, message: 'Preparing audio…' });
     const mono = await resampleToMono22050(buffer);
-    onProgress?.({ percent: 0.06, message: 'Loading Basic Pitch…' });
+    onProgress?.({ percent: 0.06, message: 'Loading melody capture…' });
     const events = await evaluateBasicPitchMono22050(
       mono,
       (percent) => {
         onProgress?.({
           percent: 0.06 + percent * 0.9,
-          message: 'Transcribing melody (Basic Pitch)…',
+          message: 'Capturing pitch · time · loudness · bends…',
         });
       },
       thresholds,

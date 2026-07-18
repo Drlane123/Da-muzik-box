@@ -5735,9 +5735,9 @@ function MusioPianoRollPanel({
                   borderColor: `${track.colorHex}55`,
                   background: `${track.colorHex}14`,
                 }}
-                title="Hum Capture — mic, key pads, melody roll"
+                title="Hum / Melody Capture — humming, singing, whistling, or a single instrument line → MIDI (pitch, timing, loudness, bends)"
               >
-                Hum Capture · {humCaptureInstrumentLabel ?? 'Piano'}
+                Hum / Melody · {humCaptureInstrumentLabel ?? 'Piano'}
               </span>
             </div>
           ) : !isAudioTrack && isMidiLane && isDrumGeneratorLane ? (
@@ -16513,11 +16513,14 @@ export default function StudioEditor2Screen({
           background: humCapturePanelOpen ? `${humCaptureEligibleTrack?.colorHex ?? '#00E5FF'}22` : '#16161e',
           color: humCapturePanelOpen ? (humCaptureEligibleTrack?.colorHex ?? '#00E5FF') : '#a8a8b8',
         }}
-        title="Hum Capture — mic, key pads, melody roll"
+        title="Hum / Melody Capture — humming, singing, whistling, or a single instrument line → MIDI (pitch, timing, loudness, bends)"
       >
-        <span>Hum Capture</span>
+        <span>Hum / Melody</span>
       </button>
-      <StudioEditor2HelpTip tab="humCapture" title="Hum Capture lane — hum melodies into the arrangement" />
+      <StudioEditor2HelpTip
+        tab="humCapture"
+        title="Hum / Melody Capture — humming, singing, whistling, or a single instrument line → MIDI (pitch, timing, loudness, bends)"
+      />
       <button
         type="button"
         disabled={running || !midiHasNoteSel}
@@ -16541,7 +16544,7 @@ export default function StudioEditor2Screen({
           background: (humCaptureEligibleTrack?.notes.length ?? 0) > 0 ? '#2a1418' : '#16161e',
           color: (humCaptureEligibleTrack?.notes.length ?? 0) > 0 ? '#e85d75' : '#6a6a78',
         }}
-        title="Clear melody MIDI — keep this Hum Capture lane and instrument"
+        title="Clear melody MIDI — keep this Hum / Melody Capture lane and instrument"
       >
         Clear notes
       </button>
@@ -22642,9 +22645,9 @@ export default function StudioEditor2Screen({
                           <span
                             className="truncate w-full text-center text-[7px] font-bold uppercase tracking-wide"
                             style={{ color: tr.colorHex }}
-                            title={`Hum Capture · ${neuralHumInstrumentMeta(tr.humCaptureInstrumentId ?? 'piano').label}`}
+                            title={`Hum / Melody Capture · ${neuralHumInstrumentMeta(tr.humCaptureInstrumentId ?? 'piano').label}`}
                           >
-                            Hum · {neuralHumInstrumentMeta(tr.humCaptureInstrumentId ?? 'piano').label}
+                            Hum / Melody · {neuralHumInstrumentMeta(tr.humCaptureInstrumentId ?? 'piano').label}
                           </span>
                         )}
                         {studioTrackIsGuitarChannel(tr) && (
