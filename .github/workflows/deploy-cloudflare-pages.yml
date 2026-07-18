@@ -96,5 +96,5 @@ jobs:
             echo "Old URL retired (project deleted or already gone)."
             exit 0
           fi
-          echo "::error::Could not delete Pages project da-muzik-box (HTTP ${CODE}). Token may lack Pages Edit, or delete it manually in Cloudflare Dashboard → Workers & Pages → da-muzik-box → Settings → Delete."
-          exit 1
+          echo "::warning::Could not delete Pages project da-muzik-box (HTTP ${CODE}). API token likely cannot delete projects. Delete it once in Cloudflare Dashboard → Workers & Pages → da-muzik-box → Settings → Delete project so https://da-muzik-box.pages.dev dies."
+          exit 0
