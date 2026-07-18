@@ -2159,8 +2159,10 @@ export function BeatLabDrumMachineOverlay({
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 6,
+                    gap: 5,
                     flexShrink: 0,
+                    flexWrap: 'nowrap',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {beatPadsOrchHits ? (
@@ -2276,11 +2278,11 @@ export function BeatLabDrumMachineOverlay({
                     </span>
                   </button>
                   <span
-                    className="se2-beat-pads-electric-title beat-pads-vocalbox-tagline pointer-events-none select-none shrink-0"
+                    className="beat-pads-vocalbox-tagline pointer-events-none select-none"
                     title="VocalBox — create your own drum pattern with your mouth"
                     aria-hidden
                   >
-                    <span className="se2-beat-pads-electric-title-word beat-pads-vocalbox-tagline-word">
+                    <span className="beat-pads-vocalbox-tagline-word">
                       {BEAT_PADS_VOCALBOX_TAGLINE}
                     </span>
                   </span>

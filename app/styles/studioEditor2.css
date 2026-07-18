@@ -65,15 +65,25 @@
   padding-right: 0.12em;
 }
 
-/* VocalBox tagline — Chord Lock Technology electric face, larger white */
+/* VocalBox tagline — keep tiny so kit / Export / ORCH / VocalBox stay on one row */
 [data-studio-editor-2] .beat-pads-vocalbox-tagline {
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  max-width: none;
+  font-family: 'Rajdhani', system-ui, sans-serif;
+  font-size: 7.5px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
   color: #ffffff;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.16);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 [data-studio-editor-2] .beat-pads-vocalbox-tagline-word {
-  letter-spacing: 0.12em;
+  letter-spacing: 0.02em;
   text-transform: none;
   background: none;
   -webkit-background-clip: unset;
@@ -81,7 +91,10 @@
   -webkit-text-fill-color: #ffffff;
   color: #ffffff;
   filter: none;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.22);
+  text-shadow: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Beat Pads dock — modern horizontal volume slider (24px — matches Export / Master / Slave) */
