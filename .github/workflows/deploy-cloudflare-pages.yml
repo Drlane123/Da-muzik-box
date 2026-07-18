@@ -75,5 +75,26 @@ jobs:
           bunx wrangler@3.114.0 whoami
           bunx wrangler@3.114.0 pages project create da-muzik-box-f1 --production-branch=main || true
           bunx wrangler@3.114.0 pages deploy dist --project-name=da-muzik-box-f1 --branch=main --commit-dirty=true
-          # Retire old public URL (da-muzik-box.pages.dev). Safe if already gone.
-          bunx wrangler@3.114.0 pages project delete da-muzik-box --yes || true
+
+      - name: Retire old da-muzik-box Pages project
+        run: |
+          set -euo pipefail
+          URL="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/da-muzik-box"
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            RESP="$(curl -sS -w $'\n%{http_code}' -X DELETE "$URL" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
+          else
+            RESP="$(curl -sS -w $'\n%{http_code}' -X DELETE "$URL" \
+              -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
+              -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}")"
+          fi
+          BODY="$(printf '%s\n' "$RESP" | sed '$d')"
+          CODE="$(printf '%s\n' "$RESP" | tail -n1)"
+          echo "DELETE da-muzik-box -> HTTP ${CODE}"
+          echo "${BODY}"
+          if [ "${CODE}" = "200" ] || [ "${CODE}" = "404" ]; then
+            echo "Old URL retired (project deleted or already gone)."
+            exit 0
+          fi
+          echo "::error::Could not delete Pages project da-muzik-box (HTTP ${CODE}). Token may lack Pages Edit, or delete it manually in Cloudflare Dashboard → Workers & Pages → da-muzik-box → Settings → Delete."
+          exit 1
