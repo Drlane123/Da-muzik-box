@@ -700,11 +700,10 @@ export function StudioAllInOneFxPanel({
   return createPortal(
     <>
       <PadSamplerFxTCapStyles />
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{ zIndex: PANEL_Z - 1, background: 'rgba(0,0,0,0.35)' }}
-        aria-hidden
-      />
+      {/*
+        No full-viewport dim scrim — over the dark arranger (#0a0a10) a 35% black overlay
+        washes out canvas grid lines and waveforms mid-play. Panel shadow alone is enough.
+      */}
       <div
         ref={panelRef}
         data-studio-fx-suite

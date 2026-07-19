@@ -3190,9 +3190,17 @@ function syncTimelineGridLayer(
     (off as HTMLCanvasElement & { __tracksSig: string }).__tracksSig = tracksSig;
     off.width = bw;
     off.height = bh;
+    /* Failed bitmap alloc (GPU pressure / FX suite open) — do not poison the cache. */
+    if (off.width < 1 || off.height < 1) {
+      gridCacheRef.current = null;
+      return;
+    }
     gridCacheRef.current = off;
     const og = off.getContext('2d');
-    if (!og) return;
+    if (!og) {
+      gridCacheRef.current = null;
+      return;
+    }
     og.imageSmoothingEnabled = false;
     og.setTransform(dpr, 0, 0, dpr, 0, 0);
     og.fillStyle = '#0a0a10';
@@ -7312,6 +7320,10 @@ export default function StudioEditor2Screen({
       /* Do not clear audioPreviewScheduledRef here — refill would stack new BufferSources
          on still-playing clips (louder each EQ move; stuck loud until Stop). Insert strip
          live-rewires the graph; scheduled clips keep using the same preStrip bus. */
+      /* Mid-play rack rebuild can starve follow-ahead paints — force the next tick to refill. */
+      if (runningRef.current) {
+        timelineFollowPaintEndRef.current = 0;
+      }
     },
     [],
   );
@@ -7674,7 +7686,27 @@ export default function StudioEditor2Screen({
     viewportMargins?: { marginBackPx?: number; marginFwdPx?: number },
   ) => {
     const scrollEl = timelineHScrollRef.current;
-    const scrollLeft = scrollOverride ?? scrollEl?.scrollLeft ?? 0;
+    let scrollLeft = scrollOverride ?? scrollEl?.scrollLeft ?? 0;
+    let margins = viewportMargins;
+    /*
+     * During transform-follow play, scrollLeft is frozen at the follow origin. Painting
+     * at that frozen left without follow margins (e.g. after FX suite re-renders / rack
+     * rebuild) places the canvas window behind the playhead → blank #0a0a10 strip.
+     */
+    if (runningRef.current && timelineEdgeFollowActiveRef.current && !margins) {
+      scrollLeft =
+        scrollOverride
+        ?? Math.max(
+          0,
+          Math.round(
+            timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current,
+          ),
+        );
+      margins = {
+        marginBackPx: TIMELINE_FOLLOW_PAINT_BACK_PX,
+        marginFwdPx: TIMELINE_FOLLOW_PAINT_FWD_PX,
+      };
+    }
     const viewportWidth = scrollEl?.clientWidth ?? 1200;
     const zoom = zoomOverride ?? timelineZoomRef.current;
     syncTimelineGridLayer(
@@ -7695,11 +7727,11 @@ export default function StudioEditor2Screen({
       scrollLeft,
       viewportWidth,
       liveRecordingPeaksRef.current,
-      viewportMargins,
+      margins,
     );
-    if (viewportMargins) {
+    if (margins) {
       const fullW = TOTAL_WIDTH_PX * zoom;
-      const vp = se2ComputeGridViewport(fullW, scrollLeft, viewportWidth, viewportMargins);
+      const vp = se2ComputeGridViewport(fullW, scrollLeft, viewportWidth, margins);
       const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
       const maxCss = SE2_MAX_GRID_BITMAP_PX / dpr;
       const paintW = Math.min(vp.paintWidth, maxCss);

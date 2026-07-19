@@ -21,6 +21,7 @@ import {
   studioMeterBallistics,
   STUDIO_METER_DISPLAY_FLOOR,
 } from '@/app/lib/studio/studioTrackAnalyserBus';
+import { isStudioMixerStripGraphPlaybackLocked } from '@/app/lib/studio/studioMixerStripBus';
 import { useStudioAnalyserLevels } from '@/app/hooks/useStudioAnalyserLevels';
 import type { StudioTrackInsertFxRack } from '@/app/lib/studio/studioTrackInsertFx';
 import { studioInsertFxSuitePowered } from '@/app/lib/studio/studioTrackInsertFx';
@@ -735,7 +736,12 @@ export function SuiteSpectrumAnalyzer({
     };
 
     const draw = (t: number) => {
-      if (t - lastDraw < 33) {
+      /*
+       * During SE2 transport, analyser reads are locked (null). Slow the suite FFT canvas
+       * so it does not compete with timeline follow-ahead paints when FX opens mid-play.
+       */
+      const minGapMs = isStudioMixerStripGraphPlaybackLocked() ? 120 : 33;
+      if (t - lastDraw < minGapMs) {
         raf = requestAnimationFrame(draw);
         return;
       }
