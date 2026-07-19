@@ -335,6 +335,81 @@ export const RICH_JAZZ_GENRE: GenreDef = {
       name: 'Gospel · Choir Stack · 7',
       chords: ['IVmaj9', 'Imaj9', 'vi9', 'V13', 'iii9', 'IVmaj9', 'V13sus'],
     },
+    // ── Extra building-blocks shelf ────────────────────────────────────────
+    {
+      id: 'rjazz-coltrane-lite',
+      name: 'Jazz · Soft Matrix · 8',
+      chords: ['Imaj9', 'bVImaj9', 'bIIImaj9', 'IVmaj9', 'ii9', 'V13', 'vi9', 'V13sus'],
+    },
+    {
+      id: 'rjazz-drop-two-251',
+      name: 'Jazz · Drop-Two ii–V · 6',
+      chords: ['ii9', 'V13', 'Imaj9', 'IVmaj9', 'iii9', 'V13sus'],
+    },
+    {
+      id: 'rjazz-side-slip',
+      name: 'Jazz · Side-Slip Color · 7',
+      chords: ['Imaj9', 'bIIImaj9', 'ii9', 'V13', 'vi9', 'IVmaj9', 'V13sus'],
+    },
+    {
+      id: 'rjazz-tonicization',
+      name: 'Jazz · Soft Tonicization · 8',
+      chords: ['Imaj9', 'iii9', 'vi9', 'ii9', 'V13', 'Imaj9', 'vi9', 'V13sus'],
+    },
+    {
+      id: 'rjazz-70s-copper',
+      name: '70s · Copper Rhodes · 7',
+      chords: ['Imaj9', 'IVmaj9', 'V13sus', 'V13', 'vi9', 'ii9', 'Imaj9'],
+    },
+    {
+      id: 'rjazz-70s-suede',
+      name: '70s · Suede Walk · 8',
+      chords: ['vi9', 'ii9', 'V13', 'Imaj9', 'iii9', 'vi9', 'IVmaj9', 'V13sus'],
+    },
+    {
+      id: 'rjazz-70s-late-show',
+      name: '70s · Late Show · 6',
+      chords: ['Imaj9', 'vi9', 'bVIImaj9', 'IVmaj9', 'ii9', 'V13'],
+    },
+    {
+      id: 'rjazz-neo-dew',
+      name: 'Neo · Morning Dew · 7',
+      mode: 'dorian',
+      chords: ['i9', 'bVIImaj9', 'IV13', 'ii9', 'i9', 'IV9', 'bIIImaj9'],
+    },
+    {
+      id: 'rjazz-neo-linen',
+      name: 'Neo · Linen Pad · 8',
+      chords: ['Imaj9', 'vi9', 'iiø7', 'V13sus', 'IVmaj9', 'iii9', 'vi9', 'ii9'],
+    },
+    {
+      id: 'rjazz-neo-cedar',
+      name: 'Neo · Cedar Modal · 6',
+      mode: 'dorian',
+      chords: ['bVIImaj9', 'IV13', 'i9', 'ii9', 'bIIImaj9', 'IV9'],
+    },
+    {
+      id: 'rjazz-dark-ink',
+      name: 'Dark · Ink Pool · 7',
+      mode: 'minor',
+      chords: ['i9', 'iiø7', 'V13', 'bVImaj9', 'iv9', 'V13', 'i9'],
+    },
+    {
+      id: 'rjazz-dark-foghorn',
+      name: 'Dark · Foghorn Minor · 8',
+      mode: 'minor',
+      chords: ['i9', 'bIIImaj9', 'VImaj9', 'iv9', 'iiø7', 'V13', 'i9', 'VImaj9'],
+    },
+    {
+      id: 'rjazz-gospel-rise',
+      name: 'Gospel · Soft Rise · 7',
+      chords: ['Imaj9', 'iii9', 'IVmaj9', 'V13', 'vi9', 'IVmaj9', 'V13sus'],
+    },
+    {
+      id: 'rjazz-gospel-harbor',
+      name: 'Gospel · Harbor Amen · 6',
+      chords: ['IVmaj9', 'Imaj9', 'ii9', 'V13', 'Imaj9', 'V13sus'],
+    },
   ],
 };
 

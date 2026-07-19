@@ -242,6 +242,82 @@ export const DEEP_RNB_GENRE: GenreDef = {
       mode: 'minor',
       chords: ['i7', 'bIIImaj7', 'VImaj7', 'VII7', 'iv7', 'V7'],
     },
+    // ── Extra deep shelf (maj9 / m9 / 13 color + late-night) ───────────────
+    {
+      id: 'deeprnb-satin-ii-v',
+      name: 'Deep · Satin ii–V · 8',
+      chords: ['ii9', 'V13sus', 'V13', 'Imaj9', 'vi9', 'ii9', 'V13', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-rosewood-turn',
+      name: 'Deep · Rosewood Turn · 7',
+      chords: ['Imaj9', 'iii9', 'IVmaj9', 'V13', 'vi9', 'ii9', 'V13sus'],
+    },
+    {
+      id: 'deeprnb-plush-iv',
+      name: 'Deep · Plush IV Climb · 6',
+      chords: ['IVmaj9', 'iii9', 'vi9', 'ii9', 'V13', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-cashmere-9',
+      name: 'Deep · Cashmere Ninth · 8',
+      chords: ['Imaj9', 'vi9', 'IVmaj9', 'iii9', 'ii9', 'V13sus', 'V13', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-night-drive-13',
+      name: 'Deep · Night Drive 13 · 7',
+      chords: ['Imaj9', 'V13', 'vi9', 'IVmaj9', 'iiø7', 'V13', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-soft-backdoor-9',
+      name: 'Deep · Soft Backdoor 9 · 6',
+      chords: ['Imaj9', 'bVIImaj9', 'IVmaj9', 'iii9', 'vi9', 'V13'],
+    },
+    {
+      id: 'deeprnb-ivory-sus',
+      name: 'Deep · Ivory Sus · 8',
+      chords: ['Imaj9', 'V13sus', 'vi9', 'IVmaj9', 'iii9', 'ii9', 'V13sus', 'V13'],
+    },
+    {
+      id: 'deeprnb-pearl-cycle',
+      name: 'Deep · Pearl Cycle · 7',
+      chords: ['vi9', 'IVmaj9', 'Imaj9', 'V13', 'iii9', 'ii9', 'V13sus'],
+    },
+    {
+      id: 'deeprnb-velvet-borrow',
+      name: 'Deep · Velvet Borrow · 7',
+      chords: ['Imaj9', 'iv9', 'IVmaj9', 'vi9', 'ii9', 'V13', 'Imaj9'],
+    },
+    {
+      id: 'deeprnb-min-blue-velvet',
+      name: 'Deep · Blue Velvet Minor · 8',
+      mode: 'minor',
+      chords: ['i9', 'iv9', 'VImaj9', 'iiø7', 'V13', 'i9', 'bIIImaj9', 'VImaj9'],
+    },
+    {
+      id: 'deeprnb-min-rain-glass',
+      name: 'Deep · Rain Glass Minor · 6',
+      mode: 'minor',
+      chords: ['i9', 'bVImaj9', 'iv9', 'V13', 'bIIImaj9', 'VImaj9'],
+    },
+    {
+      id: 'deeprnb-dor-honey-iv',
+      name: 'Deep · Dorian Honey IV · 8',
+      mode: 'dorian',
+      chords: ['i9', 'IV13', 'ii9', 'bVIImaj9', 'i9', 'IV9', 'bIIImaj9', 'IV13'],
+    },
+    {
+      id: 'deeprnb-dor-loft-pad',
+      name: 'Deep · Dorian Loft Pad · 7',
+      mode: 'dorian',
+      chords: ['ii9', 'i9', 'IV13', 'bVIImaj9', 'ii9', 'i9', 'IV9'],
+    },
+    {
+      id: 'deeprnb-min-candle-smoke',
+      name: 'Deep · Candle Smoke Minor · 7',
+      mode: 'minor',
+      chords: ['i9', 'VImaj9', 'VII7', 'iv9', 'iiø7', 'V13', 'i9'],
+    },
   ],
 };
 

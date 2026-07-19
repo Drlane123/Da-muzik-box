@@ -1,6 +1,6 @@
 /**
  * Live Chord presets — Rich Jazz · Neo (Geno Build 1).
- * Same 60 building-block progressions as SE2 Chord Generator Rich Jazz · Neo:
+ * Same building-block progressions as SE2 Chord Generator Rich Jazz · Neo:
  * lush maj9 / m9 / 13 / ø7, 70s soul jazz, neo-jazz, dark jazz, gospel jazz.
  */
 import type { ChordMode, ChordSymbol } from '@/app/lib/creationStation/chordBuilder';
