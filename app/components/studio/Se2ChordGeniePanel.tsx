@@ -14,7 +14,7 @@ import {
 } from '@/app/lib/creationStation/grooveLabProgressionLibrary';
 import { clampGrooveLabBpm } from '@/app/lib/creationStation/grooveLabTempo';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
-import { useGrooveLabProgressionAudition } from '@/app/hooks/useGrooveLabProgressionAudition';
+import { useSe2ChordGeneratorAudition } from '@/app/hooks/useSe2ChordGeneratorAudition';
 import { GenoChordCreatorMiniRoll } from '@/app/components/studio/GenoChordCreatorMiniRoll';
 import { Se2GenoChordCreatorSketchPanel } from '@/app/components/studio/Se2GenoChordCreatorSketchPanel';
 import { Se2ChordGeneratorUpSelect } from '@/app/components/studio/Se2ChordGeneratorUpSelect';
@@ -367,6 +367,10 @@ export function Se2GenoChordCreatorPanel({
   const [aiMidiMode, setAiMidiMode] = useState<Se2ChordGenieAiMidiMode>('off');
   const [deepRnbPickerOpen, setDeepRnbPickerOpen] = useState(false);
   const deepRnbPickerRef = useRef<HTMLDivElement | null>(null);
+  const [richJazzPickerOpen, setRichJazzPickerOpen] = useState(false);
+  const richJazzPickerRef = useRef<HTMLDivElement | null>(null);
+  const [deepNeoPickerOpen, setDeepNeoPickerOpen] = useState(false);
+  const deepNeoPickerRef = useRef<HTMLDivElement | null>(null);
 
   const composeGenrePeek = useMemo(() => {
     if (!composeText.trim()) return null;
@@ -398,17 +402,34 @@ export function Se2GenoChordCreatorPanel({
     [presetCatalog],
   );
 
+  const richJazzPresets = useMemo(
+    () => presetCatalog.filter((p) => p.genreId === 'rich-jazz'),
+    [presetCatalog],
+  );
+
+  const deepNeoPresets = useMemo(
+    () => presetCatalog.filter((p) => p.genreId === 'deep-neo'),
+    [presetCatalog],
+  );
+
   useEffect(() => {
-    if (!deepRnbPickerOpen) return;
+    if (!deepRnbPickerOpen && !richJazzPickerOpen && !deepNeoPickerOpen) return;
     const onDoc = (e: MouseEvent) => {
-      const el = deepRnbPickerRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) {
-        setDeepRnbPickerOpen(false);
-      }
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      const inDeep = deepRnbPickerRef.current?.contains(t);
+      const inJazz = richJazzPickerRef.current?.contains(t);
+      const inNeo = deepNeoPickerRef.current?.contains(t);
+      if (!inDeep) setDeepRnbPickerOpen(false);
+      if (!inJazz) setRichJazzPickerOpen(false);
+      if (!inNeo) setDeepNeoPickerOpen(false);
     };
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === 'Escape') setDeepRnbPickerOpen(false);
+      if (e.key === 'Escape') {
+        setDeepRnbPickerOpen(false);
+        setRichJazzPickerOpen(false);
+        setDeepNeoPickerOpen(false);
+      }
     };
     document.addEventListener('mousedown', onDoc);
     window.addEventListener('keydown', onKey);
@@ -416,7 +437,7 @@ export function Se2GenoChordCreatorPanel({
       document.removeEventListener('mousedown', onDoc);
       window.removeEventListener('keydown', onKey);
     };
-  }, [deepRnbPickerOpen]);
+  }, [deepRnbPickerOpen, richJazzPickerOpen, deepNeoPickerOpen]);
 
   const presetId = se2GenoChordCreatorPresetId(track) || presetCatalog[0]?.id || '';
   const presetLabel = useMemo(() => {
@@ -443,11 +464,11 @@ export function Se2GenoChordCreatorPanel({
     [onPresetBpmChange],
   );
 
-  const audition = useGrooveLabProgressionAudition({
+  const audition = useSe2ChordGeneratorAudition({
     getAudioContext,
     bpm,
-    chordVoice: 'grand',
-    perfMode: 'block',
+    midiInstrumentId: track.midiInstrumentId,
+    trackId: track.id,
     linkedChordVolume: 0.82,
   });
 
@@ -1059,8 +1080,8 @@ export function Se2GenoChordCreatorPanel({
         background: 'linear-gradient(180deg, #101828 0%, #080c14 100%)',
       }}
     >
-      {/* Left: Length/Audio + sketch · Right: presets + key wheel */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      {/* Left: Length/Audio + sketch · Center: deep packs (gap) · Right: presets + key wheel */}
+      <div className="flex w-full flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col shrink-0 min-w-0 max-w-full">
           <div className="flex flex-wrap items-end gap-x-4 gap-y-1">
             <div className="shrink-0">
@@ -1172,142 +1193,428 @@ export function Se2GenoChordCreatorPanel({
           </div>
         </div>
 
-        <div
-          ref={deepRnbPickerRef}
-          className="relative flex flex-col items-center justify-center shrink-0 self-center px-2 min-w-0 z-30"
-        >
-          <span className="block text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd] mb-1 text-center">
-            Deep Chords
-          </span>
-          <button
-            type="button"
-            disabled={disabled || deepRnbPresets.length === 0}
-            aria-expanded={deepRnbPickerOpen}
-            aria-haspopup="listbox"
-            onClick={() => {
-              if (deepRnbPresets.length === 0) return;
-              setStyleGenreId('deep-rnb');
-              setDeepRnbPickerOpen((open) => !open);
-            }}
-            className="inline-flex items-center justify-center gap-1.5 rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
-            style={{
-              height: controlH + 4,
-              minWidth: 148,
-              borderColor:
-                styleGenreId === 'deep-rnb' || deepRnbPickerOpen
-                  ? 'rgba(196,181,253,0.85)'
-                  : 'rgba(196,181,253,0.35)',
-              background:
-                styleGenreId === 'deep-rnb' || deepRnbPickerOpen
-                  ? 'rgba(196,181,253,0.22)'
-                  : 'rgba(196,181,253,0.08)',
-              color: styleGenreId === 'deep-rnb' || deepRnbPickerOpen ? '#f5f3ff' : '#c4b5fd',
-              boxShadow:
-                styleGenreId === 'deep-rnb' || deepRnbPickerOpen
-                  ? '0 0 12px rgba(196,181,253,0.25)'
-                  : undefined,
-            }}
-            title="Browse Deep R&B Chords — complex quiet-storm / neo-soul progressions"
+        <div className="relative z-30 flex shrink-0 flex-col items-center justify-start gap-1.5 self-start px-2">
+          <div className="flex items-start justify-center gap-3">
+<div
+            ref={deepRnbPickerRef}
+            className="relative flex flex-col items-center justify-center shrink-0 min-w-0"
           >
-            Deep R&B Chords
-            <ChevronDown
-              size={12}
-              aria-hidden
-              style={{
-                transform: deepRnbPickerOpen ? 'rotate(180deg)' : undefined,
-                transition: 'transform 120ms ease',
+            <span className="block text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd] mb-1 text-center">
+              Deep Chords
+            </span>
+            <button
+              type="button"
+              disabled={disabled || deepRnbPresets.length === 0}
+              aria-expanded={deepRnbPickerOpen}
+              aria-haspopup="listbox"
+              onClick={() => {
+                if (deepRnbPresets.length === 0) return;
+                setStyleGenreId('deep-rnb');
+                setRichJazzPickerOpen(false);
+                setDeepNeoPickerOpen(false);
+                setDeepRnbPickerOpen((open) => !open);
               }}
-            />
-          </button>
-          <p className="mt-1 text-[8px] font-semibold leading-tight text-[#6a6280] text-center max-w-[10rem]">
-            {deepRnbPresets.length} progressive deep R&B chords
-          </p>
-
-          {deepRnbPickerOpen ? (
-            <div
-              role="listbox"
-              aria-label="Deep R&B Chords"
-              className="absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-lg border shadow-2xl"
+              className="inline-flex items-center justify-center gap-1.5 rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
               style={{
-                width: 'min(92vw, 560px)',
-                maxWidth: '560px',
-                borderColor: 'rgba(196,181,253,0.45)',
-                background: 'linear-gradient(180deg, #1a1428 0%, #0c0a14 100%)',
-                boxShadow: '0 16px 40px rgba(0,0,0,0.65), 0 0 24px rgba(196,181,253,0.12)',
-                zIndex: 80,
+                height: controlH + 4,
+                minWidth: 148,
+                borderColor:
+                  styleGenreId === 'deep-rnb' || deepRnbPickerOpen
+                    ? 'rgba(196,181,253,0.85)'
+                    : 'rgba(196,181,253,0.35)',
+                background:
+                  styleGenreId === 'deep-rnb' || deepRnbPickerOpen
+                    ? 'rgba(196,181,253,0.22)'
+                    : 'rgba(196,181,253,0.08)',
+                color: styleGenreId === 'deep-rnb' || deepRnbPickerOpen ? '#f5f3ff' : '#c4b5fd',
+                boxShadow:
+                  styleGenreId === 'deep-rnb' || deepRnbPickerOpen
+                    ? '0 0 12px rgba(196,181,253,0.25)'
+                    : undefined,
               }}
+              title="Browse Deep R&B Chords — complex quiet-storm / neo-soul progressions"
             >
-              <div
-                className="flex items-center justify-between gap-2 px-3 py-2 border-b"
-                style={{ borderColor: 'rgba(196,181,253,0.22)' }}
-              >
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">
-                  Pick a Deep R&B chord
-                </span>
-                <span className="text-[8px] font-semibold text-[#8a8098]">
-                  Scroll → · click to load
-                </span>
-              </div>
-              <div
-                className="flex gap-2 overflow-x-auto overflow-y-hidden px-3 py-3"
+              Deep R&B Chords
+              <ChevronDown
+                size={12}
+                aria-hidden
                 style={{
-                  scrollSnapType: 'x proximity',
-                  WebkitOverflowScrolling: 'touch',
+                  transform: deepRnbPickerOpen ? 'rotate(180deg)' : undefined,
+                  transition: 'transform 120ms ease',
+                }}
+              />
+            </button>
+            <p className="mt-1 text-[8px] font-semibold leading-tight text-[#6a6280] text-center max-w-[10rem]">
+              {deepRnbPresets.length} progressive deep R&B chords
+            </p>
+
+            {deepRnbPickerOpen ? (
+              <div
+                role="listbox"
+                aria-label="Deep R&B Chords"
+                className="absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-lg border shadow-2xl"
+                style={{
+                  width: 'min(92vw, 560px)',
+                  maxWidth: '560px',
+                  borderColor: 'rgba(196,181,253,0.45)',
+                  background: 'linear-gradient(180deg, #1a1428 0%, #0c0a14 100%)',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.65), 0 0 24px rgba(196,181,253,0.12)',
+                  zIndex: 80,
                 }}
               >
-                {deepRnbPresets.map((p) => {
-                  const selected = (catalogPresetId || presetId) === p.id;
-                  const shortName = p.progressionId
-                    ? p.label.replace(/^Deep R&B (?:Cards|Chords) ·\s*/i, '')
-                    : p.label;
-                  const chordLine = p.steps.map((s) => s.label).join(' – ');
-                  return (
-                    <button
-                      key={p.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      disabled={disabled}
-                      onClick={() => {
-                        handlePresetPick(p.id);
-                        setDeepRnbPickerOpen(false);
-                      }}
-                      className="shrink-0 rounded-md border text-left disabled:opacity-40"
-                      style={{
-                        width: 168,
-                        minHeight: 88,
-                        scrollSnapAlign: 'start',
-                        padding: '8px 10px',
-                        borderColor: selected
-                          ? 'rgba(196,181,253,0.9)'
-                          : 'rgba(196,181,253,0.28)',
-                        background: selected
-                          ? 'rgba(196,181,253,0.2)'
-                          : 'rgba(8,8,16,0.92)',
-                        boxShadow: selected
-                          ? 'inset 0 0 0 1px rgba(196,181,253,0.35)'
-                          : undefined,
-                      }}
-                      title={chordLine}
-                    >
-                      <span
-                        className="block text-[10px] font-black leading-snug"
-                        style={{ color: selected ? '#f5f3ff' : '#e8e0f8' }}
+                <div
+                  className="flex items-center justify-between gap-2 px-3 py-2 border-b"
+                  style={{ borderColor: 'rgba(196,181,253,0.22)' }}
+                >
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">
+                    Pick a Deep R&B chord
+                  </span>
+                  <span className="text-[8px] font-semibold text-[#8a8098]">
+                    Scroll → · click to load
+                  </span>
+                </div>
+                <div
+                  className="flex gap-2 overflow-x-auto overflow-y-hidden px-3 py-3"
+                  style={{
+                    scrollSnapType: 'x proximity',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
+                >
+                  {deepRnbPresets.map((p) => {
+                    const selected = (catalogPresetId || presetId) === p.id;
+                    const shortName = p.progressionId
+                      ? p.label.replace(/^Deep R&B (?:Cards|Chords) ·\s*/i, '')
+                      : p.label;
+                    const chordLine = p.steps.map((s) => s.label).join(' – ');
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        disabled={disabled}
+                        onClick={() => {
+                          handlePresetPick(p.id);
+                          setDeepRnbPickerOpen(false);
+                        }}
+                        className="shrink-0 rounded-md border text-left disabled:opacity-40"
+                        style={{
+                          width: 168,
+                          minHeight: 88,
+                          scrollSnapAlign: 'start',
+                          padding: '8px 10px',
+                          borderColor: selected
+                            ? 'rgba(196,181,253,0.9)'
+                            : 'rgba(196,181,253,0.28)',
+                          background: selected
+                            ? 'rgba(196,181,253,0.2)'
+                            : 'rgba(8,8,16,0.92)',
+                          boxShadow: selected
+                            ? 'inset 0 0 0 1px rgba(196,181,253,0.35)'
+                            : undefined,
+                        }}
+                        title={chordLine}
                       >
-                        {shortName}
-                      </span>
-                      <span
-                        className="mt-1.5 block text-[8px] font-semibold leading-snug"
-                        style={{ color: '#9a90b0' }}
-                      >
-                        {chordLine}
-                      </span>
-                    </button>
-                  );
-                })}
+                        <span
+                          className="block text-[10px] font-black leading-snug"
+                          style={{ color: selected ? '#f5f3ff' : '#e8e0f8' }}
+                        >
+                          {shortName}
+                        </span>
+                        <span
+                          className="mt-1.5 block text-[8px] font-semibold leading-snug"
+                          style={{ color: '#9a90b0' }}
+                        >
+                          {chordLine}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
+<div
+            ref={richJazzPickerRef}
+            className="relative flex flex-col items-center justify-center shrink-0 min-w-0"
+          >
+            <span className="block text-[9px] font-bold uppercase tracking-wider text-[#f0d48a] mb-1 text-center">
+              Jazz · Neo
+            </span>
+            <button
+              type="button"
+              disabled={disabled || richJazzPresets.length === 0}
+              aria-expanded={richJazzPickerOpen}
+              aria-haspopup="listbox"
+              onClick={() => {
+                if (richJazzPresets.length === 0) return;
+                setStyleGenreId('rich-jazz');
+                setDeepRnbPickerOpen(false);
+                setDeepNeoPickerOpen(false);
+                setRichJazzPickerOpen((open) => !open);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
+              style={{
+                height: controlH + 4,
+                minWidth: 148,
+                borderColor:
+                  styleGenreId === 'rich-jazz' || richJazzPickerOpen
+                    ? 'rgba(240,212,138,0.9)'
+                    : 'rgba(240,212,138,0.38)',
+                background:
+                  styleGenreId === 'rich-jazz' || richJazzPickerOpen
+                    ? 'rgba(240,212,138,0.2)'
+                    : 'rgba(240,212,138,0.08)',
+                color: styleGenreId === 'rich-jazz' || richJazzPickerOpen ? '#fff8e8' : '#f0d48a',
+                boxShadow:
+                  styleGenreId === 'rich-jazz' || richJazzPickerOpen
+                    ? '0 0 12px rgba(240,212,138,0.22)'
+                    : undefined,
+              }}
+              title="Browse Rich Jazz · Neo — 70s soul jazz, neo-jazz, dark jazz, gospel jazz"
+            >
+              Rich Jazz · Neo
+              <ChevronDown
+                size={12}
+                aria-hidden
+                style={{
+                  transform: richJazzPickerOpen ? 'rotate(180deg)' : undefined,
+                  transition: 'transform 120ms ease',
+                }}
+              />
+            </button>
+            <p className="mt-1 text-[8px] font-semibold leading-tight text-[#7a6e52] text-center max-w-[10rem]">
+              {richJazzPresets.length} rich jazz / neo chords
+            </p>
+
+            {richJazzPickerOpen ? (
+              <div
+                role="listbox"
+                aria-label="Rich Jazz · Neo"
+                className="absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-lg border shadow-2xl"
+                style={{
+                  width: 'min(92vw, 560px)',
+                  maxWidth: '560px',
+                  borderColor: 'rgba(240,212,138,0.45)',
+                  background: 'linear-gradient(180deg, #241c10 0%, #0e0c08 100%)',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.65), 0 0 24px rgba(240,212,138,0.12)',
+                  zIndex: 80,
+                }}
+              >
+                <div
+                  className="flex items-center justify-between gap-2 px-3 py-2 border-b"
+                  style={{ borderColor: 'rgba(240,212,138,0.22)' }}
+                >
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#f0d48a]">
+                    Pick a Jazz · Neo chord
+                  </span>
+                  <span className="text-[8px] font-semibold text-[#9a8a68]">
+                    Scroll → · click to load
+                  </span>
+                </div>
+                <div
+                  className="flex gap-2 overflow-x-auto overflow-y-hidden px-3 py-3"
+                  style={{
+                    scrollSnapType: 'x proximity',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
+                >
+                  {richJazzPresets.map((p) => {
+                    const selected = (catalogPresetId || presetId) === p.id;
+                    const shortName = p.progressionId
+                      ? p.label.replace(/^Rich Jazz · Neo ·\s*/i, '')
+                      : p.label;
+                    const chordLine = p.steps.map((s) => s.label).join(' – ');
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        disabled={disabled}
+                        onClick={() => {
+                          handlePresetPick(p.id);
+                          setRichJazzPickerOpen(false);
+                        }}
+                        className="shrink-0 rounded-md border text-left disabled:opacity-40"
+                        style={{
+                          width: 168,
+                          minHeight: 88,
+                          scrollSnapAlign: 'start',
+                          padding: '8px 10px',
+                          borderColor: selected
+                            ? 'rgba(240,212,138,0.95)'
+                            : 'rgba(240,212,138,0.28)',
+                          background: selected
+                            ? 'rgba(240,212,138,0.18)'
+                            : 'rgba(10,8,4,0.92)',
+                          boxShadow: selected
+                            ? 'inset 0 0 0 1px rgba(240,212,138,0.35)'
+                            : undefined,
+                        }}
+                        title={chordLine}
+                      >
+                        <span
+                          className="block text-[10px] font-black leading-snug"
+                          style={{ color: selected ? '#fff8e8' : '#f5ebd0' }}
+                        >
+                          {shortName}
+                        </span>
+                        <span
+                          className="mt-1.5 block text-[8px] font-semibold leading-snug"
+                          style={{ color: '#a89870' }}
+                        >
+                          {chordLine}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          </div>
+          <div className="flex items-start justify-center">
+<div
+            ref={deepNeoPickerRef}
+            className="relative flex flex-col items-center justify-center shrink-0 min-w-0"
+          >
+            <span className="block text-[9px] font-bold uppercase tracking-wider text-[#7ee0c8] mb-1 text-center">
+              Deep Neo
+            </span>
+            <button
+              type="button"
+              disabled={disabled || deepNeoPresets.length === 0}
+              aria-expanded={deepNeoPickerOpen}
+              aria-haspopup="listbox"
+              onClick={() => {
+                if (deepNeoPresets.length === 0) return;
+                setStyleGenreId('deep-neo');
+                setDeepRnbPickerOpen(false);
+                setRichJazzPickerOpen(false);
+                setDeepNeoPickerOpen((open) => !open);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded border px-3 text-[10px] font-black uppercase tracking-wide disabled:opacity-40 whitespace-nowrap"
+              style={{
+                height: controlH + 4,
+                minWidth: 148,
+                borderColor:
+                  styleGenreId === 'deep-neo' || deepNeoPickerOpen
+                    ? 'rgba(126,224,200,0.9)'
+                    : 'rgba(126,224,200,0.38)',
+                background:
+                  styleGenreId === 'deep-neo' || deepNeoPickerOpen
+                    ? 'rgba(126,224,200,0.2)'
+                    : 'rgba(126,224,200,0.08)',
+                color: styleGenreId === 'deep-neo' || deepNeoPickerOpen ? '#e8fff8' : '#7ee0c8',
+                boxShadow:
+                  styleGenreId === 'deep-neo' || deepNeoPickerOpen
+                    ? '0 0 12px rgba(126,224,200,0.22)'
+                    : undefined,
+              }}
+              title="Browse Deep Neo — lush maj13 / 6/9 / m11 colors you can rearrange"
+            >
+              Deep Neo
+              <ChevronDown
+                size={12}
+                aria-hidden
+                style={{
+                  transform: deepNeoPickerOpen ? 'rotate(180deg)' : undefined,
+                  transition: 'transform 120ms ease',
+                }}
+              />
+            </button>
+            <p className="mt-1 text-[8px] font-semibold leading-tight text-[#4a7a6c] text-center max-w-[10rem]">
+              {deepNeoPresets.length} deep neo color palettes
+            </p>
+
+            {deepNeoPickerOpen ? (
+              <div
+                role="listbox"
+                aria-label="Deep Neo"
+                className="absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-lg border shadow-2xl"
+                style={{
+                  width: 'min(92vw, 560px)',
+                  maxWidth: '560px',
+                  borderColor: 'rgba(126,224,200,0.45)',
+                  background: 'linear-gradient(180deg, #102420 0%, #080e0c 100%)',
+                  boxShadow: '0 16px 40px rgba(0,0,0,0.65), 0 0 24px rgba(126,224,200,0.12)',
+                  zIndex: 80,
+                }}
+              >
+                <div
+                  className="flex items-center justify-between gap-2 px-3 py-2 border-b"
+                  style={{ borderColor: 'rgba(126,224,200,0.22)' }}
+                >
+                  <span className="text-[10px] font-black uppercase tracking-wider text-[#7ee0c8]">
+                    Pick a Deep Neo color
+                  </span>
+                  <span className="text-[8px] font-semibold text-[#6a9a88]">
+                    Scroll → · click to load
+                  </span>
+                </div>
+                <div
+                  className="flex gap-2 overflow-x-auto overflow-y-hidden px-3 py-3"
+                  style={{
+                    scrollSnapType: 'x proximity',
+                    WebkitOverflowScrolling: 'touch',
+                  }}
+                >
+                  {deepNeoPresets.map((p) => {
+                    const selected = (catalogPresetId || presetId) === p.id;
+                    const shortName = p.progressionId
+                      ? p.label.replace(/^Deep Neo ·\s*/i, '')
+                      : p.label;
+                    const chordLine = p.steps.map((s) => s.label).join(' – ');
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        disabled={disabled}
+                        onClick={() => {
+                          handlePresetPick(p.id);
+                          setDeepNeoPickerOpen(false);
+                        }}
+                        className="shrink-0 rounded-md border text-left disabled:opacity-40"
+                        style={{
+                          width: 168,
+                          minHeight: 88,
+                          scrollSnapAlign: 'start',
+                          padding: '8px 10px',
+                          borderColor: selected
+                            ? 'rgba(126,224,200,0.95)'
+                            : 'rgba(126,224,200,0.28)',
+                          background: selected
+                            ? 'rgba(126,224,200,0.18)'
+                            : 'rgba(4,12,10,0.92)',
+                          boxShadow: selected
+                            ? 'inset 0 0 0 1px rgba(126,224,200,0.35)'
+                            : undefined,
+                        }}
+                        title={chordLine}
+                      >
+                        <span
+                          className="block text-[10px] font-black leading-snug"
+                          style={{ color: selected ? '#e8fff8' : '#d0f5ea' }}
+                        >
+                          {shortName}
+                        </span>
+                        <span
+                          className="mt-1.5 block text-[8px] font-semibold leading-snug"
+                          style={{ color: '#6a9a88' }}
+                        >
+                          {chordLine}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          </div>
         </div>
 
         <div className="flex flex-col items-end gap-1 ml-auto shrink-0">

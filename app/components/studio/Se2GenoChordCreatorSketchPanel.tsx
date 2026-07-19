@@ -5,7 +5,7 @@ import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import { defaultGenrePackForMode } from '@/app/lib/creationStation/grooveLabProgressionLibrary';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
 import { GrooveEightChordSketch } from '@/app/components/creation/GrooveEightChordSketch';
-import { useGrooveLabProgressionAudition } from '@/app/hooks/useGrooveLabProgressionAudition';
+import { useSe2ChordGeneratorAudition } from '@/app/hooks/useSe2ChordGeneratorAudition';
 import {
   se2ChordGeniePresetCatalog,
 } from '@/app/lib/studio/se2ChordGenieGenerate';
@@ -64,11 +64,11 @@ export function Se2GenoChordCreatorSketchPanel({
     return draftSteps.reduce((n, s) => n + (s.label?.length ?? 0) + (s.beats ?? 0), draftSteps.length);
   }, [draftSteps]);
 
-  const audition = useGrooveLabProgressionAudition({
+  const audition = useSe2ChordGeneratorAudition({
     getAudioContext,
     bpm,
-    chordVoice: 'grand',
-    perfMode: 'block',
+    midiInstrumentId: track.midiInstrumentId,
+    trackId: track.id,
     linkedChordVolume: 0.82,
   });
 

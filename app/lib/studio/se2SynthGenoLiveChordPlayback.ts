@@ -57,7 +57,12 @@ export async function playSe2SynthGenoLiveChordBlock(opts: {
     clearGenoAccordPassQueue(ctx);
     playSe2LiveChordGlide(ctx, opts.dest, sessionKey, uniqueTones, {
       enabled: true,
-      glideSec: opts.playOpts.genreId === 'jazz' ? 0.28 : 0.22,
+      glideSec:
+        opts.playOpts.genreId === 'jazz'
+        || opts.playOpts.genreId === 'rich-jazz'
+        || opts.playOpts.genreId === 'deep-neo'
+          ? 0.28
+          : 0.22,
       durationSec: opts.playOpts.durationSec ?? 2.8,
     });
     return;

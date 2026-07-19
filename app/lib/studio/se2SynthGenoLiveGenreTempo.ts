@@ -27,6 +27,8 @@ export const SE2_SYNTH_GENO_LIVE_GENRE_TEMPO: Record<Se2SynthGenoLiveGenreId, Li
   'lofi-cinematic': { min: 60, max: 82, defaultBpm: 68 },
   'dark-cinematic': { min: 56, max: 84, defaultBpm: 72 },
   jazz: { min: 90, max: 180, defaultBpm: 120 },
+  'rich-jazz': { min: 68, max: 118, defaultBpm: 92 },
+  'deep-neo': { min: 66, max: 96, defaultBpm: 78 },
   'guitar-lines': { min: 68, max: 128, defaultBpm: 96 },
   kpop: { min: 76, max: 132, defaultBpm: 118 },
 };

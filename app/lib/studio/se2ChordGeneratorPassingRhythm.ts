@@ -50,6 +50,9 @@ function liveGenreIdForPassing(genreId: string): Se2SynthGenoLiveGenreId {
   if (id === 'rnb' || id === 'rnb-true' || id.startsWith('rnb') || id === 'soul-eras') return 'rnb';
   if (id === 'gospel') return 'gospel';
   if (id === 'jazz') return 'jazz';
+  if (id === 'rich-jazz') return 'rich-jazz';
+  if (id === 'deep-neo') return 'deep-neo';
+  if (id === 'deep-rnb') return 'rnb';
   if (id === 'trap' || id === 'drill') return 'trap';
   if (id === 'lofi') return 'lofi';
   if (id === 'pop' || id.startsWith('pop') || id === 'doowop' || id.includes('ballad')) return 'pop';

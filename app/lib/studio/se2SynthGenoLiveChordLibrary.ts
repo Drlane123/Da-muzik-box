@@ -41,6 +41,8 @@ import {
   SE2_SYNTH_GENO_LIVE_PLUG_RAGE_DEFS,
 } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsBatch3';
 import { SE2_SYNTH_GENO_LIVE_JAZZ_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsJazz';
+import { SE2_SYNTH_GENO_LIVE_RICH_JAZZ_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsRichJazz';
+import { SE2_SYNTH_GENO_LIVE_DEEP_NEO_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsDeepNeo';
 import { SE2_SYNTH_GENO_LIVE_RNB_POP_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsRnbPop';
 import { SE2_SYNTH_GENO_LIVE_GUITAR_LINES_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsGuitarPort';
 import { SE2_SYNTH_GENO_LIVE_KPOP_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsKpop';
@@ -83,16 +85,22 @@ export { se2SynthGenoLiveGenreSoundSelection };
 
 export const SE2_SYNTH_GENO_LIVE_GENRES: Se2SynthGenoLiveGenre[] = [
   {
-    id: 'trap',
-    label: 'Trap',
-    description: 'Dark minor loops, soul flips, 808-ready 7ths',
-    defaultMode: 'minor',
+    id: 'deep-neo',
+    label: 'Deep Neo',
+    description: 'Lush rearrangeable colors — maj13, 6/9, m11, 13sus (Building Blocks–style)',
+    defaultMode: 'major',
   },
   {
-    id: 'hip-hop',
-    label: 'Hip-Hop',
-    description: 'Boom bap, Dilla vamps, sample-flip harmony',
-    defaultMode: 'minor',
+    id: 'rich-jazz',
+    label: 'Rich Jazz · Neo',
+    description: '70s soul jazz, neo-jazz, lush maj9 / 13 / ø7 building blocks',
+    defaultMode: 'major',
+  },
+  {
+    id: 'neo-soul',
+    label: 'Neo-Soul',
+    description: 'Dorian grooves, extended 7ths, Rhodes soul',
+    defaultMode: 'dorian',
   },
   {
     id: 'rnb',
@@ -107,6 +115,18 @@ export const SE2_SYNTH_GENO_LIVE_GENRES: Se2SynthGenoLiveGenre[] = [
     defaultMode: 'major',
   },
   {
+    id: 'trap',
+    label: 'Trap',
+    description: 'Dark minor loops, soul flips, 808-ready 7ths',
+    defaultMode: 'minor',
+  },
+  {
+    id: 'hip-hop',
+    label: 'Hip-Hop',
+    description: 'Boom bap, Dilla vamps, sample-flip harmony',
+    defaultMode: 'minor',
+  },
+  {
     id: 'drill',
     label: 'Chill',
     description: 'Mellow minor loops, soft 7ths, laid-back harmony',
@@ -117,12 +137,6 @@ export const SE2_SYNTH_GENO_LIVE_GENRES: Se2SynthGenoLiveGenre[] = [
     label: 'Lo-Fi',
     description: 'Dusty dorian vamps, tape-warm minor 7ths',
     defaultMode: 'minor',
-  },
-  {
-    id: 'neo-soul',
-    label: 'Neo-Soul',
-    description: 'Dorian grooves, extended 7ths, Rhodes soul',
-    defaultMode: 'dorian',
   },
   {
     id: 'pop',
@@ -223,6 +237,8 @@ const DEFS_BY_GENRE: Record<Se2SynthGenoLiveGenreId, Se2SynthGenoLivePresetDef[]
   'lofi-cinematic': SE2_SYNTH_GENO_LIVE_LOFI_CINEMATIC_DEFS,
   'dark-cinematic': SE2_SYNTH_GENO_LIVE_DARK_DEFS,
   jazz: SE2_SYNTH_GENO_LIVE_JAZZ_DEFS,
+  'rich-jazz': SE2_SYNTH_GENO_LIVE_RICH_JAZZ_DEFS,
+  'deep-neo': SE2_SYNTH_GENO_LIVE_DEEP_NEO_DEFS,
   'guitar-lines': SE2_SYNTH_GENO_LIVE_GUITAR_LINES_DEFS,
   kpop: SE2_SYNTH_GENO_LIVE_KPOP_DEFS,
 };

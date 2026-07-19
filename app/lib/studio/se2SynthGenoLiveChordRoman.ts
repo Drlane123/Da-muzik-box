@@ -22,37 +22,65 @@ export const SE2_SYNTH_GENO_LIVE_REGISTER_REFERENCE_GENRE: Se2SynthGenoLiveGenre
 const ROMAN_DEGREE: Record<string, number> = {
   I: 0,
   Imaj7: 0,
+  Imaj9: 0,
+  Imaj13: 0,
+  I69: 0,
+  'Imaj7#11': 0,
   I7: 0,
   Isus4: 0,
   'i(maj7)': 0,
   i: 0,
   i7: 0,
+  i9: 0,
+  i11: 0,
+  i69: 0,
   ii: 1,
   II7: 1,
   ii7: 1,
+  ii9: 1,
+  ii11: 1,
   'ii°': 1,
   'iiø7': 1,
   iii: 2,
   iii7: 2,
+  iii9: 2,
+  iii11: 2,
   bIII: 2,
   bIIImaj7: 2,
+  bIIImaj9: 2,
   IV: 3,
   IVmaj7: 3,
+  IVmaj9: 3,
+  IVmaj13: 3,
+  IV69: 3,
   IV7: 3,
+  IV9: 3,
+  IV13: 3,
   iv: 3,
   iv7: 3,
+  iv9: 3,
+  iv11: 3,
   V: 4,
   V7: 4,
+  V9: 4,
+  V11: 4,
+  V13: 4,
   Vsus4: 4,
+  V13sus: 4,
   v: 4,
   vi: 5,
   vi7: 5,
+  vi9: 5,
+  vi11: 5,
   bVI: 5,
   bVImaj7: 5,
+  bVImaj9: 5,
   VI: 5,
   VImaj7: 5,
+  VImaj9: 5,
   bVII: 6,
   bVIImaj7: 6,
+  bVIImaj9: 6,
   bVII7: 6,
   VII: 6,
   VII7: 6,
@@ -85,8 +113,13 @@ function liveVoicingHints(
   roman: ChordSymbol,
   genreId: Se2SynthGenoLiveGenreId,
 ): Pick<GenoBarChordSpec, 'lockedType' | 'inversion' | 'stackOctave' | 'smartMatch'> {
-  const jazz = genreId === 'jazz';
-  const soul = genreId === 'rnb' || genreId === 'rnb-pop' || genreId === 'neo-soul' || genreId === 'gospel' || jazz;
+  const jazz = genreId === 'jazz' || genreId === 'rich-jazz' || genreId === 'deep-neo';
+  const soul =
+    genreId === 'rnb'
+    || genreId === 'rnb-pop'
+    || genreId === 'neo-soul'
+    || genreId === 'gospel'
+    || jazz;
   const trap =
     genreId === 'trap'
     || genreId === 'hip-hop'
@@ -111,7 +144,15 @@ function liveVoicingHints(
   if (roman === 'i(maj7)') {
     return { lockedType: 'min', smartMatch: false, inversion: 0, stackOctave: dark };
   }
-  if (roman.includes('maj7') || roman === 'VImaj7' || roman === 'bVImaj7' || roman === 'bIIImaj7') {
+  if (
+    roman.includes('maj7')
+    || roman.includes('maj9')
+    || roman.includes('maj13')
+    || roman.endsWith('69')
+    || roman === 'VImaj7'
+    || roman === 'bVImaj7'
+    || roman === 'bIIImaj7'
+  ) {
     return {
       lockedType: 'maj',
       smartMatch: false,
@@ -121,10 +162,21 @@ function liveVoicingHints(
   }
   if (
     roman === 'ii7'
+    || roman === 'ii9'
+    || roman === 'ii11'
     || roman === 'iii7'
+    || roman === 'iii9'
+    || roman === 'iii11'
     || roman === 'vi7'
+    || roman === 'vi9'
+    || roman === 'vi11'
     || roman === 'i7'
+    || roman === 'i9'
+    || roman === 'i11'
+    || roman === 'i69'
     || roman === 'iv7'
+    || roman === 'iv9'
+    || roman === 'iv11'
   ) {
     return {
       lockedType: 'min',
@@ -133,7 +185,20 @@ function liveVoicingHints(
       stackOctave: genreId === 'rnb' || genreId === 'rnb-pop' ? false : brightComp || jazz,
     };
   }
-  if (roman === 'I7' || roman === 'V7' || roman === 'IV7' || roman === 'II7' || roman === 'VII7' || roman === 'bVII7') {
+  if (
+    roman === 'I7'
+    || roman === 'V7'
+    || roman === 'V9'
+    || roman === 'V11'
+    || roman === 'V13'
+    || roman === 'V13sus'
+    || roman === 'IV7'
+    || roman === 'IV9'
+    || roman === 'IV13'
+    || roman === 'II7'
+    || roman === 'VII7'
+    || roman === 'bVII7'
+  ) {
     return {
       lockedType: 'maj',
       smartMatch: false,

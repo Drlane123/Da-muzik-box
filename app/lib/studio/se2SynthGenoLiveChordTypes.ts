@@ -36,6 +36,8 @@ export type Se2SynthGenoLiveGenreId =
   | 'lofi-cinematic'
   | 'dark-cinematic'
   | 'jazz'
+  | 'rich-jazz'
+  | 'deep-neo'
   | 'guitar-lines'
   | 'kpop';
 

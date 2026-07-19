@@ -28,11 +28,19 @@ function inferChordColor(intervals: readonly number[]): ChordColor {
 }
 
 function soulGenre(genreId: Se2SynthGenoLiveGenreId): boolean {
-  return genreId === 'rnb' || genreId === 'rnb-pop' || genreId === 'neo-soul' || genreId === 'gospel' || genreId === 'jazz';
+  return (
+    genreId === 'rnb'
+    || genreId === 'rnb-pop'
+    || genreId === 'neo-soul'
+    || genreId === 'gospel'
+    || genreId === 'jazz'
+    || genreId === 'rich-jazz'
+    || genreId === 'deep-neo'
+  );
 }
 
 function jazzGenre(genreId: Se2SynthGenoLiveGenreId): boolean {
-  return genreId === 'jazz';
+  return genreId === 'jazz' || genreId === 'rich-jazz' || genreId === 'deep-neo';
 }
 
 function lushGenre(genreId: Se2SynthGenoLiveGenreId): boolean {
@@ -102,7 +110,7 @@ function enrichmentLayers(
 }
 
 export function se2SynthGenoDefaultVoicingDepth(genreId: Se2SynthGenoLiveGenreId): GenoVoicingDepth {
-  if (genreId === 'jazz') return 6;
+  if (genreId === 'jazz' || genreId === 'rich-jazz' || genreId === 'deep-neo') return 6;
   if (genreId === 'rnb' || genreId === 'pop' || genreId === 'kpop' || genreId === 'rnb-pop' || genreId === 'afrobeats') return 5;
   if (soulGenre(genreId)) return 6;
   if (genreId === 'lofi' || genreId === 'lofi-cinematic' || genreId === 'boom-bap') return 5;

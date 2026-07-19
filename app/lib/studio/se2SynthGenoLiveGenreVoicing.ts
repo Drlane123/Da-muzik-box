@@ -151,6 +151,28 @@ export const GENRE_VOICING: Record<
       bassBankId: 'bass-guitar-finger',
     },
   },
+  'rich-jazz': {
+    stylePreset: 'jazz',
+    extensions: ['M7', 'm7', '9', '11', '13'],
+    inversion: 1,
+    perfMode: 'block',
+    soundSelection: {
+      accordBankId: 'rhodes-classic',
+      melodyBankId: 'lead-silk',
+      bassBankId: 'bass-guitar-finger',
+    },
+  },
+  'deep-neo': {
+    stylePreset: 'jazz',
+    extensions: ['M7', 'm7', '9', '11', '13'],
+    inversion: 2,
+    perfMode: 'block',
+    soundSelection: {
+      accordBankId: 'rhodes-classic',
+      melodyBankId: 'lead-silk',
+      bassBankId: 'bass-guitar-finger',
+    },
+  },
   'guitar-lines': {
     stylePreset: 'rnb',
     extensions: ['M7', 'm7', '9', '6'],

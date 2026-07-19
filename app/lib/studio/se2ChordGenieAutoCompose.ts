@@ -63,6 +63,9 @@ const GENRE_STRONG = new Set([
   'deep rnb',
   'deep chords',
   'deep cards',
+  'rich jazz',
+  'neo jazz',
+  'neojazz',
 ]);
 
 const STYLE_TO_GENRE: Partial<Record<GenoChordStyle, string>> = {
@@ -75,7 +78,7 @@ const STYLE_TO_GENRE: Partial<Record<GenoChordStyle, string>> = {
   dark: 'dance',
   bright: 'pop',
   kpop: 'kpop-eras',
-  jazz: 'jazz',
+  jazz: 'rich-jazz',
   minor: 'trap',
 };
 
@@ -102,6 +105,7 @@ export function detectChordGenieEra(q: string): ChordGenieEraHint | null {
 
 function eraGenreForQuery(q: string, era: ChordGenieEraHint): string | null {
   if (/\b(deep\s*rnb|deep\s*r\s*&\s*b|deep\s*chords?|deep\s*cards|deep\s*soul)\b/.test(q)) return 'deep-rnb';
+  if (/\b(rich\s*jazz|neo[- ]?jazz|70s?\s*soul\s*jazz|jazz\s*neo)\b/.test(q)) return 'rich-jazz';
   const rnbish = /\b(rnb|r and b|soul|quiet storm|slow jam|neo soul|neosoul)\b/.test(q);
   const popish = /\bpop\b/.test(q);
   if (rnbish) {

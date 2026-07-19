@@ -54,6 +54,27 @@ export const CHORD_GENIE_GENRE_PROFILES: readonly ChordGenieGenreProfile[] = [
     weak: ['deep', 'midnight', 'silk porch'],
   },
   {
+    genreId: 'rich-jazz',
+    strong: [
+      'rich jazz',
+      'neo jazz',
+      'neojazz',
+      'neo-jazz',
+      'jazz neo',
+      '70s soul jazz',
+      'soul jazz',
+      'building blocks jazz',
+    ],
+    medium: ['lush ii v', 'modal crawl', 'velvet soul jazz', 'dark jazz', 'gospel jazz'],
+    weak: ['jazz', 'bebop', 'swing', 'rhodes'],
+  },
+  {
+    genreId: 'deep-neo',
+    strong: ['deep neo', 'deepneo', 'deep neo soul', 'maj13', '6/9', 'm11 palette'],
+    medium: ['lush colors', 'rhodes 6/9', 'quiet storm colors', 'rearrangeable chords'],
+    weak: ['deep', 'palette', 'colors'],
+  },
+  {
     genreId: 'rnb-true',
     strong: ['modern rnb', 'true rnb', 'contemporary rnb', 'true r&b'],
     medium: ['silk', 'velvet', 'late night'],
