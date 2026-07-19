@@ -1,5 +1,5 @@
 /**
- * Deep R&B Cards — original progressive chord packs for SE2 Chord Generator.
+ * Deep R&B Chords — original progressive chord packs for SE2 Chord Generator.
  * Quiet-storm / neo-soul / late-night R&B — lush maj9 / m9 / 13 / 13sus color.
  * Inspired by common slow-jam harmonic language; not copied from any commercial pack.
  */
@@ -8,7 +8,7 @@ import type { GenreDef } from '@/app/lib/creationStation/chordBuilder';
 
 export const DEEP_RNB_GENRE: GenreDef = {
   id: 'deep-rnb',
-  label: 'Deep R&B Cards',
+  label: 'Deep R&B Chords',
   mode: 'major',
   progressions: [
     // ── Front shelf: lush 5–6 note slow-jam cards (maj9 / m9 / 13) ──────────

@@ -54,7 +54,7 @@ export const SE2_SYNTH_GENO_LIVE_JAZZ_DEFS = defs('jazz', [
   {
     id: 'satin-doll',
     name: 'Satin Doll',
-    tag: 'Ellington',
+    tag: 'swing classic',
     mode: 'major',
     bpm: 128,
     romans: ['ii7', 'V7', 'Imaj7', 'vi7'],

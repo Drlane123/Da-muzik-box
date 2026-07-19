@@ -18,7 +18,7 @@ const TRACK_KIND_OPTIONS: { value: StudioNewTrackKind; label: string; hint: stri
   { value: 'trackAlign', label: 'Track Align', hint: 'Time stretch' },
   { value: 'a2m', label: 'Audio → MIDI', hint: 'Drop a clip — convert to MIDI notes' },
   { value: 'rhythm', label: 'Rhythm Edit', hint: 'Add lane — hits per bar & beat pick editor' },
-  { value: 'genoChordCreator', label: 'SE2 Chord Generator', hint: '4/8 bar card sketch — generate, edit, export to this lane' },
+  { value: 'genoChordCreator', label: 'SE2 Chord Generator', hint: '4/8 bar chord sketch — generate, edit, export to this lane' },
   { value: 'beatPads', label: 'Beat Pads', hint: 'Full drum machine lane — 16 pads, grid, Geno sync' },
   { value: 'drumGenerator', label: 'Drum Generator', hint: 'Generate grooves that match your chords & bass' },
   {

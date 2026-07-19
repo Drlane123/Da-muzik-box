@@ -303,7 +303,7 @@ export const SE2_SYNTH_GENO_LIVE_LOFI_DEFS: Se2SynthGenoLivePresetDef[] = defs('
   },
   {
     id: 'dilla-dust',
-    name: 'Dilla Dust',
+    name: 'Dusty Flip',
     tag: 'IV lead',
     mode: 'dorian',
     romans: ['IV7', 'i7', 'ii7', 'bVIImaj7'],
@@ -418,7 +418,7 @@ export const SE2_SYNTH_GENO_LIVE_LOFI_DEFS: Se2SynthGenoLivePresetDef[] = defs('
 export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = defs('neo-soul', [
   {
     id: 'dangelo-vamp',
-    name: "D'Angelo Vamp",
+    name: 'Neo Vamp',
     tag: 'IV lead',
     mode: 'dorian',
     romans: ['IV7', 'i7', 'bVIImaj7', 'ii7'],
@@ -426,7 +426,7 @@ export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = de
   },
   {
     id: 'badu-dorian',
-    name: 'Badu Dorian',
+    name: 'Soft Dorian',
     tag: 'ii lead',
     mode: 'dorian',
     romans: ['ii7', 'bIIImaj7', 'IV7', 'bVIImaj7'],
@@ -434,7 +434,7 @@ export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = de
   },
   {
     id: 'maxwell-turn',
-    name: 'Maxwell Turn',
+    name: 'Velvet Turn',
     tag: 'vi lead',
     mode: 'major',
     romans: ['vi7', 'ii7', 'V7', 'Imaj7'],
@@ -442,7 +442,7 @@ export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = de
   },
   {
     id: 'jill-scott',
-    name: 'Jill Scott',
+    name: 'Warm Spoken',
     tag: 'ii lead',
     mode: 'dorian',
     romans: ['ii7', 'i7', 'IV7', 'bVIImaj7'],
@@ -450,7 +450,7 @@ export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = de
   },
   {
     id: 'soulquarians',
-    name: 'Soulquarians',
+    name: 'Collective Soul',
     tag: 'IV lead',
     mode: 'dorian',
     romans: ['IV7', 'i7', 'ii7', 'bVIImaj7'],
@@ -474,7 +474,7 @@ export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = de
   },
   {
     id: 'quest-love',
-    name: 'Quest Love',
+    name: 'Pocket Groove',
     tag: 'bVII vamp',
     mode: 'dorian',
     romans: ['bVIImaj7', 'i7', 'IV7', 'ii7'],
@@ -482,7 +482,7 @@ export const SE2_SYNTH_GENO_LIVE_NEO_SOUL_DEFS: Se2SynthGenoLivePresetDef[] = de
   },
   {
     id: 'erykah-badu',
-    name: 'Baduizm',
+    name: 'Earth Tone',
     tag: 'bIII tint',
     mode: 'dorian',
     romans: ['bIIImaj7', 'i7', 'IV7', 'bVIImaj7'],

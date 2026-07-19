@@ -4,7 +4,7 @@ import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 
 const KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'] as const;
 
-/** Circle of fifths — clockwise from F (matches Studio One / Chord Genie layout). */
+/** Circle of fifths — clockwise from F (SE2 Chord Generator key wheel). */
 const MAJOR_ROOTS = [5, 0, 7, 2, 9, 4, 11, 6, 1, 8, 3, 10] as const;
 const MINOR_ROOTS = [2, 9, 4, 11, 6, 1, 8, 3, 10, 5, 0, 7] as const;
 const MAJOR_LABELS = ['F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'Db', 'Ab', 'Eb', 'Bb'] as const;
@@ -161,7 +161,7 @@ export function GenoChordCreatorWheel({
       </svg>
       {!compact ? (
         <p className="text-center w-full mt-2 px-1 pb-1 text-[9px] leading-snug" style={{ color: '#6a8098' }}>
-          Outer = major · inner = minor — click a chord to set key and fill cards
+          Outer = major · inner = minor — click a chord to set key and fill the progression
         </p>
       ) : null}
     </div>

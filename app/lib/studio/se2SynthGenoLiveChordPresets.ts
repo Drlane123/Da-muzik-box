@@ -30,7 +30,7 @@ function defs(genreId: Se2SynthGenoLiveGenreId, items: Se2SynthGenoLivePresetDef
 export const SE2_SYNTH_GENO_LIVE_TRAP_DEFS: Se2SynthGenoLivePresetDef[] = defs('trap', [
   {
     id: 'metro-shadow',
-    name: 'Metro Shadow',
+    name: 'Shadow Loop',
     tag: 'dark loop',
     mode: 'minor',
     romans: ['i7', 'bVII', 'bVI', 'bVII'],
@@ -38,7 +38,7 @@ export const SE2_SYNTH_GENO_LIVE_TRAP_DEFS: Se2SynthGenoLivePresetDef[] = defs('
   },
   {
     id: 'zay-wide',
-    name: 'Zay Wide',
+    name: 'Wide Flip',
     tag: 'sample flip',
     mode: 'minor',
     romans: ['bIIImaj7', 'bVII', 'i7', 'iv7'],
@@ -110,7 +110,7 @@ export const SE2_SYNTH_GENO_LIVE_TRAP_DEFS: Se2SynthGenoLivePresetDef[] = defs('
   },
   {
     id: 'lex-cold',
-    name: 'Lex Cold',
+    name: 'Ice Cold',
     tag: 'icy',
     mode: 'minor',
     romans: ['i7', 'bVII', 'bVI', 'bVII'],
@@ -118,7 +118,7 @@ export const SE2_SYNTH_GENO_LIVE_TRAP_DEFS: Se2SynthGenoLivePresetDef[] = defs('
   },
   {
     id: 'tm88-wide',
-    name: 'TM88 Wide',
+    name: 'Stadium Wide',
     tag: 'stadium',
     mode: 'minor',
     romans: ['i7', 'bVII', 'iv7', 'bVI'],
@@ -201,7 +201,7 @@ export const SE2_SYNTH_GENO_LIVE_HIPHOP_DEFS: Se2SynthGenoLivePresetDef[] = defs
   },
   {
     id: 'dj-premier',
-    name: 'DJ Premier Feel',
+    name: 'Scratch Soul',
     tag: 'iv lead',
     mode: 'minor',
     romans: ['iv7', 'i7', 'bVII', 'i7'],
@@ -209,7 +209,7 @@ export const SE2_SYNTH_GENO_LIVE_HIPHOP_DEFS: Se2SynthGenoLivePresetDef[] = defs
   },
   {
     id: 'j-dilla-vamp',
-    name: 'Dilla Vamp',
+    name: 'Offbeat Vamp',
     tag: 'dorian',
     mode: 'dorian',
     romans: ['i7', 'IV7', 'i7', 'bVIImaj7'],
@@ -225,7 +225,7 @@ export const SE2_SYNTH_GENO_LIVE_HIPHOP_DEFS: Se2SynthGenoLivePresetDef[] = defs
   },
   {
     id: 'mobb-deep',
-    name: 'Mobb Deep Dark',
+    name: 'Deep Dark',
     tag: 'bVI lead',
     mode: 'minor',
     romans: ['bVI', 'bVII', 'i7', 'iv7'],
@@ -364,7 +364,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'usher-turn',
-    name: 'Usher Turn',
+    name: 'Soft Turn',
     tag: 'vi lead',
     mode: 'major',
     romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
@@ -380,7 +380,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'frank-ocean',
-    name: 'Frank Ocean Feel',
+    name: 'Dream Maj7',
     tag: 'dream',
     mode: 'major',
     romans: ['Imaj7', 'iii7', 'vi7', 'IVmaj7'],
@@ -388,7 +388,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'h-e-r-mood',
-    name: 'H.E.R. Mood',
+    name: 'Soft Mood',
     tag: 'vi start',
     mode: 'major',
     romans: ['vi7', 'IVmaj7', 'Imaj7', 'V7'],
@@ -396,7 +396,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'maxwell-smooth',
-    name: 'Maxwell Smooth',
+    name: 'Velvet Smooth',
     tag: 'vi turn',
     mode: 'major',
     romans: ['vi7', 'ii7', 'V7', 'Imaj7'],
@@ -404,7 +404,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'stevie-wonder',
-    name: 'Stevie Wonder',
+    name: 'Classic Soul',
     tag: 'classic',
     mode: 'major',
     romans: ['Imaj7', 'vi7', 'ii7', 'V7'],
@@ -428,7 +428,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'sza-mood',
-    name: 'SZA Mood',
+    name: 'Moody Glow',
     tag: 'minor',
     mode: 'minor',
     romans: ['bVImaj7', 'bVII', 'iv7', 'i7'],
@@ -436,7 +436,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'summer-walker',
-    name: 'Summer Walker',
+    name: 'Alt Minor Glow',
     tag: 'alt minor',
     mode: 'minor',
     romans: ['i7', 'bVImaj7', 'iv7', 'bVII'],
@@ -444,7 +444,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_DEFS: Se2SynthGenoLivePresetDef[] = defs('r
   },
   {
     id: 'weeknd-night',
-    name: 'Weeknd Night',
+    name: 'After Dark',
     tag: 'dark',
     mode: 'minor',
     romans: ['i7', 'bVI', 'bVII', 'i7'],

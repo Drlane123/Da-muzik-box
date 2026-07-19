@@ -129,17 +129,17 @@ export const SE2_MIDI_COMPOSER_HELP = {
     {
       heading: 'Chords',
       body:
-        'When Type is Chords, your progression lands as chord cards on the chord generator roll — one chord per bar. Edit the cards, preview, then export to the track when you are ready.',
+        'When Type is Chords, your progression lands as chords on the chord generator roll — one chord per bar. Edit the chords, preview, then export to the track when you are ready.',
     },
     {
       heading: 'Melody, lead & bass',
       body:
-        'When Type is Melody, Lead, or Bass, notes go straight onto the piano roll as individual MIDI notes — not chord cards. Melodies are generated against a real chord bed for your genre (R&B, neo-soul, etc.) and snapped to the Note grid (1/8, 1/16, 1/32) so they lock with the changes.',
+        'When Type is Melody, Lead, or Bass, notes go straight onto the piano roll as individual MIDI notes — not chord stacks. Melodies are generated against a real chord bed for your genre (R&B, neo-soul, etc.) and snapped to the Note grid (1/8, 1/16, 1/32) so they lock with the changes.',
     },
     {
       heading: 'Full arrangement',
       body:
-        'Full arrangement gives you chord cards plus a top-line melody locked to those same chords — same key, same bar changes, same beat grid.',
+        'Full arrangement gives you chords plus a top-line melody locked to those same chords — same key, same bar changes, same beat grid.',
     },
     {
       heading: 'Note grid',

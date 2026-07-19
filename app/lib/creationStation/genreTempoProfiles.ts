@@ -28,7 +28,7 @@ export const GENRE_TEMPO_PROFILES: Record<string, GenreTempoProfile> = {
   'rnb-90s': { min: 64, max: 98, recommended: 82, note: '90s R&B groove' },
   rnb: { min: 62, max: 94, recommended: 78, note: 'Neo-soul / modern R&B' },
   'rnb-true': { min: 58, max: 90, recommended: 74, note: 'True R&B vocal lane' },
-  'deep-rnb': { min: 58, max: 88, recommended: 72, note: 'Deep R&B Cards · quiet-storm pocket' },
+  'deep-rnb': { min: 58, max: 88, recommended: 72, note: 'Deep R&B Chords · quiet-storm pocket' },
   hiphop: { min: 72, max: 98, recommended: 86, note: 'Hip-hop head-nod' },
   trap: { min: 130, max: 160, recommended: 142, note: 'Trap / drill grid' },
   house: { min: 118, max: 128, recommended: 124, note: 'Four-on-the-floor house' },

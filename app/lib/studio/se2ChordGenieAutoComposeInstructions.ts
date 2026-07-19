@@ -16,7 +16,7 @@ export const SE2_CHORD_GENIE_COMPOSE_HELP = {
     {
       heading: 'What you can say',
       body:
-        'Name any card from the Preset pattern list — the full library (400+ cards) is indexed. Type the card title, genre, decade, or mood: Axis, Quiet Storm, seventies soul, eighties R&B, nineties slow jam. Key: in F major. Length: 4 or 8 bars (or four bar chart). Tempo: bpm 88 or tempo 120 — your BPM is applied to the session. Passing chord adds a transition on the last bar.',
+        'Name any chord progression from the Preset pattern list — the full library (400+ chords) is indexed. Type the progression title, genre, decade, or mood: Axis, Quiet Storm, seventies soul, eighties R&B, nineties slow jam. Key: in F major. Length: 4 or 8 bars (or four bar chart). Tempo: bpm 88 or tempo 120 — your BPM is applied to the session. Passing chord adds a transition on the last bar.',
     },
     {
       heading: 'Examples',

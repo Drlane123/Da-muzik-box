@@ -50,6 +50,16 @@ export type GenoChordCreatorMiniRollProps = {
   onPassingChordRegenerate?: () => void;
   passingApplyDisabled?: boolean;
   passingRegenerateDisabled?: boolean;
+  /** SE2 Chord Generator — Harmony tools (selected bar). */
+  onHarmonyAlt?: () => void;
+  onHarmonyEnrich?: () => void;
+  onHarmonyReduce?: () => void;
+  onHarmonyInvert?: () => void;
+  onHarmonyVoiceLead?: () => void;
+  onHarmonyAltAll?: () => void;
+  onHarmonyBassFromCards?: () => void;
+  onHarmonyFromMelody?: () => void;
+  harmonyToolsDisabled?: boolean;
   onExportMidiToTrack?: (notes: StudioEditor2GenNote[], loopBars: StudioHarmonyLoopBars) => void;
   onClearProgression?: () => void;
   onPreviewMidi?: (midi: number) => void;
@@ -113,6 +123,15 @@ export function GenoChordCreatorMiniRoll({
   onPassingChordRegenerate,
   passingApplyDisabled = false,
   passingRegenerateDisabled = false,
+  onHarmonyAlt,
+  onHarmonyEnrich,
+  onHarmonyReduce,
+  onHarmonyInvert,
+  onHarmonyVoiceLead,
+  onHarmonyAltAll,
+  onHarmonyBassFromCards,
+  onHarmonyFromMelody,
+  harmonyToolsDisabled = false,
   onExportMidiToTrack,
   onClearProgression,
   onPreviewMidi,
@@ -262,8 +281,16 @@ export function GenoChordCreatorMiniRoll({
   }, [rollNotes]);
 
   const showPassing = Boolean(onPassingBarIndexChange && onPassingChordApply);
+  const showHarmony = Boolean(onHarmonyAlt || onHarmonyVoiceLead || onHarmonyBassFromCards);
+  const showToolRow = showPassing || showHarmony;
   const toolbarH = 28;
   const passingActionBtnH = 20;
+  const harmBtn = {
+    height: passingActionBtnH,
+    borderColor: 'rgba(212,175,55,0.45)',
+    background: 'rgba(212,175,55,0.1)',
+    color: '#e8c86a',
+  } as const;
 
   const handleExportMidiToTrack = useCallback(() => {
     if (rollNotes.length === 0 || typeof onExportMidiToTrack !== 'function') return;
@@ -381,67 +408,176 @@ export function GenoChordCreatorMiniRoll({
         </div>
       </div>
 
-      {showPassing ? (
+      {showToolRow ? (
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 pb-2 border-t"
           style={{ borderColor: 'rgba(77,168,255,0.12)' }}
         >
-          <div className="flex flex-wrap gap-1">
-            {Array.from({ length: loopBars }, (_, i) => {
-              const sel = passingBarIndex === i;
-              return (
+          {onPassingBarIndexChange ? (
+            <div className="flex flex-wrap gap-1">
+              {Array.from({ length: loopBars }, (_, i) => {
+                const sel = passingBarIndex === i;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onPassingBarIndexChange?.(i)}
+                    className="rounded border text-[8px] font-black tabular-nums disabled:opacity-40"
+                    style={{
+                      width: toolbarH,
+                      height: toolbarH,
+                      lineHeight: `${toolbarH - 2}px`,
+                      borderColor: sel ? '#4DA8FF' : 'rgba(77,168,255,0.22)',
+                      background: sel ? 'rgba(77,168,255,0.22)' : '#080c14',
+                      color: sel ? '#d0e8ff' : '#9ab0c0',
+                    }}
+                    title={`Bar ${i + 1}`}
+                  >
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+          {showPassing ? (
+            <>
+              <button
+                type="button"
+                disabled={disabled || passingApplyDisabled}
+                onClick={onPassingChordApply}
+                className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                style={{
+                  height: passingActionBtnH,
+                  borderColor: 'rgba(77,168,255,0.5)',
+                  background: 'rgba(77,168,255,0.14)',
+                  color: '#8ec8ff',
+                }}
+                title="Add passing chord on final beat of selected bar"
+              >
+                Passing chords
+              </button>
+              {onPassingChordRegenerate ? (
                 <button
-                  key={i}
                   type="button"
-                  disabled={disabled}
-                  onClick={() => onPassingBarIndexChange?.(i)}
-                  className="rounded border text-[8px] font-black tabular-nums disabled:opacity-40"
+                  disabled={disabled || passingRegenerateDisabled}
+                  onClick={onPassingChordRegenerate}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
                   style={{
-                    width: toolbarH,
-                    height: toolbarH,
-                    lineHeight: `${toolbarH - 2}px`,
-                    borderColor: sel ? '#4DA8FF' : 'rgba(77,168,255,0.22)',
-                    background: sel ? 'rgba(77,168,255,0.22)' : '#080c14',
-                    color: sel ? '#d0e8ff' : '#9ab0c0',
+                    height: passingActionBtnH,
+                    borderColor: 'rgba(124,244,198,0.45)',
+                    background: 'rgba(124,244,198,0.1)',
+                    color: '#7cf4c6',
                   }}
-                  title={`Bar ${i + 1}`}
+                  title="Try another passing chord for the selected bar"
                 >
-                  {i + 1}
+                  Regenerate
                 </button>
-              );
-            })}
-          </div>
-          <button
-            type="button"
-            disabled={disabled || passingApplyDisabled}
-            onClick={onPassingChordApply}
-            className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
-            style={{
-              height: passingActionBtnH,
-              borderColor: 'rgba(77,168,255,0.5)',
-              background: 'rgba(77,168,255,0.14)',
-              color: '#8ec8ff',
-            }}
-            title="Add passing chord on final beat of selected bar"
-          >
-            Passing chords
-          </button>
-          {onPassingChordRegenerate ? (
-            <button
-              type="button"
-              disabled={disabled || passingRegenerateDisabled}
-              onClick={onPassingChordRegenerate}
-              className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
-              style={{
-                height: passingActionBtnH,
-                borderColor: 'rgba(124,244,198,0.45)',
-                background: 'rgba(124,244,198,0.1)',
-                color: '#7cf4c6',
-              }}
-              title="Try another passing chord for the selected bar"
-            >
-              Regenerate
-            </button>
+              ) : null}
+            </>
+          ) : null}
+          {showHarmony ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-[7px] font-black uppercase tracking-wider text-[#e8c86a] mr-0.5">
+                Harmony
+              </span>
+              {onHarmonyAlt ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyAlt}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Swap selected chord for a related alternative"
+                >
+                  Alt
+                </button>
+              ) : null}
+              {onHarmonyEnrich ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyEnrich}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Add color (7 / 9 / 11 / 13) to the selected chord"
+                >
+                  Enrich
+                </button>
+              ) : null}
+              {onHarmonyReduce ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyReduce}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Simplify the selected chord (strip extensions)"
+                >
+                  Reduce
+                </button>
+              ) : null}
+              {onHarmonyInvert ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyInvert}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Cycle inversion (slash bass) on the selected chord"
+                >
+                  Invert
+                </button>
+              ) : null}
+              {onHarmonyVoiceLead ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyVoiceLead}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Smooth bass motion across all chords"
+                >
+                  Voice Lead
+                </button>
+              ) : null}
+              {onHarmonyAltAll ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyAltAll}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Suggest alternative chords for the whole progression"
+                >
+                  Alt All
+                </button>
+              ) : null}
+              {onHarmonyBassFromCards ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyBassFromCards}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Build a bassline locked to these chords"
+                >
+                  Bass
+                </button>
+              ) : null}
+              {onHarmonyFromMelody ? (
+                <button
+                  type="button"
+                  disabled={disabled || harmonyToolsDisabled}
+                  onClick={onHarmonyFromMelody}
+                  className="inline-flex items-center justify-center rounded border px-2 text-[7px] font-black uppercase tracking-wide whitespace-nowrap disabled:opacity-40"
+                  style={harmBtn}
+                  title="Build chords from the last MIDI Composer melody"
+                >
+                  From melody
+                </button>
+              ) : null}
+            </div>
           ) : null}
           {typeof onExportMidiToTrack === 'function' ? (
             <button
@@ -455,7 +591,7 @@ export function GenoChordCreatorMiniRoll({
                 background: 'rgba(255,180,90,0.1)',
                 color: '#ffd4a0',
               }}
-              title="Send chord MIDI from this sequencer to the Chord Generator track lane"
+              title="Send chord MIDI from this sequencer to the SE2 Chord Generator track lane"
             >
               Export MIDI
             </button>

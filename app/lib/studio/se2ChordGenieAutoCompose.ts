@@ -61,6 +61,7 @@ const GENRE_STRONG = new Set([
   'neosoul',
   'neo-soul',
   'deep rnb',
+  'deep chords',
   'deep cards',
 ]);
 
@@ -100,7 +101,7 @@ export function detectChordGenieEra(q: string): ChordGenieEraHint | null {
 }
 
 function eraGenreForQuery(q: string, era: ChordGenieEraHint): string | null {
-  if (/\b(deep\s*rnb|deep\s*r\s*&\s*b|deep\s*cards|deep\s*soul)\b/.test(q)) return 'deep-rnb';
+  if (/\b(deep\s*rnb|deep\s*r\s*&\s*b|deep\s*chords?|deep\s*cards|deep\s*soul)\b/.test(q)) return 'deep-rnb';
   const rnbish = /\b(rnb|r and b|soul|quiet storm|slow jam|neo soul|neosoul)\b/.test(q);
   const popish = /\bpop\b/.test(q);
   if (rnbish) {
@@ -596,11 +597,11 @@ export function resolveSe2ChordGenieAutoCompose(
   if (randomPick || !best || best.score <= 0) {
     const byToken = fallbackPresetFromTokens(index, tokens);
     if (byToken && (!excludeId || byToken.id !== excludeId)) {
-      best = { preset: byToken, score: 1, labels: ['Card match'] };
+      best = { preset: byToken, score: 1, labels: ['Chord match'] };
     } else {
       const idx = seededIndex(Date.now(), pool.length);
       const picked = pool[idx]!;
-      best = { preset: picked, score: 1, labels: randomPick ? ['Random card'] : ['Catalog pick'] };
+      best = { preset: picked, score: 1, labels: randomPick ? ['Random chord'] : ['Catalog pick'] };
     }
   }
 

@@ -22,7 +22,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_POP_DEFS: Se2SynthGenoLivePresetDef[] = def
   },
   {
     id: 'baduizm-deep',
-    name: 'Baduizm Deep',
+    name: 'Earth Deep',
     tag: 'bIII neo',
     mode: 'dorian',
     bpm: 74,
@@ -31,7 +31,7 @@ export const SE2_SYNTH_GENO_LIVE_RNB_POP_DEFS: Se2SynthGenoLivePresetDef[] = def
   },
   {
     id: 'glasper-minor',
-    name: 'Glasper Minor',
+    name: 'Soft Jazz Minor',
     tag: 'iiø turn',
     mode: 'minor',
     bpm: 76,

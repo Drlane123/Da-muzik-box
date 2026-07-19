@@ -197,7 +197,7 @@ export const MUSIC_BOX_OVERVIEW_BLOCKS: Record<
     ],
     bullets: [
       'Key + mode lock for consistent spelling across exports',
-      'Progression paste (`C Am F G`) and step-based chord cards',
+      'Progression paste (`C Am F G`) and step-based chord rows',
       'Import / export paths to Beat Lab NEW SYNTH and Groove Lab',
       'Session Link play mirror with Beat Lab and Groove Lab when enabled',
       'Preview voicings before committing to the grid',
@@ -316,18 +316,18 @@ export const MUSIC_BOX_OVERVIEW_BLOCKS: Record<
 
   'se2-chord-generator': {
     title: 'SE2 Chord Generator',
-    tagline: 'Harmony command center — 400+ cards, Type & Go compose, and SE2 MIDI Composer on your timeline.',
+    tagline: 'Harmony command center — 400+ chords, Type & Go compose, and SE2 MIDI Composer on your timeline.',
     paragraphs: [
-      'SE2 Chord Generator is a dedicated harmonic lane — add it from the track menu and it becomes your song\'s chord brain, not a generic MIDI row. Dock the panel to sketch 4- or 8-bar chord card rows on a mini roll, audition with SE2 transport sync, save your own patterns, then export cards and MIDI to the lane piano roll when the progression feels right. Every other linked lane — Beat Pads Match Chords, Drum Generator, Bass Glide, 808 chord lock, Groove Lead, Hum Capture — can follow what you build here.',
-      'The preset catalog is massive: 400+ progression cards from genre packs. Browse, hit Generate for a fresh take, and read labels formatted in your chosen key. Geno Chord Creator Wheel sets key and mode; Wheel style picks genre voicing. Save, rename, and recall your own progressions — your harmonic library grows with every session.',
+      'SE2 Chord Generator is a dedicated harmonic lane — add it from the track menu and it becomes your song\'s chord brain, not a generic MIDI row. Dock the panel to sketch 4- or 8-bar chord rows on a mini roll, audition with SE2 transport sync, save your own patterns, then export chords and MIDI to the lane piano roll when the progression feels right. Every other linked lane — Beat Pads Match Chords, Drum Generator, Bass Glide, 808 chord lock, Groove Lead, Hum Capture — can follow what you build here.',
+      'The preset catalog is massive: 400+ progression chords from genre packs. Browse, hit Generate for a fresh take, and read labels formatted in your chosen key. SE2 Chord Generator wheel sets key and mode; Wheel style picks genre voicing. Harmony tools add alternatives, enrich/reduce, inversions, voice leading, bass from chords, and chords from melody. Save, rename, and recall your own progressions — your harmonic library grows with every session.',
       'Type & Go is the fast path. Type plain English — “sad R&B 8 bars in D minor”, “gospel lift in Ab”, “dark trap chords 4 bars” — and the engine matches genre, key, bar count, BPM, and passing-chord color. Go applies; Regen tries another take without retyping. Passing chord tools add movement inside the bar without breaking the loop.',
-      'SE2 MIDI Composer is the AI-assisted layer on top. Toggle it on in the panel: chat-style prompt plus controls for Key, Scale, Type, Length (4–32 bars), Genre, and note grid. Types: Chords (card rows), Melody, Lead, Bass, or Full arrangement (cards + top-line melody). Workflow: Generate → Preview → Regenerate → Go Back → Apply to Roll. Hear it first, commit when it fits.',
+      'SE2 MIDI Composer is the AI-assisted layer on top. Toggle it on in the panel: chat-style prompt plus controls for Key, Scale, Type, Length (4–32 bars), Genre, and note grid. Types: Chords (chord rows), Melody, Lead, Bass, or Full arrangement (chords + top-line melody). Workflow: Generate → Preview → Regenerate → Go Back → Apply to Roll. Hear it first, commit when it fits.',
       'Providers: Da Muzik Box local engine (no API key), Gemini, Grok, OpenAI, or Custom API — bring your own key via Set, stored on your device only. Cloud failure falls back to the local engine automatically. Your ear stays in control; AI drafts harmony and MIDI you still edit note by note on the roll.',
     ],
     bullets: [
-      'Dedicated harmonic lane — chord cards + piano roll on one timeline row',
-      '400+ preset progression cards · genre packs · Generate fresh takes',
-      'Geno Chord Creator Wheel — key/mode · Wheel style voicing · user-saved patterns',
+      'Dedicated harmonic lane — chords + piano roll on one timeline row',
+      '400+ preset progressions · genre packs · Generate fresh takes',
+      'SE2 Chord Generator — key/mode · Harmony Alt/Enrich/Voice Lead · user-saved patterns',
       '★ TYPE & GO — plain English → matched progression · passing chords · Regen',
       '★ SE2 MIDI COMPOSER — Chords · Melody · Lead · Bass · Full arrangement',
       'Generate → Preview → Apply to Roll · 4–32 bars · SE2 transport sync',
@@ -396,7 +396,7 @@ export const MUSIC_BOX_OVERVIEW_BLOCKS: Record<
       '★ DRUM GENERATOR — Pop · Trap · K-Pop · R&B · Dance · Drill · Lo-Fi · chord-matched Bank 2',
       '16 pad sound swap · Re-roll · Variation slider · Drum pat preset load',
       '★ GROOVE LEAD — WaveLeaf R&B/gospel lead · melody from Progression+ · Lock from Synth Geno',
-      '★ RHYTHM EDIT — chord cards · hit patterns · Apply to roll · copy from other lanes',
+      '★ RHYTHM EDIT — chords · hit patterns · Apply to roll · copy from other lanes',
       '808 Lab SE2 lane — tone grid · chord lock · trap pocket gen · MIDI/WAV export',
       'Bass Glide synth bass + harmony sync',
       '★ Geno Ultra · Geno Bass · Guitar — see Ultra · Bass · Guitar tab',

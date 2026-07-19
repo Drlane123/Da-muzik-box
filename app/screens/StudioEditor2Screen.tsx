@@ -16618,7 +16618,7 @@ export default function StudioEditor2Screen({
           background: chordGeniePanelOpen ? `${chordGenieEligibleTrack?.colorHex ?? SE2_GENO_CHORD_CREATOR_ACCENT}22` : '#16161e',
           color: chordGeniePanelOpen ? (chordGenieEligibleTrack?.colorHex ?? SE2_GENO_CHORD_CREATOR_ACCENT) : '#a8a8b8',
         }}
-        title={`${SE2_CHORD_GENERATOR_LABEL} — 4/8 card sketch, export when ready`}
+        title={`${SE2_CHORD_GENERATOR_LABEL} — 4/8 chord sketch, export when ready`}
       >
         <span>{SE2_CHORD_GENERATOR_LABEL}</span>
       </button>
@@ -16632,7 +16632,7 @@ export default function StudioEditor2Screen({
           background: (chordGenieEligibleTrack?.notes.length ?? 0) > 0 ? '#2a1418' : '#16161e',
           color: (chordGenieEligibleTrack?.notes.length ?? 0) > 0 ? '#e85d75' : '#6a6a78',
         }}
-        title="Clear exported MIDI on this lane — card draft stays in the generator"
+        title="Clear exported MIDI on this lane — chord draft stays in the generator"
       >
         Clear roll
       </button>

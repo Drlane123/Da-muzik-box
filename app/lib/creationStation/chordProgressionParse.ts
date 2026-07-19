@@ -61,7 +61,9 @@ export function parseChordSymbolToken(rawToken: string): ParsedChordSymbol | nul
   const token = rawToken.trim().replace(/[()|]/g, '');
   if (!token) return null;
 
-  const main = token.split('/')[0]!.trim();
+  const slashParts = token.split('/');
+  const main = slashParts[0]!.trim();
+  const bassRaw = slashParts[1]?.trim() ?? '';
   if (!main) return null;
 
   const letter = main[0]?.toUpperCase();
@@ -103,18 +105,35 @@ export function parseChordSymbolToken(rawToken: string): ParsedChordSymbol | nul
   }
 
   const rootMidi = 60 + rootPc;
-  const notes = intervals
+  let notes = intervals
     .map((iv) => rootMidi + iv)
     .filter((n) => n >= 36 && n <= 96)
     .sort((a, b) => a - b);
   if (notes.length < 2) return null;
+
+  // Slash bass (C/E) — place bass tone under the stack for voice-leading / inversions.
+  let displayBass = '';
+  if (bassRaw) {
+    const bLetter = bassRaw[0]?.toUpperCase();
+    if (bLetter && bLetter in ROOT_LETTER_PC) {
+      let bassPc = ROOT_LETTER_PC[bLetter]!;
+      if (bassRaw[1] === '#') bassPc = (bassPc + 1) % 12;
+      else if (bassRaw[1] === 'b') bassPc = (bassPc + 11) % 12;
+      let bassMidi = 48 + bassPc;
+      while (bassMidi >= notes[0]! - 2) bassMidi -= 12;
+      if (bassMidi < 36) bassMidi += 12;
+      notes = [bassMidi, ...notes.filter((n) => n % 12 !== bassPc)];
+      notes.sort((a, b) => a - b);
+      displayBass = `/${NOTE_LETTERS[bassPc]}`;
+    }
+  }
 
   const noteLetter = NOTE_LETTERS[rootPc] ?? '?';
   return {
     input: rawToken,
     rootPc,
     notes,
-    display: `${noteLetter}${canonical}`,
+    display: `${noteLetter}${canonical}${displayBass}`,
   };
 }
 

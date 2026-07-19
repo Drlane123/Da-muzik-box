@@ -29,6 +29,7 @@ import {
 } from '@/app/lib/studio/se2ChordGenieGenerate';
 import type { Se2GenoChordCreatorTrack } from '@/app/lib/studio/se2ChordGenieTrack';
 import {
+  SE2_CHORD_GENERATOR_LABEL,
   SE2_GENO_CHORD_CREATOR_ACCENT,
   se2GenoChordCreatorAudioOn,
   se2GenoChordCreatorLoopBars,
@@ -40,6 +41,17 @@ import {
   se2InjectPassingChordAtBar,
   se2PassingTailLabelForBar,
 } from '@/app/lib/studio/se2ChordGeneratorPassingRhythm';
+import {
+  se2HarmonyAltAll,
+  se2HarmonyAltAt,
+  se2HarmonyBassFromCards,
+  se2HarmonyChordsFromMelody,
+  se2HarmonyEnrichAt,
+  se2HarmonyInvertAt,
+  se2HarmonyReduceAt,
+  se2HarmonyVoiceLead,
+  se2PitchEventsFromMidiNotes,
+} from '@/app/lib/studio/se2ChordGenieHarmonyTools';
 import {
   STUDIO_HARMONY_LOOP_BAR_OPTIONS,
   progressionStepsToChordNotes,
@@ -342,6 +354,8 @@ export function Se2GenoChordCreatorPanel({
   const [styleGenreId, setStyleGenreId] = useState(() => defaultGenrePackForMode(keyMode));
   const [passingBarIndex, setPassingBarIndex] = useState(0);
   const [passingSeed, setPassingSeed] = useState(0);
+  const [harmonySeed, setHarmonySeed] = useState(0);
+  const lastMelodyNotesRef = useRef<StudioEditor2GenNote[]>([]);
   const [userSaveRev, setUserSaveRev] = useState(0);
   const [saveName, setSaveName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -447,6 +461,98 @@ export function Se2GenoChordCreatorPanel({
     [onDraftStepsChange, onPresetChange],
   );
 
+  const stepIndexForHarmonyBar = useCallback(
+    (barIndex: number): number => {
+      if (!draftSteps.length) return 0;
+      const target = Math.max(0, barIndex) * Math.max(1, beatsPerBar);
+      let cursor = 0;
+      for (let i = 0; i < draftSteps.length; i++) {
+        const beats = Math.max(0, draftSteps[i]!.beats);
+        if (target >= cursor && target < cursor + Math.max(beats, 0.001)) return i;
+        cursor += beats;
+      }
+      return Math.min(draftSteps.length - 1, Math.max(0, barIndex));
+    },
+    [beatsPerBar, draftSteps],
+  );
+
+  const runHarmonyAlt = useCallback(() => {
+    const idx = stepIndexForHarmonyBar(passingBarIndex);
+    const nextSeed = harmonySeed + 1;
+    setHarmonySeed(nextSeed);
+    const result = se2HarmonyAltAt(draftSteps, idx, {
+      keyRoot,
+      mode: keyMode,
+      genreId: styleGenreId,
+      seed: nextSeed,
+    });
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, draftSteps, harmonySeed, keyMode, keyRoot, passingBarIndex, stepIndexForHarmonyBar, styleGenreId]);
+
+  const runHarmonyEnrich = useCallback(() => {
+    const result = se2HarmonyEnrichAt(draftSteps, stepIndexForHarmonyBar(passingBarIndex));
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, draftSteps, passingBarIndex, stepIndexForHarmonyBar]);
+
+  const runHarmonyReduce = useCallback(() => {
+    const result = se2HarmonyReduceAt(draftSteps, stepIndexForHarmonyBar(passingBarIndex));
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, draftSteps, passingBarIndex, stepIndexForHarmonyBar]);
+
+  const runHarmonyInvert = useCallback(() => {
+    const result = se2HarmonyInvertAt(draftSteps, stepIndexForHarmonyBar(passingBarIndex));
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, draftSteps, passingBarIndex, stepIndexForHarmonyBar]);
+
+  const runHarmonyVoiceLead = useCallback(() => {
+    const result = se2HarmonyVoiceLead(draftSteps);
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, draftSteps]);
+
+  const runHarmonyAltAll = useCallback(() => {
+    const nextSeed = harmonySeed + 1;
+    setHarmonySeed(nextSeed);
+    const result = se2HarmonyAltAll(draftSteps, {
+      keyRoot,
+      mode: keyMode,
+      genreId: styleGenreId,
+      seed: nextSeed,
+    });
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, draftSteps, harmonySeed, keyMode, keyRoot, styleGenreId]);
+
+  const runHarmonyBassFromCards = useCallback(() => {
+    const result = se2HarmonyBassFromCards(draftSteps, {
+      keyRoot,
+      mode: keyMode,
+      beatsPerBar,
+      loopBars,
+      seed: Date.now(),
+    });
+    if ('error' in result) {
+      setStatus(result.error);
+      return;
+    }
+    onExportMidiToTrack(result.notes, loopBars);
+    setStatus(result.message);
+  }, [beatsPerBar, draftSteps, keyMode, keyRoot, loopBars, onExportMidiToTrack]);
+
+  const runHarmonyFromMelody = useCallback(() => {
+    const events = se2PitchEventsFromMidiNotes(lastMelodyNotesRef.current, bpm);
+    const result = se2HarmonyChordsFromMelody(events, {
+      bpm,
+      keyRoot,
+      mode: keyMode,
+      loopBars,
+      beatsPerBar,
+    });
+    if ('error' in result) {
+      setStatus(result.error);
+      return;
+    }
+    applyDraft(result.steps, result.message);
+  }, [applyDraft, beatsPerBar, bpm, keyMode, keyRoot, loopBars]);
+
   const handleMidiComposerGenerated = useCallback(
     (result: Se2MidiComposerGeneratedPayload) => {
       if (result.keyRoot !== keyRoot || result.keyMode !== keyMode) {
@@ -485,6 +591,10 @@ export function Se2GenoChordCreatorPanel({
           : undefined);
 
       if (rollNotes?.length) {
+        // Keep last melodic take for Harmony → From melody (monophonic / lead lines).
+        if (!result.steps?.length || /melody|lead|bass/i.test(result.summary)) {
+          lastMelodyNotesRef.current = rollNotes;
+        }
         onExportMidiToTrack(rollNotes, result.loopBars);
         if (!result.steps?.length) {
           setStatus(`SE2 MIDI Composer: ${result.summary} — ${rollNotes.length} notes on the roll`);
@@ -520,7 +630,7 @@ export function Se2GenoChordCreatorPanel({
         setStatus(generated.message);
         return;
       }
-      applyDraft(generated.steps, 'Preset cards loaded — export when ready.', generated.presetId);
+      applyDraft(generated.steps, 'Preset chords loaded — export when ready.', generated.presetId);
       const hit = presetCatalog.find((p) => p.id === generated.presetId);
       if (hit) applyPatternBpm(bpmForProgressionPreset(hit.id, keyRoot));
     },
@@ -539,7 +649,7 @@ export function Se2GenoChordCreatorPanel({
       if (result.loopBars && result.loopBars !== loopBars) {
         onLoopBarsChange(result.loopBars);
       }
-      // Prefer the catalog pack on the matched preset (Neo-Soul cards stay Neo-Soul).
+      // Prefer the catalog pack on the matched preset (Neo-Soul chords stay Neo-Soul).
       const presetPackId = result.presetId?.includes('::')
         ? result.presetId.split('::')[0]!
         : null;
@@ -1067,7 +1177,7 @@ export function Se2GenoChordCreatorPanel({
           className="relative flex flex-col items-center justify-center shrink-0 self-center px-2 min-w-0 z-30"
         >
           <span className="block text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd] mb-1 text-center">
-            Deep Cards
+            Deep Chords
           </span>
           <button
             type="button"
@@ -1097,9 +1207,9 @@ export function Se2GenoChordCreatorPanel({
                   ? '0 0 12px rgba(196,181,253,0.25)'
                   : undefined,
             }}
-            title="Browse Deep R&B Cards — complex quiet-storm / neo-soul progressions"
+            title="Browse Deep R&B Chords — complex quiet-storm / neo-soul progressions"
           >
-            Deep R&B Cards
+            Deep R&B Chords
             <ChevronDown
               size={12}
               aria-hidden
@@ -1116,7 +1226,7 @@ export function Se2GenoChordCreatorPanel({
           {deepRnbPickerOpen ? (
             <div
               role="listbox"
-              aria-label="Deep R&B Cards"
+              aria-label="Deep R&B Chords"
               className="absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-lg border shadow-2xl"
               style={{
                 width: 'min(92vw, 560px)',
@@ -1132,7 +1242,7 @@ export function Se2GenoChordCreatorPanel({
                 style={{ borderColor: 'rgba(196,181,253,0.22)' }}
               >
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#c4b5fd]">
-                  Pick a Deep R&B card
+                  Pick a Deep R&B chord
                 </span>
                 <span className="text-[8px] font-semibold text-[#8a8098]">
                   Scroll → · click to load
@@ -1148,7 +1258,7 @@ export function Se2GenoChordCreatorPanel({
                 {deepRnbPresets.map((p) => {
                   const selected = (catalogPresetId || presetId) === p.id;
                   const shortName = p.progressionId
-                    ? p.label.replace(/^Deep R&B Cards ·\s*/i, '')
+                    ? p.label.replace(/^Deep R&B (?:Cards|Chords) ·\s*/i, '')
                     : p.label;
                   const chordLine = p.steps.map((s) => s.label).join(' – ');
                   return (
@@ -1617,9 +1727,18 @@ export function Se2GenoChordCreatorPanel({
           onPassingChordRegenerate={runRegeneratePassingForBar}
           passingApplyDisabled={draftSteps.length === 0}
           passingRegenerateDisabled={passingRegenerateDisabled}
+          onHarmonyAlt={runHarmonyAlt}
+          onHarmonyEnrich={runHarmonyEnrich}
+          onHarmonyReduce={runHarmonyReduce}
+          onHarmonyInvert={runHarmonyInvert}
+          onHarmonyVoiceLead={runHarmonyVoiceLead}
+          onHarmonyAltAll={runHarmonyAltAll}
+          onHarmonyBassFromCards={runHarmonyBassFromCards}
+          onHarmonyFromMelody={runHarmonyFromMelody}
+          harmonyToolsDisabled={draftSteps.length === 0}
           onExportMidiToTrack={(notes, bars) => {
             onExportMidiToTrack(notes, bars);
-            setStatus(`Exported ${notes.length} chord notes to track — edit on the lane`);
+            setStatus(`Exported ${notes.length} chord notes to ${SE2_CHORD_GENERATOR_LABEL} track`);
           }}
           onClearProgression={() => {
             applyDraft([], 'Cleared progression.');

@@ -47,7 +47,7 @@ export function Se2ChordGenieCollapsedStrip({
         borderColor: `${accentHex}44`,
         background: `linear-gradient(180deg, ${accentHex}14 0%, #080c14 100%)`,
       }}
-      title={`Show ${SE2_CHORD_GENERATOR_LABEL} — 4/8 bar card sketch`}
+      title={`Show ${SE2_CHORD_GENERATOR_LABEL} — 4/8 bar chord sketch`}
       aria-expanded={false}
     >
       <span className="inline-flex min-w-0 items-center gap-1.5">

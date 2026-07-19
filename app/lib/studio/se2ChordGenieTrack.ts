@@ -1,5 +1,5 @@
 /**
- * Studio Editor 2 — Geno Chord Creator lane (4/8 card sketch → export harmony + MIDI to track).
+ * Studio Editor 2 — SE2 Chord Generator lane (4/8 card sketch → export harmony + MIDI to track).
  */
 import type { ChordMode } from '@/app/lib/creationStation/chordBuilder';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';

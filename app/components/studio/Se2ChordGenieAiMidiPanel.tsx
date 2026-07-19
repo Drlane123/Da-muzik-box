@@ -352,9 +352,9 @@ export function Se2ChordGenieAiMidiPanel({
 
         const detail =
           result.steps?.length && result.notes?.length
-            ? `${result.steps.length} chord cards + ${result.notes.length} notes ready`
+            ? `${result.steps.length} chords + ${result.notes.length} notes ready`
             : result.steps?.length
-              ? `${result.steps.length} chord cards ready`
+              ? `${result.steps.length} chords ready`
               : result.notes?.length
                 ? `${result.notes.length} notes ready`
                 : 'draft ready';

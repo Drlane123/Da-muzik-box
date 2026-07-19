@@ -172,7 +172,7 @@ export const STUDIO_EDITOR2_HELP_SECTIONS: readonly StudioEditor2HelpSection[] =
       'Add **808 Lab** from the track-type menu — trap 808 kick and bass-low synth on its own SE2 channel (same engine as Creation Station, standalone here).',
       '**808 Kick** / **Bass Low** — switch lane, pick a trap-kick or bass-low preset, set output level, and tune **HP/LP** filters (live filter graph under the pads).',
       '**Tone pads** — 16 chromatic pads (8×2); **Oct− / Oct+** shifts range. Strike pads to preview; chord-locked pads show root chord labels.',
-      '**Chord lock** — follow **song key**, a chosen **key**, or a harmony **track** (Progression+, Rhythm Edit, Synth Geno, Glide Bass, Groove Lead, Geno Ultra, Chord Genie…).',
+      '**Chord lock** — follow **song key**, a chosen **key**, or a harmony **track** (Progression+, Rhythm Edit, Synth Geno, Glide Bass, Groove Lead, Geno Ultra, SE2 Chord Generator…).',
       '**Root scope** dial shows the active key and progression roots; pick a root to highlight it on the grid.',
       '**Generate roots** writes harmony roots onto the **tone grid**; **Regenerate** keeps the same key/roots but rolls a new pocket for the selected **Genre** (sparse kicks + breathing 808 root hits — not melodic runs).',
       '**Genre** — Trap · R&B · K-pop · Dance · Hip-hop · Drill · **Dark** · **Sci-fi** — changes kick/808 pocket feel (not the synth sound). Dark/Sci-fi use cinematic sparse hits and darker 808 interval moves. Picking a genre also sets a sensible default **Quantize**.',
