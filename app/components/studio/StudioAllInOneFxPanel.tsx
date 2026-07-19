@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Power, X, Zap, GripHorizontal } from 'lucide-react';
 
@@ -39,6 +39,7 @@ import {
   STUDIO_EQ_PRESETS,
   cloneStudioTrackInsertFxRack,
   normalizeStudioFilter,
+  studioInsertFxSuiteActive,
   studioInsertFxSuiteMasterPowerOff,
   studioTrackInsertFxRacksEqual,
   STUDIO_DEESSER_AMOUNT_MAX,
@@ -54,6 +55,7 @@ import {
 } from '@/app/lib/studio/studioFxSuitePresets';
 import { patchStudioEqBands, studioEqBandColor, studioEqFormatBandHz } from '@/app/lib/studio/studioEq';
 import { setStudioTrackAnalyserConsumer } from '@/app/lib/studio/studioTrackAnalyserBus';
+import { retapStudioInsertFxAnalyserIfConsumerOpen } from '@/app/lib/studio/studioTrackInsertFxStrip';
 import { SUITE_FONT_FAMILY } from '@/app/lib/studio/studioUiTypography';
 import { useStudioFloatingPanelDrag } from '@/app/components/studio/useStudioFloatingPanelDrag';
 import '@/app/styles/studioFxSuite.css';
@@ -144,12 +146,17 @@ export function StudioAllInOneFxPanel({
     const synced = cloneStudioTrackInsertFxRack(rackPropRef.current);
     draftRackRef.current = synced;
     setDraftRack(synced);
-    setPresetId(STUDIO_FX_SUITE_PRESET_DEFAULT_ID);
+    /* Keep preset label honest — do not force "Default" over a saved custom rack. */
+    const matched = STUDIO_FX_SUITE_PRESETS.find((p) =>
+      studioTrackInsertFxRacksEqual(p.rack, synced),
+    );
+    setPresetId(matched?.id ?? '__custom__');
   }, [open, trackIndex]);
 
   const pushDraftRackToParent = useCallback((next: StudioTrackInsertFxRack) => {
     const cloned = cloneStudioTrackInsertFxRack(next);
     if (studioTrackInsertFxRacksEqual(cloned, rackPropRef.current)) return;
+    rackPropRef.current = cloned;
     onRackChangeRef.current(cloned);
   }, []);
 
@@ -163,17 +170,40 @@ export function StudioAllInOneFxPanel({
     return () => onRegisterFlush?.(null);
   }, [flushRack, onRegisterFlush]);
 
+  /* Always commit draft on unmount (mixer hide / track switch) — close handlers alone can miss debounce. */
+  useLayoutEffect(() => {
+    if (!open) return;
+    return () => {
+      window.clearTimeout(pushRackTimerRef.current);
+      const draft = draftRackRef.current;
+      if (!studioTrackInsertFxRacksEqual(draft, rackPropRef.current)) {
+        onRackChangeRef.current(cloneStudioTrackInsertFxRack(draft));
+      }
+    };
+  }, [open, trackIndex]);
+
   const patchRack = useCallback(
     (next: StudioTrackInsertFxRack, opts?: { immediate?: boolean }) => {
-      draftRackRef.current = next;
-      setDraftRack(next);
+      /*
+       * Auto-arm suite when modules are active BUT suite was already off (knob/module edits).
+       * Never override an explicit Suite power-off — master switch must be able to bypass.
+       */
+      const prev = draftRackRef.current;
+      const explicitPowerOff = prev.suiteOn && !next.suiteOn;
+      const armed = studioInsertFxSuiteActive(next);
+      const resolved =
+        !explicitPowerOff && armed && !next.suiteOn
+          ? { ...next, suiteOn: true }
+          : next;
+      draftRackRef.current = resolved;
+      setDraftRack(resolved);
       window.clearTimeout(pushRackTimerRef.current);
       if (opts?.immediate) {
-        pushDraftRackToParent(next);
+        pushDraftRackToParent(resolved);
         return;
       }
       pushRackTimerRef.current = window.setTimeout(() => {
-        pushDraftRackToParent(next);
+        pushDraftRackToParent(draftRackRef.current);
       }, SUITE_RACK_PUSH_MS);
     },
     [pushDraftRackToParent],
@@ -194,6 +224,8 @@ export function StudioAllInOneFxPanel({
   }, [flushRack, onClose]);
 
   const anyActive = draftRack.suiteOn && SUITE_MODULES.some((m) => suiteModuleEnabled(draftRack, m.id));
+  /** Meters / analyzer only while Suite power is on — bypass must stay dark (no dry-signal ghost read). */
+  const metersLive = open && draftRack.suiteOn;
   const armedModuleLabels = SUITE_MODULES.filter((m) => suiteModuleEnabled(draftRack, m.id)).map(
     (m) => m.label,
   );
@@ -203,7 +235,14 @@ export function StudioAllInOneFxPanel({
   useEffect(() => {
     if (!open) return;
     setStudioTrackAnalyserConsumer(trackIndex, 'fxSuite', true);
-    return () => setStudioTrackAnalyserConsumer(trackIndex, 'fxSuite', false);
+    /* Retap after open — suite mid-play needs the insert analyser live for VU / spectrum. */
+    const raf = requestAnimationFrame(() => {
+      retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      setStudioTrackAnalyserConsumer(trackIndex, 'fxSuite', false);
+    };
   }, [open, trackIndex]);
 
   useEffect(() => {
@@ -305,7 +344,7 @@ export function StudioAllInOneFxPanel({
                 onClick={() =>
                   patchRack(
                     {
-                      ...draftRack,
+                      ...draftRackRef.current,
                       suiteOn: true,
                       eq: patchStudioEqBands({ ...eq, enabled: true }, p.bands),
                     },
@@ -331,7 +370,7 @@ export function StudioAllInOneFxPanel({
               eq={eq}
               onEqChange={(next) => patchRack({ ...draftRackRef.current, eq: next }, { immediate: true })}
               trackIndex={trackIndex}
-              meterActive={open}
+              meterActive={metersLive}
               accent={modAccent}
             />
           </FxSuiteChromeFrame>
@@ -366,13 +405,13 @@ export function StudioAllInOneFxPanel({
     const gate = draftRack.gate;
     moduleBody = (
       <SuiteModuleShell
-        viz={<GateMeter thresholdDb={gate.thresholdDb} floorDb={gate.floorDb} accent={modAccent} enabled={gate.enabled} trackIndex={trackIndex} meterActive={open} />}
+        viz={<GateMeter thresholdDb={gate.thresholdDb} floorDb={gate.floorDb} accent={modAccent} enabled={gate.enabled} trackIndex={trackIndex} meterActive={metersLive} />}
         faders={
           <>
-            <SuiteFader label="THR" min={-80} max={0} step={1} value={gate.thresholdDb} onChange={(thresholdDb) => patchRack({ ...draftRack, gate: { ...gate, thresholdDb } })} format={(v) => `${Math.round(v)}`} accent={modAccent} disabled={!gate.enabled} />
-            <SuiteFader label="FLOOR" min={-80} max={-6} step={1} value={gate.floorDb} onChange={(floorDb) => patchRack({ ...draftRack, gate: { ...gate, floorDb } })} format={(v) => `${Math.round(v)}`} accent="#94a3b8" disabled={!gate.enabled} />
-            <SuiteFader label="ATK" min={0.0005} max={0.05} step={0.0005} value={gate.attackSec} onChange={(attackSec) => patchRack({ ...draftRack, gate: { ...gate, attackSec } })} format={(v) => `${Math.round(v * 1000)}`} accent="#a78bfa" disabled={!gate.enabled} />
-            <SuiteFader label="REL" min={0.02} max={0.8} step={0.01} value={gate.releaseSec} onChange={(releaseSec) => patchRack({ ...draftRack, gate: { ...gate, releaseSec } })} format={(v) => `${Math.round(v * 1000)}`} accent="#a78bfa" disabled={!gate.enabled} />
+            <SuiteFader label="THR" min={-80} max={0} step={1} value={gate.thresholdDb} onChange={(thresholdDb) => patchRack({ ...draftRackRef.current, gate: { ...gate, thresholdDb } })} format={(v) => `${Math.round(v)}`} accent={modAccent} disabled={!gate.enabled} />
+            <SuiteFader label="FLOOR" min={-80} max={-6} step={1} value={gate.floorDb} onChange={(floorDb) => patchRack({ ...draftRackRef.current, gate: { ...gate, floorDb } })} format={(v) => `${Math.round(v)}`} accent="#94a3b8" disabled={!gate.enabled} />
+            <SuiteFader label="ATK" min={0.0005} max={0.05} step={0.0005} value={gate.attackSec} onChange={(attackSec) => patchRack({ ...draftRackRef.current, gate: { ...gate, attackSec } })} format={(v) => `${Math.round(v * 1000)}`} accent="#a78bfa" disabled={!gate.enabled} />
+            <SuiteFader label="REL" min={0.02} max={0.8} step={0.01} value={gate.releaseSec} onChange={(releaseSec) => patchRack({ ...draftRackRef.current, gate: { ...gate, releaseSec } })} format={(v) => `${Math.round(v * 1000)}`} accent="#a78bfa" disabled={!gate.enabled} />
           </>
         }
       />
@@ -388,7 +427,7 @@ export function StudioAllInOneFxPanel({
             accent={modAccent}
             enabled={ess.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
@@ -399,7 +438,7 @@ export function StudioAllInOneFxPanel({
               max={STUDIO_DEESSER_FREQ_MAX}
               step={25}
               value={ess.freqHz}
-              onChange={(freqHz) => patchRack({ ...draftRack, deEsser: { ...ess, freqHz } })}
+              onChange={(freqHz) => patchRack({ ...draftRackRef.current, deEsser: { ...ess, freqHz } })}
               format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`)}
               accent={modAccent}
               disabled={!ess.enabled}
@@ -410,7 +449,7 @@ export function StudioAllInOneFxPanel({
               max={STUDIO_DEESSER_AMOUNT_MAX}
               step={0.01}
               value={ess.amount}
-              onChange={(amount) => patchRack({ ...draftRack, deEsser: { ...ess, amount } })}
+              onChange={(amount) => patchRack({ ...draftRackRef.current, deEsser: { ...ess, amount } })}
               format={(v) => `${Math.round(v * 100)}%`}
               accent="#94a3b8"
               disabled={!ess.enabled}
@@ -432,16 +471,16 @@ export function StudioAllInOneFxPanel({
             makeupDb={comp.makeupDb}
             enabled={comp.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
           <>
-            <SuiteFader label="THR" min={-48} max={0} step={1} value={comp.thresholdDb} onChange={(thresholdDb) => patchRack({ ...draftRack, compressor: { ...comp, thresholdDb } })} format={(v) => `${Math.round(v)}`} accent={modAccent} disabled={!comp.enabled} />
-            <SuiteFader label="RATIO" min={1} max={20} step={0.5} value={comp.ratio} onChange={(ratio) => patchRack({ ...draftRack, compressor: { ...comp, ratio } })} format={(v) => `1:${v.toFixed(1)}`} accent="#94a3b8" disabled={!comp.enabled} />
-            <SuiteFader label="ATK" min={0.0005} max={0.25} step={0.0005} value={comp.attackSec} onChange={(attackSec) => patchRack({ ...draftRack, compressor: { ...comp, attackSec } })} format={(v) => `${Math.round(v * 1000)}ms`} accent="#a78bfa" disabled={!comp.enabled} />
-            <SuiteFader label="REL" min={0.02} max={1.2} step={0.01} value={comp.releaseSec} onChange={(releaseSec) => patchRack({ ...draftRack, compressor: { ...comp, releaseSec } })} format={(v) => `${Math.round(v * 1000)}ms`} accent="#a78bfa" disabled={!comp.enabled} />
-            <SuiteFader label="MKUP" min={0} max={18} step={0.5} value={comp.makeupDb} onChange={(makeupDb) => patchRack({ ...draftRack, compressor: { ...comp, makeupDb } })} format={(v) => `+${v.toFixed(1)}`} accent="#7cf4c6" disabled={!comp.enabled} />
+            <SuiteFader label="THR" min={-48} max={0} step={1} value={comp.thresholdDb} onChange={(thresholdDb) => patchRack({ ...draftRackRef.current, compressor: { ...comp, thresholdDb } })} format={(v) => `${Math.round(v)}`} accent={modAccent} disabled={!comp.enabled} />
+            <SuiteFader label="RATIO" min={1} max={20} step={0.5} value={comp.ratio} onChange={(ratio) => patchRack({ ...draftRackRef.current, compressor: { ...comp, ratio } })} format={(v) => `1:${v.toFixed(1)}`} accent="#94a3b8" disabled={!comp.enabled} />
+            <SuiteFader label="ATK" min={0.0005} max={0.25} step={0.0005} value={comp.attackSec} onChange={(attackSec) => patchRack({ ...draftRackRef.current, compressor: { ...comp, attackSec } })} format={(v) => `${Math.round(v * 1000)}ms`} accent="#a78bfa" disabled={!comp.enabled} />
+            <SuiteFader label="REL" min={0.02} max={1.2} step={0.01} value={comp.releaseSec} onChange={(releaseSec) => patchRack({ ...draftRackRef.current, compressor: { ...comp, releaseSec } })} format={(v) => `${Math.round(v * 1000)}ms`} accent="#a78bfa" disabled={!comp.enabled} />
+            <SuiteFader label="MKUP" min={0} max={18} step={0.5} value={comp.makeupDb} onChange={(makeupDb) => patchRack({ ...draftRackRef.current, compressor: { ...comp, makeupDb } })} format={(v) => `+${v.toFixed(1)}`} accent="#7cf4c6" disabled={!comp.enabled} />
           </>
         }
       />
@@ -457,13 +496,13 @@ export function StudioAllInOneFxPanel({
             accent={modAccent}
             enabled={sat.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
           <>
-            <SuiteFader label="DRIVE" min={0} max={1} step={0.01} value={sat.drive} onChange={(drive) => patchRack({ ...draftRack, saturation: { ...sat, drive } })} format={(v) => `${Math.round(v * 100)}%`} accent={modAccent} disabled={!sat.enabled} />
-            <SuiteFader label="TONE" min={0} max={1} step={0.01} value={sat.tone} onChange={(tone) => patchRack({ ...draftRack, saturation: { ...sat, tone } })} format={(v) => `${Math.round(v * 100)}%`} accent="#94a3b8" disabled={!sat.enabled} />
+            <SuiteFader label="DRIVE" min={0} max={1} step={0.01} value={sat.drive} onChange={(drive) => patchRack({ ...draftRackRef.current, saturation: { ...sat, drive } })} format={(v) => `${Math.round(v * 100)}%`} accent={modAccent} disabled={!sat.enabled} />
+            <SuiteFader label="TONE" min={0} max={1} step={0.01} value={sat.tone} onChange={(tone) => patchRack({ ...draftRackRef.current, saturation: { ...sat, tone } })} format={(v) => `${Math.round(v * 100)}%`} accent="#94a3b8" disabled={!sat.enabled} />
           </>
         }
       />
@@ -482,7 +521,7 @@ export function StudioAllInOneFxPanel({
             accent={modAccent}
             disabled={!f.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
             onChange={(patch) => patchFilter(patch)}
           />
         }
@@ -549,21 +588,21 @@ export function StudioAllInOneFxPanel({
             accent={modAccent}
             enabled={ch.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
           <>
-            <SuiteFader label="MIX" min={0} max={1} step={0.01} value={ch.mix} onChange={(mix) => patchRack({ ...draftRack, chorus: { ...ch, mix } })} format={(v) => `${Math.round(v * 100)}%`} accent={modAccent} disabled={!ch.enabled} />
-            <SuiteFader label="RATE" min={0.1} max={8} step={0.05} value={ch.rateHz} onChange={(rateHz) => patchRack({ ...draftRack, chorus: { ...ch, rateHz } })} format={(v) => `${v.toFixed(1)}Hz`} accent="#94a3b8" disabled={!ch.enabled} />
-            <SuiteFader label="DEPTH" min={0} max={1} step={0.01} value={ch.depth} onChange={(depth) => patchRack({ ...draftRack, chorus: { ...ch, depth } })} format={(v) => `${Math.round(v * 100)}%`} accent="#a78bfa" disabled={!ch.enabled} />
+            <SuiteFader label="MIX" min={0} max={1} step={0.01} value={ch.mix} onChange={(mix) => patchRack({ ...draftRackRef.current, chorus: { ...ch, mix } })} format={(v) => `${Math.round(v * 100)}%`} accent={modAccent} disabled={!ch.enabled} />
+            <SuiteFader label="RATE" min={0.1} max={8} step={0.05} value={ch.rateHz} onChange={(rateHz) => patchRack({ ...draftRackRef.current, chorus: { ...ch, rateHz } })} format={(v) => `${v.toFixed(1)}Hz`} accent="#94a3b8" disabled={!ch.enabled} />
+            <SuiteFader label="DEPTH" min={0} max={1} step={0.01} value={ch.depth} onChange={(depth) => patchRack({ ...draftRackRef.current, chorus: { ...ch, depth } })} format={(v) => `${Math.round(v * 100)}%`} accent="#a78bfa" disabled={!ch.enabled} />
           </>
         }
       />
     );
   } else if (activeModule === 'delay') {
     const d = draftRack.delay;
-    const patchDelay = (patch: Partial<typeof d>) => patchRack({ ...draftRack, delay: { ...d, ...patch } });
+    const patchDelay = (patch: Partial<typeof d>) => patchRack({ ...draftRackRef.current, delay: { ...d, ...patch } });
     moduleBody = (
       <SuiteModuleShell
         top={
@@ -614,7 +653,7 @@ export function StudioAllInOneFxPanel({
             syncLabel={d.syncToBpm ? d.note : undefined}
             enabled={d.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
@@ -661,13 +700,13 @@ export function StudioAllInOneFxPanel({
             accent={modAccent}
             enabled={rev.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
           <>
-            <SuiteFader label="MIX" min={0} max={1} step={0.01} value={rev.mix} onChange={(mix) => patchRack({ ...draftRack, reverb: { ...rev, mix } })} format={(v) => `${Math.round(v * 100)}%`} accent={modAccent} disabled={!rev.enabled} />
-            <SuiteFader label="DECAY" min={0.2} max={4} step={0.05} value={rev.decaySec} onChange={(decaySec) => patchRack({ ...draftRack, reverb: { ...rev, decaySec } })} format={(v) => `${v.toFixed(1)}s`} accent="#c4b5fd" disabled={!rev.enabled} />
+            <SuiteFader label="MIX" min={0} max={1} step={0.01} value={rev.mix} onChange={(mix) => patchRack({ ...draftRackRef.current, reverb: { ...rev, mix } })} format={(v) => `${Math.round(v * 100)}%`} accent={modAccent} disabled={!rev.enabled} />
+            <SuiteFader label="DECAY" min={0.2} max={4} step={0.05} value={rev.decaySec} onChange={(decaySec) => patchRack({ ...draftRackRef.current, reverb: { ...rev, decaySec } })} format={(v) => `${v.toFixed(1)}s`} accent="#c4b5fd" disabled={!rev.enabled} />
           </>
         }
       />
@@ -682,13 +721,13 @@ export function StudioAllInOneFxPanel({
             accent={modAccent}
             enabled={lim.enabled}
             trackIndex={trackIndex}
-            meterActive={open}
+            meterActive={metersLive}
           />
         }
         faders={
           <>
-            <SuiteFader label="CEIL" min={-12} max={0} step={0.5} value={lim.ceilingDb} onChange={(ceilingDb) => patchRack({ ...draftRack, limiter: { ...lim, ceilingDb } })} format={(v) => `${v.toFixed(1)}`} accent={modAccent} disabled={!lim.enabled} />
-            <SuiteFader label="REL" min={0.01} max={0.4} step={0.01} value={lim.releaseSec} onChange={(releaseSec) => patchRack({ ...draftRack, limiter: { ...lim, releaseSec } })} format={(v) => `${Math.round(v * 1000)}ms`} accent="#94a3b8" disabled={!lim.enabled} />
+            <SuiteFader label="CEIL" min={-12} max={0} step={0.5} value={lim.ceilingDb} onChange={(ceilingDb) => patchRack({ ...draftRackRef.current, limiter: { ...lim, ceilingDb } })} format={(v) => `${v.toFixed(1)}`} accent={modAccent} disabled={!lim.enabled} />
+            <SuiteFader label="REL" min={0.01} max={0.4} step={0.01} value={lim.releaseSec} onChange={(releaseSec) => patchRack({ ...draftRackRef.current, limiter: { ...lim, releaseSec } })} format={(v) => `${Math.round(v * 1000)}ms`} accent="#94a3b8" disabled={!lim.enabled} />
           </>
         }
       />
@@ -828,7 +867,11 @@ export function StudioAllInOneFxPanel({
               <select
                 data-no-drag
                 value={presetId}
-                onChange={(e) => applySuitePreset(e.target.value)}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (id === '__custom__') return;
+                  applySuitePreset(id);
+                }}
                 className="suite-preset-select w-full rounded-md pl-2 pr-8 py-1 outline-none cursor-pointer truncate"
                 style={{
                   fontFamily: SUITE_FONT_FAMILY,
@@ -841,6 +884,9 @@ export function StudioAllInOneFxPanel({
                   borderColor: `${accentHex}66`,
                 }}
               >
+                <option value="__custom__" style={{ background: '#12121a', color: '#a8a8bc' }}>
+                  Custom
+                </option>
                 {STUDIO_FX_SUITE_PRESET_GROUPS.map((group) => (
                   <optgroup key={group} label={group}>
                     {STUDIO_FX_SUITE_PRESETS.filter((p) => p.group === group).map((p) => (
@@ -899,7 +945,7 @@ export function StudioAllInOneFxPanel({
 
         {/* Hero analyzer */}
         <div className="shrink-0 px-3 pt-2 pb-2">
-          <SuiteSpectrumAnalyzer rack={draftRack} accent={accentHex} armed={anyActive} trackIndex={trackIndex} meterActive={open} />
+          <SuiteSpectrumAnalyzer rack={draftRack} accent={accentHex} armed={anyActive} trackIndex={trackIndex} meterActive={metersLive} />
         </div>
 
         {/* Signal chain LEDs */}

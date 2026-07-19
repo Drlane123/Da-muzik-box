@@ -7,6 +7,7 @@ import { GripHorizontal, SlidersHorizontal, X } from 'lucide-react';
 import { PadSamplerFxTCapStyles } from '@/app/components/creation/PadSamplerFxWidgets';
 import { SuiteFader, CompTransferCurve, GateMeter, ReverbRoomViz } from '@/app/components/studio/studioFxSuiteWidgets';
 import { setStudioTrackAnalyserConsumer } from '@/app/lib/studio/studioTrackAnalyserBus';
+import { retapStudioInsertFxAnalyserIfConsumerOpen } from '@/app/lib/studio/studioTrackInsertFxStrip';
 import '@/app/styles/studioFxSuite.css';
 import { StudioFxGraphicEq } from '@/app/components/studio/StudioFxGraphicEq';
 import type { MixerEffectId } from '@/app/screens/components/ChannelStripFxDropdowns';
@@ -168,7 +169,13 @@ export function StudioInsertFxEditor({
   useEffect(() => {
     if (!open) return;
     setStudioTrackAnalyserConsumer(vocalTrackIndex, 'fxSuite', true);
-    return () => setStudioTrackAnalyserConsumer(vocalTrackIndex, 'fxSuite', false);
+    const raf = requestAnimationFrame(() => {
+      retapStudioInsertFxAnalyserIfConsumerOpen(vocalTrackIndex);
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      setStudioTrackAnalyserConsumer(vocalTrackIndex, 'fxSuite', false);
+    };
   }, [open, vocalTrackIndex]);
 
   useEffect(() => {

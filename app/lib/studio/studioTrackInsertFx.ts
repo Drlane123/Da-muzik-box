@@ -342,7 +342,8 @@ export function studioInsertFxSuiteActive(rack: StudioTrackInsertFxRack): boolea
     rack.chorus.enabled ||
     (rack.saturation.enabled && rack.saturation.drive > 0.01) ||
     rack.filter.enabled ||
-    rack.limiter.enabled
+    rack.limiter.enabled ||
+    rack.analogSaturation.level > 0.004
   );
 }
 

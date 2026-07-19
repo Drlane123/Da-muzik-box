@@ -473,7 +473,7 @@ export function ChannelStripFxButton({
         channelLabel={channelLabel}
         accentHex={accent}
         anchorRect={anchorRect}
-        rack={cloneStudioTrackInsertFxRack(insertFxRack)}
+        rack={insertFxRack}
         onRackChange={handleRackChange}
         onClose={closeSuite}
         onRegisterFlush={bindSuiteFlush}
@@ -493,7 +493,7 @@ export function ChannelStripFxButton({
         channelLabel={channelLabel}
         accentHex={accent}
         anchorRect={anchorRect}
-        rack={cloneStudioTrackInsertFxRack(insertFxRack)}
+        rack={insertFxRack}
         onRackChange={handleRackChange}
         vocalFx={vocalFx}
         onVocalFxChange={onVocalFxChange}

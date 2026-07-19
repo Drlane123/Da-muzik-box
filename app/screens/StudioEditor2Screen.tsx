@@ -6740,6 +6740,9 @@ export default function StudioEditor2Screen({
   const [masterFxSlots, setMasterFxSlots] = useState<[MixerEffectId, MixerEffectId, MixerEffectId]>(() =>
     emptyMixerFxSlots(),
   );
+  const [masterInsertFxRack, setMasterInsertFxRack] = useState<StudioTrackInsertFxRack>(() =>
+    defaultStudioTrackInsertFxRack(),
+  );
 
   /* Mixer meter refs â€” updated directly from animationTick (no React state for 60fps DOM writes). */
   const showMixerRef      = useRef(false);
@@ -7302,6 +7305,10 @@ export default function StudioEditor2Screen({
         next[trackIndex] = cloned;
         return next;
       });
+      /* Mirror immediately — render-time ref sync can lag one frame behind graph wiring. */
+      const mirrored = trackInsertFxRacksRef.current.slice();
+      mirrored[trackIndex] = cloned;
+      trackInsertFxRacksRef.current = mirrored;
       /* Push suite into the Web Audio graph immediately — including while transport is
          locked — so preset / module changes are audible without Stop→Play. */
       const ctx = ctxRef.current;
@@ -7316,6 +7323,14 @@ export default function StudioEditor2Screen({
           bpmRef.current,
           studioMasterOutRef.current ?? ctx.destination,
         );
+        /* Pitch Tune / Vocoder stacks carry their own suite instance — refresh mid-edit. */
+        const tr = studioTracksRef.current[trackIndex];
+        if (tr && (tr.kind === 'audio' || tr.kind === 'a2m')) {
+          const rawFx = trackVocalFxRef.current[trackIndex] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
+          if (studioTrackVocalFxActive(rawFx)) {
+            void syncSe2TrackVocalFxNow(trackIndex, rawFx);
+          }
+        }
       }
       /* Do not clear audioPreviewScheduledRef here — refill would stack new BufferSources
          on still-playing clips (louder each EQ move; stuck loud until Stop). Insert strip
@@ -7325,7 +7340,7 @@ export default function StudioEditor2Screen({
         timelineFollowPaintEndRef.current = 0;
       }
     },
-    [],
+    [syncSe2TrackVocalFxNow],
   );
 
   const onTrackFxSlotChange = useCallback(
@@ -23383,8 +23398,8 @@ export default function StudioEditor2Screen({
                           slots={masterFxSlots}
                           onSlotChange={onMasterFxSlotChange}
                           sessionBpm={bpm}
-                          insertFxRack={defaultStudioTrackInsertFxRack()}
-                          onInsertFxRackChange={() => {}}
+                          insertFxRack={masterInsertFxRack}
+                          onInsertFxRackChange={setMasterInsertFxRack}
                           trackIndex={-1}
                         />
                       </div>

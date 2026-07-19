@@ -16,12 +16,10 @@ import {
 import type { StudioTrackMeterSnapshot } from '@/app/lib/studio/studioTrackAnalyserBus';
 import {
   readStudioTrackMeterSnapshot,
-  studioAnalyserLogBandIndex,
-  studioAnalyserSpectrumDisplayLinear,
+  studioAnalyserLogBandPeak,
   studioMeterBallistics,
   STUDIO_METER_DISPLAY_FLOOR,
 } from '@/app/lib/studio/studioTrackAnalyserBus';
-import { isStudioMixerStripGraphPlaybackLocked } from '@/app/lib/studio/studioMixerStripBus';
 import { useStudioAnalyserLevels } from '@/app/hooks/useStudioAnalyserLevels';
 import type { StudioTrackInsertFxRack } from '@/app/lib/studio/studioTrackInsertFx';
 import { studioInsertFxSuitePowered } from '@/app/lib/studio/studioTrackInsertFx';
@@ -545,8 +543,18 @@ const SUITE_METER_MIN_H = 88;
 const SUITE_ANALYZER_PLOT_MIN_H = SUITE_METER_MIN_H * 2 + 10;
 const SUITE_ANALYZER_LABEL_H = 9;
 const SUITE_ANALYZER_TOP_PAD = 2;
-const SUITE_ANALYZER_BAR_ATTACK = 0.5;
-const SUITE_ANALYZER_BAR_RELEASE = 0.7;
+const SUITE_ANALYZER_BAR_ATTACK = 0.62;
+const SUITE_ANALYZER_BAR_RELEASE = 0.78;
+/** Extra display lift after window-normalized FFT. */
+const SUITE_ANALYZER_BAND_GAIN = 1.05;
+/** Purple lows — slight lift; reading was good, just a touch low. */
+const SUITE_ANALYZER_LOW_GAIN = 0.62;
+/** Yellow mids — eased so they sit under the greens. */
+const SUITE_ANALYZER_MID_GAIN = 0.82;
+/** Green next to yellow — pulled down (was too hot). */
+const SUITE_ANALYZER_MID_HIGH_GAIN = 0.88;
+/** Top green highs — pulled down (was pegging). */
+const SUITE_ANALYZER_HIGH_GAIN = 0.95;
 
 const SILENT_METER: StudioTrackMeterSnapshot = {
   peak: 0,
@@ -736,12 +744,7 @@ export function SuiteSpectrumAnalyzer({
     };
 
     const draw = (t: number) => {
-      /*
-       * During SE2 transport, analyser reads are locked (null). Slow the suite FFT canvas
-       * so it does not compete with timeline follow-ahead paints when FX opens mid-play.
-       */
-      const minGapMs = isStudioMixerStripGraphPlaybackLocked() ? 120 : 33;
-      if (t - lastDraw < minGapMs) {
+      if (t - lastDraw < 33) {
         raf = requestAnimationFrame(draw);
         return;
       }
@@ -799,8 +802,17 @@ export function SuiteSpectrumAnalyzer({
 
       if (hasSignal && raw && raw.spectrum.length > 0) {
         for (let i = 0; i < n; i++) {
-          const srcI = studioAnalyserLogBandIndex(i, n, raw.spectrum.length);
-          const target = studioAnalyserSpectrumDisplayLinear(raw.spectrum[srcI] ?? 0);
+          const tBand = i / Math.max(1, n - 1);
+          const bandGain =
+            tBand < 0.28
+              ? SUITE_ANALYZER_LOW_GAIN
+              : tBand < 0.62
+                ? SUITE_ANALYZER_MID_GAIN
+                : tBand < 0.8
+                  ? SUITE_ANALYZER_MID_HIGH_GAIN
+                  : SUITE_ANALYZER_HIGH_GAIN;
+          const peak = studioAnalyserLogBandPeak(i, n, raw.spectrum);
+          const target = Math.min(1, peak * SUITE_ANALYZER_BAND_GAIN * bandGain);
           bars[i] =
             bars[i]! * (1 - SUITE_ANALYZER_BAR_ATTACK) + target * SUITE_ANALYZER_BAR_ATTACK;
         }
@@ -810,7 +822,8 @@ export function SuiteSpectrumAnalyzer({
 
       const barW = (w - 16) / n;
       for (let i = 0; i < n; i++) {
-        const bh = Math.max(2, bars[i]! * plotH);
+        const level = bars[i]!;
+        const bh = Math.max(level > 0.01 ? 3 : 2, level * plotH);
         const x = 8 + i * barW;
         const y = plotBottom - bh;
         const tBand = i / (n - 1);
@@ -863,12 +876,12 @@ export function SuiteSpectrumAnalyzer({
             <span
               className="suite-type-micro rounded px-1 py-px text-[6px]"
               style={{
-                background: armed ? `${accent}22` : '#1a1a24',
-                color: armed ? accent : '#5a5a68',
-                border: `1px solid ${armed ? `${accent}44` : '#2a2a36'}`,
+                background: meterActive ? `${accent}22` : '#1a1a24',
+                color: meterActive ? accent : '#5a5a68',
+                border: `1px solid ${meterActive ? `${accent}44` : '#2a2a36'}`,
               }}
             >
-              {armed ? 'ARMED' : 'STANDBY'}
+              {meterActive ? (armed ? 'LIVE' : 'ON') : 'OFF'}
             </span>
           </div>
           <div className="suite-type-micro absolute top-1.5 right-3 text-[7px] tabular-nums" style={{ color: '#5a5a68' }}>

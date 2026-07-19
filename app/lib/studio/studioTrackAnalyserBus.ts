@@ -40,15 +40,33 @@ export const STUDIO_ANALYSER_SPECTRUM_FLOOR_DB = -72;
 export const STUDIO_ANALYSER_FFT_SIZE = 2048;
 /** Lower = analyzer follows EQ/FX moves faster (honest post-FX readout). */
 export const STUDIO_ANALYSER_SMOOTHING = 0.04;
-/** Spectrum Forge — SPAN-style analyser dB window on the insert tap. */
-const FX_SUITE_ANALYSER_MIN_DB = -90;
-const FX_SUITE_ANALYSER_MAX_DB = -12;
-const FX_SUITE_ANALYSER_SMOOTHING = 0.55;
+/**
+ * FX Suite Spectrum Forge-style dB window on the insert tap.
+ * Wider top (−6) so program material reaches visible bar height; floor stays deep for air/lows.
+ */
+const FX_SUITE_ANALYSER_MIN_DB = -96;
+const FX_SUITE_ANALYSER_MAX_DB = -6;
+const FX_SUITE_ANALYSER_SMOOTHING = 0.32;
 
 function configureFxSuiteAnalyser(analyser: AnalyserNode): void {
   analyser.minDecibels = FX_SUITE_ANALYSER_MIN_DB;
   analyser.maxDecibels = FX_SUITE_ANALYSER_MAX_DB;
   analyser.smoothingTimeConstant = FX_SUITE_ANALYSER_SMOOTHING;
+}
+
+/** Display silence gate — below this, bars stay dark (analyser floor is deeper for FFT headroom). */
+const FX_SUITE_DISPLAY_FLOOR_DB = -78;
+
+/**
+ * Map analyser dB into 0–1 inside the FX Suite window (SPAN-style), not absolute amplitude.
+ * Absolute 10^(dB/20) left typical program levels (~−40 dB) nearly invisible — especially purple lows.
+ */
+export function studioFxSuiteDbToDisplay(db: number): number {
+  if (!Number.isFinite(db) || db <= FX_SUITE_DISPLAY_FLOOR_DB) return 0;
+  const span = FX_SUITE_ANALYSER_MAX_DB - FX_SUITE_DISPLAY_FLOOR_DB;
+  const t = Math.min(1, Math.max(0, (db - FX_SUITE_DISPLAY_FLOOR_DB) / span));
+  /* Closer to linear — readable motion without pegging purple/yellow/green. */
+  return Math.min(1, Math.pow(t, 0.85));
 }
 
 const floatSpectrumScratch = new Map<number, Float32Array>();
@@ -91,6 +109,29 @@ export function studioAnalyserLogBandIndex(
 ): number {
   const t = bandIndex / Math.max(1, bandCount - 1);
   return Math.min(spectrumLength - 1, Math.floor(t * t * spectrumLength));
+}
+
+/**
+ * Peak across the log-spaced FFT bin range for one display bar.
+ * Single-bin sampling often misses low-end energy (purple meters looked dead).
+ */
+export function studioAnalyserLogBandPeak(
+  bandIndex: number,
+  bandCount: number,
+  spectrum: Float32Array,
+): number {
+  const n = spectrum.length;
+  if (n < 1 || bandCount < 1) return 0;
+  const t0 = bandIndex / bandCount;
+  const t1 = (bandIndex + 1) / bandCount;
+  const i0 = Math.min(n - 1, Math.floor(t0 * t0 * n));
+  const i1 = Math.min(n, Math.max(i0 + 1, Math.ceil(t1 * t1 * n)));
+  let peak = 0;
+  for (let i = i0; i < i1; i++) {
+    const v = spectrum[i] ?? 0;
+    if (v > peak) peak = v;
+  }
+  return peak;
 }
 
 export function studioAnalyserDbToLinear(db: number, floorDb = STUDIO_ANALYSER_SPECTRUM_FLOOR_DB): number {
@@ -214,9 +255,34 @@ function readAnalyserMeterSnapshot(
     floatSpectrumScratch.set(trackIndex, floatBuf);
   }
   analyser.getFloatFrequencyData(floatBuf);
-  const floorDb = (consumers.get(trackIndex)?.has('fxSuite') ?? false)
-    ? FX_SUITE_ANALYSER_MIN_DB
-    : STUDIO_ANALYSER_SPECTRUM_FLOOR_DB;
+  const fxSuite = consumers.get(trackIndex)?.has('fxSuite') ?? false;
+  if (fxSuite) {
+    let spectrumEnergy = 0;
+    for (let i = 0; i < binCount; i++) {
+      const t = i / Math.max(1, binCount - 1);
+      /*
+       * Mild display-only tilt — keep highs from dominating purple after band gains.
+       * Does not change the audio tap.
+       */
+      const tilt = 0.78 + t * 0.35;
+      const v = Math.min(1, studioFxSuiteDbToDisplay(floatBuf[i] ?? FX_SUITE_ANALYSER_MIN_DB) * tilt);
+      spectrum[i] = v;
+      if (v > spectrumEnergy) spectrumEnergy = v;
+    }
+    /* Time-domain peak can sit under the gate on quiet lows — still light the analyzer. */
+    const hasSpectrum = spectrumEnergy >= 0.055;
+    return {
+      peak,
+      peakL: peak,
+      peakR: peak,
+      rms,
+      hasSignal: hasSignal || hasSpectrum,
+      spectrum,
+      waveform: time,
+    };
+  }
+
+  const floorDb = STUDIO_ANALYSER_SPECTRUM_FLOOR_DB;
   for (let i = 0; i < binCount; i++) {
     spectrum[i] = studioAnalyserDbToLinear(floatBuf[i] ?? floorDb, floorDb);
   }
@@ -236,16 +302,18 @@ export function readStudioTrackMeterSnapshot(
   trackIndex: number,
   reuseSpectrum?: Float32Array,
 ): StudioTrackMeterSnapshot | null {
-  // Main-thread analyser pulls during SE2 transport cause audible dropouts on WAV/MIDI lanes.
-  if (isStudioMixerStripGraphPlaybackLocked()) return null;
-
   const fxSuiteOpen = consumers.get(trackIndex)?.has('fxSuite') ?? false;
-  const insertAnalyser = fxSuiteOpen ? analysers.get(trackIndex) : undefined;
+  const insertAnalyser = analysers.get(trackIndex);
 
-  // Spectrum Forge — always read the insert tap (pre-FX input), never mixer fallback.
+  /*
+   * FX Suite / Pitch insert tap is a parallel AnalyserNode — safe to poll during transport.
+   * Mixer-strip analyser pulls during lock still cause audible dropouts on WAV/MIDI lanes.
+   */
   if (fxSuiteOpen && insertAnalyser) {
     return readAnalyserMeterSnapshot(trackIndex, insertAnalyser, reuseSpectrum);
   }
+
+  if (isStudioMixerStripGraphPlaybackLocked()) return null;
 
   const mixerSnap = readStudioMixerStripAnalyserSnapshot(trackIndex, reuseSpectrum);
   if (mixerSnap) return mixerSnap;
