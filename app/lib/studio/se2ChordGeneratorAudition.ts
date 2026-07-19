@@ -170,7 +170,7 @@ export function scheduleSe2ChordGeneratorProgression(
       beat += Math.max(0.25, step.beats);
       continue;
     }
-    const midis = chordMidisForStepLabel(step.label);
+    const midis = chordMidisForStepLabel(step.label, { genreId: opts.genreId });
     if (midis?.length) {
       const when = startTime + beat * secPerBeat;
       const sustainSec = auditionSustainSec(step.beats, secPerBeat, opts.genreId);
@@ -187,7 +187,7 @@ export function scheduleSe2ChordGeneratorStep(
   startTime: number,
   opts: Se2ChordGeneratorAuditionOpts,
 ): void {
-  const midis = chordMidisForStepLabel(step.label);
+  const midis = chordMidisForStepLabel(step.label, { genreId: opts.genreId });
   if (!midis?.length) return;
   const secPerBeat = 60 / Math.max(40, opts.bpm);
   const sustainSec = auditionSustainSec(step.beats, secPerBeat, opts.genreId);

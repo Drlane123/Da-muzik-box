@@ -31,6 +31,12 @@ import {
   se2SynthGenoFinalizeVoicedMidis,
   type GenoVoicingDepth,
 } from '@/app/lib/studio/se2SynthGenoVoicingDepth';
+import {
+  SE2_OPEN_JAZZ_NEO_MIDI_MAX,
+  SE2_OPEN_JAZZ_NEO_MIDI_MIN,
+  se2GenreUsesOpenJazzNeoVoicing,
+  se2OpenJazzNeoVoicing,
+} from '@/app/lib/studio/se2OpenJazzNeoVoicing';
 
 function liveCompDepth(spec: GenoBarChordSpec, genreId?: Se2SynthGenoLiveGenreId): GenoVoicingDepth {
   return (spec.voicingDepth
@@ -40,8 +46,17 @@ function liveCompDepth(spec: GenoBarChordSpec, genreId?: Se2SynthGenoLiveGenreId
 function liveCompFinish(
   tones: number[],
   depth: GenoVoicingDepth,
-  _genreId?: Se2SynthGenoLiveGenreId,
+  genreId?: Se2SynthGenoLiveGenreId,
 ): number[] {
+  if (se2GenreUsesOpenJazzNeoVoicing(genreId)) {
+    const opened = se2OpenJazzNeoVoicing(tones);
+    return se2SynthGenoFinalizeVoicedMidis(
+      opened,
+      depth,
+      SE2_OPEN_JAZZ_NEO_MIDI_MIN,
+      SE2_OPEN_JAZZ_NEO_MIDI_MAX,
+    );
+  }
   const lifted = genoLiftVoicingToRange(tones, GENO_LIVE_CHORD_MIDI_MIN, GENO_LIVE_CHORD_MIDI_MAX);
   return se2SynthGenoFinalizeVoicedMidis(
     se2SynthGenoDedenseCompVoicing(lifted, depth),

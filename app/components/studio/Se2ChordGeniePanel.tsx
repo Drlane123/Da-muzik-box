@@ -1193,7 +1193,7 @@ export function Se2GenoChordCreatorPanel({
           </div>
         </div>
 
-        <div className="relative z-30 flex shrink-0 flex-col items-center justify-start gap-1.5 self-start px-2">
+        <div className="relative z-30 flex min-w-0 flex-1 flex-col items-center justify-start gap-1.5 self-start px-2">
           <div className="flex items-start justify-center gap-3">
 <div
             ref={deepRnbPickerRef}
@@ -1617,7 +1617,7 @@ export function Se2GenoChordCreatorPanel({
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-1 ml-auto shrink-0">
+        <div className="flex flex-col items-end gap-1 shrink-0">
           <div className="flex items-start gap-2 overflow-visible">
           <div className="flex flex-col gap-0.5 shrink-0 overflow-visible" style={{ width: presetColW }}>
             <div>

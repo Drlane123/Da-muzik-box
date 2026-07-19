@@ -89,6 +89,7 @@ function stepsToGenNotes(
   steps: readonly GrooveProgressionStep[],
   loopBars: StudioHarmonyLoopBars,
   beatsPerBar: number,
+  openJazzNeo = false,
 ): StudioEditor2GenNote[] {
   if (steps.length === 0) return [];
   const bpb = Math.max(1, beatsPerBar);
@@ -97,6 +98,7 @@ function stepsToGenNotes(
     barCount: loopBars,
     sustainSlots: 4,
     beatsPerBar: bpb,
+    openJazzNeo,
   });
   if ('message' in built) return [];
   return grooveHitsToRollNotes(built.chordHits, bpb);
@@ -166,8 +168,14 @@ export function GenoChordCreatorMiniRoll({
   });
 
   const derivedNotes = useMemo(
-    () => stepsToGenNotes(steps, loopBars, beatsPerBar),
-    [steps, loopBars, beatsPerBar],
+    () =>
+      stepsToGenNotes(
+        steps,
+        loopBars,
+        beatsPerBar,
+        genreId === 'rich-jazz' || genreId === 'deep-neo',
+      ),
+    [steps, loopBars, beatsPerBar, genreId],
   );
   const [barChopQuants, setBarChopQuants] = useState<GenoBarChopQuant[]>(() =>
     se2DefaultBarChopQuants(loopBars),

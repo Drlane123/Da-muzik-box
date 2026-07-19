@@ -12,6 +12,10 @@ import {
 import type { ChordVoiceId } from '@/app/lib/creationStation/chordSequencerVoices';
 import { CHORD_VOICE_MAP } from '@/app/lib/creationStation/chordSequencerVoices';
 import type { GrooveProgressionStep } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
+import {
+  se2GenreUsesOpenJazzNeoVoicing,
+  se2OpenJazzNeoVoicing,
+} from '@/app/lib/studio/se2OpenJazzNeoVoicing';
 
 export type ProgressionAuditionOpts = {
   bpm: number;
@@ -46,9 +50,15 @@ function auditionSustainSec(stepBeats: number, secPerBeat: number, genreId?: str
   return Math.max(0.2, raw);
 }
 
-export function chordMidisForStepLabel(label: string): number[] | null {
+export function chordMidisForStepLabel(
+  label: string,
+  opts?: { openJazzNeo?: boolean; genreId?: string },
+): number[] | null {
   const parsed = parseChordSymbolToken(label);
   if (!parsed) return null;
+  if (opts?.openJazzNeo || se2GenreUsesOpenJazzNeoVoicing(opts?.genreId)) {
+    return se2OpenJazzNeoVoicing(parsed.notes);
+  }
   const bassRef = grooveLabClampBassRootMidi(Math.min(...parsed.notes));
   const lifted = grooveLabLiftChordsAboveBass(bassRef, parsed.notes);
   return lifted.map((m) => grooveLabClampChordRollMidi(m, bassRef));

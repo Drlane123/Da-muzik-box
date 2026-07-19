@@ -397,6 +397,8 @@ export function progressionStepsToChordNotes(
     sustainSlots?: number;
     /** Cap each chord voice length so sustained stacks do not re-trigger as a delay on loop refill. */
     maxDurationBeats?: number;
+    /** Rich Jazz / Deep Neo — open octave spreads on the piano roll. */
+    openJazzNeo?: boolean;
   },
 ): StudioHarmonyMidiNote[] | { message: string } {
   const bpb = Math.max(1, opts.beatsPerBar);
@@ -408,6 +410,7 @@ export function progressionStepsToChordNotes(
     barCount,
     sustainSlots: opts.sustainSlots ?? 8,
     beatsPerBar: bpb,
+    openJazzNeo: opts.openJazzNeo,
   });
   if ('message' in built) return built;
   const chordHitCount = grooveInput.filter((s) => !s.rest && s.label.trim()).length;

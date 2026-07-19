@@ -11,7 +11,7 @@ import type { Se2SynthGenoLiveGenreId } from '@/app/lib/studio/se2SynthGenoLiveC
 import { se2SynthGenoDefaultVoicingDepth } from '@/app/lib/studio/se2SynthGenoVoicingDepth';
 
 /** Bump when voicing hints / register change — Live panel re-resolves pad specs. */
-export const SE2_SYNTH_GENO_LIVE_VOICING_REVISION = 16;
+export const SE2_SYNTH_GENO_LIVE_VOICING_REVISION = 17;
 
 /** Bump when Chord Generator voicing pipeline changes — era pad specs re-resolve. */
 export const SE2_SYNTH_GENO_PLUGIN_VOICING_REVISION = 2;

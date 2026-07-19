@@ -11963,11 +11963,19 @@ export default function StudioEditor2Screen({
       presetId?: string,
     ) => {
       const barCount = studioResolveHarmonyBarCount(steps, loopBars, beatsPerBar);
+      const trackPresetId =
+        presetId
+        ?? (studioTracksRef.current[trackIndex] as { genoChordCreatorPresetId?: string } | undefined)
+          ?.genoChordCreatorPresetId
+        ?? '';
+      const openJazzNeo =
+        trackPresetId.startsWith('rich-jazz::') || trackPresetId.startsWith('deep-neo::');
       const built = progressionStepsToChordNotes(steps, {
         beatsPerBar,
         barCount,
         sustainSlots: 4,
         maxDurationBeats: Math.min(beatsPerBar * 0.92, Math.max(0.5, beatsPerBar - 0.08)),
+        openJazzNeo,
       });
       if ('message' in built) return;
       interruptStudioProgressionAuditionForTransport();

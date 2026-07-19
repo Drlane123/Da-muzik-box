@@ -348,6 +348,8 @@ export function progressionStepsToGrooveHits(
     barCount: number;
     sustainSlots: number;
     beatsPerBar?: number;
+    /** Rich Jazz / Deep Neo open octave spreads on export. */
+    openJazzNeo?: boolean;
   },
 ): GrooveStagedProgression | { message: string } {
   if (steps.length === 0) {
@@ -399,9 +401,11 @@ export function progressionStepsToGrooveHits(
       barCount,
     );
     const bassRef = grooveLabClampBassRootMidi(Math.min(...parsed.notes));
-    const voicing = grooveLabLiftChordsAboveBass(bassRef, parsed.notes).filter(
-      (m) => m >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN,
-    );
+    const voicing = opts.openJazzNeo
+      ? parsed.notes
+      : grooveLabLiftChordsAboveBass(bassRef, parsed.notes).filter(
+          (m) => m >= GROOVE_LAB_CHORD_ROLL_MIDI_MIN,
+        );
     if (voicing.length === 0) continue;
     chordHits.push(
       ...grooveLabStackChordHitsAtSlot({
@@ -411,6 +415,7 @@ export function progressionStepsToGrooveHits(
         quantize: opts.quantize,
         barCount,
         bassMidiForLift: bassRef,
+        openJazzNeo: opts.openJazzNeo,
       }),
     );
     beat += durBeats;

@@ -29,6 +29,11 @@ import {
   orchidNoteOnsets,
   type OrchidPerformanceMode,
 } from '@/app/lib/creationStation/orchidChordEngine';
+import {
+  SE2_OPEN_JAZZ_NEO_MIDI_MAX,
+  SE2_OPEN_JAZZ_NEO_MIDI_MIN,
+  se2OpenJazzNeoVoicing,
+} from '@/app/lib/studio/se2OpenJazzNeoVoicing';
 
 /** Green chord-register notes on the piano roll (C4+). */
 export function grooveLabRollHasChordNotes(hits: readonly { midi: number }[]): boolean {
@@ -967,9 +972,22 @@ export function grooveLabStackChordHitsAtSlot(opts: {
   quantize: GrooveLabQuantize;
   barCount: number;
   bassMidiForLift?: number;
+  /** Rich Jazz / Deep Neo — keep open octave spread (do not crush into C3–A4). */
+  openJazzNeo?: boolean;
 }): GrooveRollHit[] {
   const anchor = snapGrooveSlot(opts.anchorSlot, opts.quantize, opts.barCount);
   const sus = snapGrooveSustain(anchor, opts.sustainSlots, opts.quantize, opts.barCount);
+  if (opts.openJazzNeo) {
+    const voices = se2OpenJazzNeoVoicing(opts.chordMidis).filter(
+      (m) => m >= SE2_OPEN_JAZZ_NEO_MIDI_MIN && m <= SE2_OPEN_JAZZ_NEO_MIDI_MAX,
+    );
+    return voices.map((midi, i) => ({
+      slot: anchor,
+      midi,
+      sustainSlots: sus,
+      vel: Math.max(0.55, 0.92 - i * 0.05),
+    }));
+  }
   const bassRef =
     opts.bassMidiForLift != null ? grooveLabClampBassRootMidi(opts.bassMidiForLift) : undefined;
   const lifted = grooveLabLiftChordsAboveBass(
