@@ -38,6 +38,7 @@ export type Se2SynthGenoLiveGenreId =
   | 'jazz'
   | 'rich-jazz'
   | 'deep-neo'
+  | 'deep-rnb'
   | 'guitar-lines'
   | 'kpop';
 

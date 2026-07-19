@@ -416,6 +416,7 @@ export function progressionStepsToGrooveHits(
         barCount,
         bassMidiForLift: bassRef,
         openJazzNeo: opts.openJazzNeo,
+        openJazzNeoRootPc: opts.openJazzNeo ? parsed.rootPc : undefined,
       }),
     );
     beat += durBeats;

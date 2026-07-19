@@ -47,12 +47,15 @@ function liveCompFinish(
   tones: number[],
   depth: GenoVoicingDepth,
   genreId?: Se2SynthGenoLiveGenreId,
+  rootPc?: number,
 ): number[] {
   if (se2GenreUsesOpenJazzNeoVoicing(genreId)) {
-    const opened = se2OpenJazzNeoVoicing(tones);
+    const opened = se2OpenJazzNeoVoicing(tones, rootPc != null ? { rootPc } : undefined);
+    /** Open neo sounds clearer at 5 voices than a dense 6-note crush. */
+    const openDepth = Math.min(depth, 5) as GenoVoicingDepth;
     return se2SynthGenoFinalizeVoicedMidis(
       opened,
-      depth,
+      openDepth,
       SE2_OPEN_JAZZ_NEO_MIDI_MIN,
       SE2_OPEN_JAZZ_NEO_MIDI_MAX,
     );
@@ -140,16 +143,21 @@ function voiceFromIntervals(
   const rootIv = enriched[0]!;
   const baseOct = Math.floor(GENO_LIVE_CHORD_ROOT_OCTAVE_MIDI / 12) * 12;
   const rootMidi = baseOct + normalizePc(keyRoot) + rootIv;
+  const trueRootPc = normalizePc(rootMidi);
   let tones = [...new Set(enriched.map((iv) => rootMidi + (iv - rootIv)))].sort((a, b) => a - b);
-  tones = applyInversion(tones, spec.inversion ?? presetInversion);
+  const open = se2GenreUsesOpenJazzNeoVoicing(genreId);
+  /** Open path locks real root in the bass — do not invert before spreading. */
+  if (!open) {
+    tones = applyInversion(tones, spec.inversion ?? presetInversion);
+  }
   const depth = liveCompDepth(spec, genreId);
-  if (spec.stackOctave && tones.length >= 3 && tones.length < depth) {
+  if (!open && spec.stackOctave && tones.length >= 3 && tones.length < depth) {
     const top = tones[tones.length - 1]!;
     if (top + 12 <= GENO_LIVE_CHORD_MIDI_MAX + 12) {
       tones = [...new Set([...tones, top + 12])].sort((a, b) => a - b);
     }
   }
-  return liveCompFinish(tones, depth, genreId);
+  return liveCompFinish(tones, depth, genreId, open ? trueRootPc : undefined);
 }
 
 export function se2SynthGenoVoiceLiveChord(

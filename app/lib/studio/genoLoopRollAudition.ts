@@ -1,5 +1,6 @@
 /**
  * Local chord-roll preview — schedules edited piano-roll notes (not progression steps).
+ * When `instrumentId` is set, uses the SE2 track Instrument (GM / synth / orch / lead).
  */
 import { GROOVE_LAB_CHORD_MIX_GAIN } from '@/app/lib/creationStation/grooveLabLayers';
 import type { ProgressionAuditionOpts } from '@/app/lib/creationStation/grooveLabProgressionPreview';
@@ -9,12 +10,19 @@ import {
   genoLoopPianoSnapBeat,
   type GenoLoopPianoRollNote,
 } from '@/app/lib/studio/se2SynthGenoLoopPianoRoll';
+import { scheduleSe2ChordGeneratorChord } from '@/app/lib/studio/se2ChordGeneratorAudition';
 
 export function genoLoopRollTotalBeats(barCount: number, beatsPerBar: number): number {
   return Math.max(1, barCount * Math.max(1, beatsPerBar));
 }
 
 type RollNotePick = Pick<GenoLoopPianoRollNote, 'pitch' | 'startBeat' | 'durationBeats' | 'velocity'>;
+
+export type GenoLoopRollAuditionOpts = ProgressionAuditionOpts & {
+  /** SE2 Chord Generator lane Instrument — when set, bypass Orchid Grand. */
+  instrumentId?: string;
+  trackIndex?: number;
+};
 
 function groupNotesByStartBeat(notes: readonly RollNotePick[]): Map<number, RollNotePick[]> {
   const groups = new Map<number, RollNotePick[]>();
@@ -27,6 +35,31 @@ function groupNotesByStartBeat(notes: readonly RollNotePick[]): Map<number, Roll
   return groups;
 }
 
+function scheduleRollChord(
+  ctx: AudioContext,
+  midis: number[],
+  when: number,
+  sustainSec: number,
+  opts: GenoLoopRollAuditionOpts,
+  vol: number,
+): void {
+  if (opts.instrumentId) {
+    scheduleSe2ChordGeneratorChord(ctx, midis, when, sustainSec, {
+      bpm: opts.bpm,
+      instrumentId: opts.instrumentId,
+      trackIndex: opts.trackIndex ?? 1900,
+      volume: opts.volume ?? vol,
+      genreId: opts.genreId,
+      perfMode: opts.perfMode,
+    });
+    return;
+  }
+  scheduleOrchidChord(ctx, midis, when, sustainSec, opts.chordVoice, vol, {
+    mode: opts.perfMode,
+    bpm: opts.bpm,
+  });
+}
+
 /** Schedule roll notes from `fromBeat` through loop end; returns audible span in seconds. */
 export function scheduleGenoLoopRollAudition(
   ctx: AudioContext,
@@ -34,7 +67,7 @@ export function scheduleGenoLoopRollAudition(
   anchorTime: number,
   fromBeat: number,
   totalBeats: number,
-  opts: ProgressionAuditionOpts,
+  opts: GenoLoopRollAuditionOpts,
 ): number {
   const secPerBeat = 60 / Math.max(40, opts.bpm);
   const vol = (opts.volume ?? 0.88) * GROOVE_LAB_CHORD_MIX_GAIN;
@@ -50,10 +83,7 @@ export function scheduleGenoLoopRollAudition(
     const durBeats = Math.max(...chordNotes.map((n) => n.durationBeats));
     const when = anchorTime + (startBeat - fromBeat) * secPerBeat;
     const sustainSec = Math.max(0.12, durBeats * secPerBeat * 0.88);
-    scheduleOrchidChord(ctx, midis, when, sustainSec, opts.chordVoice, vol, {
-      mode: opts.perfMode,
-      bpm: opts.bpm,
-    });
+    scheduleRollChord(ctx, midis, when, sustainSec, opts, vol);
     maxEndBeat = Math.max(maxEndBeat, startBeat + durBeats);
   }
 
@@ -86,7 +116,7 @@ export function refillGenoLoopRollSe2Sync(
   notes: readonly RollNotePick[],
   loopBeat: number,
   totalBeats: number,
-  opts: ProgressionAuditionOpts,
+  opts: GenoLoopRollAuditionOpts,
   scheduled: Set<string>,
 ): void {
   if (notes.length === 0 || totalBeats <= 0) return;
@@ -112,11 +142,15 @@ export function refillGenoLoopRollSe2Sync(
     const durBeats = Math.max(...chordNotes.map((n) => n.durationBeats));
     const when = Math.max(tOn, now + SE2_SYNC_CHAIN_FLOOR_SEC);
     const sustainSec = Math.max(0.12, durBeats * secPerBeat * 0.88);
-    withProgressionAuditionBus(ctx, () => {
-      scheduleOrchidChord(ctx, midis, when, sustainSec, opts.chordVoice, vol, {
-        mode: opts.perfMode,
-        bpm: opts.bpm,
+    if (opts.instrumentId) {
+      scheduleRollChord(ctx, midis, when, sustainSec, opts, vol);
+    } else {
+      withProgressionAuditionBus(ctx, () => {
+        scheduleOrchidChord(ctx, midis, when, sustainSec, opts.chordVoice, vol, {
+          mode: opts.perfMode,
+          bpm: opts.bpm,
+        });
       });
-    });
+    }
   }
 }

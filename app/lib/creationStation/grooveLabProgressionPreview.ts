@@ -57,7 +57,7 @@ export function chordMidisForStepLabel(
   const parsed = parseChordSymbolToken(label);
   if (!parsed) return null;
   if (opts?.openJazzNeo || se2GenreUsesOpenJazzNeoVoicing(opts?.genreId)) {
-    return se2OpenJazzNeoVoicing(parsed.notes);
+    return se2OpenJazzNeoVoicing(parsed.notes, { rootPc: parsed.rootPc });
   }
   const bassRef = grooveLabClampBassRootMidi(Math.min(...parsed.notes));
   const lifted = grooveLabLiftChordsAboveBass(bassRef, parsed.notes);

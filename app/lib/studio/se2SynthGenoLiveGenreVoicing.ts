@@ -154,7 +154,7 @@ export const GENRE_VOICING: Record<
   'rich-jazz': {
     stylePreset: 'jazz',
     extensions: ['M7', 'm7', '9', '11', '13'],
-    inversion: 1,
+    inversion: 0,
     perfMode: 'block',
     soundSelection: {
       accordBankId: 'rhodes-classic',
@@ -165,7 +165,18 @@ export const GENRE_VOICING: Record<
   'deep-neo': {
     stylePreset: 'jazz',
     extensions: ['M7', 'm7', '9', '11', '13'],
-    inversion: 2,
+    inversion: 0,
+    perfMode: 'block',
+    soundSelection: {
+      accordBankId: 'rhodes-classic',
+      melodyBankId: 'lead-silk',
+      bassBankId: 'bass-guitar-finger',
+    },
+  },
+  'deep-rnb': {
+    stylePreset: 'rnb',
+    extensions: ['M7', 'm7', '9', '11', '13'],
+    inversion: 0,
     perfMode: 'block',
     soundSelection: {
       accordBankId: 'rhodes-classic',

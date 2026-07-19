@@ -11,7 +11,7 @@ import type { Se2SynthGenoLiveGenreId } from '@/app/lib/studio/se2SynthGenoLiveC
 import { se2SynthGenoDefaultVoicingDepth } from '@/app/lib/studio/se2SynthGenoVoicingDepth';
 
 /** Bump when voicing hints / register change — Live panel re-resolves pad specs. */
-export const SE2_SYNTH_GENO_LIVE_VOICING_REVISION = 17;
+export const SE2_SYNTH_GENO_LIVE_VOICING_REVISION = 18;
 
 /** Bump when Chord Generator voicing pipeline changes — era pad specs re-resolve. */
 export const SE2_SYNTH_GENO_PLUGIN_VOICING_REVISION = 2;
@@ -113,12 +113,14 @@ function liveVoicingHints(
   roman: ChordSymbol,
   genreId: Se2SynthGenoLiveGenreId,
 ): Pick<GenoBarChordSpec, 'lockedType' | 'inversion' | 'stackOctave' | 'smartMatch'> {
-  const jazz = genreId === 'jazz' || genreId === 'rich-jazz' || genreId === 'deep-neo';
+  const openNeo = genreId === 'rich-jazz' || genreId === 'deep-neo' || genreId === 'deep-rnb';
+  const jazz = genreId === 'jazz' || openNeo;
   const soul =
     genreId === 'rnb'
     || genreId === 'rnb-pop'
     || genreId === 'neo-soul'
     || genreId === 'gospel'
+    || genreId === 'deep-rnb'
     || jazz;
   const trap =
     genreId === 'trap'
@@ -139,7 +141,12 @@ function liveVoicingHints(
     return { lockedType: 'sus', smartMatch: false, inversion: 0 };
   }
   if (roman === 'iiø7' || roman === 'vii°7' || roman === 'ii°' || roman === 'vii°' || roman === 'iø7') {
-    return { lockedType: 'dim', smartMatch: false, inversion: jazz ? 2 : dark ? 0 : 1, stackOctave: jazz || dark };
+    return {
+      lockedType: 'dim',
+      smartMatch: false,
+      inversion: openNeo ? 0 : jazz ? 2 : dark ? 0 : 1,
+      stackOctave: !openNeo && (jazz || dark),
+    };
   }
   if (roman === 'i(maj7)') {
     return { lockedType: 'min', smartMatch: false, inversion: 0, stackOctave: dark };
@@ -156,8 +163,12 @@ function liveVoicingHints(
     return {
       lockedType: 'maj',
       smartMatch: false,
-      inversion: jazz ? 2 : genreId === 'rnb' || genreId === 'rnb-pop' ? 0 : brightComp ? 1 : 1,
-      stackOctave: genreId === 'rnb' || genreId === 'rnb-pop' ? false : brightComp || jazz || dark,
+      inversion: openNeo ? 0 : jazz ? 2 : genreId === 'rnb' || genreId === 'rnb-pop' ? 0 : brightComp ? 1 : 1,
+      stackOctave: openNeo
+        ? false
+        : genreId === 'rnb' || genreId === 'rnb-pop'
+          ? false
+          : brightComp || jazz || dark,
     };
   }
   if (
@@ -181,8 +192,24 @@ function liveVoicingHints(
     return {
       lockedType: 'min',
       smartMatch: false,
-      inversion: jazz ? 2 : genreId === 'rnb' || genreId === 'rnb-pop' ? 1 : soul ? 1 : lofi ? 1 : boom ? 1 : 1,
-      stackOctave: genreId === 'rnb' || genreId === 'rnb-pop' ? false : brightComp || jazz,
+      inversion: openNeo
+        ? 0
+        : jazz
+          ? 2
+          : genreId === 'rnb' || genreId === 'rnb-pop'
+            ? 1
+            : soul
+              ? 1
+              : lofi
+                ? 1
+                : boom
+                  ? 1
+                  : 1,
+      stackOctave: openNeo
+        ? false
+        : genreId === 'rnb' || genreId === 'rnb-pop'
+          ? false
+          : brightComp || jazz,
     };
   }
   if (
@@ -202,8 +229,24 @@ function liveVoicingHints(
     return {
       lockedType: 'maj',
       smartMatch: false,
-      inversion: jazz ? 1 : genreId === 'rnb' || genreId === 'rnb-pop' ? 0 : soul ? 1 : pop ? 1 : dance ? 0 : 0,
-      stackOctave: genreId === 'rnb' || genreId === 'rnb-pop' ? false : brightComp || jazz || dark || dance,
+      inversion: openNeo
+        ? 0
+        : jazz
+          ? 1
+          : genreId === 'rnb' || genreId === 'rnb-pop'
+            ? 0
+            : soul
+              ? 1
+              : pop
+                ? 1
+                : dance
+                  ? 0
+                  : 0,
+      stackOctave: openNeo
+        ? false
+        : genreId === 'rnb' || genreId === 'rnb-pop'
+          ? false
+          : brightComp || jazz || dark || dance,
     };
   }
   if (roman === 'bVII' || roman === 'bVI' || roman === 'bIII' || roman === 'VII' || roman === 'VI') {

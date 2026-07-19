@@ -1903,6 +1903,8 @@ export function Se2GenoChordCreatorPanel({
                     genreId={styleGenreId}
                     fallbackGenreId={styleGenreId}
                     getAudioContext={getAudioContext}
+                    midiInstrumentId={track.midiInstrumentId}
+                    trackId={track.id}
                     onKeyChange={onKeyChange}
                     onApplyToRoll={handleMidiComposerGenerated}
                   />
@@ -2026,6 +2028,8 @@ export function Se2GenoChordCreatorPanel({
           onSe2SyncToggle={onSe2SyncToggle}
           getSe2TransportBeat={getSe2TransportBeat}
           genreId={styleGenreId}
+          midiInstrumentId={track.midiInstrumentId}
+          trackId={track.id}
           disabled={disabled}
           scrollWithParent
           passingBarIndex={passingBarIndex}

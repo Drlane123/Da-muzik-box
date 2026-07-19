@@ -43,6 +43,7 @@ import {
 import { SE2_SYNTH_GENO_LIVE_JAZZ_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsJazz';
 import { SE2_SYNTH_GENO_LIVE_RICH_JAZZ_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsRichJazz';
 import { SE2_SYNTH_GENO_LIVE_DEEP_NEO_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsDeepNeo';
+import { SE2_SYNTH_GENO_LIVE_DEEP_RNB_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsDeepRnb';
 import { SE2_SYNTH_GENO_LIVE_RNB_POP_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsRnbPop';
 import { SE2_SYNTH_GENO_LIVE_GUITAR_LINES_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsGuitarPort';
 import { SE2_SYNTH_GENO_LIVE_KPOP_DEFS } from '@/app/lib/studio/se2SynthGenoLiveChordPresetsKpop';
@@ -88,6 +89,12 @@ export const SE2_SYNTH_GENO_LIVE_GENRES: Se2SynthGenoLiveGenre[] = [
     id: 'deep-neo',
     label: 'Deep Neo',
     description: 'Lush rearrangeable colors — maj13, 6/9, m11, 13sus (Building Blocks–style)',
+    defaultMode: 'major',
+  },
+  {
+    id: 'deep-rnb',
+    label: 'Deep R&B Chords',
+    description: 'Quiet-storm / neo-soul lush maj9 · m9 · 13 · 13sus cards',
     defaultMode: 'major',
   },
   {
@@ -239,6 +246,7 @@ const DEFS_BY_GENRE: Record<Se2SynthGenoLiveGenreId, Se2SynthGenoLivePresetDef[]
   jazz: SE2_SYNTH_GENO_LIVE_JAZZ_DEFS,
   'rich-jazz': SE2_SYNTH_GENO_LIVE_RICH_JAZZ_DEFS,
   'deep-neo': SE2_SYNTH_GENO_LIVE_DEEP_NEO_DEFS,
+  'deep-rnb': SE2_SYNTH_GENO_LIVE_DEEP_RNB_DEFS,
   'guitar-lines': SE2_SYNTH_GENO_LIVE_GUITAR_LINES_DEFS,
   kpop: SE2_SYNTH_GENO_LIVE_KPOP_DEFS,
 };

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { clampGrooveLabBpm } from '@/app/lib/creationStation/grooveLabTempo';
-import type { ProgressionAuditionOpts } from '@/app/lib/creationStation/grooveLabProgressionPreview';
 import {
   haltProgressionAuditionVoices,
   type ChordVoiceId,
@@ -10,8 +9,13 @@ import {
   genoLoopRollTotalBeats,
   genoLoopRollWrapBeat,
   refillGenoLoopRollSe2Sync,
+  type GenoLoopRollAuditionOpts,
 } from '@/app/lib/studio/genoLoopRollAudition';
 import type { GenoLoopPianoRollNote } from '@/app/lib/studio/se2SynthGenoLoopPianoRoll';
+import {
+  haltSe2ChordGeneratorAudition,
+  se2ChordGeneratorAuditionTrackIndex,
+} from '@/app/lib/studio/se2ChordGeneratorAudition';
 
 type RollNotePick = Pick<GenoLoopPianoRollNote, 'pitch' | 'startBeat' | 'durationBeats' | 'velocity'>;
 
@@ -29,6 +33,8 @@ export function useGenoLoopRollSe2Sync(opts: {
   chordVoice?: ChordVoiceId;
   perfMode?: OrchidPerformanceMode;
   volume?: number;
+  midiInstrumentId?: string;
+  trackId?: string;
   onPlayheadBeat: (beat: number) => void;
 }) {
   const scheduledRef = useRef(new Set<string>());
@@ -95,12 +101,14 @@ export function useGenoLoopRollSe2Sync(opts: {
         lastLoopBeatRef.current = loopBeat;
         const ctx = o.getAudioContext();
         if (ctx && ctx.state !== 'closed') {
-          const auditionOpts: ProgressionAuditionOpts = {
+          const auditionOpts: GenoLoopRollAuditionOpts = {
             bpm: clampGrooveLabBpm(o.bpm),
             chordVoice: o.chordVoice ?? 'grand',
             perfMode: o.perfMode ?? 'block',
             volume: o.volume ?? 0.82,
             genreId: o.genreId,
+            instrumentId: o.midiInstrumentId,
+            trackIndex: se2ChordGeneratorAuditionTrackIndex(o.trackId),
           };
           refillGenoLoopRollSe2Sync(
             ctx,
@@ -127,6 +135,7 @@ export function useGenoLoopRollSe2Sync(opts: {
     return () => {
       cancelAnimationFrame(raf);
       window.clearInterval(seekPoll);
+      haltSe2ChordGeneratorAudition();
       haltProgressionAuditionVoices();
       scheduledRef.current.clear();
       lastLoopBeatRef.current = -1;
@@ -143,10 +152,13 @@ export function useGenoLoopRollSe2Sync(opts: {
     perfMode,
     transportPlaying,
     volume,
+    opts.midiInstrumentId,
+    opts.trackId,
   ]);
 
   useEffect(() => {
     if (!transportPlaying) {
+      haltSe2ChordGeneratorAudition();
       haltProgressionAuditionVoices();
       scheduledRef.current.clear();
       lastLoopBeatRef.current = -1;

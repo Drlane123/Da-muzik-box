@@ -179,6 +179,8 @@ export type Se2ChordGenieAiMidiPanelProps = {
   genreId?: string;
   fallbackGenreId: string;
   getAudioContext?: () => AudioContext | null;
+  midiInstrumentId?: string;
+  trackId?: string;
   onApplyToRoll: (result: Se2MidiComposerGeneratedPayload) => void;
   onKeyChange?: (root: number, mode: ChordMode) => void;
 };
@@ -194,6 +196,8 @@ export function Se2ChordGenieAiMidiPanel({
   genreId,
   fallbackGenreId,
   getAudioContext,
+  midiInstrumentId,
+  trackId,
   onApplyToRoll,
   onKeyChange,
 }: Se2ChordGenieAiMidiPanelProps) {
@@ -249,6 +253,8 @@ export function Se2ChordGenieAiMidiPanel({
     barCount: previewBarCount,
     genreId: genreId ?? genre,
     loop: true,
+    midiInstrumentId,
+    trackId,
   });
 
   useEffect(() => {

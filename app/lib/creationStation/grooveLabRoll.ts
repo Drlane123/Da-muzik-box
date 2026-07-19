@@ -974,11 +974,19 @@ export function grooveLabStackChordHitsAtSlot(opts: {
   bassMidiForLift?: number;
   /** Rich Jazz / Deep Neo — keep open octave spread (do not crush into C3–A4). */
   openJazzNeo?: boolean;
+  /** True chord root PC when openJazzNeo (not inverted lowest note). */
+  openJazzNeoRootPc?: number;
 }): GrooveRollHit[] {
   const anchor = snapGrooveSlot(opts.anchorSlot, opts.quantize, opts.barCount);
   const sus = snapGrooveSustain(anchor, opts.sustainSlots, opts.quantize, opts.barCount);
   if (opts.openJazzNeo) {
-    const voices = se2OpenJazzNeoVoicing(opts.chordMidis).filter(
+    const rootPc =
+      opts.openJazzNeoRootPc != null
+        ? ((Math.round(opts.openJazzNeoRootPc) % 12) + 12) % 12
+        : opts.bassMidiForLift != null
+          ? ((Math.round(opts.bassMidiForLift) % 12) + 12) % 12
+          : undefined;
+    const voices = se2OpenJazzNeoVoicing(opts.chordMidis, rootPc != null ? { rootPc } : undefined).filter(
       (m) => m >= SE2_OPEN_JAZZ_NEO_MIDI_MIN && m <= SE2_OPEN_JAZZ_NEO_MIDI_MAX,
     );
     return voices.map((midi, i) => ({

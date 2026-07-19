@@ -25,6 +25,7 @@ import {
   se2ResizeBarChopQuants,
   type GenoBarChopQuant,
 } from '@/app/lib/studio/se2ChordGenieBarChop';
+import { se2GenreUsesOpenJazzNeoVoicing } from '@/app/lib/studio/se2OpenJazzNeoVoicing';
 
 const CHORD_ROLL_MIN_MIDI = 48;
 const CHORD_ROLL_MAX_MIDI = 76;
@@ -41,6 +42,9 @@ export type GenoChordCreatorMiniRollProps = {
   onSe2SyncToggle?: () => void;
   getSe2TransportBeat?: () => number;
   genreId?: string;
+  /** Track Instrument picker — mini-roll Play / SE2 sync follow this sound. */
+  midiInstrumentId?: string;
+  trackId?: string;
   accentHex?: string;
   disabled?: boolean;
   gridMaxHeightPx?: number;
@@ -116,6 +120,8 @@ export function GenoChordCreatorMiniRoll({
   onSe2SyncToggle,
   getSe2TransportBeat,
   genreId,
+  midiInstrumentId,
+  trackId,
   accentHex = SE2_GENO_CHORD_CREATOR_ACCENT,
   disabled = false,
   gridMaxHeightPx = 300,
@@ -165,6 +171,8 @@ export function GenoChordCreatorMiniRoll({
     barCount: loopBars,
     genreId,
     loop: true,
+    midiInstrumentId,
+    trackId,
   });
 
   const derivedNotes = useMemo(
@@ -173,7 +181,7 @@ export function GenoChordCreatorMiniRoll({
         steps,
         loopBars,
         beatsPerBar,
-        genreId === 'rich-jazz' || genreId === 'deep-neo',
+        se2GenreUsesOpenJazzNeoVoicing(genreId),
       ),
     [steps, loopBars, beatsPerBar, genreId],
   );
@@ -226,6 +234,8 @@ export function GenoChordCreatorMiniRoll({
     beatsPerBar,
     barCount: loopBars,
     genreId,
+    midiInstrumentId,
+    trackId,
     onPlayheadBeat: onSe2PlayheadBeat,
   });
 

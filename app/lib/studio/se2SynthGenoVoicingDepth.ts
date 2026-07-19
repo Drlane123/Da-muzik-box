@@ -22,6 +22,8 @@ function inferChordColor(intervals: readonly number[]): ChordColor {
   if (has(4) && has(10)) return 'dom7';
   if (has(3) && has(10)) return 'min7';
   if (has(4) && has(11)) return 'maj7';
+  /** 6/9 shells (R·3·5·6·9) — keep as maj7 color family, never add a b7. */
+  if (has(4) && has(9) && (has(2) || has(14 % 12)) && !has(10) && !has(11)) return 'maj7';
   if (has(3)) return 'min7';
   if (has(4)) return 'triad';
   return 'triad';
@@ -36,11 +38,17 @@ function soulGenre(genreId: Se2SynthGenoLiveGenreId): boolean {
     || genreId === 'jazz'
     || genreId === 'rich-jazz'
     || genreId === 'deep-neo'
+    || genreId === 'deep-rnb'
   );
 }
 
 function jazzGenre(genreId: Se2SynthGenoLiveGenreId): boolean {
-  return genreId === 'jazz' || genreId === 'rich-jazz' || genreId === 'deep-neo';
+  return (
+    genreId === 'jazz'
+    || genreId === 'rich-jazz'
+    || genreId === 'deep-neo'
+    || genreId === 'deep-rnb'
+  );
 }
 
 function lushGenre(genreId: Se2SynthGenoLiveGenreId): boolean {
@@ -110,7 +118,9 @@ function enrichmentLayers(
 }
 
 export function se2SynthGenoDefaultVoicingDepth(genreId: Se2SynthGenoLiveGenreId): GenoVoicingDepth {
-  if (genreId === 'jazz' || genreId === 'rich-jazz' || genreId === 'deep-neo') return 6;
+  /** Open jazz/neo / deep R&B — 5 clear tones beat a dense 6-note crush. */
+  if (genreId === 'rich-jazz' || genreId === 'deep-neo' || genreId === 'deep-rnb') return 5;
+  if (genreId === 'jazz') return 6;
   if (genreId === 'rnb' || genreId === 'pop' || genreId === 'kpop' || genreId === 'rnb-pop' || genreId === 'afrobeats') return 5;
   if (soulGenre(genreId)) return 6;
   if (genreId === 'lofi' || genreId === 'lofi-cinematic' || genreId === 'boom-bap') return 5;

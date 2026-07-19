@@ -61,6 +61,7 @@ export async function playSe2SynthGenoLiveChordBlock(opts: {
         opts.playOpts.genreId === 'jazz'
         || opts.playOpts.genreId === 'rich-jazz'
         || opts.playOpts.genreId === 'deep-neo'
+        || opts.playOpts.genreId === 'deep-rnb'
           ? 0.28
           : 0.22,
       durationSec: opts.playOpts.durationSec ?? 2.8,

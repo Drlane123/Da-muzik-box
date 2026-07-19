@@ -52,6 +52,7 @@ export function se2ModernGenreFromLiveGenre(genreId: Se2SynthGenoLiveGenreId): S
     case 'jazz':
     case 'rich-jazz':
     case 'deep-neo':
+    case 'deep-rnb':
     case 'boom-bap':
     case 'lofi':
     case 'lofi-cinematic':

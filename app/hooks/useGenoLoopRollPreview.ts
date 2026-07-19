@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clampGrooveLabBpm } from '@/app/lib/creationStation/grooveLabTempo';
-import type { ProgressionAuditionOpts } from '@/app/lib/creationStation/grooveLabProgressionPreview';
 import {
   haltProgressionAuditionVoices,
   withProgressionAuditionBus,
@@ -11,8 +10,14 @@ import {
   genoLoopRollBeatAtElapsed,
   genoLoopRollTotalBeats,
   scheduleGenoLoopRollAudition,
+  type GenoLoopRollAuditionOpts,
 } from '@/app/lib/studio/genoLoopRollAudition';
 import type { GenoLoopPianoRollNote } from '@/app/lib/studio/se2SynthGenoLoopPianoRoll';
+import {
+  haltSe2ChordGeneratorAudition,
+  se2ChordGeneratorAuditionTrackIndex,
+  warmupSe2ChordGeneratorInstrument,
+} from '@/app/lib/studio/se2ChordGeneratorAudition';
 
 type RollNotePick = Pick<GenoLoopPianoRollNote, 'pitch' | 'startBeat' | 'durationBeats' | 'velocity'>;
 
@@ -26,6 +31,9 @@ export function useGenoLoopRollPreview(opts: {
   volume?: number;
   genreId?: string;
   loop?: boolean;
+  /** SE2 Chord Generator track Instrument — play through picker sound, not Orchid Grand. */
+  midiInstrumentId?: string;
+  trackId?: string;
 }) {
   const [playheadBeat, setPlayheadBeat] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -49,6 +57,7 @@ export function useGenoLoopRollPreview(opts: {
   const stop = useCallback(() => {
     sessionRef.current += 1;
     clearTimers();
+    haltSe2ChordGeneratorAudition();
     haltProgressionAuditionVoices();
     setPlaying(false);
   }, [clearTimers]);
@@ -56,14 +65,24 @@ export function useGenoLoopRollPreview(opts: {
   useEffect(() => () => stop(), [stop]);
 
   const buildAuditionOpts = useCallback(
-    (): ProgressionAuditionOpts => ({
+    (): GenoLoopRollAuditionOpts => ({
       bpm: clampGrooveLabBpm(opts.bpm),
       chordVoice: opts.chordVoice ?? 'grand',
       perfMode: opts.perfMode ?? 'block',
       volume: opts.volume ?? 0.82,
       genreId: opts.genreId,
+      instrumentId: opts.midiInstrumentId,
+      trackIndex: se2ChordGeneratorAuditionTrackIndex(opts.trackId),
     }),
-    [opts.bpm, opts.chordVoice, opts.genreId, opts.perfMode, opts.volume],
+    [
+      opts.bpm,
+      opts.chordVoice,
+      opts.genreId,
+      opts.perfMode,
+      opts.volume,
+      opts.midiInstrumentId,
+      opts.trackId,
+    ],
   );
 
   const play = useCallback(
@@ -75,6 +94,7 @@ export function useGenoLoopRollPreview(opts: {
       if (!getCtx) return;
       const sessionId = (sessionRef.current += 1);
       clearTimers();
+      haltSe2ChordGeneratorAudition();
       haltProgressionAuditionVoices();
       setPlaying(true);
 
@@ -87,8 +107,11 @@ export function useGenoLoopRollPreview(opts: {
         }
         const when = Math.max(ctx.currentTime, 0) + 0.02;
         const auditionOpts = buildAuditionOpts();
+        if (auditionOpts.instrumentId) {
+          warmupSe2ChordGeneratorInstrument(ctx, auditionOpts.instrumentId);
+        }
         const secPerBeat = 60 / Math.max(40, auditionOpts.bpm);
-        const durationSec = withProgressionAuditionBus(ctx, () =>
+        const schedule = () =>
           scheduleGenoLoopRollAudition(
             ctx,
             notes,
@@ -96,8 +119,10 @@ export function useGenoLoopRollPreview(opts: {
             segmentStartBeat,
             totalBeats,
             auditionOpts,
-          ),
-        );
+          );
+        const durationSec = auditionOpts.instrumentId
+          ? schedule()
+          : withProgressionAuditionBus(ctx, schedule);
 
           const tick = () => {
             if (sessionRef.current !== sessionId) return;

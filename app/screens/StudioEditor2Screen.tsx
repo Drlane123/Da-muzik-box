@@ -671,6 +671,7 @@ import {
   newProgressionStepId,
   type GrooveProgressionStep,
 } from '@/app/lib/creationStation/grooveLabProgressionBuilder';
+import { se2PresetUsesOpenJazzNeoVoicing } from '@/app/lib/studio/se2OpenJazzNeoVoicing';
 import { GROOVE_ORCHESTRA_HIT_DEFAULT } from '@/app/lib/creationStation/grooveLabOrchestraHitSoundBank';
 import type { OrchestraHitId } from '@/app/lib/creationStation/grooveLabOrchestraHitBank';
 import { GROOVE_LAB_LEAD_SOUND_DEFAULT } from '@/app/lib/creationStation/grooveLabLeadSounds';
@@ -11968,8 +11969,7 @@ export default function StudioEditor2Screen({
         ?? (studioTracksRef.current[trackIndex] as { genoChordCreatorPresetId?: string } | undefined)
           ?.genoChordCreatorPresetId
         ?? '';
-      const openJazzNeo =
-        trackPresetId.startsWith('rich-jazz::') || trackPresetId.startsWith('deep-neo::');
+      const openJazzNeo = se2PresetUsesOpenJazzNeoVoicing(trackPresetId);
       const built = progressionStepsToChordNotes(steps, {
         beatsPerBar,
         barCount,
