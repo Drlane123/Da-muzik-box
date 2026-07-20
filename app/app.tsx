@@ -565,14 +565,18 @@ function AppContent() {
       style={{
         height: 'var(--dmb-ui-shell-h, 100dvh)',
         width: 'var(--dmb-ui-shell-w, 100%)',
+        minHeight: 'var(--dmb-ui-shell-h, 100dvh)',
+        flex: 1,
       }}
       data-dmb-app-monitor-bezel
     >
       <div
-        className="dmb-app-monitor-bezel__screen flex flex-col w-full overflow-hidden"
+        className="dmb-app-monitor-bezel__screen flex flex-col w-full h-full min-h-0 overflow-hidden"
         style={{
           background: '#303030',
           color: '#f0f0f0',
+          height: '100%',
+          minHeight: 0,
         }}
       >
       <TouchDeviceBootstrap />

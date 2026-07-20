@@ -27,8 +27,12 @@ export default function UiScaleBootstrap() {
     }
     const onResize = () => apply();
     window.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('scroll', onResize);
     return () => {
       window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('scroll', onResize);
       clearDocumentUiScale();
     };
   }, [mode, manual]);
