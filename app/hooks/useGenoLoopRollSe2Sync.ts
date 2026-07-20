@@ -6,6 +6,7 @@ import {
 } from '@/app/lib/creationStation/chordSequencerVoices';
 import type { OrchidPerformanceMode } from '@/app/lib/creationStation/orchidChordEngine';
 import {
+  createGenoLoopRollAuditionBus,
   genoLoopRollTotalBeats,
   genoLoopRollWrapBeat,
   refillGenoLoopRollSe2Sync,
@@ -15,6 +16,7 @@ import type { GenoLoopPianoRollNote } from '@/app/lib/studio/se2SynthGenoLoopPia
 import {
   haltSe2ChordGeneratorAudition,
   se2ChordGeneratorAuditionTrackIndex,
+  warmupSe2ChordGeneratorInstrument,
 } from '@/app/lib/studio/se2ChordGeneratorAudition';
 
 type RollNotePick = Pick<GenoLoopPianoRollNote, 'pitch' | 'startBeat' | 'durationBeats' | 'velocity'>;
@@ -40,8 +42,20 @@ export function useGenoLoopRollSe2Sync(opts: {
   const scheduledRef = useRef(new Set<string>());
   const lastLoopBeatRef = useRef(-1);
   const wasPlayingRef = useRef(false);
+  const busRef = useRef<GainNode | null>(null);
   const optsRef = useRef(opts);
   optsRef.current = opts;
+
+  const disposeBus = () => {
+    const bus = busRef.current;
+    busRef.current = null;
+    if (!bus) return;
+    try {
+      bus.disconnect();
+    } catch {
+      /* */
+    }
+  };
 
   const {
     enabled,
@@ -90,6 +104,7 @@ export function useGenoLoopRollSe2Sync(opts: {
 
       if (o.transportPlaying && !wasPlayingRef.current) {
         scheduledRef.current.clear();
+        disposeBus();
       }
       wasPlayingRef.current = o.transportPlaying;
 
@@ -101,6 +116,12 @@ export function useGenoLoopRollSe2Sync(opts: {
         lastLoopBeatRef.current = loopBeat;
         const ctx = o.getAudioContext();
         if (ctx && ctx.state !== 'closed') {
+          if (!busRef.current) {
+            busRef.current = createGenoLoopRollAuditionBus(ctx, o.volume ?? 0.82);
+            if (o.midiInstrumentId) {
+              warmupSe2ChordGeneratorInstrument(ctx, o.midiInstrumentId, busRef.current);
+            }
+          }
           const auditionOpts: GenoLoopRollAuditionOpts = {
             bpm: clampGrooveLabBpm(o.bpm),
             chordVoice: o.chordVoice ?? 'grand',
@@ -109,6 +130,7 @@ export function useGenoLoopRollSe2Sync(opts: {
             genreId: o.genreId,
             instrumentId: o.midiInstrumentId,
             trackIndex: se2ChordGeneratorAuditionTrackIndex(o.trackId),
+            auditionBus: busRef.current,
           };
           refillGenoLoopRollSe2Sync(
             ctx,
@@ -137,6 +159,7 @@ export function useGenoLoopRollSe2Sync(opts: {
       window.clearInterval(seekPoll);
       haltSe2ChordGeneratorAudition();
       haltProgressionAuditionVoices();
+      disposeBus();
       scheduledRef.current.clear();
       lastLoopBeatRef.current = -1;
       wasPlayingRef.current = false;
@@ -160,6 +183,7 @@ export function useGenoLoopRollSe2Sync(opts: {
     if (!transportPlaying) {
       haltSe2ChordGeneratorAudition();
       haltProgressionAuditionVoices();
+      disposeBus();
       scheduledRef.current.clear();
       lastLoopBeatRef.current = -1;
     }

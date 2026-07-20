@@ -202,7 +202,13 @@ export function haltSe2ChordGeneratorAudition(): void {
 export function warmupSe2ChordGeneratorInstrument(
   ctx: AudioContext,
   instrumentId: string | undefined,
+  /** Pass the same audition bus used for schedule so GM cache hits. */
+  destination?: AudioNode,
 ): void {
-  void warmupStudioEditor2MidiInstrument(ctx, instrumentId, resolveGrooveLabAudioDest(ctx));
+  void warmupStudioEditor2MidiInstrument(
+    ctx,
+    instrumentId,
+    destination ?? resolveGrooveLabAudioDest(ctx),
+  );
   void studioPreloadOrchestraHitInstrument(ctx, instrumentId);
 }

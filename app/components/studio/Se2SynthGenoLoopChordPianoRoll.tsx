@@ -40,6 +40,8 @@ export type Se2SynthGenoLoopChordPianoRollHandle = {
   duplicateSelected: () => void;
   undo: () => void;
   clearAll: () => void;
+  /** WAAPI playhead host for local mini-roll preview. */
+  getPlayheadEl: () => HTMLElement | null;
 };
 
 export type Se2SynthGenoLoopChordPianoRollProps = {
@@ -53,6 +55,8 @@ export type Se2SynthGenoLoopChordPianoRollProps = {
   /** Click/drag ruler or play marker to reposition local preview playhead. */
   onPreviewBeatChange?: (beat: number) => void;
   playheadScrub?: boolean;
+  /** Local preview — WAAPI owns playhead `left`; do not React-drive position. */
+  playheadCompositorActive?: boolean;
   /** Live keyboard audition — lights piano keys with the deck keyboard. */
   previewHeldMidi?: number | null;
   onPianoKeyPreview?: (midi: number) => void;
@@ -262,31 +266,32 @@ function GenoLoopPianoRollContextMenu({
 const SE2_PLAYHEAD_W_PX = 2;
 const SE2_PLAYHEAD_GRIP_W_PX = 16;
 
-/** Matches Studio Editor 2 timeline / piano-roll playhead. */
-function PreviewPlayMarker({
-  leftPct,
-  scrub,
-  onScrubStart,
-}: {
-  leftPct: number;
-  scrub?: boolean;
-  onScrubStart?: (e: React.PointerEvent) => void;
-}) {
+/** Matches Studio Editor 2 timeline / piano-roll playhead. `left` is imperative / WAAPI only. */
+const PreviewPlayMarker = forwardRef<
+  HTMLDivElement,
+  {
+    scrub?: boolean;
+    compositorActive?: boolean;
+    onScrubStart?: (e: React.PointerEvent) => void;
+  }
+>(function PreviewPlayMarker({ scrub, compositorActive, onScrubStart }, ref) {
   const gripW = scrub ? SE2_PLAYHEAD_GRIP_W_PX : SE2_PLAYHEAD_W_PX;
   return (
     <div
+      ref={ref}
+      data-geno-loop-playhead
       className="absolute top-0 bottom-0 z-30 flex justify-center select-none"
       style={{
-        left: `${leftPct}%`,
+        // `left` is set only via park helper / WAAPI — never from React (avoids fighting compositor).
         width: gripW,
         marginLeft: -gripW / 2,
-        pointerEvents: scrub ? 'auto' : 'none',
-        cursor: scrub ? 'ew-resize' : undefined,
+        pointerEvents: scrub && !compositorActive ? 'auto' : 'none',
+        cursor: scrub && !compositorActive ? 'ew-resize' : undefined,
         touchAction: 'none',
-        willChange: 'transform',
+        willChange: compositorActive ? 'left' : undefined,
       }}
-      onPointerDown={scrub ? onScrubStart : undefined}
-      aria-hidden={!scrub}
+      onPointerDown={scrub && !compositorActive ? onScrubStart : undefined}
+      aria-hidden={!scrub || compositorActive}
       aria-label={scrub ? 'Playhead — drag to reposition' : undefined}
     >
       <div
@@ -300,7 +305,7 @@ function PreviewPlayMarker({
       />
     </div>
   );
-}
+});
 
 function PianoKeyCell({
   midi,
@@ -441,6 +446,7 @@ export const Se2SynthGenoLoopChordPianoRoll = forwardRef<
   previewBeat = null,
   onPreviewBeatChange,
   playheadScrub = false,
+  playheadCompositorActive = false,
   previewHeldMidi = null,
   onPianoKeyPreview,
   onPianoKeyRelease,
@@ -465,6 +471,7 @@ export const Se2SynthGenoLoopChordPianoRoll = forwardRef<
   const gridPaint = gridEditTool === 'draw' || gridEditTool === 'erase';
   const gridPlayheadScrub = Boolean(playheadScrub && onPreviewBeatChange && !gridPaint);
   const gridRef = useRef<HTMLDivElement>(null);
+  const playheadElRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const notesRef = useRef<GenoLoopPianoRollNote[]>([]);
   const dirtyRef = useRef(false);
@@ -538,6 +545,14 @@ export const Se2SynthGenoLoopChordPianoRoll = forwardRef<
     const clamped = ((previewBeat % totalBeats) + totalBeats) % totalBeats;
     return (clamped / totalBeats) * 100;
   }, [previewBeat, totalBeats]);
+
+  /** Park playhead via DOM when stopped — never React-drive `left` (fights WAAPI). */
+  useEffect(() => {
+    if (playheadCompositorActive) return;
+    const el = playheadElRef.current;
+    if (!el || playheadPct == null) return;
+    el.style.left = `${playheadPct}%`;
+  }, [playheadCompositorActive, playheadPct]);
 
   const barPct = 100 / Math.max(1, barCount);
   const beatPct = 100 / totalBeats;
@@ -1147,6 +1162,7 @@ export const Se2SynthGenoLoopChordPianoRoll = forwardRef<
       duplicateSelected,
       undo: undoLast,
       clearAll,
+      getPlayheadEl: () => playheadElRef.current,
     }),
     [clearAll, cutSelected, deleteSelected, duplicateSelected, undoLast],
   );
@@ -1468,10 +1484,11 @@ export const Se2SynthGenoLoopChordPianoRoll = forwardRef<
               })
             : null}
 
-          {playheadPct != null ? (
+          {playheadPct != null || playheadCompositorActive ? (
             <PreviewPlayMarker
-              leftPct={playheadPct}
+              ref={playheadElRef}
               scrub={playheadScrub && Boolean(onPreviewBeatChange)}
+              compositorActive={playheadCompositorActive}
               onScrubStart={beginPlayheadScrub}
             />
           ) : null}

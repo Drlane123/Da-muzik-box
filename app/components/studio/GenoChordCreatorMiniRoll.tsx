@@ -158,10 +158,16 @@ export function GenoChordCreatorMiniRoll({
     );
   }, []);
 
+  const getPlayheadEl = useCallback(
+    () => pianoRollRef.current?.getPlayheadEl() ?? null,
+    [],
+  );
+
   const {
     playheadBeat,
     setPlayheadBeat: setRawPlayheadBeat,
     playing: rollPreviewPlaying,
+    compositorActive: rollPlayheadCompositorActive,
     play: playRollPreview,
     stop: stopRollPreview,
   } = useGenoLoopRollPreview({
@@ -173,6 +179,7 @@ export function GenoChordCreatorMiniRoll({
     loop: true,
     midiInstrumentId,
     trackId,
+    getPlayheadEl,
   });
 
   const derivedNotes = useMemo(
@@ -627,6 +634,7 @@ export function GenoChordCreatorMiniRoll({
         previewBeat={playheadBeat}
         onPreviewBeatChange={canScrubPlayhead ? setPlayheadBeat : undefined}
         playheadScrub={canScrubPlayhead}
+        playheadCompositorActive={rollPlayheadCompositorActive}
         disabled={disabled}
         onNotesChange={setRollNotes}
         onEditStateChange={handleEditStateChange}
