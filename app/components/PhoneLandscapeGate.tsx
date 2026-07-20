@@ -31,14 +31,26 @@ export default function PhoneLandscapeGate() {
       const portrait = isPhonePortraitViewport(vp.width, vp.height);
       setShowHint(portrait && !dismissed);
     };
+    const syncSoon = () => {
+      sync();
+      window.setTimeout(sync, 50);
+      window.setTimeout(sync, 200);
+      window.setTimeout(sync, 500);
+    };
     sync();
-    window.addEventListener('resize', sync);
-    window.addEventListener('orientationchange', sync);
-    window.visualViewport?.addEventListener('resize', sync);
+    window.addEventListener('resize', syncSoon);
+    window.addEventListener('orientationchange', syncSoon);
+    window.visualViewport?.addEventListener('resize', syncSoon);
+    const mq = window.matchMedia('(orientation: landscape)');
+    const onMq = () => syncSoon();
+    if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onMq);
+    else mq.addListener(onMq);
     return () => {
-      window.removeEventListener('resize', sync);
-      window.removeEventListener('orientationchange', sync);
-      window.visualViewport?.removeEventListener('resize', sync);
+      window.removeEventListener('resize', syncSoon);
+      window.removeEventListener('orientationchange', syncSoon);
+      window.visualViewport?.removeEventListener('resize', syncSoon);
+      if (typeof mq.removeEventListener === 'function') mq.removeEventListener('change', onMq);
+      else mq.removeListener(onMq);
     };
   }, []);
 

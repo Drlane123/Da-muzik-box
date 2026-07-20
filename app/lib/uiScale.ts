@@ -34,11 +34,22 @@ export function readViewportSize(
   if (typeof window === 'undefined') {
     return { width: REF_WIDTH, height: REF_HEIGHT };
   }
+
+  // Layout viewport tracks orientation reliably. visualViewport often lags after
+  // rotate (Facebook / iOS WebViews) and can leave the UI stuck in portrait size.
+  const layoutW = Math.max(1, window.innerWidth || document.documentElement.clientWidth || REF_WIDTH);
+  const layoutH = Math.max(1, window.innerHeight || document.documentElement.clientHeight || REF_HEIGHT);
   const vv = window.visualViewport;
   if (vv && vv.width > 0 && vv.height > 0) {
-    return { width: vv.width, height: vv.height };
+    const wRatio = vv.width / layoutW;
+    const hRatio = vv.height / layoutH;
+    const agrees =
+      wRatio > 0.85 && wRatio < 1.15 && hRatio > 0.7 && hRatio < 1.15;
+    if (agrees) {
+      return { width: vv.width, height: vv.height };
+    }
   }
-  return { width: window.innerWidth, height: window.innerHeight };
+  return { width: layoutW, height: layoutH };
 }
 
 /** True for phone-sized handsets (portrait or landscape). Tablets/desktops = false. */
@@ -97,15 +108,22 @@ export function applyDocumentUiScale(scale: number): void {
 
   if (s < 0.999) {
     const inv = 1 / s;
-    root.style.setProperty('--dmb-ui-shell-w', `calc(100vw * ${inv})`);
-    // Phone handsets: use the same viewport as auto-scale so GRID/footer aren't cut off.
-    const shellH = phoneHandset
-      ? `${Math.max(1, Math.round(vp.height * inv))}px`
-      : `calc(100dvh * ${inv})`;
-    root.style.setProperty('--dmb-ui-shell-h', shellH);
-    root.style.width = `calc(100vw * ${inv})`;
-    root.style.minHeight = shellH;
-    root.style.height = shellH;
+    if (phoneHandset) {
+      // Explicit px after rotate — `100vw`/`100dvh` + zoom often stay on portrait sizes in WebViews.
+      const shellW = Math.max(1, Math.round(vp.width * inv));
+      const shellH = Math.max(1, Math.round(vp.height * inv));
+      root.style.setProperty('--dmb-ui-shell-w', `${shellW}px`);
+      root.style.setProperty('--dmb-ui-shell-h', `${shellH}px`);
+      root.style.width = `${shellW}px`;
+      root.style.minHeight = `${shellH}px`;
+      root.style.height = `${shellH}px`;
+    } else {
+      root.style.setProperty('--dmb-ui-shell-w', `calc(100vw * ${inv})`);
+      root.style.setProperty('--dmb-ui-shell-h', `calc(100dvh * ${inv})`);
+      root.style.width = `calc(100vw * ${inv})`;
+      root.style.minHeight = `calc(100dvh * ${inv})`;
+      root.style.height = `calc(100dvh * ${inv})`;
+    }
     root.style.overflow = 'hidden';
   } else {
     root.style.setProperty('--dmb-ui-shell-w', '100%');
