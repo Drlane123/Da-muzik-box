@@ -12,9 +12,16 @@ function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
 }
 
+/** Cache impulses — regenerating 1–4s stereo noise on the main thread mid-play causes dropouts. */
+const reverbImpulseCache = new Map<string, AudioBuffer>();
+
 function makeReverbImpulse(ctx: BaseAudioContext, decaySec: number): AudioBuffer {
   const rate = ctx.sampleRate;
-  const len = Math.max(1, Math.floor(rate * decaySec));
+  const decay = Math.max(0.2, Math.min(2.5, decaySec));
+  const key = `${rate}:${Math.round(decay * 20)}`;
+  const cached = reverbImpulseCache.get(key);
+  if (cached) return cached;
+  const len = Math.max(1, Math.floor(rate * decay));
   const buf = ctx.createBuffer(2, len, rate);
   for (let c = 0; c < buf.numberOfChannels; c++) {
     const ch = buf.getChannelData(c);
@@ -22,6 +29,7 @@ function makeReverbImpulse(ctx: BaseAudioContext, decaySec: number): AudioBuffer
       ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.2);
     }
   }
+  reverbImpulseCache.set(key, buf);
   return buf;
 }
 
@@ -58,19 +66,20 @@ function connectCompressor(
   return makeup;
 }
 
+/**
+ * Soft noise reducer (not a true expander gate — Web Audio has no native gate).
+ * Previous version put a constant floor GainNode after a ratio-20 compressor, which
+ * either crushed the lane (~−72 dB always) or pumped hard → audible in/out silence.
+ */
 function connectGate(ctx: AudioContext, input: AudioNode, gate: StudioTrackInsertFxRack['gate']): AudioNode {
   const c = ctx.createDynamicsCompressor();
-  c.threshold.value = Math.max(-80, Math.min(0, gate.thresholdDb));
-  c.knee.value = 0;
-  c.ratio.value = 20;
-  c.attack.value = Math.max(1e-4, Math.min(0.05, gate.attackSec));
-  c.release.value = Math.max(0.02, Math.min(0.8, gate.releaseSec));
+  c.threshold.value = Math.max(-80, Math.min(-12, gate.thresholdDb));
+  c.knee.value = 8;
+  c.ratio.value = 3;
+  c.attack.value = Math.max(0.001, Math.min(0.05, gate.attackSec));
+  c.release.value = Math.max(0.05, Math.min(0.8, gate.releaseSec));
   input.connect(c);
-  const floor = ctx.createGain();
-  const floorLin = dbToLinear(Math.max(-80, Math.min(-6, gate.floorDb)));
-  floor.gain.value = floorLin < 0.00008 ? 0 : floorLin;
-  c.connect(floor);
-  return floor;
+  return c;
 }
 
 function connectFilter(ctx: AudioContext, input: AudioNode, f: StudioTrackInsertFxRack['filter']): AudioNode {

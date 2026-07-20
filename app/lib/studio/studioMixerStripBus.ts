@@ -87,13 +87,31 @@ let masterMeterTap: MasterMeterTap | null = null;
 let masterBusOutputWired: { masterBus: GainNode; downstream: AudioNode } | null = null;
 /** While SE2 transport is running, never tear down strip nodes (disconnects live WAV/MIDI). */
 let stripGraphPlaybackLocked = false;
+/**
+ * After Stop/Pause, ignore late worklet peak posts (do NOT force meters to zero — that
+ * caused drop-then-jump when a stale analyser read landed afterward).
+ */
+let ignoreWorkletMeterPostsUntilMs = 0;
 
 export function setStudioMixerStripGraphPlaybackLocked(locked: boolean): void {
   stripGraphPlaybackLocked = locked;
+  if (locked) {
+    ignoreWorkletMeterPostsUntilMs = 0;
+  }
 }
 
 export function isStudioMixerStripGraphPlaybackLocked(): boolean {
   return stripGraphPlaybackLocked;
+}
+
+/** Clear held peaks + ignore in-flight worklet posts after Stop/Pause. */
+export function prepareStudioMixerMetersForStop(): void {
+  resetStudioMixerMeterPeaks();
+  ignoreWorkletMeterPostsUntilMs = performance.now() + 150;
+}
+
+function ignoringWorkletMeterPosts(): boolean {
+  return performance.now() < ignoreWorkletMeterPostsUntilMs;
 }
 
 /** How many strip graphs to keep alive — never pre-build all 64 (worklet spam → play dropouts). */
@@ -178,6 +196,7 @@ function emptyMeterPeaks(): MeterPeaks {
 
 function bindMeterWorkletPort(node: AudioWorkletNode, peaks: MeterPeaks): void {
   node.port.onmessage = (ev: MessageEvent<Partial<MeterPeaks>>) => {
+    if (ignoringWorkletMeterPosts()) return;
     const d = ev.data;
     if (!d || typeof d.peakL !== 'number' || typeof d.peakR !== 'number') return;
     // Hold the hottest sample since the last paint read (processor also holds).
@@ -505,25 +524,24 @@ function readStripRawPeaks(strip: StripNodes): {
     peakR = held.peakR;
     rmsL = held.rmsL;
     rmsR = held.rmsR;
-    // During transport: worklet peaks only — never pull analysers on the main thread (dropouts).
-    if (
-      stripGraphPlaybackLocked
-      || peakL > STUDIO_MIXER_SILENCE_LINEAR
-      || peakR > STUDIO_MIXER_SILENCE_LINEAR
-    ) {
-      if (strip.lastMono) {
-        const peak = Math.max(peakL, peakR);
-        const rms = Math.max(rmsL, rmsR);
-        return { peakL: peak, peakR: peak, rmsL: rms, rmsR: rms };
-      }
-      return { peakL, peakR, rmsL, rmsR };
+    /*
+     * Worklet is the strip VU source. Do NOT fall through to analysers when unlocked —
+     * after Stop the FFT ring still holds pre-stop audio and meters jump (drop → spike).
+     * Pre-fader IN meters use readStudioMixerStripInputMeter separately.
+     */
+    if (strip.lastMono) {
+      const peak = Math.max(peakL, peakR);
+      const rms = Math.max(rmsL, rmsR);
+      return { peakL: peak, peakR: peak, rmsL: rms, rmsR: rms };
     }
-  }
-
-  if (stripGraphPlaybackLocked) {
     return { peakL, peakR, rmsL, rmsR };
   }
 
+  if (stripGraphPlaybackLocked) {
+    return { peakL: 0, peakR: 0, rmsL: 0, rmsR: 0 };
+  }
+
+  /* Analyser fallback only when this strip has no meter worklet. */
   if (
     strip.meterAnalyserL
     && strip.meterAnalyserR
@@ -532,10 +550,10 @@ function readStripRawPeaks(strip: StripNodes): {
   ) {
     const l = readMonoAnalyser(strip.meterAnalyserL, strip.meterBufL);
     const r = readMonoAnalyser(strip.meterAnalyserR, strip.meterBufR);
-    peakL = Math.max(peakL, l.peak);
-    peakR = Math.max(peakR, r.peak);
-    rmsL = Math.max(rmsL, l.rms);
-    rmsR = Math.max(rmsR, r.rms);
+    peakL = l.peak;
+    peakR = r.peak;
+    rmsL = l.rms;
+    rmsR = r.rms;
   }
 
   if (strip.lastMono) {
@@ -735,21 +753,11 @@ export function readStudioMasterBusMeter(): { peakL: number; peakR: number } | n
 
   if (tap.meterWorklet) {
     const held = consumeMeterPeaks(tap.meterPeaks);
-    let outL = studioMixerMeterTargetLinear(held.peakL, held.rmsL, -2);
-    let outR = studioMixerMeterTargetLinear(held.peakR, held.rmsR, -3);
-    if (
-      !stripGraphPlaybackLocked
-      && tap.analyserL
-      && tap.analyserR
-      && tap.bufL
-      && tap.bufR
-    ) {
-      const l = readMonoAnalyser(tap.analyserL, tap.bufL);
-      const r = readMonoAnalyser(tap.analyserR, tap.bufR);
-      outL = Math.max(outL, studioMixerMeterTargetLinear(l.peak, l.rms, -2));
-      outR = Math.max(outR, studioMixerMeterTargetLinear(r.peak, r.rms, -3));
-    }
-    return { peakL: outL, peakR: outR };
+    /* Worklet only — merging analysers after Stop caused master VU jump. */
+    return {
+      peakL: studioMixerMeterTargetLinear(held.peakL, held.rmsL, -2),
+      peakR: studioMixerMeterTargetLinear(held.peakR, held.rmsR, -3),
+    };
   }
 
   if (stripGraphPlaybackLocked) return null;

@@ -70,6 +70,10 @@ export function studioFxSuiteDbToDisplay(db: number): number {
 }
 
 const floatSpectrumScratch = new Map<number, Float32Array>();
+const timeDomainScratch = new Map<number, Float32Array>();
+/** Share one FFT read across Suite meters + spectrum (~20 Hz) — cuts main-thread underruns. */
+const fxSuiteMeterCache = new Map<number, { ms: number; snap: StudioTrackMeterSnapshot }>();
+const FX_SUITE_METER_CACHE_MS = 50;
 /** Lanes whose pitch scope reads the Pitch Tune engine analyser (not a duplicate tap). */
 const pitchMonitorEngineBound = new Set<number>();
 
@@ -231,7 +235,11 @@ function readAnalyserMeterSnapshot(
   analyser: AnalyserNode,
   reuseSpectrum?: Float32Array,
 ): StudioTrackMeterSnapshot {
-  const time = new Float32Array(analyser.fftSize);
+  let time = timeDomainScratch.get(trackIndex);
+  if (!time || time.length !== analyser.fftSize) {
+    time = new Float32Array(analyser.fftSize);
+    timeDomainScratch.set(trackIndex, time);
+  }
   analyser.getFloatTimeDomainData(time);
   let peak = 0;
   let sumSq = 0;
@@ -310,7 +318,14 @@ export function readStudioTrackMeterSnapshot(
    * Mixer-strip analyser pulls during lock still cause audible dropouts on WAV/MIDI lanes.
    */
   if (fxSuiteOpen && insertAnalyser) {
-    return readAnalyserMeterSnapshot(trackIndex, insertAnalyser, reuseSpectrum);
+    const now = performance.now();
+    const cached = fxSuiteMeterCache.get(trackIndex);
+    if (cached && now - cached.ms < FX_SUITE_METER_CACHE_MS) {
+      return cached.snap;
+    }
+    const snap = readAnalyserMeterSnapshot(trackIndex, insertAnalyser, reuseSpectrum);
+    fxSuiteMeterCache.set(trackIndex, { ms: now, snap });
+    return snap;
   }
 
   if (isStudioMixerStripGraphPlaybackLocked()) return null;

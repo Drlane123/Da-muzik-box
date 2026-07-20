@@ -8,9 +8,11 @@ function dbToLinear(db: number): number {
 }
 
 function applyGate(comp: DynamicsCompressorNode, gate: StudioTrackInsertFxRack['gate']): void {
-  comp.threshold.value = Math.max(-80, Math.min(0, gate.thresholdDb));
-  comp.attack.value = Math.max(1e-4, Math.min(0.05, gate.attackSec));
-  comp.release.value = Math.max(0.02, Math.min(0.8, gate.releaseSec));
+  comp.threshold.value = Math.max(-80, Math.min(-12, gate.thresholdDb));
+  comp.knee.value = 8;
+  comp.ratio.value = 3;
+  comp.attack.value = Math.max(0.001, Math.min(0.05, gate.attackSec));
+  comp.release.value = Math.max(0.05, Math.min(0.8, gate.releaseSec));
 }
 
 function applyCompressor(comp: DynamicsCompressorNode, c: StudioTrackInsertFxRack['compressor']): void {
@@ -43,7 +45,8 @@ export function insertSuiteParamsNeedChainSwap(
     || prev.delay.mix !== next.delay.mix
     || prev.reverb.enabled !== next.reverb.enabled
     || prev.reverb.mix !== next.reverb.mix
-    || prev.reverb.decaySec !== next.reverb.decaySec
+    /* Decay only — mix can live-update later; impulse regen on tiny decay nudges is expensive. */
+    || Math.abs(prev.reverb.decaySec - next.reverb.decaySec) > 0.08
     || prev.analogSaturation.level !== next.analogSaturation.level
     || prev.eq.enabled !== next.eq.enabled
     || JSON.stringify(prev.eq.bands) !== JSON.stringify(next.eq.bands)
@@ -75,12 +78,6 @@ export function liveUpdateInsertSuiteParams(
     const comp = compressors[ci++];
     if (!comp) return false;
     applyGate(comp, rack.gate);
-    const floor = makeupGains[makeupIx];
-    if (floor) {
-      const floorLin = dbToLinear(Math.max(-80, Math.min(-6, rack.gate.floorDb)));
-      floor.gain.value = floorLin < 0.00008 ? 0 : floorLin;
-      makeupIx++;
-    }
   }
 
   if (rack.deEsser.enabled) {

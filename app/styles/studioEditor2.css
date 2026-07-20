@@ -343,6 +343,29 @@
   scrollbar-gutter: stable;
 }
 
+/* Transport mic — armed / recording must stay visibly red (not only inline React styles). */
+[data-studio-transport] .se2-transport-rec-btn {
+  color: #b0b0bc;
+  border-color: #2a2a32;
+  background: transparent;
+}
+[data-studio-transport] .se2-transport-rec-btn[data-rec-armed='1'],
+[data-studio-transport] .se2-transport-rec-btn[data-rec-on='1'] {
+  color: #ff6b6b !important;
+  border-color: #cc3030 !important;
+  background: rgba(255, 48, 48, 0.22) !important;
+  box-shadow: 0 0 10px rgba(255, 64, 64, 0.4);
+}
+[data-studio-transport] .se2-transport-rec-btn[data-rec-on='1'] {
+  background: rgba(255, 48, 48, 0.28) !important;
+  box-shadow: 0 0 12px rgba(255, 64, 64, 0.5);
+}
+[data-studio-transport] .se2-transport-rec-btn[data-rec-armed='1'] svg,
+[data-studio-transport] .se2-transport-rec-btn[data-rec-on='1'] svg {
+  color: #ff6b6b !important;
+  stroke: #ff6b6b !important;
+}
+
 /* Each footer control group is its own fixed-width island — play must not compress neighbors. */
 [data-studio-transport] > .se2-transport-footer-island,
 [data-studio-transport] > .se2-transport-transport-controls {

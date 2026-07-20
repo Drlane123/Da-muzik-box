@@ -9,6 +9,7 @@ import {
   se2NewAudioClipId,
   type Se2TimelineAudioClip,
 } from '@/app/lib/studio/se2TimelineAudioClips';
+import { se2ClipGainDbToLin } from '@/app/lib/studio/se2AudioClipGain';
 import {
   se2ClipUsesAlignStretchPlayback,
   se2TrackAlignPlaybackForWallSegment,
@@ -166,7 +167,7 @@ export async function consolidateSe2TrackClips(
     const source = offline.createBufferSource();
     source.buffer = buf;
     const gain = offline.createGain();
-    gain.gain.value = 1;
+    gain.gain.value = se2ClipGainDbToLin(clip.gainDb ?? 0);
     source.connect(gain);
     gain.connect(offline.destination);
 

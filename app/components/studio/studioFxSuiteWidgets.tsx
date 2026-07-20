@@ -589,30 +589,35 @@ function SuiteLevelMeters({
     let raf = 0;
     let smoothL = 0;
     let smoothR = 0;
-    const tick = () => {
+    let lastRead = 0;
+    const tick = (t: number) => {
       if (cancelled) return;
-      const raw = readStudioTrackMeterSnapshot(trackIndex);
-      const a = accentRef.current;
-      const grad = `linear-gradient(0deg, ${a} 0%, ${a}66 55%, ${a}22 100%)`;
-      const glow = `0 0 8px ${a}44`;
-      if (raw?.hasSignal) {
-        const targetL = Math.min(1, raw.peakL * 2.1);
-        const targetR = Math.min(1, raw.peakR * 2.1);
-        smoothL = studioMeterBallistics(smoothL, targetL, true);
-        smoothR = studioMeterBallistics(smoothR, targetR, true);
-      } else {
-        smoothL = studioMeterBallistics(smoothL, 0, false);
-        smoothR = studioMeterBallistics(smoothR, 0, false);
-      }
-      if (fillLRef.current) {
-        fillLRef.current.style.height = `${smoothL * 100}%`;
-        fillLRef.current.style.background = smoothL > STUDIO_METER_DISPLAY_FLOOR ? grad : 'transparent';
-        fillLRef.current.style.boxShadow = smoothL > STUDIO_METER_DISPLAY_FLOOR ? glow : 'none';
-      }
-      if (fillRRef.current) {
-        fillRRef.current.style.height = `${smoothR * 100}%`;
-        fillRRef.current.style.background = smoothR > STUDIO_METER_DISPLAY_FLOOR ? grad : 'transparent';
-        fillRRef.current.style.boxShadow = smoothR > STUDIO_METER_DISPLAY_FLOOR ? glow : 'none';
+      /* ~15 Hz — shared cache in readStudioTrackMeterSnapshot; avoid double FFT vs spectrum. */
+      if (t - lastRead >= 66) {
+        lastRead = t;
+        const raw = readStudioTrackMeterSnapshot(trackIndex);
+        const a = accentRef.current;
+        const grad = `linear-gradient(0deg, ${a} 0%, ${a}66 55%, ${a}22 100%)`;
+        const glow = `0 0 8px ${a}44`;
+        if (raw?.hasSignal) {
+          const targetL = Math.min(1, raw.peakL * 2.1);
+          const targetR = Math.min(1, raw.peakR * 2.1);
+          smoothL = studioMeterBallistics(smoothL, targetL, true);
+          smoothR = studioMeterBallistics(smoothR, targetR, true);
+        } else {
+          smoothL = studioMeterBallistics(smoothL, 0, false);
+          smoothR = studioMeterBallistics(smoothR, 0, false);
+        }
+        if (fillLRef.current) {
+          fillLRef.current.style.height = `${smoothL * 100}%`;
+          fillLRef.current.style.background = smoothL > STUDIO_METER_DISPLAY_FLOOR ? grad : 'transparent';
+          fillLRef.current.style.boxShadow = smoothL > STUDIO_METER_DISPLAY_FLOOR ? glow : 'none';
+        }
+        if (fillRRef.current) {
+          fillRRef.current.style.height = `${smoothR * 100}%`;
+          fillRRef.current.style.background = smoothR > STUDIO_METER_DISPLAY_FLOOR ? grad : 'transparent';
+          fillRRef.current.style.boxShadow = smoothR > STUDIO_METER_DISPLAY_FLOOR ? glow : 'none';
+        }
       }
       raf = requestAnimationFrame(tick);
     };

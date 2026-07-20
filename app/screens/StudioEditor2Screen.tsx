@@ -145,6 +145,13 @@ import {
   se2SplitAudioClipAtBeat,
 } from '@/app/lib/studio/se2TimelineAudioClips';
 import {
+  clampSe2ClipGainDb,
+  formatSe2ClipGainDb,
+  SE2_CLIP_GAIN_DB_PER_PX,
+  se2ClipGainAmplitudeScale,
+  se2ClipPreviewGainLin,
+} from '@/app/lib/studio/se2AudioClipGain';
+import {
   applySe2NormalizeToSourceIds,
   consolidateSe2TrackClips,
   formatSe2ConsolidateRangeLabel,
@@ -727,7 +734,6 @@ import {
 } from '@/app/lib/studio/studioTrackVocalFx';
 import {
   ensureStudioInputMonitor,
-  getStudioInputMonitorFanout,
   getStudioInputMonitorStream,
   setStudioInputMonitorGain,
   setStudioInputMonitorKeepAlive,
@@ -747,7 +753,6 @@ import {
 } from '@/app/lib/studio/studioEditor2MidiInstrumentPlayback';
 import {
   findSe2RecordTargetTrackIndex,
-  padHotSe2RecordedBuffer,
   se2AudioRecordingActive,
   startSe2AudioRecording,
   stopSe2AudioRecording,
@@ -762,6 +767,8 @@ import {
   studioMixerMeterFrameDt,
   studioMixerMonitorLinear,
   studioMixerDisplayToDb,
+  armStudioMixerMeterDecayOnly,
+  clearStudioMixerMeterDecayOnly,
   resetStudioMixerMeterBallistics,
   STUDIO_MIXER_MASTER_TRACK_INDEX,
 } from '@/app/lib/studio/studioMixerMeterEngine';
@@ -775,6 +782,7 @@ import {
   readStudioMixerStripMeter,
   removeStudioMixerStripAt,
   resetStudioMixerMeterPeaks,
+  prepareStudioMixerMetersForStop,
   setStudioMixerStripGraphPlaybackLocked,
   isStudioMixerStripGraphPlaybackLocked,
   setStudioMixerStripCountHint,
@@ -1117,6 +1125,8 @@ type StudioAudioClip = {
   alignTempoLock?: boolean;
   /** Track Align trim mode — fixed stretch ratio while cropping with edge (no Shift). */
   alignWallStretchRate?: number;
+  /** Non-destructive clip gain in dB (0 = unity relative to SE2 baseline). */
+  gainDb?: number;
 };
 
 type MockMusioTrack = {
@@ -1380,11 +1390,13 @@ const TIMELINE_LOOP_REENTRY_PIN_PX = 0;
 /**
  * During follow, do NOT repaint the grid every few bars (that was the periodic jump).
  * Paint a large forward window rarely; only refill when scroll nears the painted end.
+ * Grid *motion* is WAAPI (compositor) — same clock family as the playhead — so a refill
+ * hitch must not freeze the strip translate. Waveform drawing is unchanged.
  */
 const TIMELINE_FOLLOW_PAINT_BACK_PX = 160;
 const TIMELINE_FOLLOW_PAINT_FWD_PX = 16000;
 /** Refill when the right edge of the viewport is this close to the painted end. */
-const TIMELINE_FOLLOW_PAINT_REARM_PX = 1200;
+const TIMELINE_FOLLOW_PAINT_REARM_PX = 2400;
 
 /**
  * Transform-only follow — scrollLeft stays frozen during play; the strip glides via translate3d.
@@ -1890,6 +1902,7 @@ function strokeTimelineLaneSelectedAudioClip(
   laneTop: number,
   laneH: number,
   ppb: number,
+  showGainReadout = false,
 ): void {
   const clip = track.audioClips.find((c) => c.id === clipId);
   if (!clip) return;
@@ -1923,6 +1936,41 @@ function strokeTimelineLaneSelectedAudioClip(
     g.fillStyle = 'rgba(110,231,249,0.92)';
     g.fillRect(x + 2, hy, handleW, handleH);
     g.fillRect(x + w - handleW - 2, hy, handleW, handleH);
+  }
+  /* Clip gain handle + dB readout (DAW event volume). */
+  if (w >= 28 && h >= 14) {
+    const midY = y + h * 0.5;
+    const lineL = x + Math.min(10, w * 0.12);
+    const lineR = x + w - Math.min(10, w * 0.12);
+    g.save();
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.lineWidth = 1;
+    g.setLineDash([3, 3]);
+    g.beginPath();
+    g.moveTo(lineL, midY + 0.5);
+    g.lineTo(lineR, midY + 0.5);
+    g.stroke();
+    g.setLineDash([]);
+    const knobR = 3.5;
+    g.fillStyle = 'rgba(255, 107, 107, 0.95)';
+    g.strokeStyle = 'rgba(0,0,0,0.45)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.arc((lineL + lineR) * 0.5, midY, knobR, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    const gainDb = clip.gainDb ?? 0;
+    if (Math.abs(gainDb) >= 0.05 || showGainReadout) {
+      const label = formatSe2ClipGainDb(gainDb);
+      g.font = '700 9px ui-sans-serif, system-ui, sans-serif';
+      g.textAlign = 'center';
+      g.textBaseline = 'bottom';
+      g.fillStyle = 'rgba(0,0,0,0.55)';
+      g.fillText(label, (lineL + lineR) * 0.5 + 0.5, midY - knobR - 2.5);
+      g.fillStyle = '#ffd0d0';
+      g.fillText(label, (lineL + lineR) * 0.5, midY - knobR - 3);
+    }
+    g.restore();
   }
 }
 
@@ -2097,6 +2145,8 @@ function scheduleAudioClipOnPreviewBus(params: {
   /** Trim mode locked stretch ratio (Track Align edge without Shift). */
   alignLockedStretchRate?: number;
   scheduleKey?: string;
+  /** Per-clip event gain in dB (0 = unity). */
+  gainDb?: number;
 }): void {
   const {
     ctx,
@@ -2125,6 +2175,7 @@ function scheduleAudioClipOnPreviewBus(params: {
     timeStretchAlign = false,
     alignLockedStretchRate,
     scheduleKey,
+    gainDb = 0,
   } = params;
   const tPlay = Math.max(tClipStart, tScheduleFrom);
   if (tPlay >= tClipEnd - 1e-4) return;
@@ -2132,7 +2183,7 @@ function scheduleAudioClipOnPreviewBus(params: {
   const timelineOffSec = Math.max(0, tPlay - tClipStart);
   if (timelineOffSec >= wallDur - 1e-4) return;
   const wallRemain = wallDur - timelineOffSec;
-  const clipGain = 0.42;
+  const clipGain = se2ClipPreviewGainLin(gainDb);
   const src = ctx.createBufferSource();
   src.buffer = buffer;
   let bufferOffSec = sourceOffsetSec + timelineOffSec;
@@ -2786,6 +2837,26 @@ function hitTimelineAudioClipDragMode(
   return 'move';
 }
 
+/** Mid-band gain handle — Cubase-style event volume grab (avoids resize edges). */
+function hitTimelineAudioClipGainHandle(
+  track: MockMusioTrack,
+  clipId: string,
+  xCss: number,
+  yLaneLocal: number,
+  ppb: number,
+  laneH: number,
+): boolean {
+  const clip = track.audioClips.find((c) => c.id === clipId);
+  if (!clip) return false;
+  const { x, y, w, h } = timelineAudioClipInnerRect(track, clip, 0, laneH, ppb);
+  if (w < 16 || h < 10) return false;
+  const edge = se2TrackIsTrackAlign(track.kind) ? 16 : AUDIO_CLIP_RESIZE_EDGE_PX;
+  if (xCss < x + edge || xCss > x + w - edge) return false;
+  const midY = y + h * 0.5;
+  const band = Math.max(6, Math.min(14, h * 0.28));
+  return Math.abs(yLaneLocal - midY) <= band;
+}
+
 function drawLaneAudioClips(
   og: CanvasRenderingContext2D,
   clips: StudioAudioClip[],
@@ -2864,13 +2935,14 @@ function drawLaneAudioClips(
         Math.max(128, Math.ceil(wClip * 12)),
       );
     };
+    const ampScale = se2ClipGainAmplitudeScale(c.gainDb);
     if (livePeaks && livePeaks.length > 0) {
       const sliced = slicePeaks(livePeaks);
-      drawSe2ClipWaveform(og, sliced, x, innerTop, wClip, innerH, r);
+      drawSe2ClipWaveform(og, sliced, x, innerTop, wClip, innerH, r, ampScale);
     } else if (buf) {
       const peaks = getSe2AudioWaveformPeaks(c.sourceId, buf);
       const sliced = slicePeaks(peaks);
-      drawSe2ClipWaveform(og, sliced, x, innerTop, wClip, innerH, r);
+      drawSe2ClipWaveform(og, sliced, x, innerTop, wClip, innerH, r, ampScale);
     }
     og.strokeStyle = `rgba(${baseR},${baseG},${baseB},0.72)`;
     og.lineWidth = 1;
@@ -3134,6 +3206,7 @@ function syncTimelineGridLayer(
   viewportWidthCss = 1200,
   livePeaksBySource?: ReadonlyMap<string, number[]>,
   viewportMargins?: { marginBackPx?: number; marginFwdPx?: number },
+  showClipGainReadout = false,
 ): void {
   if (!lanesCanvas && !rulerCanvas) return;
   const dpr = Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
@@ -3170,24 +3243,23 @@ function syncTimelineGridLayer(
   const rulerSrcY = Math.round(RULER_TOTAL_H_PX * dpr);
 
   const tracksSig = `${tracksSignature(tracks)}|bpb:${bpb}|buf:${se2AudioBuffersSignature(audioBuffers)}|live:${livePeaksBySource?.size ?? 0}${useViewport ? `|vs:${viewStart}|pw:${Math.round(paintW)}` : ''}`;
-  let off = gridCacheRef.current;
-  const offVer = off && '__gridVer' in off ? (off as HTMLCanvasElement & { __gridVer: number }).__gridVer : -1;
-  const offZoom = off && '__zoom' in off ? (off as HTMLCanvasElement & { __zoom: number }).__zoom : -1;
-  const prevSig = off && '__tracksSig' in off ? (off as HTMLCanvasElement & { __tracksSig: string }).__tracksSig : '';
-  let didRebuild = false;
-  if (
-    !off ||
-    off.width !== bw ||
-    off.height !== bh ||
-    offVer !== GRID_CACHE_VERSION ||
-    offZoom !== zoom ||
-    prevSig !== tracksSig
-  ) {
-    didRebuild = true;
-    off = document.createElement('canvas');
-    (off as HTMLCanvasElement & { __gridVer: number }).__gridVer = GRID_CACHE_VERSION;
-    (off as HTMLCanvasElement & { __zoom: number }).__zoom = zoom;
-    (off as HTMLCanvasElement & { __tracksSig: string }).__tracksSig = tracksSig;
+  type GridOff = HTMLCanvasElement & { __gridVer: number; __zoom: number; __tracksSig: string };
+  let off = gridCacheRef.current as GridOff | null;
+  const offVer = off?.__gridVer ?? -1;
+  const offZoom = off?.__zoom ?? -1;
+  const prevSig = off?.__tracksSig ?? '';
+  const needsNewBitmap =
+    !off
+    || off.width !== bw
+    || off.height !== bh
+    || offVer !== GRID_CACHE_VERSION
+    || offZoom !== zoom;
+  const needsRedraw = needsNewBitmap || prevSig !== tracksSig;
+  /* Reuse bitmap when only the view window moved — avoids GC hitch; same waveform draw path. */
+  if (needsNewBitmap) {
+    off = document.createElement('canvas') as GridOff;
+    off.__gridVer = GRID_CACHE_VERSION;
+    off.__zoom = zoom;
     off.width = bw;
     off.height = bh;
     /* Failed bitmap alloc (GPU pressure / FX suite open) — do not poison the cache. */
@@ -3196,6 +3268,9 @@ function syncTimelineGridLayer(
       return;
     }
     gridCacheRef.current = off;
+  }
+  if (needsRedraw && off) {
+    off.__tracksSig = tracksSig;
     const og = off.getContext('2d');
     if (!og) {
       gridCacheRef.current = null;
@@ -3356,7 +3431,15 @@ function syncTimelineGridLayer(
         if (trA.audioClips.some((c) => c.id === clipId)) {
           const laneTop = ati * laneHClamped;
           const clip = trA.audioClips.find((c) => c.id === clipId);
-          strokeTimelineLaneSelectedAudioClip(g, trA, clipId, laneTop, laneHClamped, ppb);
+          strokeTimelineLaneSelectedAudioClip(
+            g,
+            trA,
+            clipId,
+            laneTop,
+            laneHClamped,
+            ppb,
+            showClipGainReadout,
+          );
           if (
             clip &&
             audioSplitMarkerBeat != null &&
@@ -6629,6 +6712,8 @@ export default function StudioEditor2Screen({
       : 16,
   );
   const [recording, setRecording] = useState(false);
+  /** Mic armed on transport — capture waits for Play (does not auto-start when stopped). */
+  const [recordStandby, setRecordStandby] = useState(false);
   const [consolidateBusy, setConsolidateBusy] = useState(false);
   const [consolidateStartBar, setConsolidateStartBar] = useState(1);
   const [consolidateEndBar, setConsolidateEndBar] = useState(32);
@@ -6963,6 +7048,24 @@ export default function StudioEditor2Screen({
    */
   const playheadWapiRef    = useRef<Animation | null>(null);
   const pianoPhWapiRef     = useRef<Animation | null>(null);
+  /** Visible arrange playhead — compositor transform (JS left writes were shaking against strip WAAPI). */
+  const playheadVisibleWapiRef = useRef<Animation | null>(null);
+  const loopPlayheadVisibleWapiRef = useRef<Animation | null>(null);
+  /** Lane + ruler strip follow — compositor translate (keeps grid gliding during canvas refill). */
+  const timelineFollowWapiLaneRef = useRef<Animation | null>(null);
+  const timelineFollowWapiRulerRef = useRef<Animation | null>(null);
+  const timelineFollowWapiMetaRef = useRef({
+    off0: 0,
+    off1: 0,
+    durMs: 1,
+    infinite: false,
+    beatStart: 0,
+    beatEnd: 1,
+    origin: 0,
+    pin: 0,
+    maxScroll: 0,
+    ppb: 1,
+  });
   const wapiBpmRef         = useRef(120);
   const wapiPpbRef         = useRef(100);
   const bpmRef = useRef(120);
@@ -6975,8 +7078,13 @@ export default function StudioEditor2Screen({
   const precountCancelRef = useRef(false);
   const beginSe2RecordWithOptionalPrecountRef = useRef<() => Promise<void>>(async () => {});
   const recordingRef = useRef(false);
+  const recordStandbyRef = useRef(false);
+  const transportRecBtnRef = useRef<HTMLButtonElement | null>(null);
   const liveRecordSessionRef = useRef<Se2LiveRecordUiSession | null>(null);
   const liveRecordingPeaksRef = useRef<Map<string, number[]>>(new Map());
+  /** Growing take clip — DOM overlay; WAAPI scaleX locks to playhead (no per-frame width). */
+  const liveRecordClipElRef = useRef<HTMLDivElement | null>(null);
+  const liveRecordClipWapiRef = useRef<Animation | null>(null);
   const lastToggleMsRef = useRef(0);
   /** Next quarter index `k` to schedule (`t = sessionStart + (k - origin) * spb`). */
   const nextMetroKRef = useRef(0);
@@ -7126,7 +7234,7 @@ export default function StudioEditor2Screen({
   /** Arrange-view: drag WAV clips between lanes (dedicated audio tracks). */
   const timelineAudioClipDragRef = useRef<{
     active: boolean;
-    mode: 'move' | 'resize-left' | 'resize-right';
+    mode: 'move' | 'resize-left' | 'resize-right' | 'gain';
     sourceTrackIndex: number;
     targetTrackIndex: number;
     clipId: string;
@@ -7141,6 +7249,8 @@ export default function StudioEditor2Screen({
     /** Track Align — Shift+edge = time-stretch; edge alone = trim. */
     alignEdgeStretch?: boolean;
     alignAnchorStretchRate?: number;
+    /** Clip gain drag — dB at pointer-down. */
+    anchorGainDb?: number;
   }>({
     active: false,
     mode: 'move',
@@ -7157,6 +7267,7 @@ export default function StudioEditor2Screen({
     dragCommitted: false,
     alignEdgeStretch: undefined,
     alignAnchorStretchRate: undefined,
+    anchorGainDb: undefined,
   });
   /** Slice tool: drag on audio clip to position split marker, cut on pointer up. */
   const timelineAudioSliceDragRef = useRef<{
@@ -7335,9 +7446,17 @@ export default function StudioEditor2Screen({
       /* Do not clear audioPreviewScheduledRef here — refill would stack new BufferSources
          on still-playing clips (louder each EQ move; stuck loud until Stop). Insert strip
          live-rewires the graph; scheduled clips keep using the same preStrip bus. */
-      /* Mid-play rack rebuild can starve follow-ahead paints — force the next tick to refill. */
-      if (runningRef.current) {
-        timelineFollowPaintEndRef.current = 0;
+      /*
+       * Soft rearm only — forcing paintEnd=0 caused a heavy rebuild hitch at the same
+       * follow position. Do not change waveform drawing.
+       */
+      if (runningRef.current && timelineFollowPaintEndRef.current > 0) {
+        const virt =
+          timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current;
+        timelineFollowPaintEndRef.current = Math.min(
+          timelineFollowPaintEndRef.current,
+          virt + TIMELINE_FOLLOW_PAINT_REARM_PX + 600,
+        );
       }
     },
     [syncSe2TrackVocalFxNow],
@@ -7515,13 +7634,19 @@ export default function StudioEditor2Screen({
   }, [isScreenActive, studioTracks, trackRecordArmed, settings.audioInput]);
 
   useEffect(() => {
-    setStudioInputMonitorKeepAlive(() => recordingRef.current);
+    /* Keep mic tracks alive across ensure/rebuild even before React commits recording=true. */
+    setStudioInputMonitorKeepAlive(
+      () =>
+        recordingRef.current
+        || se2AudioRecordingActive()
+        || liveRecordSessionRef.current != null,
+    );
     return () => setStudioInputMonitorKeepAlive(null);
   }, []);
 
   /**
    * While recording: hard-mute software input monitor (mic must not reach speakers).
-   * Dry MediaRecorder still captures the mic stream; waveform peaks tap the silent fanout.
+   * Dry MediaRecorder still captures the mic stream; live take UI is a DOM overlay.
    */
   useEffect(() => {
     setStudioInputMonitorSoftMuted(recording);
@@ -7569,6 +7694,7 @@ export default function StudioEditor2Screen({
   precountBarsRef.current = precountBars;
   isPrecountingRef.current = isPrecounting;
   recordingRef.current = recording;
+  recordStandbyRef.current = recordStandby;
   timelineZoomRef.current = zoom;
   loopOnRef.current = loopOn;
   loopBarsRef.current = loopBars;
@@ -7598,15 +7724,64 @@ export default function StudioEditor2Screen({
    * Cleared on stop/pause or when the user scrolls the timeline by hand.
    */
   const timelineEdgeFollowActiveRef = useRef(false);
+  /**
+   * Stop parked the follow strip as a CSS translate (scrollLeft unchanged).
+   * Cleared on Play resume or when the user scrolls/seeks (then we commit to scroll).
+   */
+  const timelineFollowParkedTransformRef = useRef(false);
   /** Screen X (css px) where the playhead stays pinned once sticky follow engages. */
   const timelineFollowPinScreenXRef = useRef(0);
   /** Deferred grid repaint rAF id — keep heavy paint off the scroll/write frame. */
   const timelineFollowPaintRafRef = useRef(0);
 
+  const cancelTimelineFollowWapi = useCallback(() => {
+    timelineFollowWapiLaneRef.current?.cancel();
+    timelineFollowWapiLaneRef.current = null;
+    timelineFollowWapiRulerRef.current?.cancel();
+    timelineFollowWapiRulerRef.current = null;
+    timelineStripRef.current?.getAnimations().forEach((a) => a.cancel());
+    timelineRulerStripRef.current?.getAnimations().forEach((a) => a.cancel());
+  }, []);
+
+  const readTimelineFollowWapiOffset = useCallback((): number | null => {
+    const anim = timelineFollowWapiLaneRef.current;
+    if (!anim || anim.playState === 'idle') return null;
+    const meta = timelineFollowWapiMetaRef.current;
+    const d = Math.max(1e-9, meta.durMs);
+    const t = Number(anim.currentTime ?? 0);
+    const phase = meta.infinite ? ((t % d) + d) % d : Math.max(0, Math.min(t, d));
+    const u = phase / d;
+    const span = Math.max(1e-9, meta.beatEnd - meta.beatStart);
+    const beat = meta.beatStart + span * u;
+    /* Same curve as JS follow / follow keyframes — not linear off0→off1. */
+    const ts = Math.min(meta.maxScroll, Math.max(0, beat * meta.ppb - meta.pin));
+    return ts - meta.origin;
+  }, []);
+
   const clearTimelineEdgeFollow = useCallback(() => {
     const wasFollowing = timelineEdgeFollowActiveRef.current;
+    const wasParked = timelineFollowParkedTransformRef.current;
     const scrollEl = timelineHScrollRef.current;
-    if (wasFollowing && scrollEl) {
+    const wapiOff = readTimelineFollowWapiOffset();
+    if (wapiOff != null) timelineFollowLastOffsetRef.current = wapiOff;
+    const laneEl = timelineStripRef.current;
+    const rulerStripEl = timelineRulerStripRef.current;
+    let offset = timelineFollowLastOffsetRef.current;
+    if (wasParked && Math.abs(offset) < 0.5) {
+      offset = se2ReadStripFollowOffsetPx(laneEl) || se2ReadStripFollowOffsetPx(rulerStripEl);
+      if (Math.abs(offset) >= 0.5) timelineFollowLastOffsetRef.current = offset;
+    }
+    /*
+     * Bake follow translate into CSS BEFORE cancel — cancel drops WAAPI and would
+     * flash the grid under the playhead for a frame.
+     */
+    if ((wasFollowing || wasParked) && Math.abs(offset) >= 0.5) {
+      const bake = `translate3d(${-offset}px, 0, 0)`;
+      if (laneEl) laneEl.style.transform = bake;
+      if (rulerStripEl) rulerStripEl.style.transform = bake;
+    }
+    cancelTimelineFollowWapi();
+    if ((wasFollowing || wasParked) && scrollEl) {
       const committed = Math.max(
         0,
         Math.round(timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current),
@@ -7618,6 +7793,7 @@ export default function StudioEditor2Screen({
       if (bar && bar.scrollLeft !== committed) bar.scrollLeft = committed;
     }
     timelineEdgeFollowActiveRef.current = false;
+    timelineFollowParkedTransformRef.current = false;
     timelineFollowIntScrollRef.current = -1;
     timelineFollowTransformOriginRef.current = 0;
     timelineFollowLastOffsetRef.current = 0;
@@ -7625,10 +7801,12 @@ export default function StudioEditor2Screen({
     timelineFollowPaintScrollRef.current = Number.NEGATIVE_INFINITY;
     timelineFollowPaintEndRef.current = 0;
     if (timelineFollowPaintRafRef.current) {
+      window.clearTimeout(timelineFollowPaintRafRef.current);
       cancelAnimationFrame(timelineFollowPaintRafRef.current);
       timelineFollowPaintRafRef.current = 0;
     }
     timelineProgrammaticScrollRef.current = false;
+    /* Clear bake only after scrollLeft matches. */
     clearTimelineFollowStripTransform(
       timelineStripRef.current,
       timelineRulerStripRef.current,
@@ -7642,7 +7820,56 @@ export default function StudioEditor2Screen({
     }
     const loopPh = loopPlayheadGroupRef.current;
     if (loopPh) loopPh.style.visibility = 'hidden';
-  }, []);
+  }, [cancelTimelineFollowWapi, readTimelineFollowWapiOffset]);
+
+  /**
+   * Stop: freeze the follow strip in place (CSS bake only). Never rewrite scrollLeft —
+   * converting transform→scroll is what made the whole grid jerk on Stop.
+   */
+  const freezeTimelineFollowForStop = useCallback(() => {
+    const wapiOff = readTimelineFollowWapiOffset();
+    if (wapiOff != null) timelineFollowLastOffsetRef.current = wapiOff;
+    const offset = timelineFollowLastOffsetRef.current;
+    const laneEl = timelineStripRef.current;
+    const rulerStripEl = timelineRulerStripRef.current;
+    if (Math.abs(offset) >= 0.5) {
+      const bake = `translate3d(${-offset}px, 0, 0)`;
+      if (laneEl) laneEl.style.transform = bake;
+      if (rulerStripEl) rulerStripEl.style.transform = bake;
+      timelineFollowParkedTransformRef.current = true;
+    } else {
+      timelineFollowParkedTransformRef.current = false;
+      clearTimelineFollowStripTransform(
+        laneEl,
+        rulerStripEl,
+        timelineFollowContentRef.current,
+      );
+    }
+    try {
+      timelineFollowWapiLaneRef.current?.pause();
+      timelineFollowWapiRulerRef.current?.pause();
+    } catch {
+      /* */
+    }
+    cancelTimelineFollowWapi();
+    timelineEdgeFollowActiveRef.current = false;
+    timelineFollowPinAppliedRef.current = false;
+    timelineFollowPaintScrollRef.current = Number.NEGATIVE_INFINITY;
+    timelineFollowPaintEndRef.current = 0;
+    if (timelineFollowPaintRafRef.current) {
+      window.clearTimeout(timelineFollowPaintRafRef.current);
+      cancelAnimationFrame(timelineFollowPaintRafRef.current);
+      timelineFollowPaintRafRef.current = 0;
+    }
+    /* Keep origin + lastOffset — Play resumes the same follow frame without a scroll jump. */
+    const ph = playheadGroupRef.current;
+    if (ph) {
+      ph.style.visibility = '';
+      ph.style.pointerEvents = 'none';
+    }
+    const loopPh = loopPlayheadGroupRef.current;
+    if (loopPh) loopPh.style.visibility = 'hidden';
+  }, [cancelTimelineFollowWapi, readTimelineFollowWapiOffset]);
 
   const scrollTrackListToEnd = useCallback(() => {
     queueMicrotask(() => {
@@ -7743,6 +7970,7 @@ export default function StudioEditor2Screen({
       viewportWidth,
       liveRecordingPeaksRef.current,
       margins,
+      timelineAudioClipDragRef.current.active && timelineAudioClipDragRef.current.mode === 'gain',
     );
     if (margins) {
       const fullW = TOTAL_WIDTH_PX * zoom;
@@ -7762,60 +7990,117 @@ export default function StudioEditor2Screen({
     });
   }, [syncTimelineGridNow]);
 
-  const tickLiveRecordingWaveform = useCallback(
-    (beatNow: number) => {
-      const sess = liveRecordSessionRef.current;
-      if (!sess || !recordingRef.current) return;
+  const cancelLiveRecordClipWapi = useCallback(() => {
+    liveRecordClipWapiRef.current?.cancel();
+    liveRecordClipWapiRef.current = null;
+    const el = liveRecordClipElRef.current;
+    if (!el) return;
+    el.getAnimations().forEach((a) => a.cancel());
+    el.style.transform = 'scaleX(0)';
+    el.style.display = 'none';
+  }, []);
 
-      const now = performance.now();
-      if (now - sess.lastUiTickMs < 120) return;
-      sess.lastUiTickMs = now;
-
-      const durBeats = Math.max(
-        SE2_MIN_AUDIO_CLIP_DURATION_BEATS,
-        beatNow - sess.startBeat,
-      );
-
-      if (sess.previewEnabled) {
-        const peaks = sess.capture.getLivePeaks();
-        if (peaks.length > 0) {
-          liveRecordingPeaksRef.current.set(sess.sourceId, peaks);
-        }
+  /**
+   * Grow the live-record overlay on the compositor (scaleX), locked to the same
+   * beat→time mapping as the playhead WAAPI. Do not write width from rAF — that jitters.
+   */
+  const launchLiveRecordClipWapi = useCallback((beatNow: number, play: boolean) => {
+    const el = liveRecordClipElRef.current;
+    const sess = liveRecordSessionRef.current;
+    if (!el || !sess || !play) {
+      liveRecordClipWapiRef.current?.cancel();
+      liveRecordClipWapiRef.current = null;
+      if (el && !sess) {
+        el.style.display = 'none';
+        el.style.transform = 'scaleX(0)';
       }
+      return;
+    }
 
-      const tracks = studioTracksRef.current;
-      const tr = tracks[sess.trackIndex];
-      if (!tr) return;
-      const clipIdx = tr.audioClips.findIndex((c) => c.id === sess.clipId);
-      if (clipIdx < 0) return;
-      const prevClip = tr.audioClips[clipIdx]!;
-      if (Math.abs(prevClip.durationBeats - durBeats) < 0.02) {
-        gridCacheRef.current = null;
-        syncTimelineGridNow();
-        return;
-      }
-      const nextClips = tr.audioClips.map((c, i) =>
-        i === clipIdx ? { ...c, durationBeats: durBeats } : c,
-      );
-      studioTracksRef.current = tracks.map((t, i) =>
-        i === sess.trackIndex ? { ...t, audioClips: nextClips } : t,
-      );
+    const bpm = bpmRef.current;
+    const z = timelineZoomRef.current;
+    const bpb = beatsPerBarRef.current;
+    const ppb = ppbAtZoom(z, bpb);
+    const tb = totalBeatsRef.current;
+    const lsLoop = loopStartBeatRef.current;
+    const leLoop = Math.min(loopEndBeatRef.current, tb);
+    const inLoopRegion =
+      beatNow >= lsLoop - 1e-9 && beatNow <= leLoop + 1e-9;
+    const useSegment =
+      play &&
+      loopOnRef.current &&
+      leLoop > lsLoop &&
+      lsLoop >= 0 &&
+      inLoopRegion;
 
-      gridCacheRef.current = null;
-      syncTimelineGridNow();
-    },
-    [syncTimelineGridNow],
-  );
+    const beatStart = useSegment ? lsLoop : 0;
+    const beatEnd = useSegment ? leLoop : tb;
+    if (!(beatEnd > beatStart) || sess.startBeat >= beatEnd) {
+      el.style.display = 'none';
+      return;
+    }
 
-  /** Live clip/waveform paint — off the transport rAF so playhead stays smooth. */
-  useEffect(() => {
-    if (!recording) return;
-    const id = window.setInterval(() => {
-      if (!recordingRef.current || !liveRecordSessionRef.current) return;
-      tickLiveRecordingWaveform(displayBeatRef.current);
-    }, 120);
-    return () => clearInterval(id);
-  }, [recording, tickLiveRecordingWaveform]);
+    const durMs = ((beatEnd - beatStart) / (bpm / 60)) * 1000;
+    const bn = Math.min(Math.max(beatNow, beatStart), beatEnd);
+    const seekMs = Math.max(0, Math.min(((bn - beatStart) / (bpm / 60)) * 1000, durMs));
+    const S = sess.startBeat;
+    const wMax = Math.max(3, (beatEnd - S) * ppb);
+    const laneH = Math.max(
+      MIN_TRACK_LANE_H_PX,
+      Math.min(MAX_TRACK_LANE_H_PX, Math.round(trackLaneHRef.current)),
+    );
+
+    el.style.display = 'block';
+    el.style.left = `${S * ppb}px`;
+    el.style.top = `${sess.trackIndex * laneH + 1}px`;
+    el.style.height = `${Math.max(4, laneH - 2)}px`;
+    el.style.width = `${wMax}px`;
+    el.style.transformOrigin = 'left center';
+    el.style.background = `${sess.colorHex}66`;
+    el.style.boxShadow = `inset 0 0 0 1px ${sess.colorHex}aa`;
+    el.style.willChange = 'transform';
+
+    const span = Math.max(1e-9, beatEnd - beatStart);
+    const sAt = (beat: number) => {
+      const w = Math.max(0, beat - S) * ppb;
+      return Math.max(0, Math.min(1, w / wMax));
+    };
+    const s0 = sAt(beatStart);
+    const s1 = sAt(beatEnd);
+    const sSeek = sAt(bn);
+
+    /*
+     * If take starts mid-segment, hold scaleX(0) until S so the trailing edge never
+     * leads the playhead, then grow linearly to the segment end (same clock as playhead).
+     */
+    const frames: Keyframe[] =
+      S > beatStart + 1e-9
+        ? [
+            { offset: 0, transform: 'scaleX(0)' },
+            {
+              offset: Math.max(0, Math.min(1, (S - beatStart) / span)),
+              transform: 'scaleX(0)',
+            },
+            { offset: 1, transform: `scaleX(${s1})` },
+          ]
+        : [
+            { offset: 0, transform: `scaleX(${s0})` },
+            { offset: 1, transform: `scaleX(${s1})` },
+          ];
+
+    el.style.transform = `scaleX(${sSeek})`;
+    el.getAnimations().forEach((a) => a.cancel());
+    const a = el.animate(frames, {
+      duration: Math.max(1e-9, durMs),
+      easing: 'linear',
+      fill: 'forwards',
+      iterations: useSegment ? Infinity : 1,
+    });
+    a.pause();
+    a.currentTime = seekMs;
+    a.play();
+    liveRecordClipWapiRef.current = a;
+  }, []);
 
   const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean }) => {
     if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
@@ -7991,7 +8276,123 @@ export default function StudioEditor2Screen({
     const wapiIters = useSegment ? Infinity : 1;
     playheadWapiRef.current = makeAnim(playheadWapiTimingRef.current, x0Grip, x1Grip, durMs, seekMs, wapiIters);
     pianoPhWapiRef.current  = makeAnim(pianoPlayheadRef.current, x0Piano, x1Piano, durMs, seekMs, wapiIters);
-  }, []);
+
+    /*
+     * Visible playhead on the compositor (same x0/x1 as the hidden timing clock).
+     * Per-frame style.left from the rAF beat was fighting strip follow WAAPI → shake/jump.
+     * With left=0 and transform = beatPx − grip/2, the line glides to the pin then sits
+     * while the grid translate carries the content underneath.
+     */
+    playheadVisibleWapiRef.current?.cancel();
+    playheadVisibleWapiRef.current = null;
+    loopPlayheadVisibleWapiRef.current?.cancel();
+    loopPlayheadVisibleWapiRef.current = null;
+    const mainPhEl = playheadGroupRef.current;
+    const loopPhEl = loopPlayheadGroupRef.current;
+    const seekXGrip = x0Grip + ((x1Grip - x0Grip) * seekMs) / Math.max(1e-9, durMs);
+    if (play) {
+      /*
+       * Atomic parked→WAAPI handoff: bake transform at the resume beat BEFORE left=0.
+       * Setting left=0 first (while transform is still −grip/2) flashes the line to bar 1.
+       */
+      if (mainPhEl) {
+        mainPhEl.style.transform = `translate3d(${seekXGrip}px, 0, 0)`;
+        mainPhEl.style.left = '0px';
+        if (playheadLineRef.current) playheadLineRef.current.style.transform = 'translateX(0px)';
+      }
+      if (loopPhEl) {
+        loopPhEl.style.transform = `translate3d(${seekXGrip}px, 0, 0)`;
+        loopPhEl.style.left = '0px';
+        if (loopPlayheadLineRef.current) loopPlayheadLineRef.current.style.transform = 'translateX(0px)';
+      }
+      playheadVisibleWapiRef.current = makeAnim(mainPhEl, x0Grip, x1Grip, durMs, seekMs, wapiIters);
+      if (useSegment) {
+        loopPlayheadVisibleWapiRef.current = makeAnim(loopPhEl, x0Grip, x1Grip, durMs, seekMs, wapiIters);
+      }
+    } else if (mainPhEl) {
+      /* Stopped/paused — park with content-space left. Never left=0 first (Stop jerk). */
+      mainPhEl.getAnimations().forEach((a) => a.cancel());
+      positionTimelinePlayheadGroup(mainPhEl, playheadLineRef.current, beatNow, z, bpb);
+      if (loopPhEl) {
+        loopPhEl.getAnimations().forEach((a) => a.cancel());
+      }
+    }
+
+    /*
+     * Grid follow on the compositor. Must follow the SAME offset curve as JS follow
+     * (targetScroll(beat) − origin), not a straight 0→end line — a linear strip anim
+     * cancelled the playhead's content `left` and stuck it at the viewport start.
+     */
+    timelineFollowWapiLaneRef.current?.cancel();
+    timelineFollowWapiLaneRef.current = null;
+    timelineFollowWapiRulerRef.current?.cancel();
+    timelineFollowWapiRulerRef.current = null;
+    if (play) {
+      const cw = timelineHScrollRef.current?.clientWidth ?? 0;
+      const laneEl = timelineStripRef.current;
+      const rulerEl = timelineRulerStripRef.current;
+      if (cw > 0 && laneEl) {
+        const pin = cw * TIMELINE_FOLLOW_PIN_RATIO;
+        const maxScroll = Math.max(0, TOTAL_WIDTH_PX * z - cw);
+        const origin = timelineFollowTransformOriginRef.current;
+        const beatStart = useSegment ? lsLoop : 0;
+        const beatEnd = useSegment ? leLoop : tb;
+        const spanBeats = Math.max(1e-9, beatEnd - beatStart);
+        const offsetAt = (beat: number) => {
+          const ts = Math.min(maxScroll, Math.max(0, beat * ppb - pin));
+          return ts - origin;
+        };
+        const steps = Math.min(160, Math.max(24, Math.ceil(spanBeats)));
+        const frames: Keyframe[] = [];
+        for (let i = 0; i <= steps; i++) {
+          const u = i / steps;
+          const beat = beatStart + spanBeats * u;
+          const off = offsetAt(beat);
+          frames.push({ transform: `translate3d(${-off}px, 0, 0)`, offset: u });
+        }
+        const off0 = offsetAt(beatStart);
+        const off1 = offsetAt(beatEnd);
+        timelineFollowWapiMetaRef.current = {
+          off0,
+          off1,
+          durMs,
+          infinite: useSegment,
+          beatStart,
+          beatEnd,
+          origin,
+          pin,
+          maxScroll,
+          ppb,
+        };
+        const makeFollowAnim = (el: HTMLElement | null): Animation | null => {
+          if (!el) return null;
+          const d = Math.max(1e-9, durMs);
+          const t = Math.min(Math.max(seekMs, 0), durMs);
+          const uSeek = t / d;
+          const beatSeek = beatStart + spanBeats * uSeek;
+          const seekOff = offsetAt(beatSeek);
+          el.style.transform = `translate3d(${-seekOff}px, 0, 0)`;
+          el.getAnimations().forEach((a) => a.cancel());
+          const a = el.animate(frames, {
+            duration: durMs,
+            easing: 'linear',
+            fill: 'forwards',
+            iterations: wapiIters,
+          });
+          a.pause();
+          a.currentTime = t;
+          a.play();
+          return a;
+        };
+        timelineFollowWapiLaneRef.current = makeFollowAnim(laneEl);
+        timelineFollowWapiRulerRef.current = makeFollowAnim(rulerEl);
+        timelineEdgeFollowActiveRef.current = true;
+      }
+    }
+
+    /* Keep live take trailing edge on the same compositor clock as the playhead. */
+    launchLiveRecordClipWapi(beatNow, play);
+  }, [launchLiveRecordClipWapi]);
 
   /** Re-anchor transform follow at a beat — loop wrap uses this so the grid + loop playhead stay aligned. */
   const reanchorTimelineFollowAtBeat = useCallback(
@@ -8003,6 +8404,7 @@ export default function StudioEditor2Screen({
       const ppbLoop = ppbAtZoom(timelineZoomRef.current, beatsPerBarRef.current);
       const maxSl = Math.max(0, TOTAL_WIDTH_PX * timelineZoomRef.current - cw);
       const virt = Math.min(maxSl, Math.max(0, beat * ppbLoop - pin));
+      cancelTimelineFollowWapi();
       timelineFollowTransformOriginRef.current = virt;
       timelineFollowLastOffsetRef.current = 0;
       clearTimelineFollowStripTransform(
@@ -8014,7 +8416,7 @@ export default function StudioEditor2Screen({
         launchWapiAnims(beat, true);
       }
     },
-    [launchWapiAnims],
+    [cancelTimelineFollowWapi, launchWapiAnims],
   );
 
   const cancelPlayheadCompositorAnims = useCallback(() => {
@@ -8022,10 +8424,17 @@ export default function StudioEditor2Screen({
     playheadWapiRef.current = null;
     pianoPhWapiRef.current?.cancel();
     pianoPhWapiRef.current = null;
+    playheadVisibleWapiRef.current?.cancel();
+    playheadVisibleWapiRef.current = null;
+    loopPlayheadVisibleWapiRef.current?.cancel();
+    loopPlayheadVisibleWapiRef.current = null;
     playheadGroupRef.current?.getAnimations().forEach((a) => a.cancel());
+    loopPlayheadGroupRef.current?.getAnimations().forEach((a) => a.cancel());
     playheadWapiTimingRef.current?.getAnimations().forEach((a) => a.cancel());
     pianoPlayheadRef.current?.getAnimations().forEach((a) => a.cancel());
-  }, []);
+    cancelTimelineFollowWapi();
+    cancelLiveRecordClipWapi();
+  }, [cancelLiveRecordClipWapi, cancelTimelineFollowWapi]);
 
   const applyPlayheadLineOnly = useCallback((beat: number) => {
     const z = timelineZoomRef.current;
@@ -8373,6 +8782,11 @@ export default function StudioEditor2Screen({
     void (async () => {
       const ctx = await ensureCtx();
       if (cancelled) return;
+      /*
+       * Mid-play: onTrackInsertFxRackChange already wires the edited lane. Re-running
+       * every track here (plus vocal stack sync) caused audible in/out dropouts with Suite on.
+       */
+      if (runningRef.current || isStudioMixerStripGraphPlaybackLocked()) return;
       const bus = midiPreviewBusRef.current;
       if (!bus) return;
       const masterOut = studioMasterOutRef.current ?? ctx.destination;
@@ -9977,6 +10391,7 @@ export default function StudioEditor2Screen({
                 timeStretchAlign,
                 alignLockedStretchRate: clip.alignWallStretchRate,
                 scheduleKey: key,
+                gainDb: clip.gainDb,
               });
             } catch {
               scheduled.delete(key);
@@ -10457,54 +10872,84 @@ export default function StudioEditor2Screen({
      * viewport-pinned playhead (no scrollLeft / canvas margin fights).
      */
     if (!runningRef.current) {
-      if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
+      /* Never auto-commit a Stop-parked follow translate — that jerks the grid. */
+      if (timelineEdgeFollowActiveRef.current && !timelineFollowParkedTransformRef.current) {
+        clearTimelineEdgeFollow();
+      }
     } else if (scrollEl && clientWidth > 0) {
       const pinPx = clientWidth * TIMELINE_FOLLOW_PIN_RATIO;
       const maxScroll = Math.max(0, Math.max(scrollEl.scrollWidth, stripW) - clientWidth);
       const targetScroll = Math.min(maxScroll, Math.max(0, lineCenter - pinPx));
       timelineProgrammaticScrollRef.current = true;
-      const { virtualScroll, offset } = applyTimelineTransformFollow(
-        targetScroll,
-        timelineStripRef.current,
-        timelineRulerStripRef.current,
-        timelineFollowContentRef.current,
-        timelineFollowTransformOriginRef,
-      );
+      /*
+       * Prefer compositor follow WAAPI — do not overwrite transform from JS every frame
+       * (that was the grid pause when canvas refill blocked the main thread).
+       */
+      let virtualScroll: number;
+      let offset: number;
+      const wapiOff = readTimelineFollowWapiOffset();
+      const followRunning =
+        wapiOff != null
+        && timelineFollowWapiLaneRef.current
+        && (timelineFollowWapiLaneRef.current.playState === 'running'
+          || timelineFollowWapiLaneRef.current.playState === 'finished');
+      if (followRunning) {
+        offset = wapiOff!;
+        virtualScroll = timelineFollowTransformOriginRef.current + offset;
+      } else {
+        const jsFollow = applyTimelineTransformFollow(
+          targetScroll,
+          timelineStripRef.current,
+          timelineRulerStripRef.current,
+          timelineFollowContentRef.current,
+          timelineFollowTransformOriginRef,
+        );
+        virtualScroll = jsFollow.virtualScroll;
+        offset = jsFollow.offset;
+      }
       timelineFollowLastOffsetRef.current = offset;
       const loopPlaybackActive = loopOnRef.current && runningRef.current;
+      const mainPh = playheadGroupRef.current;
+      const loopPh = loopPlayheadGroupRef.current;
+      const visiblePhWapi = playheadVisibleWapiRef.current;
+      const compositorPh =
+        visiblePhWapi
+        && (visiblePhWapi.playState === 'running' || visiblePhWapi.playState === 'finished');
       if (loopPlaybackActive) {
-        const mainPh = playheadGroupRef.current;
         if (mainPh) {
           mainPh.style.visibility = 'hidden';
           mainPh.style.pointerEvents = 'none';
         }
-        const loopPh = loopPlayheadGroupRef.current;
         if (loopPh) {
           loopPh.style.visibility = 'visible';
-          positionLoopRegionPlayheadGroup(
-            loopPh,
-            loopPlayheadLineRef.current,
+          /* Loop head is WAAPI-driven when launched; JS left only as fallback. */
+          if (!loopPlayheadVisibleWapiRef.current || loopPlayheadVisibleWapiRef.current.playState === 'idle') {
+            positionLoopRegionPlayheadGroup(
+              loopPh,
+              loopPlayheadLineRef.current,
+              bClamped,
+              z,
+              bpb,
+            );
+          }
+        }
+      } else {
+        if (mainPh) {
+          mainPh.style.visibility = '';
+          mainPh.style.pointerEvents = 'none';
+        }
+        if (loopPh) loopPh.style.visibility = 'hidden';
+        timelineFollowPinAppliedRef.current = true;
+        /* Do not write left/transform every frame — compositor playhead owns motion. */
+        if (!compositorPh) {
+          positionTimelinePlayheadGroup(
+            mainPh,
+            playheadLineRef.current,
             bClamped,
             z,
             bpb,
           );
         }
-      } else {
-        const mainPh = playheadGroupRef.current;
-        if (mainPh) {
-          mainPh.style.visibility = '';
-          mainPh.style.pointerEvents = 'none';
-        }
-        if (loopPlayheadGroupRef.current) loopPlayheadGroupRef.current.style.visibility = 'hidden';
-        /* Content-space playhead rides the strip (incl. follow translate) — always on the beat. */
-        timelineFollowPinAppliedRef.current = true;
-        positionTimelinePlayheadGroup(
-          playheadGroupRef.current,
-          playheadLineRef.current,
-          bClamped,
-          z,
-          bpb,
-        );
       }
       timelineFollowIntScrollRef.current = scrollEl.scrollLeft;
       timelineFollowPinScreenXRef.current = pinPx;
@@ -10516,12 +10961,18 @@ export default function StudioEditor2Screen({
       if (needsPaint && !timelineFollowPaintRafRef.current) {
         const paintZ = z;
         const paintScroll = virtualScroll;
-        timelineFollowPaintRafRef.current = requestAnimationFrame(() => {
+        /*
+         * Paint off the transport rAF — strip follow is WAAPI so motion keeps gliding.
+         * Full waveform draw path unchanged (no lite peaks).
+         */
+        timelineFollowPaintRafRef.current = window.setTimeout(() => {
           timelineFollowPaintRafRef.current = 0;
           syncTimelineGridFollowAhead(paintZ, paintScroll);
-        });
+        }, 0) as unknown as number;
       }
     }
+
+    /* Live take clip is WAAPI-driven (launchLiveRecordClipWapi) — do not write width here. */
 
     /* Bar/time readouts use the audio-clock beat so they roll over with the metronome. */
     const bReadout = quantizeSe2DisplayBeatForReadout(bDisplay);
@@ -10575,6 +11026,7 @@ export default function StudioEditor2Screen({
     clearTimelineEdgeFollow,
     launchWapiAnims,
     reanchorTimelineFollowAtBeat,
+    readTimelineFollowWapiOffset,
     runLoopPreviewSpliceRefill,
     syncTimelineGridFollowAhead,
     syncTimelineGridNow,
@@ -12552,6 +13004,29 @@ export default function StudioEditor2Screen({
     resolveSe2ExportRange,
     se2ExportTracksPayload,
   ]);
+
+  const patchTimelineAudioClipGain = useCallback(
+    (trackIndex: number, clipId: string, gainDb: number) => {
+      const nextDb = clampSe2ClipGainDb(gainDb);
+      setStudioTracks((prev) => {
+        const tr = prev[trackIndex];
+        if (!tr) return prev;
+        let changed = false;
+        const audioClips = tr.audioClips.map((c) => {
+          if (c.id !== clipId) return c;
+          if (Math.abs((c.gainDb ?? 0) - nextDb) < 0.001) return c;
+          changed = true;
+          return { ...c, gainDb: nextDb };
+        });
+        if (!changed) return prev;
+        const next = prev.map((t, i) => (i === trackIndex ? { ...t, audioClips } : t));
+        studioTracksRef.current = next;
+        return next;
+      });
+      gridCacheRef.current = null;
+    },
+    [],
+  );
 
   const moveTimelineAudioClip = useCallback(
     (
@@ -18331,9 +18806,14 @@ export default function StudioEditor2Screen({
       ensureSe2MixerStrips(ctx, bus, downstream);
       resyncStudioTrackInsertFxStripInputs(ctx, bus, getStudioMixerStripCountHint(), downstream);
       primeSe2MixerStripRoutes(ctx, bus, downstream);
+      clearStudioMixerMeterDecayOnly();
       setStudioMixerStripGraphPlaybackLocked(true);
     }
-    await Promise.all([
+    /*
+     * Warm kits/instruments in the background — never block Play for this.
+     * A top-up refill runs when warmup finishes so cold MIDI still catches up.
+     */
+    const warmupPromise = Promise.all([
       ...studioTracksRef.current
         .filter((t) => studioTrackIsDrumChannel(t) && !studioTrackIsBeatPadsChannel(t) && t.drumProducerKitId)
         .map((t) => studioDrumSessionForTrack(t)),
@@ -18362,37 +18842,42 @@ export default function StudioEditor2Screen({
     resetStudioMixerMeterBallistics();
     resetStudioMixerMeterPeaks();
     transportPlayStartPerfMsRef.current = performance.now();
-    const snapped = snapBeatToQuarterGrid(cursorBeatRef.current, totalBeatsRef.current);
-    cursorBeatRef.current = snapped;
-    originBeatRef.current = snapped;
-    const tCapture = audioNow(ctx);
-    sessionStartRef.current = tCapture + AUDIO_START_FLOOR_SEC;
-    /* Seed both clocks so the first RAF frame has correct values before the 25ms tick fires. */
-    schedAnchorTimeRef.current = tCapture;
-    schedAnchorPerfRef.current = performance.now();
-    /* perfSessionStart = now + AUDIO_START_FLOOR_SEC (visual beat 0 = when audio starts). */
-    perfSessionStartMsRef.current = performance.now() + AUDIO_START_FLOOR_SEC * 1000;
-    nextMetroKRef.current = Math.floor(snapped);
-    displayBeatRef.current = snapped;
+    /* Resume exactly where Stop parked — no quarter-grid snap on Play. */
+    const resumeBeat = Math.max(0, Math.min(totalBeatsRef.current, cursorBeatRef.current));
+    cursorBeatRef.current = resumeBeat;
+    originBeatRef.current = resumeBeat;
+    nextMetroKRef.current = Math.floor(resumeBeat);
+    displayBeatRef.current = resumeBeat;
     midiPreviewLoopLapRef.current = 0;
     lastMetroLoopLapRef.current = 0;
     lastCompositorLoopLapRef.current = -1;
     midiPreviewScheduledRef.current.clear();
     midiHardwareScheduledRef.current.clear();
     /*
-     * Pre-paint a large forward grid window BEFORE the playhead moves so follow scroll
-     * does not hitch every few bars rebuilding the waveform mid-playback.
+     * Light follow origin + scroll only — do NOT paint the full grid here.
+     * If Stop parked a follow translate, keep scrollLeft + CSS transform and resume
+     * from that frame (rewriting scroll here reintroduces the Stop/Play grid jerk).
      */
-    {
-      const scrollEl = timelineHScrollRef.current;
-      const zPlay = timelineZoomRef.current;
-      const bpbPlay = beatsPerBarRef.current;
-      const ppbPlay = ppbAtZoom(zPlay, bpbPlay);
-      const clientW = scrollEl?.clientWidth ?? 0;
-      const pinPx = clientW * TIMELINE_FOLLOW_PIN_RATIO;
-      const linePx = snapped * ppbPlay;
-      const maxSl = Math.max(0, TOTAL_WIDTH_PX * zPlay - clientW);
-      const virtScroll = Math.min(maxSl, Math.max(0, linePx - pinPx));
+    const scrollEl = timelineHScrollRef.current;
+    const zPlay = timelineZoomRef.current;
+    const bpbPlay = beatsPerBarRef.current;
+    const ppbPlay = ppbAtZoom(zPlay, bpbPlay);
+    const clientW = scrollEl?.clientWidth ?? 0;
+    const pinPx = clientW * TIMELINE_FOLLOW_PIN_RATIO;
+    const linePx = resumeBeat * ppbPlay;
+    const maxSl = Math.max(0, TOTAL_WIDTH_PX * zPlay - clientW);
+    const parkedFollow = timelineFollowParkedTransformRef.current;
+    let virtScroll: number;
+    if (parkedFollow) {
+      virtScroll = Math.max(
+        0,
+        timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current,
+      );
+      timelineFollowParkedTransformRef.current = false;
+      timelineProgrammaticScrollRef.current = true;
+      /* origin stays; launchWapiAnims rebuilds follow from the same offset. */
+    } else {
+      virtScroll = Math.min(maxSl, Math.max(0, linePx - pinPx));
       timelineFollowTransformOriginRef.current = virtScroll;
       timelineFollowLastOffsetRef.current = 0;
       timelineProgrammaticScrollRef.current = true;
@@ -18407,40 +18892,61 @@ export default function StudioEditor2Screen({
         timelineRulerStripRef.current,
         timelineFollowContentRef.current,
       );
-      if (clientW > 0) {
-        /* Do not pin on Play — let the playhead glide to the pin line while the grid
-         * is still; animationTick locks it once follow offset engages. */
-        positionTimelinePlayheadGroup(
-          playheadGroupRef.current,
-          playheadLineRef.current,
-          snapped,
-          zPlay,
-          bpbPlay,
-          committed,
-          null,
-        );
-        timelineFollowPinAppliedRef.current = false;
-        timelineEdgeFollowActiveRef.current = true;
-        timelineFollowPinScreenXRef.current = pinPx;
-      }
-      syncTimelineGridFollowAhead(zPlay, virtScroll);
     }
-    /* Launch compositor-thread WAAPI animation â€” this is what the user sees. */
-    launchWapiAnims(snapped, true);
-      runningRef.current = true;
-      setRunning(true);
-    if (isScreenActiveRef.current) paintTransport();
+    if (clientW > 0) {
+      /* Do not pin on Play — let the playhead glide to the pin line while the grid
+       * is still; animationTick locks it once follow offset engages. */
+      positionTimelinePlayheadGroup(
+        playheadGroupRef.current,
+        playheadLineRef.current,
+        resumeBeat,
+        zPlay,
+        bpbPlay,
+        parkedFollow
+          ? (timelineHScrollRef.current?.scrollLeft ?? 0)
+          : Math.max(0, Math.round(virtScroll)),
+        null,
+      );
+      timelineFollowPinAppliedRef.current = false;
+      timelineEdgeFollowActiveRef.current = true;
+      timelineFollowPinScreenXRef.current = pinPx;
+    }
+    /*
+     * Arm audio + compositor clocks together AFTER light DOM work so sessionStart is
+     * not stale when WAAPI.play() and refill run in the same turn.
+     */
+    const tCapture = audioNow(ctx);
+    sessionStartRef.current = tCapture + AUDIO_START_FLOOR_SEC;
+    schedAnchorTimeRef.current = tCapture;
+    schedAnchorPerfRef.current = performance.now();
+    perfSessionStartMsRef.current = performance.now() + AUDIO_START_FLOOR_SEC * 1000;
+    /* Compositor playhead + audio refill in one arm — playhead must not lag the music. */
+    launchWapiAnims(resumeBeat, true);
+    runningRef.current = true;
+    setRunning(true);
     unmuteMetro();
     /*
-     * Fill the audio queue NOW, while ctx.currentTime â‰ˆ tCapture.
+     * Fill the audio queue NOW, while ctx.currentTime ≈ tCapture.
      * Without this, the first refill happens 25 ms later (setInterval) by which time
-     * ctx.currentTime has advanced, pushing beat-0's click to tCapture+0.075 s instead
-     * of tCapture+0.05 s.  That 25 ms late beat-0 makes the rhythm feel rushed for the
-     * first bar then abruptly correct â€” perceived as a "skip" at bar 2.
+     * ctx.currentTime has advanced, pushing beat-0's click late for the first bar.
      */
     refillMetronome(ctx, tCapture);
     refillMidiPreview(ctx, tCapture);
     refillAudioPreview(ctx, tCapture);
+    if (isScreenActiveRef.current) paintTransport();
+    /* Forward waveform window — after playhead/audio are armed so Play never hitch-stalls WAAPI. */
+    queueMicrotask(() => {
+      if (!runningRef.current) return;
+      syncTimelineGridFollowAhead(zPlay, virtScroll);
+    });
+    void warmupPromise.then(() => {
+      if (!runningRef.current) return;
+      const c = ctxRef.current;
+      if (!c || c.state === 'closed') return;
+      const t = audioNow(c);
+      refillMidiPreview(c, t);
+      refillAudioPreview(c, t);
+    });
     } finally {
       transportArmingRef.current = false;
     }
@@ -18506,21 +19012,40 @@ export default function StudioEditor2Screen({
 
   const pauseTransport = useCallback(() => {
     cancelPrecountSession();
-    muteMetro();
-    cancelScheduledMetroNodes();
-    cancelArrangerPreviewScheduling();
-    transportPlayStartPerfMsRef.current = 0;
-    setStudioMixerStripGraphPlaybackLocked(false);
-    const ctx = ctxRef.current;
-    /* Capture where the line actually is BEFORE tearing down WAAPI / follow scroll. */
+    /*
+     * Stop without grid jerk:
+     * Freeze the follow strip translate in place (do NOT convert to scrollLeft).
+     * Park the playhead on top of that frozen frame, then kill audio.
+     */
     const pauseBeat = readVisualPlayheadBeat();
+    const followOff = readTimelineFollowWapiOffset();
+    if (followOff != null) timelineFollowLastOffsetRef.current = followOff;
+
+    runningRef.current = false;
+    setRunning(false);
+    recordingRef.current = false;
+    setRecording(false);
+    transportPlayStartPerfMsRef.current = 0;
     cursorBeatRef.current = pauseBeat;
     displayBeatRef.current = pauseBeat;
     originBeatRef.current = pauseBeat;
+
     const z = timelineZoomRef.current;
     const bpb = beatsPerBarRef.current;
-    /* Commit follow scroll first, then park the playhead — never clear left after parking. */
-    clearTimelineEdgeFollow();
+    const ppbStop = ppbAtZoom(z, bpb);
+    const phStop = playheadGroupRef.current;
+    /* Bake playhead at current beat (same pixels as running WAAPI). */
+    if (phStop) {
+      const seekX = pauseBeat * ppbStop - PLAYHEAD_GRIP_W_PX / 2;
+      phStop.style.transform = `translate3d(${seekX}px, 0, 0)`;
+      phStop.style.left = '0px';
+    }
+    positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
+
+    /* Freeze grid translate — no scrollLeft rewrite (that was the Stop jerk). */
+    freezeTimelineFollowForStop();
+
+    /* Content-space park while frozen strip translate still applied — same screen pixels. */
     positionTimelinePlayheadGroup(
       playheadGroupRef.current,
       playheadLineRef.current,
@@ -18530,42 +19055,54 @@ export default function StudioEditor2Screen({
       timelineHScrollRef.current?.scrollLeft ?? 0,
     );
     positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
+
+    /* Cancel playhead/timing clocks only — leave parked strip CSS transform alone. */
+    playheadWapiRef.current?.cancel();
+    playheadWapiRef.current = null;
+    pianoPhWapiRef.current?.cancel();
+    pianoPhWapiRef.current = null;
+    playheadVisibleWapiRef.current?.cancel();
+    playheadVisibleWapiRef.current = null;
+    loopPlayheadVisibleWapiRef.current?.cancel();
+    loopPlayheadVisibleWapiRef.current = null;
+    playheadGroupRef.current?.getAnimations().forEach((a) => a.cancel());
+    loopPlayheadGroupRef.current?.getAnimations().forEach((a) => a.cancel());
+    playheadWapiTimingRef.current?.getAnimations().forEach((a) => a.cancel());
+    pianoPlayheadRef.current?.getAnimations().forEach((a) => a.cancel());
+    cancelLiveRecordClipWapi();
+
+    muteMetro();
+    cancelScheduledMetroNodes();
+    cancelArrangerPreviewScheduling();
+
+    /*
+     * Clear held peaks + ignore late worklet posts, then decay-only ballistics.
+     * Do NOT zero ballistics here — that caused drop→jump when a stale peak arrived.
+     * Strip VUs are worklet-only after Stop (no analyser merge).
+     */
+    prepareStudioMixerMetersForStop();
+    armStudioMixerMeterDecayOnly();
+    setStudioMixerStripGraphPlaybackLocked(false);
+
+    const ctx = ctxRef.current;
     if (!ctx || ctx.state === 'closed') {
-      runningRef.current = false;
-      setRunning(false);
-      setRecording(false);
       updateReadouts(pauseBeat, true);
       return;
     }
-    runningRef.current = false;
-    setRunning(false);
-    setRecording(false);
-    resetStudioMixerMeterBallistics();
-    resetStudioMixerMeterPeaks();
-    /* Paused WAAPI parked at the same beat — Studio One–style stop-in-place. */
+    /* Timing clocks only — must not clear parked strip transform. */
     launchWapiAnims(pauseBeat, false);
-    syncTimelineGridNow(z);
     updateReadouts(pauseBeat, true);
-    /* Re-assert park after WAAPI bake (defensive — Stop must not flash to bar 1). */
-    positionTimelinePlayheadGroup(
-      playheadGroupRef.current,
-      playheadLineRef.current,
-      pauseBeat,
-      z,
-      bpb,
-      timelineHScrollRef.current?.scrollLeft ?? 0,
-    );
-    positionPianoPlayhead(pianoPlayheadRef.current, pauseBeat, z, bpb);
   }, [
     cancelArrangerPreviewScheduling,
+    cancelLiveRecordClipWapi,
     cancelPrecountSession,
-    clearTimelineEdgeFollow,
+    freezeTimelineFollowForStop,
     muteMetro,
     cancelScheduledMetroNodes,
     launchWapiAnims,
+    readTimelineFollowWapiOffset,
     readVisualPlayheadBeat,
     updateReadouts,
-    syncTimelineGridNow,
   ]);
 
   const applySe2SongFile = useCallback(
@@ -19019,11 +19556,39 @@ export default function StudioEditor2Screen({
         tool !== 'erase' &&
         !e.shiftKey
       ) {
-        setBeatFromScrubClientX(e.clientX, {
-          shiftKey: e.shiftKey,
-          altKey: e.altKey,
-          clientY: e.clientY,
-        });
+        /*
+         * Skip seek when starting clip-gain (Alt+wave or mid handle) so the playhead
+         * doesn't jump while adjusting event volume.
+         */
+        let skipSeekForGain = false;
+        if (arrToolEarly === 'select' && pos) {
+          const zG = timelineZoomRef.current;
+          const bpbG = beatsPerBarRef.current;
+          const ppbG = ppbAtZoom(zG, bpbG);
+          const lhG = trackLaneHRef.current;
+          const trG = studioTracksRef.current[pos.ti];
+          if (trG && se2TrackHasDraggableAudioClips(trG.kind)) {
+            const cid = hitTimelineAudioClipId(trG, pos.xCss, pos.yLaneLocal, ppbG, lhG);
+            if (cid) {
+              const onHandle = hitTimelineAudioClipGainHandle(
+                trG,
+                cid,
+                pos.xCss,
+                pos.yLaneLocal,
+                ppbG,
+                lhG,
+              );
+              if (e.altKey || onHandle) skipSeekForGain = true;
+            }
+          }
+        }
+        if (!skipSeekForGain) {
+          setBeatFromScrubClientX(e.clientX, {
+            shiftKey: e.shiftKey,
+            altKey: e.altKey,
+            clientY: e.clientY,
+          });
+        }
         if (arrToolEarly === 'scrub') {
           timelinePlayheadScrubRef.current = { active: true };
           scrubbingRef.current = true;
@@ -19157,8 +19722,18 @@ export default function StudioEditor2Screen({
           clearSelectedPianoNotes();
           setSelectedTimelineAudioClip({ trackIndex: pos.ti, clipId: audioClipId });
           const beatPtr = clientXToBeat(e.clientX);
-          const dragMode =
+          const edgeMode =
             hitTimelineAudioClipDragMode(tr, audioClipId, pos.xCss, ppb, lh) ?? 'move';
+          const onGainHandle = hitTimelineAudioClipGainHandle(
+            tr,
+            audioClipId,
+            pos.xCss,
+            pos.yLaneLocal,
+            ppb,
+            lh,
+          );
+          const dragMode: 'move' | 'resize-left' | 'resize-right' | 'gain' =
+            edgeMode === 'move' && (e.altKey || onGainHandle) ? 'gain' : edgeMode;
           const onAlignEdge =
             se2TrackIsTrackAlign(tr.kind) &&
             (dragMode === 'resize-left' || dragMode === 'resize-right');
@@ -19184,6 +19759,7 @@ export default function StudioEditor2Screen({
             dragCommitted: dragMode !== 'move',
             alignEdgeStretch: onAlignEdge ? e.shiftKey : undefined,
             alignAnchorStretchRate: onAlignEdge ? alignAnchorRate : undefined,
+            anchorGainDb: dragMode === 'gain' ? clampSe2ClipGainDb(clip.gainDb ?? 0) : undefined,
           };
           try {
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -19346,6 +19922,18 @@ export default function StudioEditor2Screen({
         }
 
         const live = timelineAudioClipDragRef.current;
+
+        if (live.mode === 'gain') {
+          setAudioClipDropHoverTrackIndex(null);
+          const dy = e.clientY - live.startClientY;
+          /* Up = louder (negative screen Y). */
+          const nextDb = clampSe2ClipGainDb(
+            (live.anchorGainDb ?? 0) - dy * SE2_CLIP_GAIN_DB_PER_PX,
+          );
+          patchTimelineAudioClipGain(live.sourceTrackIndex, live.clipId, nextDb);
+          return;
+        }
+
         const beatPtr = clientXToBeat(e.clientX);
         const tb = totalBeatsRef.current;
         const bpb = beatsPerBarRef.current;
@@ -19650,7 +20238,16 @@ export default function StudioEditor2Screen({
       }
       timelinePaintLastClientRef.current = { clientX: e.clientX, clientY: e.clientY };
     },
-    [clientXToBeat, moveTimelineAudioClip, setBeatFromScrubClientX, timelineLaneBrushSegment, updateAudioClipSplitMarkerAtClientX, updateTimelinePencilStroke, updateTrackNotes],
+    [
+      clientXToBeat,
+      moveTimelineAudioClip,
+      patchTimelineAudioClipGain,
+      setBeatFromScrubClientX,
+      timelineLaneBrushSegment,
+      updateAudioClipSplitMarkerAtClientX,
+      updateTimelinePencilStroke,
+      updateTrackNotes,
+    ],
   );
 
   const onTimelineLanePointerUp = useCallback((e: PointerEvent<HTMLDivElement>) => {
@@ -19668,6 +20265,9 @@ export default function StudioEditor2Screen({
     const audioDrag = timelineAudioClipDragRef.current;
     const audioDragTarget = audioDrag.active ? audioDrag.targetTrackIndex : -1;
     const audioDragClipId = audioDrag.active ? audioDrag.clipId : '';
+    const wasGainDrag = audioDrag.active && audioDrag.mode === 'gain';
+    const gainTrackIndex = wasGainDrag ? audioDrag.sourceTrackIndex : -1;
+    const gainClipId = wasGainDrag ? audioDrag.clipId : '';
     timelinePaintDragRef.current = false;
     timelinePaintToolRef.current = null;
     timelinePaintLastClientRef.current = null;
@@ -19690,7 +20290,22 @@ export default function StudioEditor2Screen({
       dragCommitted: false,
       alignEdgeStretch: undefined,
       alignAnchorStretchRate: undefined,
+      anchorGainDb: undefined,
     };
+    if (wasGainDrag && runningRef.current && gainTrackIndex >= 0 && gainClipId) {
+      const ctx = ctxRef.current;
+      const srcTrack = studioTracksRef.current[gainTrackIndex];
+      if (ctx && ctx.state !== 'closed' && srcTrack) {
+        const prefix = `${srcTrack.id}:${gainClipId}:`;
+        for (const key of [...audioPreviewScheduledRef.current]) {
+          if (key.startsWith(prefix) || key.includes(`:${srcTrack.id}:${gainClipId}:`)) {
+            audioPreviewScheduledRef.current.delete(key);
+          }
+        }
+        stopScheduledPreviewAudioClips(scheduledPreviewAudioClipsRef.current, gainTrackIndex);
+        refillAudioPreview(ctx, audioNow(ctx));
+      }
+    }
     timelineMidiDragRef.current = {
       active: false,
       mode: 'move',
@@ -19715,7 +20330,7 @@ export default function StudioEditor2Screen({
         /* */
       }
     }
-  }, [splitTimelineAudioClipAtBeat]);
+  }, [refillAudioPreview, splitTimelineAudioClipAtBeat]);
 
   const onPlayheadPointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
@@ -19775,7 +20390,8 @@ export default function StudioEditor2Screen({
       pauseTransport();
       return;
     }
-    if (precountEnabledRef.current) {
+    /* Record standby or Pre count-in → start capture on Play (mic alone never auto-rolls). */
+    if (recordStandbyRef.current || precountEnabledRef.current) {
       await beginSe2RecordWithOptionalPrecountRef.current();
       return;
     }
@@ -19923,9 +20539,9 @@ export default function StudioEditor2Screen({
     if (!se2AudioRecordingActive() && !liveRecordSessionRef.current) return;
     const live = liveRecordSessionRef.current;
     live?.capture.stop();
+    cancelLiveRecordClipWapi();
     const ctx = await ensureCtx();
     const result = await stopSe2AudioRecording(ctx);
-    const pcmFallback = live?.capture.buildBuffer();
     if (live) liveRecordingPeaksRef.current.delete(live.sourceId);
     liveRecordSessionRef.current = null;
 
@@ -19940,154 +20556,57 @@ export default function StudioEditor2Screen({
       return;
     }
 
-    if (live && pcmFallback && pcmFallback.length > 0) {
-      const tr = studioTracksRef.current[live.trackIndex];
-      finalizeSe2RecordedTake(
-        live.trackIndex,
-        live.startBeat,
-        padHotSe2RecordedBuffer(pcmFallback),
-        tr?.name ?? 'Audio',
-        { sourceId: live.sourceId, clipId: live.clipId },
-      );
-      return;
-    }
-
     if (live) {
-      applyTracksMutation((prev) =>
-        prev.map((t, i) =>
-          i !== live.trackIndex
-            ? t
-            : { ...t, audioClips: t.audioClips.filter((c) => c.id !== live.clipId) },
-        ),
-      );
       studioAudioBuffersRef.current.delete(live.sourceId);
       invalidateSe2AudioWaveformPeaks(live.sourceId);
-      gridCacheRef.current = null;
-      syncTimelineGridNow();
     }
-  }, [applyTracksMutation, ensureCtx, finalizeSe2RecordedTake, syncTimelineGridNow]);
+  }, [cancelLiveRecordClipWapi, ensureCtx, finalizeSe2RecordedTake]);
 
-  const beginSe2MediaCapture = useCallback(
-    async (trackIndex: number, startBeat: number) => {
-      const tr = studioTracksRef.current[trackIndex];
-      if (!tr || tr.kind !== 'audio') return;
-
-      // Mute software monitor immediately — before any async mic/FX work (kills feedback).
-      setStudioInputMonitorSoftMuted(true);
-
-      const deviceId = effectiveAudioInputDeviceId(tr, settings.audioInput);
-      const ctx = await ensureCtx();
-      const micOk = await ensureStudioInputMonitor(ctx, deviceId);
-      if (!micOk) {
-        console.error('[SE2 Record] Microphone unavailable — check Settings → Audio Input.');
-        setStudioInputMonitorSoftMuted(false);
-        setRecording(false);
-        return;
-      }
-      setStudioInputMonitorSoftMuted(true);
-
-      const stream =
-        getStudioInputMonitorStream() ??
-        (window as unknown as { __daMusicStudioMicStream?: MediaStream | null }).__daMusicStudioMicStream ??
-        null;
-      if (!stream) {
-        console.error('[SE2 Record] No mic stream after arm — cannot capture.');
-        setRecording(false);
-        return;
-      }
-
-      const startBeatSnapped = Math.max(0, startBeat);
-      const sourceId =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? `src-${crypto.randomUUID()}`
-          : `src-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      const clipId =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? `ac-${crypto.randomUUID()}`
-          : `ac-${Date.now()}`;
-      const placeholder = ctx.createBuffer(2, Math.max(1, Math.ceil(ctx.sampleRate * 0.01)), ctx.sampleRate);
-      studioAudioBuffersRef.current.set(sourceId, placeholder);
-
-      const liveCapture = new Se2LiveRecordingCapture(ctx);
-      const fanout = getStudioInputMonitorFanout();
-      const previewEnabled = fanout ? liveCapture.startFromTap(fanout) : false;
-      if (!previewEnabled) {
-        console.warn('[SE2 Record] Live waveform preview unavailable — clip will still record.');
-      }
-      liveRecordSessionRef.current = {
-        sourceId,
-        clipId,
-        trackIndex,
-        startBeat: startBeatSnapped,
-        capture: liveCapture,
-        lastUiTickMs: 0,
-        previewEnabled,
-      };
-      liveRecordingPeaksRef.current.clear();
-
-      const seedClip: StudioAudioClip = {
-        id: clipId,
-        sourceId,
-        startBeat: startBeatSnapped,
-        durationBeats: SE2_MIN_AUDIO_CLIP_DURATION_BEATS,
-        name: `${tr.name} take`,
-      };
-      const nextTracks = studioTracksRef.current.map((t, i) => {
-        if (i !== trackIndex) return t;
-        const punched = se2PunchReplaceAudioClipsUnderRange(
-          t.audioClips,
-          seedClip.startBeat,
-          seedClip.durationBeats,
-        );
-        return { ...t, audioClips: [...punched, seedClip] };
-      });
-      studioTracksRef.current = nextTracks;
-      applyTracksMutation(() => nextTracks);
-      setSelectedTrackIndex(trackIndex);
-      setSelectedTimelineAudioClip({ trackIndex, clipId });
-      gridCacheRef.current = null;
-      syncTimelineGridNow();
-
-      // Pin mic → this lane's Pitch Tune / Vocoder insert before MediaRecorder starts.
-      // Seed-clip track mutation otherwise re-syncs every insert and can leave monitor dry.
-      const bus = midiPreviewBusRef.current;
-      if (bus) {
-        const masterOut = studioMasterOutRef.current ?? ctx.destination;
-        setStudioMixerStripCountHint(Math.max(1, studioTracksRef.current.length));
-        // Tracks added while transport was locked may lack a strip — unlock briefly to provision.
-        if (!getStudioMixerStripInput(trackIndex)) {
-          const wasLocked = isStudioMixerStripGraphPlaybackLocked();
-          setStudioMixerStripGraphPlaybackLocked(false);
-          ensureSe2MixerStrips(ctx, bus, masterOut);
-          resyncStudioTrackInsertFxStripInputs(
+  /**
+   * Warm vocal insert DSP after MediaRecorder is already running.
+   * Never call this before transport / capture — it was the record-start hitch.
+   */
+  const deferSe2RecordVocalPrep = useCallback(
+    (trackIndex: number, startBeatSnapped: number, deviceId: string) => {
+      window.setTimeout(() => {
+        if (!recordingRef.current || !liveRecordSessionRef.current) return;
+        if (liveRecordSessionRef.current.trackIndex !== trackIndex) return;
+        void (async () => {
+          const ctx = ctxRef.current;
+          const bus = midiPreviewBusRef.current;
+          const tr = studioTracksRef.current[trackIndex];
+          if (!ctx || ctx.state === 'closed' || !bus || !tr) return;
+          const masterOut = studioMasterOutRef.current ?? ctx.destination;
+          setStudioMixerStripCountHint(Math.max(1, studioTracksRef.current.length));
+          if (!isStudioMixerStripGraphPlaybackLocked()) {
+            ensureSe2MixerStrips(ctx, bus, masterOut);
+          } else if (!getStudioMixerStripInput(trackIndex)) {
+            healStudioTrackPlaybackRouteIfStale(
+              ctx,
+              bus,
+              trackIndex,
+              getStudioMixerStripCountHint(),
+              masterOut,
+            );
+          }
+          const rawFx = trackVocalFxRef.current[trackIndex] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
+          const slots = trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots();
+          const effectiveFx = studioEffectiveTrackVocalFx(rawFx, slots);
+          const rack = trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack();
+          const keyRoot = tr.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
+          se2TrackPlaybackInput(
             ctx,
             bus,
-            getStudioMixerStripCountHint(),
+            trackIndex,
+            slots,
+            rack,
+            bpmRef.current,
             masterOut,
           );
-          if (wasLocked) setStudioMixerStripGraphPlaybackLocked(true);
-        } else {
-          ensureSe2MixerStrips(ctx, bus, masterOut);
-        }
-        const rawFx = trackVocalFxRef.current[trackIndex] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
-        const slots = trackFxSlotsRef.current[trackIndex] ?? emptyMixerFxSlots();
-        const effectiveFx = studioEffectiveTrackVocalFx(rawFx, slots);
-        const rack = trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack();
-        const keyRoot = tr.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
-        se2TrackPlaybackInput(
-          ctx,
-          bus,
-          trackIndex,
-          slots,
-          rack,
-          bpmRef.current,
-          masterOut,
-        );
-        const preStrip = getStudioTrackInsertPreStrip(trackIndex);
-        const stripIn = getStudioMixerStripInput(trackIndex);
-        if (preStrip && stripIn) {
+          const preStrip = getStudioTrackInsertPreStrip(trackIndex);
+          const stripIn = getStudioMixerStripInput(trackIndex);
+          if (!preStrip || !stripIn) return;
           try {
-            // Keep Vocal DSP inserts warm for after the take — do not feed mic to speakers.
             await routeStudioVocalLiveSignal({
               ctx,
               trackIndex,
@@ -20106,29 +20625,11 @@ export default function StudioEditor2Screen({
           } catch (e) {
             console.warn('[SE2 Record] Live vocal insert prep failed.', e);
           }
-        }
-      }
-      setStudioInputMonitorSoftMuted(true);
-
-      const started = startSe2AudioRecording(stream, {
-        startBeat: startBeatSnapped,
-        trackIndex,
-        trackName: tr.name,
-      });
-      if (!started) {
-        if (previewEnabled) liveCapture.stop();
-        liveRecordSessionRef.current = null;
-        studioAudioBuffersRef.current.delete(sourceId);
-        applyTracksMutation((prev) =>
-          prev.map((t, i) =>
-            i !== trackIndex ? t : { ...t, audioClips: t.audioClips.filter((c) => c.id !== clipId) },
-          ),
-        );
-        setStudioInputMonitorSoftMuted(false);
-        setRecording(false);
-      }
+          setStudioInputMonitorSoftMuted(true);
+        })();
+      }, 48);
     },
-    [applyTracksMutation, ensureCtx, settings.audioInput, syncTimelineGridNow],
+    [],
   );
 
   const beginSe2RecordWithOptionalPrecount = useCallback(async () => {
@@ -20168,8 +20669,33 @@ export default function StudioEditor2Screen({
       trackIndex = autoArm;
     }
 
+    const tr = studioTracksRef.current[trackIndex];
+    if (!tr || tr.kind !== 'audio') return;
+
+    /*
+     * Prep mic BEFORE transport / MediaRecorder so Play does not hitch on getUserMedia
+     * and the take starts on the first beat after the click (no late capture).
+     */
+    setStudioInputMonitorSoftMuted(true);
+    const deviceId = effectiveAudioInputDeviceId(tr, settings.audioInput);
+    const ctx = await ensureCtx();
+    const micOk = await ensureStudioInputMonitor(ctx, deviceId);
+    if (!micOk) {
+      console.error('[SE2 Record] Microphone unavailable — check Settings → Audio Input.');
+      setStudioInputMonitorSoftMuted(false);
+      return;
+    }
+    const stream =
+      getStudioInputMonitorStream() ??
+      (window as unknown as { __daMusicStudioMicStream?: MediaStream | null }).__daMusicStudioMicStream ??
+      null;
+    if (!stream) {
+      console.error('[SE2 Record] No mic stream after arm — cannot capture.');
+      setStudioInputMonitorSoftMuted(false);
+      return;
+    }
+
     if (precountEnabledRef.current) {
-      const ctx = await ensureCtx();
       precountCancelRef.current = false;
       isPrecountingRef.current = true;
       setIsPrecounting(true);
@@ -20191,33 +20717,158 @@ export default function StudioEditor2Screen({
       setIsPrecounting(false);
       setPrecountBeatUi(null);
 
-      if (result.cancelled) return;
+      if (result.cancelled) {
+        setStudioInputMonitorSoftMuted(false);
+        return;
+      }
     }
 
+    const sourceId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `src-${crypto.randomUUID()}`
+        : `src-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const clipId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `ac-${crypto.randomUUID()}`
+        : `ac-${Date.now()}`;
+    const placeholder = ctx.createBuffer(2, Math.max(1, Math.ceil(ctx.sampleRate * 0.01)), ctx.sampleRate);
+    studioAudioBuffersRef.current.set(sourceId, placeholder);
+    liveRecordingPeaksRef.current.clear();
+
     let startBeat = cursorBeatRef.current;
+    liveRecordSessionRef.current = {
+      sourceId,
+      clipId,
+      trackIndex,
+      startBeat: Math.max(0, startBeat),
+      capture: new Se2LiveRecordingCapture(),
+      lastUiTickMs: 0,
+      previewEnabled: false,
+      colorHex: tr.colorHex || '#e85d5d',
+    };
+
     if (!runningRef.current) {
       await startTransport();
       startBeat = originBeatRef.current;
+      if (liveRecordSessionRef.current) {
+        liveRecordSessionRef.current.startBeat = Math.max(0, startBeat);
+      }
     }
+
+    const startBeatSnapped = Math.max(0, startBeat);
+    /* KeepAlive + MediaRecorder before any React / vocal work. */
+    recordingRef.current = true;
+    const started = startSe2AudioRecording(stream, {
+      startBeat: startBeatSnapped,
+      trackIndex,
+      trackName: tr.name,
+    });
+    if (!started) {
+      liveRecordSessionRef.current?.capture.stop();
+      liveRecordSessionRef.current = null;
+      studioAudioBuffersRef.current.delete(sourceId);
+      cancelLiveRecordClipWapi();
+      setStudioInputMonitorSoftMuted(false);
+      recordingRef.current = false;
+      return;
+    }
+
+    launchLiveRecordClipWapi(startBeatSnapped, true);
+    recordStandbyRef.current = false;
+    setRecordStandby(false);
     setRecording(true);
-    await beginSe2MediaCapture(trackIndex, startBeat);
+    setSelectedTrackIndex(trackIndex);
+    setSelectedTimelineAudioClip({ trackIndex, clipId });
+    /* Vocal DSP after capture is rolling — keeps playhead / metro free of the hitch. */
+    deferSe2RecordVocalPrep(trackIndex, startBeatSnapped, deviceId);
   }, [
-    beginSe2MediaCapture,
+    cancelLiveRecordClipWapi,
     cancelScheduledPrecountNodes,
+    deferSe2RecordVocalPrep,
     ensureCtx,
+    launchLiveRecordClipWapi,
     playPrecountClick,
+    settings.audioInput,
     startTransport,
   ]);
   beginSe2RecordWithOptionalPrecountRef.current = beginSe2RecordWithOptionalPrecount;
 
+  /** Ensure an audio lane is mixer-R armed; returns track index or -1. */
+  const ensureSe2RecordTargetArmed = useCallback((): number => {
+    let trackIndex = findSe2RecordTargetTrackIndex(
+      studioTracksRef.current,
+      trackRecordArmedRef.current,
+      selectedTrackIndexRef.current,
+    );
+    if (trackIndex >= 0) return trackIndex;
+    const tracks = studioTracksRef.current;
+    const sel = Math.max(0, Math.min(tracks.length - 1, selectedTrackIndexRef.current));
+    let autoArm = tracks[sel]?.kind === 'audio' ? sel : -1;
+    if (autoArm < 0) {
+      for (let ti = 0; ti < tracks.length; ti++) {
+        if (tracks[ti]?.kind === 'audio') {
+          autoArm = ti;
+          break;
+        }
+      }
+    }
+    if (autoArm < 0) {
+      console.warn(
+        '[SE2 Record] Add an audio track and press Record (or arm with mixer R), then try again.',
+      );
+      return -1;
+    }
+    setTrackRecordArmed((prev) => {
+      const next = [...prev];
+      next[autoArm] = true;
+      trackRecordArmedRef.current = next;
+      return next;
+    });
+    setSelectedTrackIndex(autoArm);
+    return autoArm;
+  }, []);
+
+  const paintTransportRecBtn = useCallback((armed: boolean, isRec: boolean) => {
+    const el = transportRecBtnRef.current;
+    if (!el) return;
+    el.dataset.recArmed = armed && !isRec ? '1' : '0';
+    el.dataset.recOn = isRec ? '1' : '0';
+  }, []);
+
+  useEffect(() => {
+    paintTransportRecBtn(recordStandby, recording);
+  }, [paintTransportRecBtn, recordStandby, recording]);
+
   const onRecordClick = useCallback(() => {
     if (recordingRef.current) {
+      recordingRef.current = false;
       setRecording(false);
+      recordStandbyRef.current = false;
+      setRecordStandby(false);
+      paintTransportRecBtn(false, false);
       return;
     }
     if (isPrecountingRef.current) return;
-    void beginSe2RecordWithOptionalPrecountRef.current();
-  }, []);
+
+    /* Already rolling — punch-in on the mic. */
+    if (runningRef.current) {
+      void beginSe2RecordWithOptionalPrecountRef.current();
+      return;
+    }
+
+    /* Stopped: toggle standby only — wait for Play to start the take. */
+    if (recordStandbyRef.current) {
+      recordStandbyRef.current = false;
+      setRecordStandby(false);
+      paintTransportRecBtn(false, false);
+      return;
+    }
+    if (ensureSe2RecordTargetArmed() < 0) return;
+    recordStandbyRef.current = true;
+    setRecordStandby(true);
+    /* Paint red immediately — don't wait on the next React commit. */
+    paintTransportRecBtn(true, false);
+  }, [ensureSe2RecordTargetArmed, paintTransportRecBtn]);
 
   useEffect(() => {
     if (recording) return;
@@ -20926,6 +21577,9 @@ export default function StudioEditor2Screen({
         return;
       }
       clearTimelineEdgeFollow();
+    } else if (timelineFollowParkedTransformRef.current) {
+      /* User scrolled while Stop-parked — commit translate→scroll before continuing. */
+      clearTimelineEdgeFollow();
     }
     syncTimelineHBarFromMain();
     syncTimelineGridNow();
@@ -20941,6 +21595,8 @@ export default function StudioEditor2Screen({
         return;
       }
       clearTimelineEdgeFollow();
+    } else if (timelineFollowParkedTransformRef.current) {
+      clearTimelineEdgeFollow();
     }
     syncTimelineMainFromRuler();
   }, [clearTimelineEdgeFollow, syncTimelineMainFromRuler]);
@@ -20954,6 +21610,8 @@ export default function StudioEditor2Screen({
         syncTimelineMainFromHBar();
         return;
       }
+      clearTimelineEdgeFollow();
+    } else if (timelineFollowParkedTransformRef.current) {
       clearTimelineEdgeFollow();
     }
     syncTimelineMainFromHBar();
@@ -22123,6 +22781,22 @@ export default function StudioEditor2Screen({
                 className="absolute inset-0"
               >
               <canvas ref={timelineCanvasRef} className="block max-w-none pointer-events-none" style={{ verticalAlign: 'top' }} />
+              {/* Growing record take — compositor scaleX locked to playhead WAAPI. */}
+              <div
+                ref={liveRecordClipElRef}
+                className="absolute z-[4] pointer-events-none rounded-[2px]"
+                style={{
+                  display: 'none',
+                  left: 0,
+                  top: 0,
+                  width: 0,
+                  height: 0,
+                  transformOrigin: 'left center',
+                  willChange: 'transform',
+                  transform: 'scaleX(0)',
+                }}
+                aria-hidden
+              />
               {/* Lane gestures: select track / draw & edit MIDI (tools match piano roll toolbar). */}
               <div
                 className="absolute inset-0 z-[6]"
@@ -23595,7 +24269,17 @@ export default function StudioEditor2Screen({
           </button>
           <button
             type="button"
-            title={running ? 'Pause' : precountEnabled ? 'Play — count-in then record' : 'Play'}
+            title={
+              running
+                ? 'Pause'
+                : recordStandby
+                  ? precountEnabled
+                    ? 'Play — count-in, then record'
+                    : 'Play — start recording'
+                  : precountEnabled
+                    ? 'Play — count-in then record'
+                    : 'Play'
+            }
             disabled={isPrecounting}
             className={`${transportBtnBase} h-10 w-10 rounded-full border disabled:opacity-45`}
             style={{
@@ -23603,6 +24287,10 @@ export default function StudioEditor2Screen({
               borderColor: running ? '#2a4a38' : '#2d5a48',
             color: '#7cf4c6',
           }}
+            onPointerDown={() => {
+              /* Resume AudioContext on the gesture so Play's await ensureCtx() is fast. */
+              if (!runningRef.current) void ensureCtx();
+            }}
             onClick={() => void onTogglePlayPause()}
         >
             {running ? <Pause size={20} strokeWidth={2} /> : <Play size={20} className="ml-0.5" strokeWidth={2} />}
@@ -23631,30 +24319,34 @@ export default function StudioEditor2Screen({
             <FastForward size={16} strokeWidth={2} />
           </button>
         <button
+          ref={transportRecBtnRef}
           type="button"
             title={
               recording
                 ? 'Recording — click to stop and commit take to armed audio track'
-                : precountEnabled
-                  ? 'Record — count-in enabled (1–2 bars), then capture at downbeat'
-                  : 'Record — arm an audio track (mixer R), then record at the playhead'
+                : recordStandby
+                  ? 'Record armed — hit Play to start (click mic again to cancel)'
+                  : running
+                    ? 'Record — punch in at the playhead'
+                    : 'Record — arm mic, then hit Play to start'
             }
             disabled={isPrecounting}
-            aria-pressed={recording || precountEnabled}
-            className={`${transportBtnBase} h-9 w-9 rounded-md border disabled:opacity-45`}
-          style={{
-              background: recording
-                ? 'rgba(255,60,60,0.15)'
-                : precountEnabled
-                  ? 'rgba(255,120,60,0.12)'
-                  : 'transparent',
-              borderColor: recording ? '#aa3030' : precountEnabled ? '#aa5528' : '#2a2a32',
-              color: recording ? '#ff6b6b' : precountEnabled ? '#ffb080' : '#b0b0bc',
-              boxShadow: recording ? '0 0 8px rgba(255,80,80,0.3)' : precountEnabled ? '0 0 6px rgba(255,120,60,0.2)' : undefined,
+            aria-pressed={recording || recordStandby}
+            data-rec-armed={recordStandby && !recording ? '1' : '0'}
+            data-rec-on={recording ? '1' : '0'}
+            className={`se2-transport-rec-btn ${transportBtnBase} h-9 w-9 rounded-md border disabled:opacity-45`}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              e.preventDefault();
+              onRecordClick();
             }}
-            onClick={onRecordClick}
           >
-            <Mic size={17} strokeWidth={2} className={recording ? 'animate-pulse' : ''} />
+            <Mic
+              size={17}
+              strokeWidth={2.25}
+              className={recording ? 'animate-pulse' : undefined}
+              color={recording || recordStandby ? '#ff6b6b' : '#b0b0bc'}
+            />
           </button>
           <button
             type="button"

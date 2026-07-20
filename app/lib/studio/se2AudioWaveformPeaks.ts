@@ -66,6 +66,8 @@ export function drawSe2ClipWaveform(
   w: number,
   h: number,
   radius = 2,
+  /** Linear amplitude scale from clip gainDb (1 = unity). */
+  amplitudeScale = 1,
 ): void {
   if (w < 2 || h < 4 || peaks.length === 0) return;
 
@@ -82,6 +84,7 @@ export function drawSe2ClipWaveform(
 
   const midY = y + h * 0.5;
   const maxHalf = h * 0.49;
+  const amp = Number.isFinite(amplitudeScale) ? Math.max(0.02, amplitudeScale) : 1;
   const step = peaks.length / w;
 
   for (let px = 0; px < w; px++) {
@@ -89,10 +92,11 @@ export function drawSe2ClipWaveform(
     const i1 = Math.min(peaks.length - 1, Math.floor((px + 1) * step));
     let peak = 0;
     for (let i = i0; i <= i1; i++) peak = Math.max(peak, peaks[i] ?? 0);
-    const half = Math.max(0.5, peak * maxHalf);
-    ctx.fillStyle = `rgba(255,255,255,${0.3 + peak * 0.58})`;
+    const scaled = Math.min(1, peak * amp);
+    const half = Math.max(0.5, scaled * maxHalf);
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + scaled * 0.58})`;
     ctx.fillRect(x + px, midY - half, 1, half);
-    ctx.fillStyle = `rgba(255,255,255,${0.18 + peak * 0.42})`;
+    ctx.fillStyle = `rgba(255,255,255,${0.18 + scaled * 0.42})`;
     ctx.fillRect(x + px, midY, 1, half);
   }
 

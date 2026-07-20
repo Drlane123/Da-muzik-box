@@ -10,6 +10,8 @@ export type Se2TimelineAudioClip = {
   name?: string;
   /** Trim into shared `sourceId` buffer, in quarter-note beats at project BPM. */
   sourceOffsetBeats?: number;
+  /** Non-destructive event gain in dB (0 = unity relative to SE2 baseline). */
+  gainDb?: number;
 };
 
 export const SE2_MIN_AUDIO_CLIP_DURATION_BEATS = 1 / 16;

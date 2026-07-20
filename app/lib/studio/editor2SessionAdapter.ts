@@ -29,6 +29,8 @@ export type Editor2AudioClip = {
   startBeat: number;
   durationBeats: number;
   name?: string;
+  /** Per-clip event gain in dB (0 = unity). */
+  gainDb?: number;
 };
 
 export type Editor2ArrangerTrack = {
@@ -149,7 +151,7 @@ export function buildStudioSessionFromEditor2Tracks(
           lengthTicks,
           sourceId: ac.sourceId,
           sourceOffsetSamples: 0,
-          gainDb: 0,
+          gainDb: typeof ac.gainDb === 'number' && Number.isFinite(ac.gainDb) ? ac.gainDb : 0,
           pitchSemitones: 0,
           muted: false,
           locked: false,

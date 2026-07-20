@@ -58,7 +58,7 @@ type StripRoute = {
 const routes = new Map<number, StripRoute>();
 
 /** Bump when insert wiring semantics change — forces one clean rebuild per lane. */
-const INSERT_STRIP_WIRE_REV = 12;
+const INSERT_STRIP_WIRE_REV = 13;
 
 const INSERT_FX_OUTPUT_TRIM = 0.76;
 
@@ -78,12 +78,12 @@ function routeSignature(
   });
 }
 
-/** Module enable flags only — avoids full chain rebuild on every knob move. */
-function insertWireSignature(rack: StudioTrackInsertFxRack, bpm: number): string {
+/** Module enable flags only — avoids full chain rebuild on every knob / tempo nudge. */
+function insertWireSignature(rack: StudioTrackInsertFxRack, _bpm: number): string {
   return JSON.stringify({
     rev: INSERT_STRIP_WIRE_REV,
     suiteOn: rack.suiteOn === true,
-    bpm: Math.round(bpm * 10) / 10,
+    /* BPM omitted — tempo used to force wireSuiteSwap + reverb impulse regen mid-play. */
     gate: rack.gate.enabled,
     eq: rack.eq.enabled,
     deEsser: rack.deEsser.enabled,
@@ -286,22 +286,45 @@ function wireBypass(
   stripIn: GainNode,
   trackIndex: number,
 ): void {
-  /* Allowed during transport lock — gapless enough for suite on/off; strip topology stays fixed. */
+  /*
+   * Gapless: connect dry BEFORE tearing wet. Never preStrip.disconnect() (all outputs) —
+   * that silenced live clips mid-play when Suite power toggled / effect re-ran.
+   */
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
-  stopNodes(route.innerNodes);
-  route.innerNodes = [];
-  severStripFeedInputs(route, stripFeed, stripIn);
-  severPreStripFromSuite(route);
   purgeLegacyForgeSplice(trackIndex, route.preStrip, stripIn);
   try {
-    route.preStrip.disconnect();
+    route.preStrip.connect(stripFeed);
   } catch {
-    /* */
+    /* already wired */
   }
+  const oldInner = [...route.innerNodes];
+  const oldInput = route.suiteInput;
+  const oldTap = route.tapFrom;
+  if (oldInput) {
+    try {
+      route.preStrip.disconnect(oldInput);
+    } catch {
+      /* */
+    }
+  }
+  if (oldTap && oldTap !== route.preStrip) {
+    try {
+      oldTap.disconnect(stripFeed);
+    } catch {
+      /* */
+    }
+    try {
+      oldTap.disconnect(stripIn);
+    } catch {
+      /* */
+    }
+  }
+  severPreStripFromSuite(route);
+  stopNodes(oldInner);
+  route.innerNodes = [];
   route.suiteInput = null;
   route.lastRack = null;
   route.makeupGains = [];
-  route.preStrip.connect(stripFeed);
   route.tapFrom = route.preStrip;
   route.suiteWired = false;
   retapStudioPitchMonitorSource(ctx, route.preStrip, trackIndex);
@@ -316,13 +339,9 @@ function wireSuite(
   bpm: number,
   trackIndex: number,
 ): void {
-  /* Allowed during transport lock so preset apply mid-play reaches the graph. */
+  /* Gapless bypass→suite: wet up before dry down (same contract as wireSuiteSwap). */
   const stripFeed = ensureStripFeed(ctx, route, stripIn);
-  stopNodes(route.innerNodes);
-  route.innerNodes = [];
-  severStripFeedInputs(route, stripFeed, stripIn);
   purgeLegacyForgeSplice(trackIndex, route.preStrip, stripIn);
-  disconnectOutputs(route.preStrip);
 
   const trim = ctx.createGain();
   trim.gain.value = INSERT_FX_OUTPUT_TRIM;
@@ -336,6 +355,20 @@ function wireSuite(
   );
   route.preStrip.connect(input);
   trim.connect(stripFeed);
+  try {
+    route.preStrip.disconnect(stripFeed);
+  } catch {
+    /* was already suite-only */
+  }
+  try {
+    route.preStrip.disconnect(stripIn);
+  } catch {
+    /* */
+  }
+
+  const oldInner = [...route.innerNodes];
+  stopNodes(oldInner);
+
   route.innerNodes = [...nodes, trim];
   route.suiteInput = input;
   route.makeupGains = collectMakeupGains(nodes);
@@ -381,6 +414,12 @@ function wireSuiteSwap(
     } catch {
       /* */
     }
+  }
+  /* Drop any dry bypass still feeding the strip (bypass→suite or dual-path races). */
+  try {
+    route.preStrip.disconnect(stripFeed);
+  } catch {
+    /* */
   }
   if (oldTap && oldTap !== route.preStrip) {
     try {

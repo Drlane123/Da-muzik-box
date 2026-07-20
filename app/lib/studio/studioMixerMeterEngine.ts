@@ -21,9 +21,13 @@ export const STUDIO_MIXER_NOISE_GATE_LINEAR = 0.0005;
 const METER_FLOOR_DB = -60;
 const METER_CEIL_DB = 0;
 const METER_ATTACK_SEC = 0.01;
+/** Smooth fall after Stop (instant release + stale peak = drop→jump). */
+const METER_STOP_RELEASE_SEC = 0.07;
 
 type ChannelState = { l: number; r: number };
 const stripStates = new Map<number, ChannelState>();
+/** After Stop — ballistics may only fall, never attack up (kills drop→jump). */
+let decayOnlyUntilMs = 0;
 
 export function studioMixerLevelToDisplay(linear: number): number {
   if (!Number.isFinite(linear) || linear <= STUDIO_MIXER_SILENCE_LINEAR) return 0;
@@ -85,12 +89,39 @@ export function studioMixerBufferIsSilent(samples: Float32Array): boolean {
   return studioMixerBufferPeak(samples) < STUDIO_MIXER_NOISE_GATE_LINEAR;
 }
 
-/** Fast attack (~10 ms); instant release so meters track silence immediately. */
+const METER_RELEASE_SEC = 0.05;
+
+/** Fast attack (~10 ms); short release so a missed worklet frame doesn't flash VU off. */
 function stepBallisticsLinear(current: number, target: number, dtSec: number): number {
   const targetClamped = Math.max(0, Math.min(1, target));
-  if (targetClamped <= STUDIO_MIXER_NOISE_GATE_LINEAR) return 0;
+  if (targetClamped <= STUDIO_MIXER_NOISE_GATE_LINEAR) {
+    if (current <= STUDIO_MIXER_NOISE_GATE_LINEAR) return 0;
+    const next = current * Math.exp(-dtSec / METER_RELEASE_SEC);
+    return next <= STUDIO_MIXER_NOISE_GATE_LINEAR ? 0 : next;
+  }
   if (targetClamped <= current) return targetClamped;
   return targetClamped + (current - targetClamped) * Math.exp(-dtSec / METER_ATTACK_SEC);
+}
+
+/** After Stop: never attack up; ease down instead of slamming to zero. */
+function stepBallisticsDecayOnly(current: number, raw: number, dtSec: number): number {
+  const capped = Math.min(Math.max(0, raw), current);
+  if (capped > STUDIO_MIXER_NOISE_GATE_LINEAR) return capped;
+  if (current <= STUDIO_MIXER_NOISE_GATE_LINEAR) return 0;
+  const next = current * Math.exp(-dtSec / METER_STOP_RELEASE_SEC);
+  return next <= STUDIO_MIXER_NOISE_GATE_LINEAR ? 0 : next;
+}
+
+/**
+ * Call from pause/stop — meters may only fall until the next Play.
+ * A timed window still jumped when a late worklet hold arrived after expiry.
+ */
+export function armStudioMixerMeterDecayOnly(_ms = 0): void {
+  decayOnlyUntilMs = Number.POSITIVE_INFINITY;
+}
+
+export function clearStudioMixerMeterDecayOnly(): void {
+  decayOnlyUntilMs = 0;
 }
 
 export function studioMixerMeterBallisticsStep(
@@ -101,8 +132,13 @@ export function studioMixerMeterBallisticsStep(
 ): StudioMixerMeterDisplay {
   const prev = stripStates.get(trackIndex) ?? { l: 0, r: 0 };
   const dt = Math.max(1 / 240, Math.min(0.05, dtSec));
-  const linL = stepBallisticsLinear(prev.l, rawL, dt);
-  const linR = stepBallisticsLinear(prev.r, rawR, dt);
+  const decayOnly = decayOnlyUntilMs > 0 && performance.now() < decayOnlyUntilMs;
+  const linL = decayOnly
+    ? stepBallisticsDecayOnly(prev.l, rawL, dt)
+    : stepBallisticsLinear(prev.l, rawL, dt);
+  const linR = decayOnly
+    ? stepBallisticsDecayOnly(prev.r, rawR, dt)
+    : stepBallisticsLinear(prev.r, rawR, dt);
   stripStates.set(trackIndex, { l: linL, r: linR });
   return {
     l: studioMixerLevelToDisplay(linL),
@@ -122,4 +158,5 @@ export function studioMixerMeterFrameDt(): number {
 export function resetStudioMixerMeterBallistics(): void {
   stripStates.clear();
   lastFrameMs = 0;
+  decayOnlyUntilMs = 0;
 }
