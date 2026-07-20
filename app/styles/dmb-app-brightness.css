@@ -101,7 +101,18 @@ body {
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* Portrait phone gate styles live in PhoneLandscapeGate — no page-scroll overrides. */
+/* Soft phone rotate tip lives in PhoneLandscapeGate — no lock / no page-scroll overrides. */
+
+/* Phones only: extra room at the bottom of Beat Lab GRID so last lanes aren't clipped. */
+html[data-dmb-phone-handset='1'] .beat-lab-drum-grid-scroll {
+  padding-bottom: 72px;
+  box-sizing: border-box;
+}
+
+html[data-dmb-phone-handset='1'] .beat-pads-grid-v-scroll {
+  padding-bottom: 56px;
+  box-sizing: border-box;
+}
 
 /* Geno Build 1 / 2 fullscreen — hide Modules (returns on Minimize) */
 body[data-studio-geno-build-fullscreen] [data-dmb-modules-menu] {

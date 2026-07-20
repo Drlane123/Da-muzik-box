@@ -48,15 +48,14 @@ export function isPhoneHandsetViewport(width: number, height: number): boolean {
   return shortSide <= PHONE_SHORT_MAX && longSide <= PHONE_LONG_MAX;
 }
 
-/** Phone standing tall — app should show “turn sideways” instead of running. */
+/** Phone standing tall — soft rotate tip only (does not lock the UI). */
 export function isPhonePortraitViewport(width: number, height: number): boolean {
   return isPhoneHandsetViewport(width, height) && height > width;
 }
 
 /**
  * Shrinks the whole UI when the window is smaller than the reference desktop.
- * Large monitors stay at 100%. Phone landscape / tablets / laptops get a fit ratio.
- * (Portrait phones are gated separately — they never run the scaled DAW UI.)
+ * Large monitors stay at 100%. Phones (any orientation), tablets, and laptops get a fit ratio.
  */
 export function computeAutoUiScale(
   width?: number,
@@ -76,6 +75,9 @@ export function resolveUiScale(mode: UiScaleMode, manualScale: number): number {
  * `zoom` on <html> shrinks paint size but leaves blank bands under/ beside the shell
  * (modules looked “half height” on laptops). Expand logical width/height by 1/scale
  * so after zoom the app still fills the viewport.
+ *
+ * Phones: shell height follows visualViewport (not 100dvh). Mobile browser chrome makes
+ * 100dvh taller than the visible area, which clipped the Beat Lab GRID bottom.
  */
 export function applyDocumentUiScale(scale: number): void {
   const s = clampUiScale(scale);
@@ -83,11 +85,12 @@ export function applyDocumentUiScale(scale: number): void {
   const body = document.body;
   const vp = readViewportSize();
   const phonePortrait = isPhonePortraitViewport(vp.width, vp.height);
+  const phoneHandset = isPhoneHandsetViewport(vp.width, vp.height);
 
   root.style.setProperty('--dmb-ui-scale', String(s));
   root.dataset.dmbPhoneUi = phonePortrait ? 'portrait' : '0';
-  root.dataset.dmbPhoneLandscape =
-    isPhoneHandsetViewport(vp.width, vp.height) && !phonePortrait ? '1' : '0';
+  root.dataset.dmbPhoneLandscape = phoneHandset && !phonePortrait ? '1' : '0';
+  root.dataset.dmbPhoneHandset = phoneHandset ? '1' : '0';
 
   // Chromium / Edge / Cursor — scales layout + hit targets together (portals included).
   (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(s);
@@ -95,10 +98,14 @@ export function applyDocumentUiScale(scale: number): void {
   if (s < 0.999) {
     const inv = 1 / s;
     root.style.setProperty('--dmb-ui-shell-w', `calc(100vw * ${inv})`);
-    root.style.setProperty('--dmb-ui-shell-h', `calc(100dvh * ${inv})`);
+    // Phone handsets: use the same viewport as auto-scale so GRID/footer aren't cut off.
+    const shellH = phoneHandset
+      ? `${Math.max(1, Math.round(vp.height * inv))}px`
+      : `calc(100dvh * ${inv})`;
+    root.style.setProperty('--dmb-ui-shell-h', shellH);
     root.style.width = `calc(100vw * ${inv})`;
-    root.style.minHeight = `calc(100dvh * ${inv})`;
-    root.style.height = `calc(100dvh * ${inv})`;
+    root.style.minHeight = shellH;
+    root.style.height = shellH;
     root.style.overflow = 'hidden';
   } else {
     root.style.setProperty('--dmb-ui-shell-w', '100%');
@@ -135,6 +142,7 @@ export function clearDocumentUiScale(): void {
   root.style.removeProperty('overflow-y');
   delete root.dataset.dmbPhoneUi;
   delete root.dataset.dmbPhoneLandscape;
+  delete root.dataset.dmbPhoneHandset;
   (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = '';
   if (body) {
     body.style.removeProperty('width');

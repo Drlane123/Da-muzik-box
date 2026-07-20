@@ -1,28 +1,35 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Smartphone } from 'lucide-react';
+import { RotateCw, Smartphone, X } from 'lucide-react';
 
 import {
   isPhonePortraitViewport,
   readViewportSize,
 } from '@/app/lib/uiScale';
 
+const DISMISS_KEY = 'dmb-phone-rotate-hint-dismissed';
+
 /**
- * Phones only: block portrait and ask the user to turn sideways (landscape).
- * Tablets and desktop are never gated.
+ * Phones only: soft “turn sideways” hint in portrait.
+ * Does NOT lock or block the UI (Facebook / in-app browsers break with hard locks).
+ * Tablets and desktop never see this.
  */
 export default function PhoneLandscapeGate() {
-  const [needsRotate, setNeedsRotate] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const vp = readViewportSize();
-    return isPhonePortraitViewport(vp.width, vp.height);
-  });
+  const [showHint, setShowHint] = useState(false);
 
   useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = sessionStorage.getItem(DISMISS_KEY) === '1';
+    } catch {
+      /* ignore */
+    }
+
     const sync = () => {
       const vp = readViewportSize();
-      setNeedsRotate(isPhonePortraitViewport(vp.width, vp.height));
+      const portrait = isPhonePortraitViewport(vp.width, vp.height);
+      setShowHint(portrait && !dismissed);
     };
     sync();
     window.addEventListener('resize', sync);
@@ -35,70 +42,100 @@ export default function PhoneLandscapeGate() {
     };
   }, []);
 
-  if (!needsRotate) return null;
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(DISMISS_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setShowHint(false);
+  };
+
+  if (!showHint) return null;
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Rotate phone to landscape"
+      role="status"
+      aria-live="polite"
+      aria-label="Tip: turn phone sideways for a better view"
       style={{
         position: 'fixed',
-        inset: 0,
-        zIndex: 99999,
+        left: 12,
+        right: 12,
+        bottom: 'max(12px, env(safe-area-inset-bottom))',
+        zIndex: 9000,
         display: 'flex',
-        flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 18,
-        padding: 28,
-        textAlign: 'center',
-        background:
-          'radial-gradient(900px 500px at 50% 20%, rgba(0,229,255,0.12), transparent 55%), #07090c',
+        gap: 10,
+        padding: '10px 12px',
+        borderRadius: 12,
+        border: '1px solid rgba(0,229,255,0.4)',
+        background: 'rgba(7, 9, 12, 0.92)',
+        boxShadow: '0 8px 28px rgba(0,0,0,0.45)',
         color: '#d4dce8',
         fontFamily: 'Rajdhani, sans-serif',
+        pointerEvents: 'auto',
       }}
     >
       <div
         style={{
-          width: 88,
-          height: 88,
-          borderRadius: 20,
+          flexShrink: 0,
+          width: 36,
+          height: 36,
+          borderRadius: 10,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          border: '1px solid rgba(0,229,255,0.45)',
-          background: 'rgba(0,229,255,0.08)',
+          background: 'rgba(0,229,255,0.1)',
           color: '#00E5FF',
-          transform: 'rotate(90deg)',
+          position: 'relative',
         }}
       >
-        <Smartphone size={44} strokeWidth={1.75} aria-hidden />
+        <Smartphone size={18} strokeWidth={2} aria-hidden />
+        <RotateCw
+          size={12}
+          strokeWidth={2.5}
+          aria-hidden
+          style={{ position: 'absolute', right: 2, bottom: 2 }}
+        />
       </div>
-      <div
-        style={{
-          fontFamily: 'Orbitron, sans-serif',
-          fontSize: 18,
-          fontWeight: 800,
-          letterSpacing: 1.2,
-          textTransform: 'uppercase',
-          color: '#fff',
-        }}
-      >
-        Turn your phone sideways
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: 'Orbitron, sans-serif',
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: 0.8,
+            textTransform: 'uppercase',
+            color: '#00E5FF',
+          }}
+        >
+          Turn sideways →
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.3, color: 'rgba(212,220,232,0.7)', marginTop: 2 }}>
+          Landscape looks better — portrait still works.
+        </div>
       </div>
-      <p
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss tip"
         style={{
-          margin: 0,
-          maxWidth: 320,
-          fontSize: 15,
-          lineHeight: 1.45,
-          color: 'rgba(212,220,232,0.65)',
+          flexShrink: 0,
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.12)',
+          background: 'transparent',
+          color: 'rgba(212,220,232,0.7)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
         }}
       >
-        Da Muzik Box is built for landscape on phones. Rotate to horizontal to open
-        the app — portrait mode stays locked.
-      </p>
+        <X size={16} />
+      </button>
     </div>
   );
 }

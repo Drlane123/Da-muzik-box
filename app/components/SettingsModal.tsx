@@ -473,9 +473,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
             <label style={fieldLabel}>Display size</label>
             <p style={{ fontSize: 11, color: '#888', margin: '0 0 8px', lineHeight: 1.4 }}>
-              Auto-fit shrinks the UI on tablets, phone landscape, and smaller laptop screens and
-              still fills the window edge-to-edge. Phones must be turned sideways. Use Manual if you
-              want a fixed size.
+              Auto-fit shrinks the UI on phones, tablets, and smaller laptop screens and still fills the
+              window edge-to-edge. Use Manual if you want a fixed size.
             </p>
             <select
               value={settings.uiScaleMode}
@@ -483,7 +482,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               style={{ ...selectStyle, marginBottom: 10 }}
             >
               <option value="auto" style={{ background: INPUT_BG, color: '#e8e8f0' }}>
-                Auto — fit this window (landscape phone / tablet / laptop)
+                Auto — fit this window (phone / tablet / laptop)
               </option>
               <option value="manual" style={{ background: INPUT_BG, color: '#e8e8f0' }}>
                 Manual — use slider
@@ -509,8 +508,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   style={{ width: '100%', marginBottom: 6, accentColor: CYAN }}
                 />
                 <p style={{ ...hint, marginTop: 0, marginBottom: 14 }}>
-                  Shrink the whole app so DAW screens fit landscape phones and smaller screens. Does
-                  not change song timing or playhead behavior.
+                  Shrink the whole app so DAW screens fit phones and smaller screens. Does not change
+                  song timing or playhead behavior.
                 </p>
               </>
             )}
