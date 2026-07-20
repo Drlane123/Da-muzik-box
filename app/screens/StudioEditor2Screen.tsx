@@ -6682,7 +6682,7 @@ export default function StudioEditor2Screen({
   );
   const [running, setRunning] = useState(false);
   const [metroOn, setMetroOn] = useState(false);
-  /** Record count-in — separate from playback MET; arms record when enabled. */
+  /** Record count-in — rimshot bars before capture (only when mic is armed + Play). */
   const [precountEnabled, setPrecountEnabled] = useState(false);
   const [precountBars, setPrecountBars] = useState<1 | 2>(1);
   const [isPrecounting, setIsPrecounting] = useState(false);
@@ -7076,7 +7076,9 @@ export default function StudioEditor2Screen({
   const precountBarsRef = useRef<1 | 2>(1);
   const isPrecountingRef = useRef(false);
   const precountCancelRef = useRef(false);
-  const beginSe2RecordWithOptionalPrecountRef = useRef<() => Promise<void>>(async () => {});
+  const beginSe2RecordWithOptionalPrecountRef = useRef<
+    (opts?: { fromPlay?: boolean }) => Promise<void>
+  >(async () => {});
   const recordingRef = useRef(false);
   const recordStandbyRef = useRef(false);
   const transportRecBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -7931,19 +7933,22 @@ export default function StudioEditor2Screen({
     let scrollLeft = scrollOverride ?? scrollEl?.scrollLeft ?? 0;
     let margins = viewportMargins;
     /*
-     * During transform-follow play, scrollLeft is frozen at the follow origin. Painting
-     * at that frozen left without follow margins (e.g. after FX suite re-renders / rack
-     * rebuild) places the canvas window behind the playhead → blank #0a0a10 strip.
+     * During transform-follow play (or Stop-parked bake), scrollLeft is frozen at the
+     * follow origin while the strip is CSS-translated. Painting at that frozen left
+     * without follow margins (FX suite re-render, record-arm track select, rack rebuild)
+     * places the canvas window behind the playhead → blank #0a0a10 strip.
      */
-    if (runningRef.current && timelineEdgeFollowActiveRef.current && !margins) {
-      scrollLeft =
-        scrollOverride
-        ?? Math.max(
-          0,
-          Math.round(
-            timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current,
-          ),
-        );
+    const followPaintActive =
+      (runningRef.current && timelineEdgeFollowActiveRef.current)
+      || timelineFollowParkedTransformRef.current;
+    if (followPaintActive && !margins) {
+      /* Ignore scrollOverride — callers often pass frozen scrollLeft under translate follow. */
+      scrollLeft = Math.max(
+        0,
+        Math.round(
+          timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current,
+        ),
+      );
       margins = {
         marginBackPx: TIMELINE_FOLLOW_PAINT_BACK_PX,
         marginFwdPx: TIMELINE_FOLLOW_PAINT_FWD_PX,
@@ -8103,7 +8108,15 @@ export default function StudioEditor2Screen({
   }, []);
 
   const applyPlayheadFull = useCallback((beat: number, opts?: { skipAutoScroll?: boolean }) => {
-    if (timelineEdgeFollowActiveRef.current) clearTimelineEdgeFollow();
+    /*
+     * Stop parks follow as a CSS translate with scrollLeft frozen at the origin.
+     * Must commit that bake before any grid paint — otherwise sync paints the
+     * frozen window while the strip is still translated (blank grid / waves).
+     * Record arm → select audio track hits this path via the layout effect.
+     */
+    if (timelineEdgeFollowActiveRef.current || timelineFollowParkedTransformRef.current) {
+      clearTimelineEdgeFollow();
+    }
     timelineFollowPinAppliedRef.current = false;
     timelineFollowTransformOriginRef.current = 0;
 
@@ -20390,9 +20403,9 @@ export default function StudioEditor2Screen({
       pauseTransport();
       return;
     }
-    /* Record standby or Pre count-in → start capture on Play (mic alone never auto-rolls). */
-    if (recordStandbyRef.current || precountEnabledRef.current) {
-      await beginSe2RecordWithOptionalPrecountRef.current();
+    /* Mic armed → start capture on Play. Pre only adds count-in inside begin — never forces record alone. */
+    if (recordStandbyRef.current) {
+      await beginSe2RecordWithOptionalPrecountRef.current({ fromPlay: true });
       return;
     }
     await startTransport();
@@ -20632,8 +20645,16 @@ export default function StudioEditor2Screen({
     [],
   );
 
-  const beginSe2RecordWithOptionalPrecount = useCallback(async () => {
+  const beginSe2RecordWithOptionalPrecount = useCallback(async (opts?: { fromPlay?: boolean }) => {
     if (recordingRef.current || isPrecountingRef.current) return;
+    /*
+     * Hard gate: never roll transport/capture from the mic button when stopped.
+     * Play passes { fromPlay: true }. Punch-in while already playing is allowed.
+     */
+    if (!runningRef.current && !opts?.fromPlay) {
+      console.warn('[SE2 Record] Capture blocked — arm the mic, then hit Play.');
+      return;
+    }
 
     let trackIndex = findSe2RecordTargetTrackIndex(
       studioTracksRef.current,
@@ -20695,7 +20716,8 @@ export default function StudioEditor2Screen({
       return;
     }
 
-    if (precountEnabledRef.current) {
+    /* Count-in only when starting from stopped Play — never during punch-in. */
+    if (precountEnabledRef.current && !runningRef.current) {
       precountCancelRef.current = false;
       isPrecountingRef.current = true;
       setIsPrecounting(true);
@@ -20850,13 +20872,11 @@ export default function StudioEditor2Screen({
     }
     if (isPrecountingRef.current) return;
 
-    /* Already rolling — punch-in on the mic. */
-    if (runningRef.current) {
-      void beginSe2RecordWithOptionalPrecountRef.current();
-      return;
-    }
-
-    /* Stopped: toggle standby only — wait for Play to start the take. */
+    /*
+     * Transport mic = arm/disarm only.
+     * Never start Play or MediaRecorder here — capture begins only from Play
+     * when recordStandby is on (see onTogglePlayPause).
+     */
     if (recordStandbyRef.current) {
       recordStandbyRef.current = false;
       setRecordStandby(false);
@@ -21053,7 +21073,19 @@ export default function StudioEditor2Screen({
       displayBeatRef.current = cursorBeatRef.current;
       /* Don't re-place the playhead during a user click-seek — keeps the line under the cursor. */
       if (performance.now() >= timelineUserSeekGuardUntilRef.current) {
-        applyPlayheadFull(cursorBeatRef.current, { skipAutoScroll: true });
+        /*
+         * Stop-parked / follow bake: only repaint the grid at virtual scroll.
+         * applyPlayheadFull would commit/clear the park (blank wave + lost Play resume).
+         * Record arm → select audio track lands here via selectedTrackIndex.
+         */
+        if (
+          timelineFollowParkedTransformRef.current
+          || timelineEdgeFollowActiveRef.current
+        ) {
+          syncTimelineGridNow(z);
+        } else {
+          applyPlayheadFull(cursorBeatRef.current, { skipAutoScroll: true });
+        }
       }
       updateReadouts(displayBeatRef.current, !runningRef.current);
     }
@@ -24276,9 +24308,7 @@ export default function StudioEditor2Screen({
                   ? precountEnabled
                     ? 'Play — count-in, then record'
                     : 'Play — start recording'
-                  : precountEnabled
-                    ? 'Play — count-in then record'
-                    : 'Play'
+                  : 'Play'
             }
             disabled={isPrecounting}
             className={`${transportBtnBase} h-10 w-10 rounded-full border disabled:opacity-45`}
@@ -24326,18 +24356,16 @@ export default function StudioEditor2Screen({
                 ? 'Recording — click to stop and commit take to armed audio track'
                 : recordStandby
                   ? 'Record armed — hit Play to start (click mic again to cancel)'
-                  : running
-                    ? 'Record — punch in at the playhead'
-                    : 'Record — arm mic, then hit Play to start'
+                  : 'Record — arm mic only (does not play or capture); hit Play to record'
             }
             disabled={isPrecounting}
             aria-pressed={recording || recordStandby}
             data-rec-armed={recordStandby && !recording ? '1' : '0'}
             data-rec-on={recording ? '1' : '0'}
             className={`se2-transport-rec-btn ${transportBtnBase} h-9 w-9 rounded-md border disabled:opacity-45`}
-            onPointerDown={(e) => {
-              if (e.button !== 0) return;
+            onClick={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               onRecordClick();
             }}
           >

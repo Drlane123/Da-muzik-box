@@ -79,7 +79,7 @@ export const STUDIO_EDITOR2_HELP_SECTIONS: readonly StudioEditor2HelpSection[] =
       'Add an **+ Aud** track for vocals — audio clips live on the timeline, not in the piano roll.',
       'In **Mix**, tap the red **R** on an audio strip to arm Record Enable for that input.',
       'Pick mic/line input per audio strip (mic icon) or use Settings → Audio Input as project default.',
-      'Transport **Record** (mic button) marks a recording session and starts playback — arm tracks first.',
+      'Transport **mic** only arms record (red) — it does not play or capture. Hit **Play** to start the take (optional **Pre** count-in).',
       'Recorded or imported vocal takes stack as clips you can move, trim, and layer across bars.',
     ],
   },
