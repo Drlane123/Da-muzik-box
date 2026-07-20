@@ -25,15 +25,25 @@ import {
   isStudioMixerStripGraphPlaybackLocked,
   resolveStudioMixerStripInput,
 } from '@/app/lib/studio/studioMixerStripBus';
-import {
-  getStudioTrackVocalFxEntry,
-  studioTrackVocalStackOwnsClipPath,
-} from '@/app/lib/studio/studioTrackVocalFxInsert';
+import { getStudioTrackVocalFxEntry } from '@/app/lib/studio/studioTrackVocalFxInsert';
 import {
   registerStudioFxSuiteAnalyserResync,
   retapStudioPitchMonitorSource,
+  studioPitchMonitorUsesEngineTap,
   studioTrackAnalyserHasConsumer,
 } from '@/app/lib/studio/studioTrackAnalyserBus';
+
+/** DA FX Suite meters only — never steal Pitch Tune / Vocoder scope off the vocal entry. */
+function retapInsertSuiteMeterIfNeeded(
+  ctx: AudioContext,
+  source: AudioNode,
+  trackIndex: number,
+): void {
+  if (!studioTrackAnalyserHasConsumer(trackIndex, 'fxSuite')) return;
+  if (studioTrackAnalyserHasConsumer(trackIndex, 'pitch')) return;
+  if (studioPitchMonitorUsesEngineTap(trackIndex)) return;
+  retapStudioPitchMonitorSource(ctx, source, trackIndex);
+}
 
 type StripRoute = {
   preStrip: GainNode;
@@ -235,12 +245,13 @@ function severStripFeedInputs(route: StripRoute, stripFeed: GainNode, stripIn: G
   }
 }
 
-/** Clip/midi bus: vocal stack entry when Pitch Tune/Vocoder active, else preStrip. */
+/**
+ * Clip/midi bus: prefer vocal entry whenever it exists.
+ * Entry is either bypassed to preStrip (FX off) or spliced into Pitch Tune / Vocoder
+ * (FX on) — keeping clips on the same node so toggles don't leave audio stuck dry.
+ */
 function resolveClipPlaybackBus(trackIndex: number, preStrip: GainNode): GainNode {
-  if (studioTrackVocalStackOwnsClipPath(trackIndex)) {
-    return getStudioTrackVocalFxEntry(trackIndex) ?? preStrip;
-  }
-  return preStrip;
+  return getStudioTrackVocalFxEntry(trackIndex) ?? preStrip;
 }
 
 function reconnectTapToStripFeed(route: StripRoute, stripFeed: GainNode, needSuite: boolean): void {
@@ -327,7 +338,7 @@ function wireBypass(
   route.makeupGains = [];
   route.tapFrom = route.preStrip;
   route.suiteWired = false;
-  retapStudioPitchMonitorSource(ctx, route.preStrip, trackIndex);
+  retapInsertSuiteMeterIfNeeded(ctx, route.preStrip, trackIndex);
 }
 
 /** First-time suite wire (bypass → suite or cold start). */
@@ -375,7 +386,7 @@ function wireSuite(
   route.tapFrom = trim;
   route.suiteWired = true;
   route.lastRack = cloneStudioTrackInsertFxRack(rack);
-  retapStudioPitchMonitorSource(ctx, route.tapFrom, trackIndex);
+  retapInsertSuiteMeterIfNeeded(ctx, route.tapFrom, trackIndex);
 }
 
 /**
@@ -441,7 +452,7 @@ function wireSuiteSwap(
   route.tapFrom = trim;
   route.suiteWired = true;
   route.lastRack = cloneStudioTrackInsertFxRack(rack);
-  retapStudioPitchMonitorSource(ctx, route.tapFrom, trackIndex);
+  retapInsertSuiteMeterIfNeeded(ctx, route.tapFrom, trackIndex);
 }
 
 /**
@@ -636,8 +647,11 @@ export function healStudioTrackPlaybackRouteIfStale(
 
 export function retapStudioInsertFxAnalyserIfConsumerOpen(trackIndex: number): void {
   if (!studioTrackAnalyserHasConsumer(trackIndex, 'fxSuite')) return;
+  if (studioTrackAnalyserHasConsumer(trackIndex, 'pitch')) return;
+  if (studioPitchMonitorUsesEngineTap(trackIndex)) return;
   const route = routes.get(trackIndex);
-  const tap = route?.tapFrom ?? route?.preStrip;
+  /* Vocal stack bypasses preStrip — tap the entry so suite meters see mic/clips. */
+  const tap = getStudioTrackVocalFxEntry(trackIndex) ?? route?.tapFrom ?? route?.preStrip;
   if (!tap || tap.context.state === 'closed') return;
   retapStudioPitchMonitorSource(tap.context as AudioContext, tap, trackIndex);
 }

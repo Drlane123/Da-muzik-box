@@ -18,7 +18,8 @@ export async function ensureStudioLivePitchTuneWorklet(ctx: BaseAudioContext): P
     throw new Error('AudioWorklet not supported');
   }
   const load = ctx.audioWorklet
-    .addModule('/studio-live-pitch-tune-processor.js')
+    /* rev query busts browser worklet cache after dry-pass / mute fixes */
+    .addModule('/studio-live-pitch-tune-processor.js?v=4')
     .catch((err) => {
       workletLoadByContext.delete(ctx);
       throw err;
@@ -110,9 +111,12 @@ export async function createStudioLivePitchTuneChain(
   let smoothedRatio = 1;
   let intervalId = 0;
   let silentTicks = 0;
-  let noiseRms = 0.002;
-  let noisePeak = 0.006;
+  let noiseRms = 0.0008;
+  let noisePeak = 0.002;
   let calibFrames = 0;
+  /** Soft absolute floors — tracking dial scales these further. */
+  const VOICED_RMS = 0.0025;
+  const VOICED_PEAK = 0.006;
 
   const inputRms = (data: Float32Array): number => {
     let sum = 0;
@@ -135,7 +139,8 @@ export async function createStudioLivePitchTuneChain(
     return peak;
   };
 
-  const setMixSilence = () => {
+  /** mix=0 → dry pass-through in the worklet (never mute the lane). */
+  const setMixDry = () => {
     smoothedRatio = 1;
     try {
       pitchRatio.setTargetAtTime(1, ctx.currentTime, 0.01);
@@ -155,25 +160,29 @@ export async function createStudioLivePitchTuneChain(
     const rms = inputRms(buf);
     const peak = inputPeak(buf);
     const strength = clamp(params.strength, 0, 1);
-    const confThreshold = 0.035 + (1 - clamp(params.tracking, 0, 1)) * 0.06;
+    const track = clamp(params.tracking, 0, 1);
+    /* Higher tracking → lower ACF bar + lower energy gate (dial actually does something). */
+    const confThreshold = 0.022 + (1 - track) * 0.045;
+    const gateScale = 1.15 - track * 0.55;
 
-    if (calibFrames < 28) {
+    if (calibFrames < 16) {
       calibFrames += 1;
-      noiseRms = Math.max(noiseRms, rms);
-      noisePeak = Math.max(noisePeak, peak);
-      setMixSilence();
-      return;
+      /* Learn ambient noise only while quiet — never train on the vocal. */
+      if (rms < VOICED_RMS * gateScale && peak < VOICED_PEAK * gateScale) {
+        noiseRms = Math.max(noiseRms, rms);
+        noisePeak = Math.max(noisePeak, peak);
+      }
     }
 
-    const rmsGate = Math.max(0.011, noiseRms * 3.2 + 0.004);
-    const peakGate = Math.max(0.028, noisePeak * 2.8 + 0.01);
+    const rmsGate = Math.max(VOICED_RMS * gateScale, noiseRms * (1.55 + (1 - track) * 0.55) + 0.001);
+    const peakGate = Math.max(VOICED_PEAK * gateScale, noisePeak * (1.45 + (1 - track) * 0.5) + 0.0025);
     const inputLive = rms >= rmsGate && peak >= peakGate;
 
     if (!inputLive) {
-      noiseRms = noiseRms * 0.992 + rms * 0.008;
-      noisePeak = noisePeak * 0.992 + peak * 0.008;
+      noiseRms = noiseRms * 0.995 + Math.min(rms, rmsGate) * 0.005;
+      noisePeak = noisePeak * 0.995 + Math.min(peak, peakGate) * 0.005;
       silentTicks = Math.min(16, silentTicks + 1);
-      if (silentTicks >= 2) setMixSilence();
+      if (silentTicks >= 3) setMixDry();
       return;
     }
     silentTicks = 0;
@@ -181,9 +190,9 @@ export async function createStudioLivePitchTuneChain(
     const { frequency, confidence } = detectPitchACF(
       buf,
       ctx.sampleRate,
-      70,
-      1200,
-      confThreshold * 0.85,
+      55,
+      1400,
+      confThreshold * 0.75,
     );
 
     if (frequency > 0 && confidence > confThreshold) {
@@ -208,15 +217,17 @@ export async function createStudioLivePitchTuneChain(
         mix.setValueAtTime(strength, ctx.currentTime);
       }
     } else {
-      setMixSilence();
+      /* No lock yet — keep dry audible until pitch is found. */
+      setMixDry();
     }
   };
 
-  intervalId = window.setInterval(tick, 25);
+  /* 40ms — ACF every 25ms + monitor rAF was enough to lock the UI. */
+  intervalId = window.setInterval(tick, 40);
 
   const updateMix = (strength: number) => {
     params.strength = clamp(strength, 0, 1);
-    if (silentTicks >= 2 || calibFrames < 28) {
+    if (silentTicks >= 2) {
       try {
         mix.setTargetAtTime(0, ctx.currentTime, 0.015);
       } catch {

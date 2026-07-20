@@ -14,6 +14,7 @@ export {
   setStudioPitchMonitorActiveTrack,
   setStudioPitchMonitorRouteListener,
   studioPitchMonitorUsesEngineTap,
+  unbindStudioPitchMonitorEngineAnalyser,
 } from '@/app/lib/studio/studioTrackAnalyserBus';
 
 export type { StudioTrackMeterSnapshot } from '@/app/lib/studio/studioTrackAnalyserBus';

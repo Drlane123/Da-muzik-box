@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { PadSamplerFxTCapStyles } from '@/app/components/creation/PadSamplerFxWidgets';
 import '@/app/styles/studioFxSuite.css';
@@ -31,6 +31,7 @@ import {
 import type { StudioVocoderCarrierTrack } from '@/app/lib/studio/studioVocoderCarrier';
 import {
   STUDIO_TRACK_VOCAL_FX_DEFAULT,
+  studioPatchExclusiveVocalFx,
   studioTrackVocalFxActive,
   type StudioTrackVocalFx,
 } from '@/app/lib/studio/studioTrackVocalFx';
@@ -133,7 +134,7 @@ export type StudioVocalFxPanelProps = {
   disabled?: boolean;
   compact?: boolean;
   className?: string;
-  /** Project / lane mic device — same source Hum Capture uses for live pitch readout. */
+  /** Project / lane mic device â€” same source Hum Capture uses for live pitch readout. */
   inputDeviceId?: string;
 };
 
@@ -171,7 +172,7 @@ export function StudioVocalFxPanel({
   });
 
   const { snap: pitchSnap, scalePitchClasses } = useStudioPitchTuneMonitor({
-    active: open && fx.autotuneOn,
+    active: open && !fx.vocoderOn,
     trackIndex: vocalTrackIndex,
     fx,
     keyRoot: songKeyRoot,
@@ -219,10 +220,11 @@ export function StudioVocalFxPanel({
     };
   }, [open]);
 
-  const patch = (partial: Partial<StudioTrackVocalFx>) => onChange({ ...fx, ...partial });
+  const patch = (partial: Partial<StudioTrackVocalFx>) =>
+    onChange(studioPatchExclusiveVocalFx(fx, partial));
 
   const keyLabel = studioKeyLabel(songKeyRoot, songKeyMode);
-  const tuneScopeKeyLabel = `${keyLabel} · ${pitchTuneScaleLabel(fx.pitchScaleId)}`;
+  const tuneScopeKeyLabel = `${keyLabel} Â· ${pitchTuneScaleLabel(fx.pitchScaleId)}`;
 
   const panel =
     open && typeof document !== 'undefined'
@@ -268,7 +270,7 @@ export function StudioVocalFxPanel({
                   Vocal DSP Suite
                 </div>
                 <div className="suite-type-micro text-[8px] truncate" style={{ color: '#7a7a90', textTransform: 'none', letterSpacing: '0.04em' }}>
-                  {trackName} · key {keyLabel}
+                  {trackName} Â· key {keyLabel}
                 </div>
               </div>
             </div>
@@ -276,7 +278,7 @@ export function StudioVocalFxPanel({
             <div className="px-3 pt-3 pb-2 grid grid-cols-2 gap-2.5">
               <PowerToggle
                 label="Pitch Tune DSP"
-                sub="Mic → this track → pitch correction → mixer"
+                sub="Detect pitch, snap to scale, shift (mic to this track)"
                 on={fx.autotuneOn}
                 accent={TUNE_ACCENT}
                 glow={TUNE_GLOW}
@@ -285,7 +287,7 @@ export function StudioVocalFxPanel({
               />
               <PowerToggle
                 label="Vocoder DSP"
-                sub="Vocoder / talk-box character"
+                sub="Vocal bands shape a synth carrier (one engine at a time)"
                 on={fx.vocoderOn}
                 accent={VOCODER_ACCENT}
                 glow={VOCODER_GLOW}
@@ -372,7 +374,7 @@ export function StudioVocalFxPanel({
               style={{ borderColor: '#222230', color: active ? '#9ae6b4' : '#5a5a68', background: '#07070c', textTransform: 'none', letterSpacing: '0.03em' }}
             >
               {active
-                ? 'Audio on this track routes through Vocal DSP — live mic + clip playback'
+                ? 'Audio on this track routes through Vocal DSP â€” live mic + clip playback'
                 : 'Turn on Pitch Tune DSP or Vocoder DSP'}
             </div>
           </div>,
@@ -400,7 +402,7 @@ export function StudioVocalFxPanel({
         ref={btnRef}
         type="button"
         disabled={disabled}
-        title={`Vocal DSP — Pitch Tune & Vocoder for ${trackName}`}
+        title={`Vocal DSP â€” Pitch Tune & Vocoder for ${trackName}`}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={(e) => {

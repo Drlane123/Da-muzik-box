@@ -1,6 +1,6 @@
 /**
- * Live Vocal DSP energy gate — mute inserts until real modulator signal (mic / clip).
- * Shared by Pitch Tune output and Vocoder wet/dry paths.
+ * Live Vocal DSP energy gate — duck idle carrier hum when modulator is silent.
+ * Fail-open: start audible, close only after sustained silence.
  */
 
 export type StudioLiveVocalEnergyGate = {
@@ -8,7 +8,13 @@ export type StudioLiveVocalEnergyGate = {
   stop: () => void;
 };
 
-/** Mute target gains until voiced energy on modProbe — prevents idle hum on silence. */
+/** Match live Pitch Tune — quiet mics still open the FX path. */
+const VOICED_RMS = 0.0025;
+const VOICED_PEAK = 0.006;
+/** Require this many quiet ticks before closing (avoid chopping consonants). */
+const CLOSE_HOLD_TICKS = 8;
+
+/** Duck target gains when modProbe is silent — starts open so FX is audible immediately. */
 export function attachStudioLiveVocalEnergyGate(
   ctx: BaseAudioContext,
   modProbe: AudioNode,
@@ -20,10 +26,10 @@ export function attachStudioLiveVocalEnergyGate(
   analyser.smoothingTimeConstant = 0.55;
   modProbe.connect(analyser);
   const buf = new Float32Array(analyser.fftSize);
-  let open = false;
-  let noiseRms = 0.002;
-  let noisePeak = 0.006;
-  let calib = 0;
+  let open = true;
+  let quietTicks = 0;
+  let noiseRms = 0.0015;
+  let noisePeak = 0.004;
   let targets = fullGains.slice();
 
   const apply = () => {
@@ -32,11 +38,14 @@ export function attachStudioLiveVocalEnergyGate(
       const g = gates[i];
       if (!g) continue;
       const v = open ? (targets[i] ?? 0) : 0;
-      g.gain.setTargetAtTime(v, t, open ? 0.01 : 0.05);
+      g.gain.setTargetAtTime(v, t, open ? 0.01 : 0.08);
     }
   };
 
-  for (const g of gates) g.gain.value = 0;
+  for (let i = 0; i < gates.length; i += 1) {
+    const g = gates[i];
+    if (g) g.gain.value = targets[i] ?? 1;
+  }
 
   const id = window.setInterval(() => {
     analyser.getFloatTimeDomainData(buf);
@@ -50,24 +59,24 @@ export function attachStudioLiveVocalEnergyGate(
     }
     const rms = Math.sqrt(sum / Math.max(1, buf.length));
 
-    if (calib < 28) {
-      calib += 1;
-      noiseRms = Math.max(noiseRms, rms);
-      noisePeak = Math.max(noisePeak, peak);
+    const rmsGate = Math.max(VOICED_RMS, noiseRms * 1.7 + 0.001);
+    const peakGate = Math.max(VOICED_PEAK, noisePeak * 1.55 + 0.0025);
+    const voiced = rms >= rmsGate && peak >= peakGate;
+
+    if (voiced) {
+      quietTicks = 0;
+      if (!open) {
+        open = true;
+        apply();
+      }
       return;
     }
 
-    const rmsGate = Math.max(0.011, noiseRms * 3.2 + 0.004);
-    const peakGate = Math.max(0.028, noisePeak * 2.8 + 0.01);
-    const voiced = rms >= rmsGate && peak >= peakGate;
-
-    if (!voiced) {
-      noiseRms = noiseRms * 0.992 + rms * 0.008;
-      noisePeak = noisePeak * 0.992 + peak * 0.008;
-    }
-
-    if (voiced !== open) {
-      open = voiced;
+    noiseRms = noiseRms * 0.995 + Math.min(rms, rmsGate) * 0.005;
+    noisePeak = noisePeak * 0.995 + Math.min(peak, peakGate) * 0.005;
+    quietTicks = Math.min(CLOSE_HOLD_TICKS, quietTicks + 1);
+    if (quietTicks >= CLOSE_HOLD_TICKS && open) {
+      open = false;
       apply();
     }
   }, 24);

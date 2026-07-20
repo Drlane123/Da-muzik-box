@@ -2,6 +2,7 @@
  * Pitch Tune — frame-based pitch correction for Studio mixer vocal FX.
  * Retune speed, flex-tune, humanize, and scale-aware snap (Antares-style controls).
  */
+import { detectPitchACF, frequencyToMidiNote } from '@/app/lib/pitchDetection';
 import {
   applyFormantCompensation,
   expandHopRatesToSampleRates,
@@ -38,18 +39,16 @@ export type PitchTuneParams = {
 const F_MIN = 60;
 const F_MAX = 1400;
 const PITCH_FRAME = 2048;
-const PITCH_HOP = 128;
+/** Was 128 — offline Pitch Tune on long takes locked the main thread. */
+const PITCH_HOP = 512;
+const ANALYZE_YIELD_EVERY = 64;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-function hzToMidi(hz: number): number {
-  return 69 + 12 * Math.log2(Math.max(1, hz) / 440);
-}
-
-function hann(i: number, n: number): number {
-  return 0.5 * (1 - Math.cos((2 * Math.PI * i) / Math.max(1, n - 1)));
+function yieldToMain(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 0));
 }
 
 function frameRms(frame: Float32Array): number {
@@ -59,35 +58,9 @@ function frameRms(frame: Float32Array): number {
 }
 
 function autocorrPitchHz(samples: Float32Array, start: number, sr: number): number {
-  const lagMin = Math.max(2, Math.floor(sr / F_MAX));
-  const lagMax = Math.min(PITCH_FRAME - 2, Math.floor(sr / F_MIN));
-  if (lagMax <= lagMin + 2) return 0;
-
-  const win = new Float32Array(PITCH_FRAME);
-  for (let i = 0; i < PITCH_FRAME; i++) {
-    const x = samples[start + i] ?? 0;
-    win[i] = x * hann(i, PITCH_FRAME);
-  }
-
-  let r0 = 0;
-  for (let i = 0; i < PITCH_FRAME; i++) r0 += win[i]! * win[i]!;
-  if (r0 < 1e-12) return 0;
-
-  let bestLag = -1;
-  let best = -Infinity;
-  for (let lag = lagMin; lag <= lagMax; lag++) {
-    let sum = 0;
-    for (let i = 0; i < PITCH_FRAME - lag; i++) sum += win[i]! * win[i + lag]!;
-    if (sum > best) {
-      best = sum;
-      bestLag = lag;
-    }
-  }
-  if (bestLag < 2 || best <= 0) return 0;
-
-  const f = sr / bestLag;
-  if (!Number.isFinite(f) || f < F_MIN || f > F_MAX) return 0;
-  return f;
+  const slice = samples.subarray(start, start + PITCH_FRAME);
+  const { frequency } = detectPitchACF(slice, sr, F_MIN, F_MAX, 0.05);
+  return frequency > 0 ? frequency : 0;
 }
 
 function bufferToMono(buffer: AudioBuffer): Float32Array {
@@ -108,21 +81,27 @@ function linearAt(samples: Float32Array, idx: number): number {
 
 type PitchNode = { sample: number; midi: number; voiced: boolean };
 
-function analyzePitchNodes(samples: Float32Array, sr: number, tracking: number): PitchNode[] {
+async function analyzePitchNodes(
+  samples: Float32Array,
+  sr: number,
+  tracking: number,
+): Promise<PitchNode[]> {
   const nodes: PitchNode[] = [];
   const track = clamp(tracking, 0, 1);
-  let gate = 0.004 + (1 - track) * 0.01;
+  /* Higher tracking → lower gate (more sensitive / breathy). */
+  let gate = 0.0018 + (1 - track) * 0.008;
   const rmsList: number[] = [];
   for (let start = 0; start + PITCH_FRAME <= samples.length; start += PITCH_HOP) {
     rmsList.push(frameRms(samples.subarray(start, start + PITCH_FRAME)));
   }
-  const sorted = rmsList.filter((r) => r > 0.0004).sort((a, b) => a - b);
+  const sorted = rmsList.filter((r) => r > 0.00025).sort((a, b) => a - b);
   if (sorted.length > 0) {
-    const pct = 0.04 + (1 - track) * 0.12;
+    const pct = 0.02 + (1 - track) * 0.1;
     const floor = sorted[Math.floor(sorted.length * pct)]!;
-    gate = Math.max(0.0006 + track * 0.0015, Math.min(0.018, floor * (0.18 + track * 0.35)));
+    gate = Math.max(0.00035 + (1 - track) * 0.0012, Math.min(0.014, floor * (0.12 + (1 - track) * 0.28)));
   }
 
+  let work = 0;
   for (let fi = 0, start = 0; start + PITCH_FRAME <= samples.length; start += PITCH_HOP, fi++) {
     const rms = rmsList[fi] ?? 0;
     if (rms < gate) {
@@ -132,9 +111,11 @@ function analyzePitchNodes(samples: Float32Array, sr: number, tracking: number):
     const hz = autocorrPitchHz(samples, start, sr);
     nodes.push({
       sample: start + PITCH_FRAME * 0.5,
-      midi: hz > 0 ? hzToMidi(hz) : NaN,
+      midi: hz > 0 ? frequencyToMidiNote(hz) : NaN,
       voiced: hz > 0,
     });
+    work += 1;
+    if (work % ANALYZE_YIELD_EVERY === 0) await yieldToMain();
   }
   return nodes;
 }
@@ -227,13 +208,20 @@ function midiTargetAtTimeline(
 
 /**
  * Offline pitch correction — returns processed mono samples (may be shorter/longer than input).
+ * Async so long takes can yield to the UI (sync ACF used to freeze the tab).
  */
-export function applyPitchTuneSamples(samples: Float32Array, sr: number, params: PitchTuneParams): Float32Array {
+export async function applyPitchTuneSamples(
+  samples: Float32Array,
+  sr: number,
+  params: PitchTuneParams,
+): Promise<Float32Array> {
   const strength = clamp(params.strength, 0, 1);
   if (strength < 0.02) return samples.slice();
 
+  await yieldToMain();
+
   const track = clamp(params.tracking, 0, 1);
-  const nodes = analyzePitchNodes(samples, sr, track);
+  const nodes = await analyzePitchNodes(samples, sr, track);
   if (nodes.length === 0) return samples.slice();
 
   const hopSec = PITCH_HOP / sr;
@@ -319,8 +307,9 @@ export async function renderPitchTuneBuffer(
   source: AudioBuffer,
   params: PitchTuneParams,
 ): Promise<AudioBuffer> {
+  await yieldToMain();
   const mono = bufferToMono(source);
-  const processed = applyPitchTuneSamples(mono, source.sampleRate, params);
+  const processed = await applyPitchTuneSamples(mono, source.sampleRate, params);
   const offline = new OfflineAudioContext(
     source.numberOfChannels,
     Math.max(1, processed.length),

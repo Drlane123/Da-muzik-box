@@ -137,7 +137,11 @@ export function studioInputMonitorConnectDest(dest: AudioNode | null, trackIndex
     return;
   }
 
-  if (dest && dest !== prev) {
+  /*
+   * Always (re)connect — dest may equal prev after a graph rebuild that severed
+   * fanout→entry without clearing stripInput (Pitch Tune / Vocoder looked dead).
+   */
+  if (dest) {
     try {
       nodes.fanout.connect(dest);
     } catch {

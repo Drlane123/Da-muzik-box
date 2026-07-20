@@ -8,7 +8,7 @@ import type { StudioVocoderPresetId } from '@/app/lib/studio/studioVocoderPreset
 import { studioVocoderPresetById } from '@/app/lib/studio/studioVocoderPresets';
 import type { StudioVocoderCarrierEvent } from '@/app/lib/studio/studioVocoderCarrier';
 import {
-  extractStudioVocoderBandEnvelopes,
+  extractStudioVocoderBandEnvelopesAsync,
   scheduleStudioVocoderGainEnvelope,
   studioVocoderCompandEnvelope,
   studioVocoderShapeEnvelope,
@@ -538,9 +538,11 @@ export function scheduleStudioProVocoder(
   let liveGate: StudioLiveVocalEnergyGate | null = null;
   if (liveSession) {
     const dryFull = dryG ? vel * dry * 0.78 : 0;
-    const wetFull = vel * wet * ch.carrierGainMul * wetTrimFull;
+    /* Wet trim already includes wetTrimFull — don't multiply carrierGainMul again (was double-attenuating). */
+    const wetFull = wetTrimFull;
     const gateNodes = dryG ? [wetTrim, dryG] : [wetTrim];
-    liveGate = attachStudioLiveVocalEnergyGate(ctx, modBus, gateNodes, [wetFull, dryFull].slice(0, gateNodes.length));
+    const fullGains = dryG ? [wetFull, dryFull] : [wetFull];
+    liveGate = attachStudioLiveVocalEnergyGate(ctx, modBus, gateNodes, fullGains);
     stoppers.push(() => liveGate?.stop());
   }
 
@@ -822,6 +824,9 @@ export async function renderStudioVocoderBuffer(
   source: AudioBuffer,
   params: StudioVocoderParams,
 ): Promise<AudioBuffer> {
+  /* Let the toggle / UI paint before heavy offline DSP. */
+  await new Promise<void>((r) => setTimeout(r, 0));
+
   const dur = Math.max(0.04, source.duration);
   const frames = Math.ceil((dur + 0.15) * source.sampleRate);
   const offline = new OfflineAudioContext(
@@ -832,7 +837,8 @@ export async function renderStudioVocoderBuffer(
 
   const frameDur = studioVocoderEnvelopeFrameDurSec(source);
   const compand = clamp(0.35 + params.robot * 0.45 + params.unvoiced * 0.2, 0, 1);
-  const bandEnvelopes = extractStudioVocoderBandEnvelopes(source).map((env) => {
+  const rawEnvelopes = await extractStudioVocoderBandEnvelopesAsync(source);
+  const bandEnvelopes = rawEnvelopes.map((env) => {
     const companded = studioVocoderCompandEnvelope(env, compand);
     return studioVocoderShapeEnvelope(companded, frameDur, params.attackMs, params.releaseMs);
   });

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Per-lane analyser tap for Pitch Tune scope + FX Suite meters (real signal only).
  */
 import {
@@ -14,15 +14,15 @@ export type StudioTrackMeterSnapshot = {
   peakR: number;
   rms: number;
   hasSignal: boolean;
-  /** Normalized 0–1 per frequency bin (length = analyser.frequencyBinCount). */
+  /** Normalized 0â€“1 per frequency bin (length = analyser.frequencyBinCount). */
   spectrum: Float32Array;
-  /** Time-domain samples −1…1 (length = analyser fftSize). Present when tap supports waveform read. */
+  /** Time-domain samples âˆ’1â€¦1 (length = analyser fftSize). Present when tap supports waveform read. */
   waveform?: Float32Array;
 };
 
 const analysers = new Map<number, AnalyserNode>();
 const analyserTapSources = new Map<number, AudioNode>();
-/** Vocoder scope — post–Pitch Tune node that feeds the vocoder envelope. */
+/** Vocoder scope â€” postâ€“Pitch Tune node that feeds the vocoder envelope. */
 const vocoderAnalysers = new Map<number, AnalyserNode>();
 const vocoderAnalyserTapSources = new Map<number, AudioNode>();
 const consumers = new Map<number, Set<StudioTrackAnalyserConsumer>>();
@@ -30,19 +30,19 @@ const consumers = new Map<number, Set<StudioTrackAnalyserConsumer>>();
 /** Peak / RMS below this = silence (no UI motion). */
 export const STUDIO_TRACK_METER_SIGNAL_PEAK = 0.008;
 export const STUDIO_TRACK_METER_SIGNAL_RMS = 0.004;
-/** UI snap floor — meter bars hit zero at/below this. */
+/** UI snap floor â€” meter bars hit zero at/below this. */
 export const STUDIO_METER_DISPLAY_FLOOR = 0.012;
 export const STUDIO_METER_ATTACK = 0.62;
-/** Per-frame release at ~60 fps — near-zero in ~4 frames (~65 ms). */
+/** Per-frame release at ~60 fps â€” near-zero in ~4 frames (~65 ms). */
 export const STUDIO_METER_RELEASE = 0.14;
-/** dB floor for FFT display — bins at/below this read as silence. */
+/** dB floor for FFT display â€” bins at/below this read as silence. */
 export const STUDIO_ANALYSER_SPECTRUM_FLOOR_DB = -72;
 export const STUDIO_ANALYSER_FFT_SIZE = 2048;
 /** Lower = analyzer follows EQ/FX moves faster (honest post-FX readout). */
 export const STUDIO_ANALYSER_SMOOTHING = 0.04;
 /**
  * FX Suite Spectrum Forge-style dB window on the insert tap.
- * Wider top (−6) so program material reaches visible bar height; floor stays deep for air/lows.
+ * Wider top (âˆ’6) so program material reaches visible bar height; floor stays deep for air/lows.
  */
 const FX_SUITE_ANALYSER_MIN_DB = -96;
 const FX_SUITE_ANALYSER_MAX_DB = -6;
@@ -54,24 +54,24 @@ function configureFxSuiteAnalyser(analyser: AnalyserNode): void {
   analyser.smoothingTimeConstant = FX_SUITE_ANALYSER_SMOOTHING;
 }
 
-/** Display silence gate — below this, bars stay dark (analyser floor is deeper for FFT headroom). */
+/** Display silence gate â€” below this, bars stay dark (analyser floor is deeper for FFT headroom). */
 const FX_SUITE_DISPLAY_FLOOR_DB = -78;
 
 /**
- * Map analyser dB into 0–1 inside the FX Suite window (SPAN-style), not absolute amplitude.
- * Absolute 10^(dB/20) left typical program levels (~−40 dB) nearly invisible — especially purple lows.
+ * Map analyser dB into 0â€“1 inside the FX Suite window (SPAN-style), not absolute amplitude.
+ * Absolute 10^(dB/20) left typical program levels (~âˆ’40 dB) nearly invisible â€” especially purple lows.
  */
 export function studioFxSuiteDbToDisplay(db: number): number {
   if (!Number.isFinite(db) || db <= FX_SUITE_DISPLAY_FLOOR_DB) return 0;
   const span = FX_SUITE_ANALYSER_MAX_DB - FX_SUITE_DISPLAY_FLOOR_DB;
   const t = Math.min(1, Math.max(0, (db - FX_SUITE_DISPLAY_FLOOR_DB) / span));
-  /* Closer to linear — readable motion without pegging purple/yellow/green. */
+  /* Closer to linear â€” readable motion without pegging purple/yellow/green. */
   return Math.min(1, Math.pow(t, 0.85));
 }
 
 const floatSpectrumScratch = new Map<number, Float32Array>();
 const timeDomainScratch = new Map<number, Float32Array>();
-/** Share one FFT read across Suite meters + spectrum (~20 Hz) — cuts main-thread underruns. */
+/** Share one FFT read across Suite meters + spectrum (~20 Hz) â€” cuts main-thread underruns. */
 const fxSuiteMeterCache = new Map<number, { ms: number; snap: StudioTrackMeterSnapshot }>();
 const FX_SUITE_METER_CACHE_MS = 50;
 /** Lanes whose pitch scope reads the Pitch Tune engine analyser (not a duplicate tap). */
@@ -105,7 +105,7 @@ export function setStudioPitchMonitorRouteListener(fn: PitchMonitorRouteListener
   pitchMonitorRouteListener = fn;
 }
 
-/** Log-spaced display band → FFT bin index (matches FX Suite analyzer layout). */
+/** Log-spaced display band â†’ FFT bin index (matches FX Suite analyzer layout). */
 export function studioAnalyserLogBandIndex(
   bandIndex: number,
   bandCount: number,
@@ -143,7 +143,7 @@ export function studioAnalyserDbToLinear(db: number, floorDb = STUDIO_ANALYSER_S
   return Math.min(1, Math.pow(10, db / 20));
 }
 
-/** FX Suite bar chart only — expands subtle bus/FX peaks for visible motion (audio tap unchanged). */
+/** FX Suite bar chart only â€” expands subtle bus/FX peaks for visible motion (audio tap unchanged). */
 export const STUDIO_ANALYSER_DISPLAY_GAIN = 2.6;
 
 export function studioAnalyserSpectrumDisplayLinear(linear: number): number {
@@ -151,7 +151,7 @@ export function studioAnalyserSpectrumDisplayLinear(linear: number): number {
   return Math.min(1, linear * STUDIO_ANALYSER_DISPLAY_GAIN);
 }
 
-/** Fast attack, fast release — no long sticky tail after signal stops. */
+/** Fast attack, fast release â€” no long sticky tail after signal stops. */
 export function studioMeterBallistics(current: number, target: number, hasSignal: boolean): number {
   if (!hasSignal || target < STUDIO_METER_DISPLAY_FLOOR) {
     const released = current * STUDIO_METER_RELEASE;
@@ -177,7 +177,7 @@ export function setStudioTrackAnalyserConsumer(
     queueMicrotask(() => fxSuiteAnalyserResync?.(trackIndex));
   }
   // Pitch scope analyser is wired from the vocal modulator in studioLiveVocalFxChain only.
-  // Do not parallel-tap raw mic fanout here — that bypasses mute and causes ghost scope motion.
+  // Do not parallel-tap raw mic fanout here â€” that bypasses mute and causes ghost scope motion.
 }
 
 export function studioTrackAnalyserActive(trackIndex: number): boolean {
@@ -206,7 +206,7 @@ export function getStudioPitchMonitorActiveTrack(): number | null {
 /** Retap mic/fanout into every lane with an open pitch-scope consumer. */
 export function retapAllStudioPitchMonitorSources(ctx: AudioContext, source: AudioNode): void {
   for (const [ti, set] of consumers) {
-    if (set.has('pitch')) retapStudioPitchMonitorSource(ctx, source, ti);
+    if (set.has('pitch')) retapStudioPitchMonitorSource(ctx, source, ti, { allowWhilePitchScope: true });
   }
 }
 
@@ -269,7 +269,7 @@ function readAnalyserMeterSnapshot(
     for (let i = 0; i < binCount; i++) {
       const t = i / Math.max(1, binCount - 1);
       /*
-       * Mild display-only tilt — keep highs from dominating purple after band gains.
+       * Mild display-only tilt â€” keep highs from dominating purple after band gains.
        * Does not change the audio tap.
        */
       const tilt = 0.78 + t * 0.35;
@@ -277,7 +277,7 @@ function readAnalyserMeterSnapshot(
       spectrum[i] = v;
       if (v > spectrumEnergy) spectrumEnergy = v;
     }
-    /* Time-domain peak can sit under the gate on quiet lows — still light the analyzer. */
+    /* Time-domain peak can sit under the gate on quiet lows â€” still light the analyzer. */
     const hasSpectrum = spectrumEnergy >= 0.055;
     return {
       peak,
@@ -314,7 +314,7 @@ export function readStudioTrackMeterSnapshot(
   const insertAnalyser = analysers.get(trackIndex);
 
   /*
-   * FX Suite / Pitch insert tap is a parallel AnalyserNode — safe to poll during transport.
+   * FX Suite / Pitch insert tap is a parallel AnalyserNode â€” safe to poll during transport.
    * Mixer-strip analyser pulls during lock still cause audible dropouts on WAV/MIDI lanes.
    */
   if (fxSuiteOpen && insertAnalyser) {
@@ -375,17 +375,52 @@ export function bindStudioPitchMonitorEngineAnalyser(
   if (consumers.get(trackIndex)?.has('fxSuite')) configureFxSuiteAnalyser(analyser);
   else analyser.smoothingTimeConstant = STUDIO_ANALYSER_SMOOTHING;
   registerStudioPitchMonitorAnalyser(trackIndex, analyser);
+  /*
+   * Re-assert source→analyser. Callers may have run `source.disconnect()` (all outputs)
+   * before rebuild; the chain connect alone is not enough if bookkeeping already pointed here.
+   */
+  try {
+    source.connect(analyser);
+  } catch {
+    /* already connected */
+  }
   analyserTapSources.set(trackIndex, source);
   pitchMonitorEngineBound.add(trackIndex);
 }
 
-/** Parallel analyser tap — single source per lane; never stacks duplicate fan-out connections. */
+/**
+ * Drop Pitch Tune engine ownership after stack teardown so scope/suite can retap
+ * the vocal entry. Without this, a disconnected engine analyser stays registered
+ * and `retapPitchMonitorIfOpen` / suite retaps refuse to reconnect.
+ */
+export function unbindStudioPitchMonitorEngineAnalyser(trackIndex: number): void {
+  if (trackIndex < 0) return;
+  if (!pitchMonitorEngineBound.has(trackIndex)) return;
+  pitchMonitorEngineBound.delete(trackIndex);
+  const analyser = analysers.get(trackIndex);
+  if (analyser) disconnectAnalyserTap(trackIndex, analyser);
+}
+
+/**
+ * Parallel analyser tap â€” single source per lane; never stacks duplicate fan-out connections.
+ *
+ * Insert-strip / DA FX Suite callers must NOT pass `allowWhilePitchScope` â€” Pitch Tune /
+ * Vocoder scopes own the vocal-entry tap and must not be redirected onto silent preStrip
+ * (mic feeds the Vocal DSP entry, not the insert preStrip, while those engines are armed).
+ */
 export function retapStudioPitchMonitorSource(
   ctx: AudioContext,
   source: AudioNode,
   trackIndex: number,
+  opts?: { allowWhilePitchScope?: boolean },
 ): void {
   if (trackIndex < 0) return;
+  const pitchScopeOwnsLane =
+    pitchMonitorEngineBound.has(trackIndex) ||
+    (consumers.get(trackIndex)?.has('pitch') ?? false);
+  if (pitchScopeOwnsLane && !opts?.allowWhilePitchScope) {
+    return;
+  }
   pitchMonitorEngineBound.delete(trackIndex);
   let analyser = analysers.get(trackIndex);
   if (!analyser || analyser.context !== ctx) {
@@ -402,19 +437,27 @@ export function retapStudioPitchMonitorSource(
   }
 
   const prev = analyserTapSources.get(trackIndex);
-  if (prev === source) return;
-  if (prev) {
+  if (prev && prev !== source) {
     try {
       prev.disconnect(analyser);
     } catch {
       /* */
     }
   }
-  source.connect(analyser);
+  /*
+   * Always re-assert connect. `node.disconnect()` with no args severs analyser taps but
+   * leaves analyserTapSources pointing at the same node — early-return on prev===source
+   * left Pitch Tune / Vocoder scopes reading silence while FX Suite still worked.
+   */
+  try {
+    source.connect(analyser);
+  } catch {
+    /* already connected */
+  }
   analyserTapSources.set(trackIndex, source);
 }
 
-/** Tap vocal source for pitch scope (parallel — caller keeps source→destination routing). */
+/** Tap vocal source for pitch scope (parallel â€” caller keeps sourceâ†’destination routing). */
 export function connectStudioPitchMonitorTap(
   ctx: AudioContext,
   source: AudioNode,
@@ -422,7 +465,7 @@ export function connectStudioPitchMonitorTap(
   trackIndex: number,
 ): void {
   if (trackIndex < 0) return;
-  retapStudioPitchMonitorSource(ctx, source, trackIndex);
+  retapStudioPitchMonitorSource(ctx, source, trackIndex, { allowWhilePitchScope: true });
 }
 
 export function getStudioVocoderMonitorAnalyser(trackIndex: number): AnalyserNode | null {
@@ -455,14 +498,17 @@ export function connectStudioVocoderMonitorTap(
   }
 
   const prev = vocoderAnalyserTapSources.get(trackIndex);
-  if (prev === source) return;
-  if (prev) {
+  if (prev && prev !== source) {
     try {
       prev.disconnect(analyser);
     } catch {
       /* */
     }
   }
-  source.connect(analyser);
+  try {
+    source.connect(analyser);
+  } catch {
+    /* already connected */
+  }
   vocoderAnalyserTapSources.set(trackIndex, source);
 }

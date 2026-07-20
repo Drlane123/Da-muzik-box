@@ -7,11 +7,17 @@ const VOCODER_BANDS_HZ = [
   100, 150, 220, 320, 470, 680, 980, 1400, 2000, 2800, 3800, 5000, 6400, 8000, 10000, 12000,
 ] as const;
 
+/** Larger hop keeps offline renders interactive — was 256 and froze on long takes. */
 const FRAME = 1024;
-const HOP = 256;
+const HOP = 1024;
+const YIELD_EVERY_FRAMES = 48;
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
+}
+
+function yieldToMain(): Promise<void> {
+  return new Promise((r) => setTimeout(r, 0));
 }
 
 function goertzelMag(samples: Float32Array, start: number, len: number, sr: number, freq: number): number {
@@ -20,7 +26,8 @@ function goertzelMag(samples: Float32Array, start: number, len: number, sr: numb
   const coeff = 2 * Math.cos(w);
   let s1 = 0;
   let s2 = 0;
-  for (let i = start; i < start + len && i < samples.length; i++) {
+  const end = Math.min(samples.length, start + len);
+  for (let i = start; i < end; i++) {
     const s0 = samples[i]! + coeff * s1 - s2;
     s2 = s1;
     s1 = s0;
@@ -93,18 +100,44 @@ export function studioVocoderEnvelopeFrameDurSec(buffer: AudioBuffer): number {
   return buffer.duration / frames;
 }
 
+function bandEnvelopeSync(ch: Float32Array, sr: number, hz: number, frames: number): Float32Array {
+  const env = new Float32Array(Math.max(1, frames));
+  for (let f = 0; f < env.length; f++) {
+    env[f] = goertzelMag(ch, f * HOP, FRAME, sr, hz);
+  }
+  return normalizeEnvelope(env);
+}
+
 /** Per-band modulator envelopes aligned to STUDIO_VOCODER_BANDS_HZ. */
 export function extractStudioVocoderBandEnvelopes(buffer: AudioBuffer): Float32Array[] {
   const sr = buffer.sampleRate;
   const ch = buffer.getChannelData(0);
   const frames = Math.max(1, Math.floor((ch.length - FRAME) / HOP));
-  return VOCODER_BANDS_HZ.map((hz) => {
+  return VOCODER_BANDS_HZ.map((hz) => bandEnvelopeSync(ch, sr, hz, frames));
+}
+
+/**
+ * Same as {@link extractStudioVocoderBandEnvelopes} but yields so toggling Vocoder DSP
+ * does not freeze the UI on long clips.
+ */
+export async function extractStudioVocoderBandEnvelopesAsync(
+  buffer: AudioBuffer,
+): Promise<Float32Array[]> {
+  const sr = buffer.sampleRate;
+  const ch = buffer.getChannelData(0);
+  const frames = Math.max(1, Math.floor((ch.length - FRAME) / HOP));
+  const out: Float32Array[] = [];
+  let work = 0;
+  for (const hz of VOCODER_BANDS_HZ) {
     const env = new Float32Array(Math.max(1, frames));
     for (let f = 0; f < env.length; f++) {
       env[f] = goertzelMag(ch, f * HOP, FRAME, sr, hz);
+      work += 1;
+      if (work % YIELD_EVERY_FRAMES === 0) await yieldToMain();
     }
-    return normalizeEnvelope(env);
-  });
+    out.push(normalizeEnvelope(env));
+  }
+  return out;
 }
 
 export function scheduleStudioVocoderGainEnvelope(
@@ -123,8 +156,13 @@ export function scheduleStudioVocoderGainEnvelope(
   const step = slotDur / n;
   param.cancelScheduledValues(when);
   param.setValueAtTime(floor, when);
-  for (let i = 0; i < n; i++) {
+  /* Cap automation points — browsers choke on tens of thousands of setValueAtTime calls. */
+  const maxPoints = 512;
+  const stride = Math.max(1, Math.ceil(n / maxPoints));
+  for (let i = 0; i < n; i += stride) {
     param.setValueAtTime(floor + envelope[i]! * scale, when + i * step);
   }
+  const last = envelope[n - 1]!;
+  param.setValueAtTime(floor + last * scale, when + (n - 1) * step);
   param.setValueAtTime(floor, when + slotDur);
 }

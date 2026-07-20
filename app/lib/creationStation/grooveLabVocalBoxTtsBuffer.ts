@@ -67,10 +67,14 @@ export function estimateSpeechPitchHzRange(
   const ch = buffer.getChannelData(0);
   const sr = buffer.sampleRate;
   const i0 = Math.max(0, Math.floor(startSec * sr));
-  const i1 = Math.min(ch.length, Math.ceil(endSec * sr));
-  const frame = 4096;
+  /* Cap scan window — full-clip ACF loops froze the app when enabling Vocoder DSP. */
+  const maxScanSec = 2.5;
+  const i1 = Math.min(ch.length, Math.ceil(Math.min(endSec, startSec + maxScanSec) * sr));
+  const frame = 2048;
+  const hop = 4096;
   const pitches: number[] = [];
-  for (let i = i0; i < i1 - frame; i += 2048) {
+  const maxFrames = 48;
+  for (let i = i0, n = 0; i < i1 - frame && n < maxFrames; i += hop, n += 1) {
     const slice = ch.subarray(i, i + frame);
     const { frequency, confidence } = detectPitchACF(slice, sr, 70, 420, 0.08);
     if (frequency > 0 && confidence > 0.1) pitches.push(frequency);

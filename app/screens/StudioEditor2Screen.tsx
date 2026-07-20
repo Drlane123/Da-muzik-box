@@ -688,7 +688,6 @@ import type { PendingNeuralHumStudioImport } from '@/app/lib/vocalLab/neuralHumS
 import type { PendingBeatPadsStudioImport } from '@/app/lib/creationStation/beatPadsStudioExport';
 import type { PendingAiMatchStudioImport } from '@/app/lib/aiMusicMatch/aiMusicMatchStudioExport';
 import {
-  connectStudioLiveVocalFxForClip,
   studioTrackFxStackActive,
   studioUseLiveVocalFxPlayback,
 } from '@/app/lib/studio/studioLiveVocalFxChain';
@@ -700,6 +699,7 @@ import {
 } from '@/app/lib/studio/studioLiveVocalFxRegistry';
 import {
   disconnectStudioTrackVocalFxInsert,
+  ensureStudioTrackVocalEntry,
   invalidateStudioTrackVocalFxInsert,
   getStudioTrackVocalFxEntry,
   removeStudioTrackVocalFxInsertAt,
@@ -713,7 +713,6 @@ import {
   studioLiveInputMonitorKey,
 } from '@/app/lib/studio/studioVocalSignalRouter';
 import { setStudioPitchMonitorRouteListener } from '@/app/lib/studio/studioPitchTuneMonitorBus';
-import { renderStudioAudioVocalFx, studioVocalFxClipCacheContext } from '@/app/lib/studio/studioAudioVocalFx';
 import type { StudioVocoderCarrierTrack } from '@/app/lib/studio/studioVocoderCarrier';
 import {
   cloneStudioTrackInsertFxRack,
@@ -726,9 +725,7 @@ import {
   STUDIO_TRACK_VOCAL_FX_DEFAULT,
   studioEffectiveTrackVocalFx,
   studioTrackVocalFxActive,
-  studioVocalFxCacheKeyFromTrack,
   studioVocalFxEffectiveNeedsLiveReconnect,
-  studioVocalFxSettingsFromTrack,
   studioWireA2mPitchRouteOnTrack,
   type StudioTrackVocalFx,
 } from '@/app/lib/studio/studioTrackVocalFx';
@@ -7343,6 +7340,8 @@ export default function StudioEditor2Screen({
     const preStrip = getStudioTrackInsertPreStrip(trackIndex);
     const stripIn = getStudioMixerStripInput(trackIndex);
     if (!preStrip || !stripIn) return;
+    /* Park clips on entry immediately so the async stack install can splice without a dry stuck bus. */
+    ensureStudioTrackVocalEntry(ctx, trackIndex, preStrip);
     const tr = studioTracksRef.current[trackIndex];
     const keyRoot = tr?.a2mKeyRoot != null ? tr.a2mKeyRoot : songKeyRootRef.current;
     const sessionStart = sessionStartRef.current;
@@ -7370,10 +7369,12 @@ export default function StudioEditor2Screen({
         rack,
       });
       reconnectStudioVocalLiveMicIfCached(trackIndex);
+      /* Re-arm clip sources onto the (now FX-owned) entry after stack install. */
+      clearAudioPreviewForTrack(trackIndex);
     } catch (e) {
       console.warn(`[Studio] Vocal DSP sync failed for track ${trackIndex}.`, e);
     }
-  }, []);
+  }, [clearAudioPreviewForTrack]);
 
   const onTrackVocalFxChange = useCallback(
     (trackIndex: number, nextFx: StudioTrackVocalFx) => {
@@ -7385,11 +7386,27 @@ export default function StudioEditor2Screen({
       const nextEffective = studioEffectiveTrackVocalFx(nextFx, slots);
 
       if (reconnect) {
+        const ctx = ctxRef.current;
+        const bus = midiPreviewBusRef.current;
+        const preStrip = getStudioTrackInsertPreStrip(trackIndex);
+        if (ctx && bus && preStrip && ctx.state !== 'closed') {
+          se2TrackPlaybackInput(
+            ctx,
+            bus,
+            trackIndex,
+            slots,
+            trackInsertFxRacksRef.current[trackIndex] ?? defaultStudioTrackInsertFxRack(),
+            bpmRef.current,
+            studioMasterOutRef.current ?? ctx.destination,
+          );
+          ensureStudioTrackVocalEntry(ctx, trackIndex, getStudioTrackInsertPreStrip(trackIndex) ?? preStrip);
+        }
         invalidateStudioTrackVocalFxInsert(trackIndex);
         clearAudioPreviewForTrack(trackIndex);
         studioVocalFxCacheRef.current.clear();
         studioVocalFxPendingRef.current.clear();
       } else {
+        /* Live stack owns clip + mic — faders update in place (same as DA FX Suite). */
         updateStudioLiveVocalFxForTrack(trackIndex, nextEffective, keyRoot, false);
       }
 
@@ -7400,7 +7417,7 @@ export default function StudioEditor2Screen({
         return next;
       });
 
-      /* Immediate graph sync — including mid-play — so TUNE/VOC A/B is audible without Stop. */
+      /* Rebuild insert graph on TUNE/VOC power — including mid-play. */
       if (reconnect) {
         void syncSe2TrackVocalFxNow(trackIndex, nextFx);
       }
@@ -10190,58 +10207,6 @@ export default function StudioEditor2Screen({
     }
   }, [studioBeatPadsSessionForTrack]);
 
-  const queueStudioVocalFxRender = useCallback(
-    (
-      sourceId: string,
-      source: AudioBuffer,
-      fx: StudioTrackVocalFx,
-      keyRoot: number,
-      keyMode: StudioDetectedKeyMode,
-      clipCtx: {
-        clipStartBeat: number;
-        clipDurationBeats: number;
-        vocalTrackIndex: number;
-        bpm: number;
-        carrierTracks: StudioVocoderCarrierTrack[];
-      },
-    ) => {
-      const settings = studioVocalFxSettingsFromTrack(fx);
-      if (!settings) return;
-      const cacheKey = studioVocalFxCacheKeyFromTrack(
-        sourceId,
-        fx,
-        keyRoot,
-        keyMode,
-        studioVocalFxClipCacheContext(fx, clipCtx.clipStartBeat, clipCtx.carrierTracks),
-      );
-      if (studioVocalFxCacheRef.current.has(cacheKey) || studioVocalFxPendingRef.current.has(cacheKey)) {
-        return;
-      }
-      studioVocalFxPendingRef.current.add(cacheKey);
-      void renderStudioAudioVocalFx(source, settings, {
-        keyRoot,
-        keyMode,
-        trackFx: fx,
-        clipStartBeat: clipCtx.clipStartBeat,
-        clipDurationBeats: clipCtx.clipDurationBeats,
-        bpm: clipCtx.bpm,
-        vocalTrackIndex: clipCtx.vocalTrackIndex,
-        carrierTracks: clipCtx.carrierTracks,
-      })
-        .then((rendered) => {
-          studioVocalFxCacheRef.current.set(cacheKey, rendered);
-          studioVocalFxPendingRef.current.delete(cacheKey);
-          if (!runningRef.current) {
-            audioPreviewScheduledRef.current.clear();
-          }
-        })
-        .catch(() => {
-          studioVocalFxPendingRef.current.delete(cacheKey);
-        });
-    },
-    [],
-  );
-
   const refillAudioPreview = useCallback(
     (ctx: AudioContext, ctSnap: number, opts?: { loopContinuation?: boolean }) => {
       if (!runningRef.current) return;
@@ -10321,7 +10286,8 @@ export default function StudioEditor2Screen({
         for (const clip of tr.audioClips) {
           const dryBuf = buffers.get(clip.sourceId);
           if (!dryBuf) continue;
-          const useLiveVocalFx = vocalFx && studioUseLiveVocalFxPlayback(effectiveFx);
+          /* Dry buffer → vocal entry → live Pitch Tune / Vocoder (same path as mic). */
+          const useLiveVocalFx = Boolean(vocalFx && studioUseLiveVocalFxPlayback(effectiveFx));
           const timeStretchAlign = se2ClipUsesAlignStretchPlayback(tr.kind, clip);
           const sourceOffsetBeats = se2AudioClipSourceOffsetBeats(clip);
           const occurrences = se2AudioClipLoopOccurrences({
@@ -10392,7 +10358,7 @@ export default function StudioEditor2Screen({
                 insertRack: trackInsertFxRacksRef.current[ti],
                 bpm: bpmRef.current,
                 pitchMonitorTrackIndex: ti,
-                useLiveVocalFx: Boolean(useLiveVocalFx),
+                useLiveVocalFx,
                 vocalFx: useLiveVocalFx ? effectiveFx : undefined,
                 keyRoot,
                 vocalTrackIndex: ti,

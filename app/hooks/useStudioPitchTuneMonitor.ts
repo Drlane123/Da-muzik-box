@@ -4,10 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { detectPitchACF, frequencyToMidiNote } from '@/app/lib/pitchDetection';
 import { getStudioPitchMonitorActiveTrack, getStudioPitchMonitorAnalyser, getStudioVocoderMonitorAnalyser } from '@/app/lib/studio/studioPitchTuneMonitorBus';
-import {
-  isStudioMixerStripGraphPlaybackLocked,
-  studioMixerStripAudible,
-} from '@/app/lib/studio/studioMixerStripBus';
+import { studioMixerStripAudible } from '@/app/lib/studio/studioMixerStripBus';
 import type { PitchTuneScaleId } from '@/app/lib/studio/studioPitchTune';
 import type { StudioTrackVocalFx } from '@/app/lib/studio/studioTrackVocalFx';
 import {
@@ -16,23 +13,23 @@ import {
   type NeuralHumScaleId,
 } from '@/app/lib/vocalLab/neuralHumKeyLock';
 
-/** Match Hum Capture live pitch gate — same lane tap as Vocal DSP entry. */
+/** Match live Pitch Tune engine gate — same lane tap as Vocal DSP entry. */
 const LIVE_PITCH_MIN_HZ = 50;
 const LIVE_PITCH_MAX_HZ = 1600;
-/** ACF confidence — higher rejects hum/noise false positives on the scope. */
-const LIVE_PITCH_CONF = 0.11;
-/** Absolute floor (before adaptive calibration) — above typical laptop fan/hum bleed. */
-const LIVE_PITCH_MIN_RMS = 0.014;
-const LIVE_PITCH_MIN_PEAK = 0.042;
-/** Calibrate ~0.75s of ambient noise, then require signal above floor × gain. */
-const LIVE_PITCH_CALIB_FRAMES = 45;
-const LIVE_PITCH_NOISE_RMS_GAIN = 3.4;
-const LIVE_PITCH_NOISE_PEAK_GAIN = 3.0;
-const LIVE_PITCH_NOISE_RMS_PAD = 0.006;
-const LIVE_PITCH_NOISE_PEAK_PAD = 0.016;
+/** ACF confidence — keep modest so quiet mics still lock the scope. */
+const LIVE_PITCH_CONF = 0.045;
+/** Absolute floor — aligned with softer live Pitch Tune engine gates. */
+const LIVE_PITCH_MIN_RMS = 0.0018;
+const LIVE_PITCH_MIN_PEAK = 0.0045;
+/** Short ambient learn — skip immediately once voice energy is present. */
+const LIVE_PITCH_CALIB_FRAMES = 8;
+const LIVE_PITCH_NOISE_RMS_GAIN = 1.45;
+const LIVE_PITCH_NOISE_PEAK_GAIN = 1.35;
+const LIVE_PITCH_NOISE_RMS_PAD = 0.0008;
+const LIVE_PITCH_NOISE_PEAK_PAD = 0.002;
 /** Consecutive voiced + stable-pitch frames before scope lights up. */
-const LIVE_PITCH_VOICED_FRAMES = 4;
-const LIVE_PITCH_STABLE_FRAMES = 3;
+const LIVE_PITCH_VOICED_FRAMES = 1;
+const LIVE_PITCH_STABLE_FRAMES = 1;
 
 export type StudioPitchTuneMonitorSnapshot = {
   detectedMidi: number | null;
@@ -146,34 +143,37 @@ export function useStudioPitchTuneMonitor({
     }
 
     let cancelled = false;
-    let raf = 0;
     let calibFrames = 0;
-    let noiseRms = 0;
-    let noisePeak = 0;
+    let noiseRms = 0.0015;
+    let noisePeak = 0.004;
     let voicedFrames = 0;
     let stablePitchFrames = 0;
     let lastRoundedMidi: number | null = null;
+    let lastAnalyser: AnalyserNode | null = null;
     const bufRef = { current: new Float32Array(2048) };
+
+    const resetGates = () => {
+      calibFrames = 0;
+      noiseRms = 0.0015;
+      noisePeak = 0.004;
+      voicedFrames = 0;
+      stablePitchFrames = 0;
+      lastRoundedMidi = null;
+      trailRef.current = [];
+    };
 
     const tick = () => {
       if (cancelled) return;
 
-      // Analyser pulls on the main thread during SE2 transport cause audible dropouts.
-      if (isStudioMixerStripGraphPlaybackLocked()) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
+      /*
+       * Pitch / Vocoder scopes read parallel Vocal DSP analysers — safe during transport.
+       * (Mixer-strip analyser polls remain locked elsewhere to avoid WAV/MIDI dropouts.)
+       */
 
       if (!studioMixerStripAudible(trackIndex) && getStudioPitchMonitorActiveTrack() !== trackIndex) {
-        calibFrames = 0;
-        noiseRms = 0;
-        noisePeak = 0;
-        voicedFrames = 0;
-        stablePitchFrames = 0;
-        lastRoundedMidi = null;
-        trailRef.current = [];
+        resetGates();
+        lastAnalyser = null;
         setSnap(IDLE);
-        raf = requestAnimationFrame(tick);
         return;
       }
 
@@ -182,10 +182,15 @@ export function useStudioPitchTuneMonitor({
           ? getStudioVocoderMonitorAnalyser(trackIndex) ?? getStudioPitchMonitorAnalyser(trackIndex)
           : getStudioPitchMonitorAnalyser(trackIndex) ?? getStudioVocoderMonitorAnalyser(trackIndex);
       if (!analyser) {
-        trailRef.current = [];
+        resetGates();
+        lastAnalyser = null;
         setSnap(IDLE);
-        raf = requestAnimationFrame(tick);
         return;
+      }
+
+      if (analyser !== lastAnalyser) {
+        lastAnalyser = analyser;
+        resetGates();
       }
 
       if (bufRef.current.length !== analyser.fftSize) {
@@ -196,38 +201,54 @@ export function useStudioPitchTuneMonitor({
       const { rms, peak } = rmsAndPeak(sampleBuf);
 
       if (calibFrames < LIVE_PITCH_CALIB_FRAMES) {
-        calibFrames += 1;
-        noiseRms = Math.max(noiseRms, rms);
-        noisePeak = Math.max(noisePeak, peak);
-        trailRef.current = [];
-        setSnap(IDLE);
-        raf = requestAnimationFrame(tick);
-        return;
+        const voiceDuringCalib = livePitchEnergyGate(rms, peak, noiseRms, noisePeak);
+        if (voiceDuringCalib) {
+          /* Don't hold the scope dark while the singer is already live. */
+          calibFrames = LIVE_PITCH_CALIB_FRAMES;
+        } else {
+          calibFrames += 1;
+          /* Learn ambient noise only while quiet — never train on the vocal. */
+          if (rms < LIVE_PITCH_MIN_RMS && peak < LIVE_PITCH_MIN_PEAK) {
+            noiseRms = Math.max(noiseRms, rms);
+            noisePeak = Math.max(noisePeak, peak);
+          }
+          trailRef.current = [];
+          setSnap(IDLE);
+          return;
+        }
       }
 
       const hasEnergy = livePitchEnergyGate(rms, peak, noiseRms, noisePeak);
       if (!hasEnergy) {
-        noiseRms = noiseRms * 0.992 + rms * 0.008;
-        noisePeak = noisePeak * 0.992 + peak * 0.008;
+        const rmsGate = Math.max(
+          LIVE_PITCH_MIN_RMS,
+          noiseRms * LIVE_PITCH_NOISE_RMS_GAIN + LIVE_PITCH_NOISE_RMS_PAD,
+        );
+        const peakGate = Math.max(
+          LIVE_PITCH_MIN_PEAK,
+          noisePeak * LIVE_PITCH_NOISE_PEAK_GAIN + LIVE_PITCH_NOISE_PEAK_PAD,
+        );
+        noiseRms = noiseRms * 0.995 + Math.min(rms, rmsGate) * 0.005;
+        noisePeak = noisePeak * 0.995 + Math.min(peak, peakGate) * 0.005;
         voicedFrames = 0;
         stablePitchFrames = 0;
         lastRoundedMidi = null;
         trailRef.current = [];
         setSnap(IDLE);
-        raf = requestAnimationFrame(tick);
         return;
       }
 
+      const currentFx = fxRef.current;
+      const confNeed = Math.max(0.02, LIVE_PITCH_CONF * (1.15 - currentFx.pitchTracking * 0.45));
       const { frequency, confidence } = detectPitchACF(
         sampleBuf,
         analyser.context.sampleRate,
         LIVE_PITCH_MIN_HZ,
         LIVE_PITCH_MAX_HZ,
-        LIVE_PITCH_CONF,
+        confNeed,
       );
 
-      const currentFx = fxRef.current;
-      if (frequency > 0 && confidence > LIVE_PITCH_CONF) {
+      if (frequency > 0 && confidence > confNeed) {
         voicedFrames = Math.min(12, voicedFrames + 1);
         const detectedMidi = frequencyToMidiNote(frequency);
         const roundedMidi = Math.round(detectedMidi);
@@ -240,7 +261,6 @@ export function useStudioPitchTuneMonitor({
 
         if (voicedFrames < LIVE_PITCH_VOICED_FRAMES || stablePitchFrames < LIVE_PITCH_STABLE_FRAMES) {
           setSnap(IDLE);
-          raf = requestAnimationFrame(tick);
           return;
         }
 
@@ -285,14 +305,15 @@ export function useStudioPitchTuneMonitor({
         trailRef.current = [];
         setSnap(IDLE);
       }
-      raf = requestAnimationFrame(tick);
     };
 
-    raf = requestAnimationFrame(tick);
+    /* ~20 Hz — full rAF ACF froze the app when Pitch Tune / Vocoder DSP panels were open. */
+    const intervalId = window.setInterval(tick, 50);
+    tick();
 
     return () => {
       cancelled = true;
-      if (raf) cancelAnimationFrame(raf);
+      window.clearInterval(intervalId);
       trailRef.current = [];
     };
   }, [

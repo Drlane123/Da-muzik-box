@@ -30,6 +30,7 @@ class StudioLivePitchTuneProcessor extends AudioWorkletProcessor {
     this.readIdx = 0;
     this.initialized = false;
     this.silenceHold = 0;
+    this.delaySamples = 2048;
   }
 
   process(inputs, outputs, parameters) {
@@ -40,6 +41,8 @@ class StudioLivePitchTuneProcessor extends AudioWorkletProcessor {
     const mix = Math.max(0, Math.min(1, parameters.mix[0] ?? 1));
     const SILENCE = 0.00012;
     const SILENCE_FRAMES = 6;
+    const rs = this.ringSize;
+    const delay = this.delaySamples;
 
     if (!input || input.length === 0) {
       output.fill(0);
@@ -47,12 +50,11 @@ class StudioLivePitchTuneProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    const rs = this.ringSize;
     let wi = this.writeIdx;
     let ri = this.readIdx;
 
     if (!this.initialized) {
-      ri = (wi - 2048 + rs) % rs;
+      ri = (wi - delay + rs) % rs;
       this.initialized = true;
     }
 
@@ -66,25 +68,36 @@ class StudioLivePitchTuneProcessor extends AudioWorkletProcessor {
         this.silenceHold = 0;
       }
 
-      if (this.silenceHold >= SILENCE_FRAMES || mix < 0.001) {
-        output[i] = 0;
-        this.ring[wi] = 0;
-        wi = (wi + 1) % rs;
+      this.ring[wi] = dry;
+      wi = (wi + 1) % rs;
+
+      /* mix≈0 or silence → dry pass-through (never mute the lane) */
+      if (mix < 0.001 || this.silenceHold >= SILENCE_FRAMES) {
+        output[i] = dry;
         if (this.silenceHold >= SILENCE_FRAMES) {
-          ri = (wi - 2048 + rs) % rs;
+          ri = (wi - delay + rs) % rs;
         }
         continue;
       }
 
-      this.ring[wi] = dry;
-      wi = (wi + 1) % rs;
-
-      const sample = this.ring[Math.floor(ri) % rs] ?? 0;
+      /* Linear interpolate for fractional read (smoother than nearest). */
+      const riFloor = Math.floor(ri);
+      const frac = ri - riFloor;
+      const i0 = ((riFloor % rs) + rs) % rs;
+      const i1 = (i0 + 1) % rs;
+      const sample = (this.ring[i0] ?? 0) * (1 - frac) + (this.ring[i1] ?? 0) * frac;
       output[i] = dry * (1 - mix) + sample * mix;
 
       ri += ratio;
       if (ri >= rs) ri -= rs;
       if (ri < 0) ri += rs;
+
+      /* Keep read a fixed delay behind write — prevents pointer collapse / runaway. */
+      let behind = wi - ri;
+      if (behind < 0) behind += rs;
+      if (behind < delay * 0.35 || behind > delay * 2.5) {
+        ri = (wi - delay + rs) % rs;
+      }
     }
 
     this.writeIdx = wi;

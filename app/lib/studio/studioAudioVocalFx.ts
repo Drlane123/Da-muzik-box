@@ -20,7 +20,10 @@ import {
   type PitchTuneScaleId,
 } from '@/app/lib/studio/studioPitchTune';
 import type { StudioTrackVocalFx } from '@/app/lib/studio/studioTrackVocalFx';
-import { studioVocalFxSettingsFromTrack } from '@/app/lib/studio/studioTrackVocalFx';
+import {
+  studioNormalizeExclusiveVocalEngines,
+  studioVocalFxSettingsFromTrack,
+} from '@/app/lib/studio/studioTrackVocalFx';
 import {
   resolvePitchTuneMidiTimeline,
   resolveVocoderCarrierTimeline,
@@ -86,7 +89,7 @@ export type StudioVocalFxRenderOpts = {
 };
 
 /**
- * Render clip through Pitch Tune engine + optional Vocoder color (offline).
+ * Render clip through Pitch Tune OR Vocoder (exclusive engines — not DA FX Suite).
  */
 export async function renderStudioAudioVocalFx(
   source: AudioBuffer,
@@ -95,11 +98,40 @@ export async function renderStudioAudioVocalFx(
 ): Promise<AudioBuffer> {
   if (!settings && !opts?.trackFx?.autotuneOn && !opts?.trackFx?.vocoderOn) return source;
 
+  /* Yield so Pitch Tune / Vocoder toggles paint before offline DSP starts. */
+  await new Promise<void>((r) => setTimeout(r, 0));
+
   const keyRoot = opts?.keyRoot ?? 0;
-  const trackFx = opts?.trackFx;
+  const trackFx = opts?.trackFx
+    ? studioNormalizeExclusiveVocalEngines(opts.trackFx)
+    : undefined;
   let working = source;
 
-  if (trackFx?.autotuneOn && trackFx.autotuneStrength > 0.02) {
+  if (trackFx?.vocoderOn && trackFx.vocoderWet > 0.02) {
+    const fallbackHz = estimateSpeechPitchHzRange(working, 0, working.duration);
+    const carrierTimeline =
+      opts?.carrierTracks &&
+      opts.vocalTrackIndex != null &&
+      opts.bpm != null &&
+      opts.clipStartBeat != null &&
+      opts.clipDurationBeats != null
+        ? resolveVocoderCarrierTimeline(
+            trackFx,
+            opts.carrierTracks,
+            opts.vocalTrackIndex,
+            opts.clipStartBeat,
+            opts.clipDurationBeats,
+            opts.bpm,
+            fallbackHz > 40 ? fallbackHz : 220,
+          )
+        : null;
+    working = await renderStudioVocoderBuffer(
+      working,
+      studioVocoderParamsFromTrackFx(trackFx, working, {
+        carrierTimeline: carrierTimeline ?? undefined,
+      }),
+    );
+  } else if (trackFx?.autotuneOn && trackFx.autotuneStrength > 0.02) {
     const midiTargetTimeline =
       opts?.carrierTracks &&
       opts.bpm != null &&
@@ -127,32 +159,6 @@ export async function renderStudioAudioVocalFx(
         keyRoot,
         { midiTargetTimeline: midiTargetTimeline ?? undefined },
       ),
-    );
-  }
-
-  if (trackFx?.vocoderOn && trackFx.vocoderWet > 0.02) {
-    const fallbackHz = estimateSpeechPitchHzRange(working, 0, working.duration);
-    const carrierTimeline =
-      opts?.carrierTracks &&
-      opts.vocalTrackIndex != null &&
-      opts.bpm != null &&
-      opts.clipStartBeat != null &&
-      opts.clipDurationBeats != null
-        ? resolveVocoderCarrierTimeline(
-            trackFx,
-            opts.carrierTracks,
-            opts.vocalTrackIndex,
-            opts.clipStartBeat,
-            opts.clipDurationBeats,
-            opts.bpm,
-            fallbackHz > 40 ? fallbackHz : 220,
-          )
-        : null;
-    working = await renderStudioVocoderBuffer(
-      working,
-      studioVocoderParamsFromTrackFx(trackFx, working, {
-        carrierTimeline: carrierTimeline ?? undefined,
-      }),
     );
   }
 

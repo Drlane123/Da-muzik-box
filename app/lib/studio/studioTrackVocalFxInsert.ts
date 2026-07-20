@@ -8,9 +8,11 @@ import {
 import {
   connectStudioPitchMonitorTap,
   getStudioPitchMonitorActiveTrack,
+  getStudioPitchMonitorAnalyser,
   registerStudioPitchMonitorResync,
   retapStudioPitchMonitorSource,
   studioPitchMonitorUsesEngineTap,
+  unbindStudioPitchMonitorEngineAnalyser,
 } from '@/app/lib/studio/studioPitchTuneMonitorBus';
 import { normalizeFxStackOrder } from '@/app/lib/studio/studioFxStackOrder';
 import { getStudioTrackInsertRouteSignature } from '@/app/lib/studio/studioTrackInsertFxStrip';
@@ -68,9 +70,9 @@ export function getStudioTrackVocalFxEntry(trackIndex: number): GainNode | null 
   return routes.get(trackIndex)?.entry ?? null;
 }
 
-/** True when Pitch Tune / Vocoder owns clip playback (entry → stack → strip). */
+/** True when a vocal entry exists (bypass or live Pitch Tune / Vocoder stack). */
 export function studioTrackVocalStackOwnsClipPath(trackIndex: number): boolean {
-  return Boolean(routes.get(trackIndex)?.cleanup);
+  return Boolean(routes.get(trackIndex)?.entry);
 }
 
 export function ensureStudioTrackVocalEntry(
@@ -174,6 +176,13 @@ function wireEntryBypass(entry: GainNode, preStrip: GainNode, trackIndex: number
   } catch {
     /* */
   }
+  /*
+   * `disconnect()` with no args severs parallel analyser taps. Clear engine ownership so
+   * the next retap is allowed to reconnect (otherwise scope stays on a dead node).
+   */
+  if (studioPitchMonitorUsesEngineTap(trackIndex)) {
+    unbindStudioPitchMonitorEngineAnalyser(trackIndex);
+  }
   entry.connect(preStrip);
   if (getStudioPitchMonitorActiveTrack() === trackIndex) {
     connectStudioPitchMonitorTap(entry.context as AudioContext, entry, preStrip, trackIndex);
@@ -182,10 +191,29 @@ function wireEntryBypass(entry: GainNode, preStrip: GainNode, trackIndex: number
 
 function retapPitchMonitorIfOpen(trackIndex: number): void {
   if (getStudioPitchMonitorActiveTrack() !== trackIndex) return;
-  if (studioPitchMonitorUsesEngineTap(trackIndex)) return;
-  const entry = routes.get(trackIndex)?.entry;
+  const route = routes.get(trackIndex);
+  const entry = route?.entry;
   if (!entry || entry.context.state === 'closed') return;
-  retapStudioPitchMonitorSource(entry.context as AudioContext, entry, trackIndex);
+
+  /* Live Pitch Tune stack owns the engine analyser while cleanup is armed. */
+  if (route?.cleanup && studioPitchMonitorUsesEngineTap(trackIndex)) {
+    const analyser = getStudioPitchMonitorAnalyser(trackIndex);
+    if (analyser) {
+      try {
+        entry.connect(analyser);
+      } catch {
+        /* already connected */
+      }
+    }
+    return;
+  }
+  /* Stale engine ownership after teardown must not block entry retap. */
+  if (studioPitchMonitorUsesEngineTap(trackIndex)) {
+    unbindStudioPitchMonitorEngineAnalyser(trackIndex);
+  }
+  retapStudioPitchMonitorSource(entry.context as AudioContext, entry, trackIndex, {
+    allowWhilePitchScope: true,
+  });
 }
 
 registerStudioPitchMonitorResync(retapPitchMonitorIfOpen);
@@ -245,6 +273,7 @@ async function syncStudioTrackVocalFxInsertInner(opts: VocalFxSyncOpts): Promise
   } = opts;
 
   const needStack = studioTrackFxStackActive(fx, slots, rack);
+  const pitchScopeOpen = getStudioPitchMonitorActiveTrack() === trackIndex;
 
   if (!needStack) {
     const routeState = routes.get(trackIndex);
@@ -256,13 +285,27 @@ async function syncStudioTrackVocalFxInsertInner(opts: VocalFxSyncOpts): Promise
       routeState.stackSignature = '';
       routeState.preStrip = preStrip;
       routeState.stripIn = stripIn;
-      try {
-        routeState.entry.disconnect();
-      } catch {
-        /* DA FX Suite uses preStrip only — idle entry must not sit in the graph */
-      }
+      /* Keep entry → preStrip so clips/mic stay on the same node across FX toggles. */
+      wireEntryBypass(routeState.entry, preStrip, trackIndex);
+      reconnectStudioVocalLiveMicIfCached(trackIndex);
+      retapPitchMonitorIfOpen(trackIndex);
+      return routeState.entry;
     }
-    // Mic must follow preStrip when Vocal DSP is off — never an orphaned entry.
+    /*
+     * Pitch Tune / Vocoder panel open with engines OFF still needs a vocal entry
+     * + analyser tap — otherwise the scope has nothing to read while mic hits preStrip.
+     */
+    if (pitchScopeOpen) {
+      const entry = ensureStudioTrackVocalEntry(ctx, trackIndex, preStrip);
+      const created = routes.get(trackIndex);
+      if (created) {
+        created.stripIn = stripIn;
+        created.preStrip = preStrip;
+      }
+      reconnectStudioVocalLiveMicIfCached(trackIndex);
+      retapPitchMonitorIfOpen(trackIndex);
+      return entry;
+    }
     reconnectStudioVocalLiveMicIfCached(trackIndex, preStrip);
     retapPitchMonitorIfOpen(trackIndex);
     return preStrip;

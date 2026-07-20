@@ -1,6 +1,6 @@
-/**
+﻿/**
 
- * Studio Editor 2 — per audio-lane vocal FX (Pitch Tune + Vocoder).
+ * Studio Editor 2 â€” per audio-lane vocal FX (Pitch Tune + Vocoder).
 
  */
 
@@ -42,25 +42,25 @@ export type StudioTrackVocalFx = {
 
   autotunePreset: StudioAutotunePresetId;
 
-  /** 0–1 Pitch Tune correction strength */
+  /** 0â€“1 Pitch Tune correction strength */
 
   autotuneStrength: number;
 
-  /** Pitch Tune retune speed (ms) — 0 = hard robot, 25–45 natural */
+  /** Pitch Tune retune speed (ms) â€” 0 = hard robot, 25â€“45 natural */
 
   pitchRetuneMs: number;
 
-  /** 0–1 Flex-Tune — keep intentional bends */
+  /** 0â€“1 Flex-Tune â€” keep intentional bends */
 
   pitchFlex: number;
 
-  /** 0–1 Humanize — slower pull on held notes */
+  /** 0â€“1 Humanize â€” slower pull on held notes */
 
   pitchHumanize: number;
 
   pitchScaleId: PitchTuneScaleId;
 
-  /** 0–1 pitch tracking sensitivity */
+  /** 0â€“1 pitch tracking sensitivity */
 
   pitchTracking: number;
 
@@ -68,21 +68,21 @@ export type StudioTrackVocalFx = {
 
   pitchTuneMidiTrackIndex: number | null;
 
-  /** 0–1 wet vocoder blend (dry vocal vs processed) */
+  /** 0â€“1 wet vocoder blend (dry vocal vs processed) */
 
   vocoderWet: number;
 
-  /** 0–1 robot / synth character inside the vocoder */
+  /** 0â€“1 robot / synth character inside the vocoder */
 
   vocoderRobot: number;
 
   vocoderPreset: StudioVocoderPresetId;
 
-  /** 0–1 natural vibrato on vocoder carrier */
+  /** 0â€“1 natural vibrato on vocoder carrier */
 
   vibratoDepth: number;
 
-  /** Formant shift semitones (−6 … +6) */
+  /** Formant shift semitones (âˆ’6 â€¦ +6) */
 
   vocoderFormantSemis: number;
 
@@ -94,11 +94,11 @@ export type StudioTrackVocalFx = {
 
   vocoderReleaseMs: number;
 
-  /** Unvoiced / consonant noise (0–1) */
+  /** Unvoiced / consonant noise (0â€“1) */
 
   vocoderUnvoiced: number;
 
-  /** Band tilt 0 warm · 1 bright */
+  /** Band tilt 0 warm Â· 1 bright */
 
   vocoderBandFocus: number;
 
@@ -128,7 +128,7 @@ export const STUDIO_TRACK_VOCAL_FX_DEFAULT: StudioTrackVocalFx = {
 
   pitchScaleId: 'minor',
 
-  pitchTracking: 0.5,
+  pitchTracking: 0.78,
 
   pitchTuneMidiTrackIndex: null,
 
@@ -219,9 +219,30 @@ export function studioNormalizeTrackVocalFx(fx: Partial<StudioTrackVocalFx> & { 
 
 
 export function studioTrackVocalFxActive(fx: StudioTrackVocalFx): boolean {
-
   return fx.autotuneOn || fx.vocoderOn;
+}
 
+/**
+ * Pitch Tune and Vocoder are separate engines (not DA FX Suite modules) and
+ * cannot share the same vocal path â€” enabling one clears the other.
+ */
+export function studioPatchExclusiveVocalFx(
+  fx: StudioTrackVocalFx,
+  partial: Partial<StudioTrackVocalFx>,
+): StudioTrackVocalFx {
+  const next = { ...fx, ...partial };
+  /* Enabling one engine clears the other (vocoder wins if both are set). */
+  if (partial.vocoderOn === true) next.autotuneOn = false;
+  else if (partial.autotuneOn === true) next.vocoderOn = false;
+  return next;
+}
+
+/** Collapse illegal dual-armed state before building the live / offline graph. */
+export function studioNormalizeExclusiveVocalEngines(fx: StudioTrackVocalFx): StudioTrackVocalFx {
+  if (fx.autotuneOn && fx.vocoderOn) {
+    return { ...fx, autotuneOn: false };
+  }
+  return fx;
 }
 
 
@@ -349,23 +370,21 @@ export function studioVocalFxCacheKeyFromTrack(
 
 
 /** Mixer inserts can arm Pitch Tune / Vocoder; track panel holds the detailed settings. */
-
 export function studioEffectiveTrackVocalFx(
-
   fx: StudioTrackVocalFx,
-
   slots: readonly [MixerEffectId, MixerEffectId, MixerEffectId],
-
 ): StudioTrackVocalFx {
-
-  const autotuneOn = fx.autotuneOn || slots.includes('autotune');
-
-  const vocoderOn = fx.vocoderOn || slots.includes('vocoder');
-
+  let autotuneOn = fx.autotuneOn || slots.includes('autotune');
+  let vocoderOn = fx.vocoderOn || slots.includes('vocoder');
+  /* Engines are mutually exclusive â€” never stack Pitch Tune into Vocoder. */
+  if (autotuneOn && vocoderOn) {
+    if (fx.vocoderOn && !fx.autotuneOn) autotuneOn = false;
+    else if (fx.autotuneOn && !fx.vocoderOn) vocoderOn = false;
+    else if (slots.includes('vocoder') && !slots.includes('autotune')) autotuneOn = false;
+    else vocoderOn = false;
+  }
   if (autotuneOn === fx.autotuneOn && vocoderOn === fx.vocoderOn) return fx;
-
   return { ...fx, autotuneOn, vocoderOn };
-
 }
 
 /** True when mixer slot + panel combo changed enough to rebuild the live vocal graph. */
@@ -379,7 +398,7 @@ export function studioVocalFxEffectiveNeedsLiveReconnect(
   return prev.autotuneOn !== next.autotuneOn || prev.vocoderOn !== next.vocoderOn;
 }
 
-/** After Audio→MIDI conversion, route Pitch Tune + Vocoder to this lane's notes. */
+/** After Audioâ†’MIDI conversion, route Pitch Tune + Vocoder to this lane's notes. */
 export function studioWireA2mPitchRouteOnTrack(
   fx: StudioTrackVocalFx,
   trackIndex: number,

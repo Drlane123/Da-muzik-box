@@ -60,34 +60,38 @@ function crudePitchHz(samples: Float32Array, sr: number): number {
   console.log('✓ OLA pitch shift');
 }
 
-// --- Pitch Tune scale snap ---
-{
-  const sr = 44100;
-  const src = sineMono(sr, 0.6, 466.16); // slightly sharp B4
-  const out = applyPitchTuneSamples(src, sr, {
-    strength: 0.95,
-    retuneSpeedMs: 0,
-    flexTune: 0,
-    humanize: 0,
-    keyRoot: 0,
-    scaleId: 'major',
-    tracking: 0.5,
-    formantPreserve: 0.9,
-  });
-  assert(rms(out) > 0.01, 'Pitch Tune output energy');
-  console.log('✓ Pitch Tune correction');
+async function main(): Promise<void> {
+  // --- Pitch Tune scale snap ---
+  {
+    const sr = 44100;
+    const src = sineMono(sr, 0.6, 466.16); // slightly sharp B4
+    const out = await applyPitchTuneSamples(src, sr, {
+      strength: 0.95,
+      retuneSpeedMs: 0,
+      flexTune: 0,
+      humanize: 0,
+      keyRoot: 0,
+      scaleId: 'major',
+      tracking: 0.5,
+      formantPreserve: 0.9,
+    });
+    assert(rms(out) > 0.01, 'Pitch Tune output energy');
+    console.log('✓ Pitch Tune correction');
+  }
+
+  // --- Vocoder envelope ATK/REL ---
+  {
+    const raw = new Float32Array(40);
+    for (let i = 10; i < 30; i++) raw[i] = 1;
+    const shaped = studioVocoderShapeEnvelope(raw, 0.01, 5, 80);
+    assert(shaped[12]! > shaped[9]!, 'Attack rises on onset');
+    assert(shaped[38]! < shaped[28]! + 0.05, 'Release falls after offset');
+    const companded = studioVocoderCompandEnvelope(new Float32Array([0.12, 0.18, 0.25]), 0.85);
+    assert(companded[0]! > 0.12, 'Companding lifts quiet bands');
+    console.log('✓ Vocoder envelope ATK/REL + companding');
+  }
+
+  console.log('\nAll vocal DSP validation checks passed.');
 }
 
-// --- Vocoder envelope ATK/REL ---
-{
-  const raw = new Float32Array(40);
-  for (let i = 10; i < 30; i++) raw[i] = 1;
-  const shaped = studioVocoderShapeEnvelope(raw, 0.01, 5, 80);
-  assert(shaped[12]! > shaped[9]!, 'Attack rises on onset');
-  assert(shaped[38]! < shaped[28]! + 0.05, 'Release falls after offset');
-  const companded = studioVocoderCompandEnvelope(new Float32Array([0.12, 0.18, 0.25]), 0.85);
-  assert(companded[0]! > 0.12, 'Companding lifts quiet bands');
-  console.log('✓ Vocoder envelope ATK/REL + companding');
-}
-
-console.log('\nAll vocal DSP validation checks passed.');
+void main();

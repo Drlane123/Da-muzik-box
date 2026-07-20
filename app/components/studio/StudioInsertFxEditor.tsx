@@ -32,6 +32,7 @@ import {
 import type { StudioVocoderCarrierTrack } from '@/app/lib/studio/studioVocoderCarrier';
 import {
   STUDIO_TRACK_VOCAL_FX_DEFAULT,
+  studioPatchExclusiveVocalFx,
   type StudioTrackVocalFx,
 } from '@/app/lib/studio/studioTrackVocalFx';
 import {
@@ -168,6 +169,8 @@ export function StudioInsertFxEditor({
 
   useEffect(() => {
     if (!open) return;
+    /* Pitch Tune / Vocoder are Vocal DSP engines — not DA FX Suite meters. */
+    if (effectId === 'autotune' || effectId === 'vocoder') return;
     setStudioTrackAnalyserConsumer(vocalTrackIndex, 'fxSuite', true);
     const raf = requestAnimationFrame(() => {
       retapStudioInsertFxAnalyserIfConsumerOpen(vocalTrackIndex);
@@ -176,7 +179,7 @@ export function StudioInsertFxEditor({
       cancelAnimationFrame(raf);
       setStudioTrackAnalyserConsumer(vocalTrackIndex, 'fxSuite', false);
     };
-  }, [open, vocalTrackIndex]);
+  }, [open, effectId, vocalTrackIndex]);
 
   useEffect(() => {
     if (!open) return;
@@ -217,7 +220,8 @@ export function StudioInsertFxEditor({
     };
   }, [open, onClose]);
 
-  const patchVocal = (p: Partial<StudioTrackVocalFx>) => onVocalFxChange?.({ ...fx, ...p });
+  const patchVocal = (p: Partial<StudioTrackVocalFx>) =>
+    onVocalFxChange?.(studioPatchExclusiveVocalFx(fx, p));
 
   const title = useMemo(() => {
     const map: Partial<Record<MixerEffectId, string>> = {

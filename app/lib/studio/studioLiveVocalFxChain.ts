@@ -12,8 +12,8 @@ import {
   disconnectStudioVocoderMonitorTap,
   getStudioPitchMonitorActiveTrack,
   retapStudioPitchMonitorSource,
+  unbindStudioPitchMonitorEngineAnalyser,
 } from '@/app/lib/studio/studioPitchTuneMonitorBus';
-import { attachStudioLiveVocalEnergyGate } from '@/app/lib/studio/studioLiveVocalEnergyGate';
 import {
   createStudioLivePitchTuneChain,
   type StudioLivePitchTuneHandle,
@@ -24,6 +24,7 @@ import {
 } from '@/app/lib/studio/studioLiveVocalFxRegistry';
 import { pitchTuneParamsFromTrackFx } from '@/app/lib/studio/studioPitchTune';
 import type { StudioTrackVocalFx } from '@/app/lib/studio/studioTrackVocalFx';
+import { studioNormalizeExclusiveVocalEngines } from '@/app/lib/studio/studioTrackVocalFx';
 import {
   scheduleStudioProVocoder,
   studioVocoderParamsFromTrackFx,
@@ -225,7 +226,7 @@ export async function connectStudioLiveVocalFxForClip(
     clipStartBeat,
     clipDurationBeats,
     bpm,
-    fx,
+    fx: fxRaw,
     keyRoot,
     vocalTrackIndex,
     carrierTracks,
@@ -237,6 +238,9 @@ export async function connectStudioLiveVocalFxForClip(
     pitchTuneUnbounded = false,
   } = opts;
 
+  /* Pitch Tune (detect→snap→shift) XOR Vocoder (modulator×carrier bands) — never both. */
+  const fx = studioNormalizeExclusiveVocalEngines(fxRaw);
+
   const stackOrder = normalizeFxStackOrder(fxStackOrder ?? insertRack.fxStackOrder);
   const cleanups: Array<() => void> = [];
   let tail: AudioNode = modulator;
@@ -244,7 +248,6 @@ export async function connectStudioLiveVocalFxForClip(
   let vocHandle: StudioProVocoderLiveHandle | null = null;
   let modulatorTapNodes: AudioNode[] = [];
   let ptOut: GainNode | null = null;
-  let ptGate: ReturnType<typeof attachStudioLiveVocalEnergyGate> | null = null;
   let vocoderMonitorNode: AudioNode | null = null;
 
   for (const slot of stackOrder) {
@@ -284,14 +287,10 @@ export async function connectStudioLiveVocalFxForClip(
           { tPlay, playSec, offsetSec, unbounded: pitchTuneUnbounded },
         );
         ptOut = ctx.createGain();
-        const ptOutFull = pitchTuneUnbounded ? 1.25 : 1.35;
-        ptOut.gain.value = ptOutFull;
+        ptOut.gain.value = pitchTuneUnbounded ? 1.25 : 1.35;
         tail.connect(pitchHandle.analyser);
         tail.connect(pitchHandle.node);
         pitchHandle.node.connect(ptOut);
-        if (pitchTuneUnbounded) {
-          ptGate = attachStudioLiveVocalEnergyGate(ctx, tail, [ptOut], [ptOutFull]);
-        }
         const pitchIn = tail;
         modulatorTapNodes = [pitchHandle.analyser, pitchHandle.node];
         tail = ptOut;
@@ -318,8 +317,6 @@ export async function connectStudioLiveVocalFxForClip(
             ptOut = null;
           }
           pitchHandle?.stop();
-          ptGate?.stop();
-          ptGate = null;
         });
       } catch (e) {
         console.warn('[Studio] Pitch Tune worklet unavailable — dry pass-through.', e);
@@ -391,6 +388,7 @@ export async function connectStudioLiveVocalFxForClip(
   if (pitchHandle) {
     bindStudioPitchMonitorEngineAnalyser(pitchMonitorTrackIndex, modulator, pitchHandle.analyser);
   } else {
+    /* Always feed the pitch scope from the vocal entry (mic / clip modulator). */
     connectStudioPitchMonitorTap(ctx, modulator, tail, pitchMonitorTrackIndex);
   }
 
@@ -432,30 +430,32 @@ export async function connectStudioLiveVocalFxForClip(
     cleanup: () => {
       disconnectStudioVocoderMonitorTap(pitchMonitorTrackIndex);
       for (const fn of cleanups) fn();
+      /* Always clear engine ownership — even if the pitch panel is closed —
+       * so a later panel open can retap the vocal entry instead of a dead node. */
+      unbindStudioPitchMonitorEngineAnalyser(pitchMonitorTrackIndex);
       if (getStudioPitchMonitorActiveTrack() === pitchMonitorTrackIndex) {
-        retapStudioPitchMonitorSource(ctx, modulator, pitchMonitorTrackIndex);
+        retapStudioPitchMonitorSource(ctx, modulator, pitchMonitorTrackIndex, {
+          allowWhilePitchScope: true,
+        });
       }
     },
     updateTrackFx: (nextFx, nextKeyRoot) => {
+      const exclusive = studioNormalizeExclusiveVocalEngines(nextFx);
       if (pitchHandle) {
         applyPitchTuneFromFx(
           pitchHandle,
-          nextFx,
+          exclusive,
           nextKeyRoot,
           clipCtx.carrierTracks,
           clipCtx.clipStartBeat,
           clipCtx.clipDurationBeats,
           clipCtx.bpm,
         );
-        if (ptGate && ptOut) {
-          const full = pitchTuneUnbounded ? 1.25 : 1.35;
-          ptGate.setGains([full]);
-        }
       }
       if (vocHandle) {
         applyVocoderFromFx(
           vocHandle,
-          nextFx,
+          exclusive,
           clipCtx.dryBuffer,
           clipCtx.carrierTracks,
           clipCtx.vocalTrackIndex,
