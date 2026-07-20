@@ -210,7 +210,11 @@ import {
   se2AudioClipIntersectsLoopRegion,
   se2AudioClipLoopOccurrences,
   se2AudioClipPreviewScheduleKeyLoopLap,
+  se2AudioPreviewAdoptFutureLoopLapClips,
+  se2AudioPreviewIsLoopLapKey,
+  se2AudioPreviewLapClipHasStarted,
   se2AudioPreviewPurgeLoopLapKeys,
+  se2AudioPreviewPurgeNonLapKeys,
   se2GateAudioPreviewOccurrence,
   se2PurgeDeadAudioPreviewScheduleKeys,
 } from '@/app/lib/studio/se2AudioLoopPreview';
@@ -2055,6 +2059,8 @@ type ScheduledPreviewAudioClip = {
   src: AudioBufferSourceNode;
   trackIndex: number;
   scheduleKey?: string;
+  /** Absolute `AudioContext` time passed to `src.start`. */
+  startTime?: number;
   endTime?: number;
   liveCleanup?: () => void;
 };
@@ -2081,16 +2087,46 @@ function stopScheduledPreviewAudioClips(
   }
 }
 
-/** Loop wrap — stop only the previous lap's sources (new lap already scheduled ahead). */
+/**
+ * Loop wrap — stop previous-lap sources that already started.
+ * Not-yet-started lookahead (next downbeat) is kept and re-keyed by
+ * {@link se2AudioPreviewAdoptFutureLoopLapClips} so wrap does not chop bar 1.
+ */
 function stopScheduledPreviewAudioClipsForLoopLap(
   clips: ScheduledPreviewAudioClip[],
   lapIndex: number,
+  audioNow: number,
 ): void {
   const prefix = `lap${lapIndex}:audio:`;
   for (let i = clips.length - 1; i >= 0; i--) {
     const clip = clips[i]!;
     const key = clip.scheduleKey;
     if (!key?.startsWith(prefix)) continue;
+    if (!se2AudioPreviewLapClipHasStarted(clip, audioNow)) continue;
+    clip.liveCleanup?.();
+    try {
+      clip.src.stop(0);
+    } catch {
+      /* */
+    }
+    try {
+      clip.src.disconnect();
+    } catch {
+      /* */
+    }
+    clips.splice(i, 1);
+  }
+}
+
+/**
+ * Loop wrap after approaching a mid-song region — kill full-clip BufferSources that used
+ * non-lap schedule keys. Those keep playing past the braces and stack under lap slices.
+ */
+function stopScheduledPreviewAudioClipsNonLap(clips: ScheduledPreviewAudioClip[]): void {
+  for (let i = clips.length - 1; i >= 0; i--) {
+    const clip = clips[i]!;
+    const key = clip.scheduleKey;
+    if (key && se2AudioPreviewIsLoopLapKey(key)) continue;
     clip.liveCleanup?.();
     try {
       clip.src.stop(0);
@@ -2214,6 +2250,7 @@ function scheduleAudioClipOnPreviewBus(params: {
       src,
       trackIndex: pitchMonitorTrackIndex,
       scheduleKey,
+      startTime: tPlay,
       endTime: tPlay + playSec,
       liveCleanup,
     };
@@ -7735,6 +7772,8 @@ export default function StudioEditor2Screen({
   const timelineFollowPinAppliedRef = useRef(false);
   /** Scroll (css px) at which the overscanned grid slice was last painted during follow. */
   const timelineFollowPaintScrollRef = useRef(Number.NEGATIVE_INFINITY);
+  /** Absolute content X where the follow paint window starts (`viewStart`). */
+  const timelineFollowPaintStartRef = useRef(0);
   /** Absolute content X where the follow paint window ends (viewStart + paintW). */
   const timelineFollowPaintEndRef = useRef(0);
   /**
@@ -7818,6 +7857,7 @@ export default function StudioEditor2Screen({
     timelineFollowLastOffsetRef.current = 0;
     timelineFollowPinAppliedRef.current = false;
     timelineFollowPaintScrollRef.current = Number.NEGATIVE_INFINITY;
+    timelineFollowPaintStartRef.current = 0;
     timelineFollowPaintEndRef.current = 0;
     if (timelineFollowPaintRafRef.current) {
       window.clearTimeout(timelineFollowPaintRafRef.current);
@@ -7874,6 +7914,7 @@ export default function StudioEditor2Screen({
     timelineEdgeFollowActiveRef.current = false;
     timelineFollowPinAppliedRef.current = false;
     timelineFollowPaintScrollRef.current = Number.NEGATIVE_INFINITY;
+    timelineFollowPaintStartRef.current = 0;
     timelineFollowPaintEndRef.current = 0;
     if (timelineFollowPaintRafRef.current) {
       window.clearTimeout(timelineFollowPaintRafRef.current);
@@ -8001,6 +8042,7 @@ export default function StudioEditor2Screen({
       const maxCss = SE2_MAX_GRID_BITMAP_PX / dpr;
       const paintW = Math.min(vp.paintWidth, maxCss);
       timelineFollowPaintScrollRef.current = scrollLeft;
+      timelineFollowPaintStartRef.current = vp.viewStart;
       timelineFollowPaintEndRef.current = vp.viewStart + paintW;
     }
   }, []);
@@ -8431,10 +8473,24 @@ export default function StudioEditor2Screen({
       const cw = scrollElLoop?.clientWidth ?? 0;
       if (cw <= 0) return;
       const pin = cw * TIMELINE_FOLLOW_PIN_RATIO;
-      const ppbLoop = ppbAtZoom(timelineZoomRef.current, beatsPerBarRef.current);
-      const maxSl = Math.max(0, TOTAL_WIDTH_PX * timelineZoomRef.current - cw);
+      const z = timelineZoomRef.current;
+      const ppbLoop = ppbAtZoom(z, beatsPerBarRef.current);
+      const maxSl = Math.max(0, TOTAL_WIDTH_PX * z - cw);
       const virt = Math.min(maxSl, Math.max(0, beat * ppbLoop - pin));
       cancelTimelineFollowWapi();
+      /*
+       * Follow freezes scrollLeft at the session origin and glides via translate.
+       * On wrap we must re-commit scrollLeft to the new virtual scroll — otherwise
+       * origin/paint jump to the loop while the viewport still shows earlier bars
+       * against an empty canvas slice (grid/audio “vanishes” until a seek).
+       */
+      const committed = Math.max(0, Math.round(virt));
+      timelineProgrammaticScrollRef.current = true;
+      scrollElLoop.scrollLeft = committed;
+      const rulerEl = timelineRulerHScrollRef.current;
+      const barEl = timelineHBarRef.current;
+      if (rulerEl && rulerEl.scrollLeft !== committed) rulerEl.scrollLeft = committed;
+      if (barEl && barEl.scrollLeft !== committed) barEl.scrollLeft = committed;
       timelineFollowTransformOriginRef.current = virt;
       timelineFollowLastOffsetRef.current = 0;
       clearTimelineFollowStripTransform(
@@ -8442,11 +8498,20 @@ export default function StudioEditor2Screen({
         timelineRulerStripRef.current,
         timelineFollowContentRef.current,
       );
+      if (timelineFollowPaintRafRef.current) {
+        window.clearTimeout(timelineFollowPaintRafRef.current);
+        cancelAnimationFrame(timelineFollowPaintRafRef.current);
+        timelineFollowPaintRafRef.current = 0;
+      }
+      timelineFollowPaintScrollRef.current = Number.NEGATIVE_INFINITY;
+      timelineFollowPaintStartRef.current = 0;
+      timelineFollowPaintEndRef.current = 0;
+      syncTimelineGridFollowAhead(z, virt);
       if (opts?.relaunchWapi) {
         launchWapiAnims(beat, true);
       }
     },
-    [cancelTimelineFollowWapi, launchWapiAnims],
+    [cancelTimelineFollowWapi, launchWapiAnims, syncTimelineGridFollowAhead],
   );
 
   const cancelPlayheadCompositorAnims = useCallback(() => {
@@ -10232,6 +10297,9 @@ export default function StudioEditor2Screen({
       const loopEnd = loopEndBeatRef.current;
       const loopSpan = loopEnd - loopStart;
       const loopLap = midiPreviewLoopLapRef.current;
+      /* Only trim/repeat into braces after transport has entered the loop (not while approaching). */
+      const loopCommitted =
+        loopOn && loopSpan > 1e-6 && origin >= loopStart - 1e-6;
 
       se2PurgeDeadAudioPreviewScheduleKeys(scheduled, tracking, ctx);
 
@@ -10306,8 +10374,7 @@ export default function StudioEditor2Screen({
 
           for (const occ of occurrences) {
             const inLoopRegion =
-              loopOn &&
-              loopSpan > 1e-6 &&
+              loopCommitted &&
               se2AudioClipIntersectsLoopRegion({
                 clipStartBeat: clip.startBeat,
                 clipDurationBeats: clip.durationBeats,
@@ -10427,9 +10494,17 @@ export default function StudioEditor2Screen({
     (ctxLoop: AudioContext, tCapture: number) => {
       cancelScheduledMetroNodes();
       const prevLap = midiPreviewLoopLapRef.current;
-      midiPreviewLoopLapRef.current += 1;
+      const nextLap = prevLap + 1;
+      midiPreviewLoopLapRef.current = nextLap;
+      const ctRefill = Math.max(tCapture, audioNow(ctxLoop));
+      /*
+       * Keep not-yet-started lookahead BufferSources (next downbeat) and re-key them
+       * onto the new lap. Killing them then re-scheduling late chops the audible start
+       * via timelineOffSec. Only stop prev-lap clips that already began.
+       */
       studioMidiPreviewPurgeLoopLapKeys(midiPreviewScheduledRef.current, prevLap);
-      se2AudioPreviewPurgeLoopLapKeys(audioPreviewScheduledRef.current, prevLap);
+      /* Approach used full-clip (non-lap) keys — must clear or wrap stacks under lap slices. */
+      se2AudioPreviewPurgeNonLapKeys(audioPreviewScheduledRef.current);
       midiHardwareScheduledRef.current.clear();
 
       const loopStart = loopStartBeatRef.current;
@@ -10445,13 +10520,24 @@ export default function StudioEditor2Screen({
         );
       }
 
-      const ctRefill = Math.max(tCapture, audioNow(ctxLoop));
       /*
-       * Kill previous-lap voices/clips BEFORE scheduling the new lap.
-       * Silencing after refill was killing bar-1 notes just scheduled; dedupe keys then
-       * blocked the microtask top-up → silent first bar on every loop wrap.
+       * Adopt future lookahead onto the new lap *before* purging/stopping prev-lap keys,
+       * so the next downbeat BufferSource survives wrap with a live dedupe key.
        */
-      stopScheduledPreviewAudioClipsForLoopLap(scheduledPreviewAudioClipsRef.current, prevLap);
+      se2AudioPreviewAdoptFutureLoopLapClips(
+        scheduledPreviewAudioClipsRef.current,
+        audioPreviewScheduledRef.current,
+        prevLap,
+        nextLap,
+        ctRefill,
+      );
+      stopScheduledPreviewAudioClipsForLoopLap(
+        scheduledPreviewAudioClipsRef.current,
+        prevLap,
+        ctRefill,
+      );
+      se2AudioPreviewPurgeLoopLapKeys(audioPreviewScheduledRef.current, prevLap);
+      stopScheduledPreviewAudioClipsNonLap(scheduledPreviewAudioClipsRef.current);
       silenceSe2SynthPreviewVoices();
       refillLoopPreviewOnce(ctxLoop, ctRefill);
       queueMicrotask(() => {
@@ -10820,7 +10906,27 @@ export default function StudioEditor2Screen({
         lastCompositorLoopLapRef,
         onSeamlessSplice: (ctxLoop, tCapture) => {
           runLoopPreviewSpliceRefill(ctxLoop, tCapture);
-          reanchorTimelineFollowAtBeat(loopStartBeatRef.current);
+          /*
+           * Do NOT cancel/reanchor follow WAAPI on seamless laps — that kills the
+           * infinite compositor glide and falls back to per-frame JS follow (shake),
+           * and clearing the paint window blanks the grid/audio at loop start.
+           * Soft-rearm the bitmap at the loop-start virt only.
+           */
+          const scrollEl = timelineHScrollRef.current;
+          if (scrollEl) {
+            const z = timelineZoomRef.current;
+            const cw = scrollEl.clientWidth;
+            if (cw > 0) {
+              const pin = cw * TIMELINE_FOLLOW_PIN_RATIO;
+              const ppb = ppbAtZoom(z, beatsPerBarRef.current);
+              const maxSl = Math.max(0, TOTAL_WIDTH_PX * z - cw);
+              const virt = Math.min(
+                maxSl,
+                Math.max(0, loopStartBeatRef.current * ppb - pin),
+              );
+              syncTimelineGridFollowAhead(z, virt);
+            }
+          }
         },
         onDiscreteWrap: (ctxLoop, tCapture) => runLoopPreviewSpliceRefill(ctxLoop, tCapture),
         relaunchPlaylineAtLoopStart: (ls) => {
@@ -10887,7 +10993,9 @@ export default function StudioEditor2Screen({
         offset = jsFollow.offset;
       }
       timelineFollowLastOffsetRef.current = offset;
-      const loopPlaybackActive = loopOnRef.current && runningRef.current;
+      /* Loop needle only while WAAPI is in the brace segment — not while approaching a mid-song loop. */
+      const loopPlaybackActive =
+        loopOnRef.current && runningRef.current && wapiSegLoopRef.current.active;
       const mainPh = playheadGroupRef.current;
       const loopPh = loopPlayheadGroupRef.current;
       const visiblePhWapi = playheadVisibleWapiRef.current;
@@ -10934,9 +11042,12 @@ export default function StudioEditor2Screen({
       timelineFollowPinScreenXRef.current = pinPx;
       timelineEdgeFollowActiveRef.current = true;
       const paintEnd = timelineFollowPaintEndRef.current;
+      const paintStart = timelineFollowPaintStartRef.current;
       const needsPaint =
         paintEnd <= 0 ||
-        virtualScroll + clientWidth >= paintEnd - TIMELINE_FOLLOW_PAINT_REARM_PX;
+        virtualScroll + clientWidth >= paintEnd - TIMELINE_FOLLOW_PAINT_REARM_PX ||
+        /* Loop wrap / seek can jump behind the painted slice. */
+        virtualScroll < paintStart - 0.5;
       if (needsPaint && !timelineFollowPaintRafRef.current) {
         const paintZ = z;
         const paintScroll = virtualScroll;
@@ -19023,6 +19134,15 @@ export default function StudioEditor2Screen({
 
     /* Freeze grid translate — no scrollLeft rewrite (that was the Stop jerk). */
     freezeTimelineFollowForStop();
+    /*
+     * Transport rAF stops here — repaint at the parked virtual scroll so a loop-wrap
+     * canvas window does not leave bars before the braces blank until the next seek.
+     */
+    const parkedVirt = Math.max(
+      0,
+      Math.round(timelineFollowTransformOriginRef.current + timelineFollowLastOffsetRef.current),
+    );
+    syncTimelineGridFollowAhead(z, parkedVirt);
 
     /* Content-space park while frozen strip translate still applied — same screen pixels. */
     positionTimelinePlayheadGroup(
@@ -19081,6 +19201,7 @@ export default function StudioEditor2Screen({
     launchWapiAnims,
     readTimelineFollowWapiOffset,
     readVisualPlayheadBeat,
+    syncTimelineGridFollowAhead,
     updateReadouts,
   ]);
 

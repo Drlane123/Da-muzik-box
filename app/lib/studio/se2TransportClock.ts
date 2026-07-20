@@ -195,7 +195,8 @@ export function applySe2SeamlessLoopSplice(
   const sessionStart = refs.sessionStartRef.current;
   const tb = Math.max(1e-9, totalBeats);
   const loopStart = Math.max(0, loopStartBeat);
-  const bSched = loopStart;
+  /** Match compositor phase — hard-snapping bDisplay to loopStart jerks the playhead. */
+  const bSched = se2LoopSpliceSchedBeat(bVis, loopStart, span);
   if (tSmoothSnap !== null) {
     refs.originBeatRef.current = bVis - (tSmoothSnap - sessionStart) * rate;
   } else {
@@ -207,11 +208,16 @@ export function applySe2SeamlessLoopSplice(
     refs.nextMetroKRef.current = se2SnapBeatToQuarterGrid(Math.min(tb, Math.max(0, kNext)), tb);
   }
 
-  refs.cursorBeatRef.current = loopStart;
-  refs.displayBeatRef.current = loopStart;
+  refs.cursorBeatRef.current = bVis;
+  refs.displayBeatRef.current = bVis;
 
-  // Hard reset the visual playhead directly to the left loop start.
-  const bDisplay = loopStart;
+  let bDisplay = bVis;
+  if (tSmoothSnap !== null) {
+    bDisplay = Math.max(
+      0,
+      Math.min(tb, refs.originBeatRef.current + (tSmoothSnap - sessionStart) * rate),
+    );
+  }
 
   return { bDisplay, bSched };
 }

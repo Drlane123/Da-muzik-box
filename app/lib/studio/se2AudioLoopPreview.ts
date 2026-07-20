@@ -63,8 +63,39 @@ export function se2AudioPreviewPurgeLoopLapKeys(scheduled: Set<string>, lapIndex
   }
 }
 
+/** True for loop-lap dedupe keys (`lapN:audio:…`); false for approach / non-loop full-clip keys. */
+export function se2AudioPreviewIsLoopLapKey(key: string): boolean {
+  return /^lap\d+:audio:/.test(key);
+}
+
+/**
+ * Drop approach / non-loop full-clip dedupe keys.
+ * On wrap, lap slices take over — leaving these set would block recovery and stack under new laps.
+ */
+export function se2AudioPreviewPurgeNonLapKeys(scheduled: Set<string>): void {
+  for (const key of [...scheduled]) {
+    if (!se2AudioPreviewIsLoopLapKey(key)) scheduled.delete(key);
+  }
+}
+
+/**
+ * True once transport has entered looping (started inside braces or wrapped back).
+ * While approaching a mid-song loop from earlier beats, keep full-clip scheduling —
+ * otherwise audio before the braces stays silent.
+ */
+export function se2AudioLoopPlaybackCommitted(
+  loopOn: boolean,
+  originBeat: number,
+  loopStartBeat: number,
+  loopEndBeat: number,
+): boolean {
+  const span = loopEndBeat - loopStartBeat;
+  return loopOn && span > 1e-6 && originBeat >= loopStartBeat - 1e-6;
+}
+
 /**
  * Loop-region clips: every repeat whose wrapped onset falls in the lookahead window.
+ * Approach (loop on, playhead before braces): single full-clip occurrence — same as loop off.
  * Non-loop: single full-clip occurrence (same contract as pre-loop scheduling).
  */
 export function se2AudioClipLoopOccurrences(args: {
@@ -95,10 +126,11 @@ export function se2AudioClipLoopOccurrences(args: {
   } = args;
 
   const loopCatchUpSec = 0.15;
-  const pastCutoff = ctSnap - (loopOn ? loopCatchUpSec : 0.02);
+  const loopCommitted = se2AudioLoopPlaybackCommitted(loopOn, originBeat, loopStartBeat, loopEndBeat);
+  const pastCutoff = ctSnap - (loopCommitted ? loopCatchUpSec : 0.02);
   const loopSpan = loopEndBeat - loopStartBeat;
 
-  if (loopOn && loopSpan > 1e-6) {
+  if (loopCommitted) {
     const seg = se2AudioClipLoopSegment({
       clipStartBeat,
       clipDurationBeats,
@@ -278,4 +310,46 @@ export function se2PurgeDeadAudioPreviewScheduleKeys(
     if (se2AudioPreviewClipStillAudible(tracking, key, ctx)) continue;
     scheduled.delete(key);
   }
+}
+
+export type Se2AudioPreviewLapClip = {
+  scheduleKey?: string;
+  /** Absolute `AudioContext` time when `src.start` was armed. */
+  startTime?: number;
+};
+
+/**
+ * Remap not-yet-started prev-lap lookahead clips onto the new lap’s dedupe keys
+ * (`rN` → `rN-1`) so wrap can keep their BufferSources instead of killing them
+ * and re-scheduling late (which chops the audible loop downbeat via timeline offset).
+ */
+export function se2AudioPreviewAdoptFutureLoopLapClips(
+  clips: Se2AudioPreviewLapClip[],
+  scheduled: Set<string>,
+  prevLap: number,
+  nextLap: number,
+  audioNow: number,
+): void {
+  const prevPrefix = `lap${prevLap}:audio:`;
+  const keyRe = /^lap\d+:audio:(.+):r(\d+):(align[01])$/;
+  for (const clip of clips) {
+    const key = clip.scheduleKey;
+    if (!key?.startsWith(prevPrefix)) continue;
+    if (clip.startTime == null || clip.startTime <= audioNow + 0.002) continue;
+    const m = key.match(keyRe);
+    if (!m) continue;
+    const prevR = Number(m[2]);
+    const newKey = `lap${nextLap}:audio:${m[1]}:r${Math.max(0, prevR - 1)}:${m[3]}`;
+    scheduled.delete(key);
+    clip.scheduleKey = newKey;
+    scheduled.add(newKey);
+  }
+}
+
+/** True when a tracked lap clip has already started (safe to stop on wrap). */
+export function se2AudioPreviewLapClipHasStarted(
+  clip: Se2AudioPreviewLapClip,
+  audioNow: number,
+): boolean {
+  return clip.startTime == null || clip.startTime <= audioNow + 0.002;
 }
