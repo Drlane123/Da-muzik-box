@@ -2,7 +2,7 @@
 
 export type UiScaleMode = 'auto' | 'manual';
 
-/** Floor low enough for phones (~390px) against the desktop reference canvas. */
+/** Floor low enough for phone landscape / small laptops against the desktop reference. */
 export const UI_SCALE_MIN = 0.28;
 export const UI_SCALE_MAX = 1;
 export const UI_SCALE_STEP = 0.01;
@@ -12,11 +12,11 @@ const REF_WIDTH = 1440;
 const REF_HEIGHT = 900;
 
 /**
- * Narrower phone canvas → larger auto zoom so the UI fills more of a tall phone
- * instead of sitting tiny at the top. Desktop / tablet keep REF_WIDTH.
+ * Phone handset detection (not tablets).
+ * Short side ≤520 and long side ≤950 — iPad portrait (~768) stays tablet.
  */
-const PHONE_REF_WIDTH = 980;
-const PHONE_MAX_WIDTH = 600;
+const PHONE_SHORT_MAX = 520;
+const PHONE_LONG_MAX = 950;
 
 export function clampUiScale(n: number): number {
   if (!Number.isFinite(n)) return 1;
@@ -24,7 +24,7 @@ export function clampUiScale(n: number): number {
   return Math.round(clamped * 100) / 100;
 }
 
-function readViewportSize(
+export function readViewportSize(
   width?: number,
   height?: number,
 ): { width: number; height: number } {
@@ -41,27 +41,28 @@ function readViewportSize(
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-/** Portrait phone — tall + narrow. Landscape phones / tablets use desktop fit. */
+/** True for phone-sized handsets (portrait or landscape). Tablets/desktops = false. */
+export function isPhoneHandsetViewport(width: number, height: number): boolean {
+  const shortSide = Math.min(width, height);
+  const longSide = Math.max(width, height);
+  return shortSide <= PHONE_SHORT_MAX && longSide <= PHONE_LONG_MAX;
+}
+
+/** Phone standing tall — app should show “turn sideways” instead of running. */
 export function isPhonePortraitViewport(width: number, height: number): boolean {
-  return width <= PHONE_MAX_WIDTH && height > width;
+  return isPhoneHandsetViewport(width, height) && height > width;
 }
 
 /**
  * Shrinks the whole UI when the window is smaller than the reference desktop.
- * Large monitors stay at 100%. Phones get a taller fit (larger zoom) so the
- * shell uses more vertical space without changing tablet/desktop math.
+ * Large monitors stay at 100%. Phone landscape / tablets / laptops get a fit ratio.
+ * (Portrait phones are gated separately — they never run the scaled DAW UI.)
  */
 export function computeAutoUiScale(
   width?: number,
   height?: number,
 ): number {
   const vp = readViewportSize(width, height);
-  if (isPhonePortraitViewport(vp.width, vp.height)) {
-    // Width still limits (no side crop), but against a phone-sized canvas so
-    // zoom lands ~35–42% on typical handsets instead of ~28%.
-    const raw = Math.min(vp.width / PHONE_REF_WIDTH, vp.height / REF_HEIGHT, 1);
-    return clampUiScale(raw);
-  }
   const raw = Math.min(vp.width / REF_WIDTH, vp.height / REF_HEIGHT, 1);
   return clampUiScale(raw);
 }
@@ -75,56 +76,30 @@ export function resolveUiScale(mode: UiScaleMode, manualScale: number): number {
  * `zoom` on <html> shrinks paint size but leaves blank bands under/ beside the shell
  * (modules looked “half height” on laptops). Expand logical width/height by 1/scale
  * so after zoom the app still fills the viewport.
- *
- * Portrait phones only: shell is taller than one screen + overflow-y scroll so you
- * can move the UI up/down. Tablets/desktop stay locked edge-to-edge (no page scroll).
  */
 export function applyDocumentUiScale(scale: number): void {
   const s = clampUiScale(scale);
   const root = document.documentElement;
   const body = document.body;
   const vp = readViewportSize();
-  const phone = isPhonePortraitViewport(vp.width, vp.height);
+  const phonePortrait = isPhonePortraitViewport(vp.width, vp.height);
+
   root.style.setProperty('--dmb-ui-scale', String(s));
-  root.dataset.dmbPhoneUi = phone ? '1' : '0';
+  root.dataset.dmbPhoneUi = phonePortrait ? 'portrait' : '0';
+  root.dataset.dmbPhoneLandscape =
+    isPhoneHandsetViewport(vp.width, vp.height) && !phonePortrait ? '1' : '0';
+
   // Chromium / Edge / Cursor — scales layout + hit targets together (portals included).
   (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(s);
 
   if (s < 0.999) {
     const inv = 1 / s;
     root.style.setProperty('--dmb-ui-shell-w', `calc(100vw * ${inv})`);
-
-    if (phone) {
-      // Taller than one phone screen after zoom → vertical page scroll (phones only).
-      const phoneShellH = Math.ceil(vp.height * inv * 1.28);
-      root.style.setProperty('--dmb-ui-shell-h', `${phoneShellH}px`);
-      root.style.width = `calc(100vw * ${inv})`;
-      root.style.minHeight = `${phoneShellH}px`;
-      root.style.height = 'auto';
-      root.style.overflowX = 'hidden';
-      root.style.overflowY = 'auto';
-      if (body) {
-        body.style.width = `calc(100vw * ${inv})`;
-        body.style.minHeight = `${phoneShellH}px`;
-        body.style.height = 'auto';
-        body.style.overflowX = 'hidden';
-        body.style.overflowY = 'auto';
-      }
-    } else {
-      root.style.setProperty('--dmb-ui-shell-h', `calc(100dvh * ${inv})`);
-      root.style.width = `calc(100vw * ${inv})`;
-      root.style.minHeight = `calc(100dvh * ${inv})`;
-      root.style.height = `calc(100dvh * ${inv})`;
-      root.style.overflow = 'hidden';
-      if (body) {
-        body.style.removeProperty('width');
-        body.style.removeProperty('min-height');
-        body.style.removeProperty('height');
-        body.style.removeProperty('overflow');
-        body.style.removeProperty('overflow-x');
-        body.style.removeProperty('overflow-y');
-      }
-    }
+    root.style.setProperty('--dmb-ui-shell-h', `calc(100dvh * ${inv})`);
+    root.style.width = `calc(100vw * ${inv})`;
+    root.style.minHeight = `calc(100dvh * ${inv})`;
+    root.style.height = `calc(100dvh * ${inv})`;
+    root.style.overflow = 'hidden';
   } else {
     root.style.setProperty('--dmb-ui-shell-w', '100%');
     root.style.setProperty('--dmb-ui-shell-h', '100dvh');
@@ -134,14 +109,15 @@ export function applyDocumentUiScale(scale: number): void {
     root.style.removeProperty('overflow');
     root.style.removeProperty('overflow-x');
     root.style.removeProperty('overflow-y');
-    if (body) {
-      body.style.removeProperty('width');
-      body.style.removeProperty('min-height');
-      body.style.removeProperty('height');
-      body.style.removeProperty('overflow');
-      body.style.removeProperty('overflow-x');
-      body.style.removeProperty('overflow-y');
-    }
+  }
+
+  if (body) {
+    body.style.removeProperty('width');
+    body.style.removeProperty('min-height');
+    body.style.removeProperty('height');
+    body.style.removeProperty('overflow');
+    body.style.removeProperty('overflow-x');
+    body.style.removeProperty('overflow-y');
   }
 }
 
@@ -158,6 +134,7 @@ export function clearDocumentUiScale(): void {
   root.style.removeProperty('overflow-x');
   root.style.removeProperty('overflow-y');
   delete root.dataset.dmbPhoneUi;
+  delete root.dataset.dmbPhoneLandscape;
   (root.style as CSSStyleDeclaration & { zoom?: string }).zoom = '';
   if (body) {
     body.style.removeProperty('width');

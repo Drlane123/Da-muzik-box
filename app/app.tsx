@@ -28,6 +28,7 @@ import { MusicBoxOverviewModal } from '@/app/components/MusicBoxOverviewHub';
 import TouchDeviceBootstrap from '@/app/components/TouchDeviceBootstrap';
 import UiScaleBootstrap from '@/app/components/UiScaleBootstrap';
 import UiBrightnessBootstrap from '@/app/components/UiBrightnessBootstrap';
+import PhoneLandscapeGate from '@/app/components/PhoneLandscapeGate';
 import KeyboardShortcutsBootstrap from '@/app/components/KeyboardShortcutsBootstrap';
 import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
@@ -582,6 +583,7 @@ function AppContent() {
       <TouchDeviceBootstrap />
       <UiScaleBootstrap />
       <UiBrightnessBootstrap />
+      <PhoneLandscapeGate />
       <KeyboardShortcutsBootstrap
         activeScreen={activeScreen}
         onOpenSettings={() => setShowSettings(true)}
