@@ -37,19 +37,20 @@ export const DA_MUSIC_BOX_PRICING_PLANS: readonly PricingPlan[] = [
   {
     id: 'basic',
     name: 'Basic',
-    blurb: 'Full suite access for writing and arranging — without Beat Lab, Beat Pads, or Mastering Bay.',
+    blurb:
+      'Full suite access, recording, writing, and arrangement — without Beat Lab, Beat Pads, or Mastering Bay.',
     monthlyPriceUsd: 29.99,
     yearlyPerMonthUsd: 23.99,
     ctaLabel: 'Get Basic',
   },
   {
     id: 'premium',
-    name: 'Premium',
+    name: 'Premium Plus',
     blurb: 'Everything in Basic, plus Beat Lab, Beat Pads, and Mastering Bay for finish-ready productions.',
     badge: 'Most popular',
     monthlyPriceUsd: 59.99,
     yearlyPerMonthUsd: 47.99,
-    ctaLabel: 'Get Premium',
+    ctaLabel: 'Get Premium Plus',
     highlighted: true,
   },
 ] as const;
@@ -121,19 +122,19 @@ export const DA_MUSIC_BOX_PRICING_FEATURES: readonly PricingFeatureRow[] = [
 export const DA_MUSIC_BOX_PRICING_FAQS: readonly { q: string; a: string }[] = [
   {
     q: 'What is locked on Basic?',
-    a: 'When paid billing is live: Beat Lab, Beat Pads (Studio Editor 2), and Mastering Bay are Premium only. Right now Payment Center is in preview — Open Muzik Box keeps full access on every plan.',
+    a: 'When paid billing is live: Beat Lab, Beat Pads (Studio Editor 2), and Mastering Bay are Premium Plus only. Right now Payment Center is in beta — unlock with your invite code, then Open Muzik Box.',
   },
   {
     q: 'What is Cloudflare D1 vs Stripe?',
-    a: 'D1 is the database that remembers your plan (Basic / Premium). Stripe is the payment processor that charges the card. D1 does not take payments — Stripe does. We store entitlements in D1 after Stripe confirms a subscription.',
+    a: 'D1 is the database that remembers your plan (Basic / Premium Plus). Stripe is the payment processor that charges the card. D1 does not take payments — Stripe does. We store entitlements in D1 after Stripe confirms a subscription.',
   },
   {
     q: 'Can I switch plans later?',
-    a: 'Yes. When Stripe checkout is live you will upgrade or manage billing from this Payment Center. Until then, Open Muzik Box is a full-access preview.',
+    a: 'Yes. When Stripe checkout is live you will upgrade or manage billing from this Payment Center. Until then, Open Muzik Box is a full-access beta after your invite code.',
   },
   {
     q: 'Is this charged yet?',
-    a: 'No. Stripe is not connected. Nothing is billed. The Payment Center UI and plan list work in preview; Cloudflare D1 schema is ready for entitlements when you connect Stripe.',
+    a: 'No. Stripe is not connected. Nothing is billed. Prices are hidden during beta; Cloudflare D1 schema is ready for entitlements when you connect Stripe.',
   },
 ] as const;
 

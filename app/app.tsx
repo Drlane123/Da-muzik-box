@@ -49,6 +49,7 @@ import {
   screenAllowedForPlan,
   setAppPlan,
 } from '@/app/lib/pricing/planEntitlements';
+import { clearBetaAccess, isBetaAccessUnlocked } from '@/app/lib/pricing/betaAccessGate';
 import {
   screenToVocalLabSubScreen,
   type VocalLabSubScreenId,
@@ -355,8 +356,13 @@ function AppContent() {
   /**
    * Always land on Pricing for every full load.
    * Open Music Box sets Basic or Premium, then enters the app with that plan’s feature gate.
+   * Clear session plan + beta unlock synchronously so Pricing starts locked.
    */
-  const [activeScreen, setActiveScreen] = useState<ScreenId>('pricing');
+  const [activeScreen, setActiveScreen] = useState<ScreenId>(() => {
+    clearAppPlan();
+    clearBetaAccess();
+    return 'pricing';
+  });
   const [creationSubScreen, setCreationSubScreenState] = useState<CreationSubScreenId>('groove-lab');
   const [vocalLabSubScreen, setVocalLabSubScreen] = useState<VocalLabSubScreenId>('vocal-lab');
   /** Passed to Studio Editor when navigating from Vocal Lab with a recorded/uploaded blob. */
@@ -380,10 +386,6 @@ function AppContent() {
   );
   const { settings } = useSettings();
 
-  useEffect(() => {
-    clearAppPlan();
-  }, []);
-
   const setCreationSubScreen = useCallback((sub: CreationSubScreenId) => {
     if (!creationSubAllowedForPlan(sub)) {
       setCreationSubScreenState(defaultCreationSubForPlan());
@@ -394,6 +396,8 @@ function AppContent() {
 
   const navigateToScreen = useCallback((id: ScreenId) => {
     if (!screenAllowedForPlan(id)) return;
+    // Stay on Pricing until beta invite code unlocks the app.
+    if (id !== 'pricing' && !isBetaAccessUnlocked()) return;
     prefetchModuleScreen(id);
     setVisitedScreens((prev) => {
       if (prev.has(id)) return prev;
