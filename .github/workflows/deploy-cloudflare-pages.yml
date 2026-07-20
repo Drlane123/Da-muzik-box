@@ -1,3 +1,19 @@
+# Automatic deploy: every push to `main` builds with Bun and uploads `dist`
+# to Cloudflare Pages project `da-muzik-box-f1` via Wrangler (Direct Upload).
+#
+# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_ACCOUNT_ID          — Cloudflare account id
+#   CLOUDFLARE_API_TOKEN           — API token with Pages edit (preferred)
+#   OR both:
+#   CLOUDFLARE_EMAIL               — Cloudflare login email
+#   CLOUDFLARE_GLOBAL_API_KEY      — Global API Key
+#
+# Live URL: https://da-muzik-box-f1.pages.dev/
+#
+# Important: In Cloudflare → Workers & Pages → da-muzik-box-f1 → Settings,
+# do NOT also connect a Git build that deploys `dist/` without a build step
+# (dist is gitignored). Use this Actions workflow as the only deploy source.
+
 name: Deploy to Cloudflare Pages
 
 on:
@@ -70,34 +86,29 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy to Cloudflare Pages
+      - name: Ensure Pages project exists
         run: |
           bunx wrangler@3.114.0 whoami
           bunx wrangler@3.114.0 pages project create da-muzik-box-f1 --production-branch=main || true
-          # Pages Functions (/functions) + D1 binding from wrangler.toml deploy with the site.
-          # After first D1 create, paste database_id into wrangler.toml, then optionally:
-          #   bunx wrangler@3.114.0 d1 migrations apply da-muzik-box-billing --remote
-          bunx wrangler@3.114.0 pages deploy dist --project-name=da-muzik-box-f1 --branch=main --commit-dirty=true
 
-      - name: Retire old da-muzik-box Pages project
+      - name: Deploy to Cloudflare Pages
+        id: deploy
         run: |
           set -euo pipefail
-          URL="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/da-muzik-box"
-          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
-            RESP="$(curl -sS -w $'\n%{http_code}' -X DELETE "$URL" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}")"
-          else
-            RESP="$(curl -sS -w $'\n%{http_code}' -X DELETE "$URL" \
-              -H "X-Auth-Email: ${CLOUDFLARE_EMAIL}" \
-              -H "X-Auth-Key: ${CLOUDFLARE_API_KEY}")"
-          fi
-          BODY="$(printf '%s\n' "$RESP" | sed '$d')"
-          CODE="$(printf '%s\n' "$RESP" | tail -n1)"
-          echo "DELETE da-muzik-box -> HTTP ${CODE}"
-          echo "${BODY}"
-          if [ "${CODE}" = "200" ] || [ "${CODE}" = "404" ]; then
-            echo "Old URL retired (project deleted or already gone)."
-            exit 0
-          fi
-          echo "::warning::Could not delete Pages project da-muzik-box (HTTP ${CODE}). API token likely cannot delete projects. Delete it once in Cloudflare Dashboard → Workers & Pages → da-muzik-box → Settings → Delete project so https://da-muzik-box.pages.dev dies."
-          exit 0
+          COMMIT_MSG="$(git log -1 --pretty=%s | tr -d '\r' | cut -c1-120)"
+          echo "Deploying SHA=${GITHUB_SHA} branch=main project=da-muzik-box-f1"
+          echo "Commit: ${COMMIT_MSG}"
+
+          # Bind this Direct Upload to the real git commit (not --commit-dirty).
+          bunx wrangler@3.114.0 pages deploy dist \
+            --project-name=da-muzik-box-f1 \
+            --branch=main \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-message="${COMMIT_MSG}"
+
+          {
+            echo "## Cloudflare Pages"
+            echo "- Project: \`da-muzik-box-f1\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- URL: https://da-muzik-box-f1.pages.dev/"
+          } >> "$GITHUB_STEP_SUMMARY"
