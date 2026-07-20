@@ -41,7 +41,7 @@ export interface Settings {
    * `auto` — fit to window vs ~1440×900 reference; `manual` — use `uiScale`.
    */
   uiScaleMode: UiScaleMode;
-  /** Manual scale 0.70–1.00 (70%–100%). Ignored when `uiScaleMode` is `auto`. */
+  /** Manual scale 0.28–1.00 (28%–100%). Ignored when `uiScaleMode` is `auto`. */
   uiScale: number;
   /**
    * Soft UI brighten / darken (1.0 = current lightened chrome).

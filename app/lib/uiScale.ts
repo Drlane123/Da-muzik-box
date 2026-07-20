@@ -1,8 +1,9 @@
-/** App-wide UI scale (laptop fit). Does not change timeline/transport math. */
+/** App-wide UI scale (fills window vs desktop canvas). Does not change timeline/transport math. */
 
 export type UiScaleMode = 'auto' | 'manual';
 
-export const UI_SCALE_MIN = 0.7;
+/** Floor low enough for phones (~390px) against the 1440×900 reference canvas. */
+export const UI_SCALE_MIN = 0.28;
 export const UI_SCALE_MAX = 1;
 export const UI_SCALE_STEP = 0.01;
 
@@ -18,7 +19,7 @@ export function clampUiScale(n: number): number {
 
 /**
  * Shrinks the whole UI when the window is smaller than the reference desktop.
- * Large monitors stay at 100%. Different laptop sizes get different fit ratios.
+ * Large monitors stay at 100%. Phones, tablets, and laptops get a fit ratio.
  */
 export function computeAutoUiScale(
   width = typeof window !== 'undefined' ? window.innerWidth : REF_WIDTH,
