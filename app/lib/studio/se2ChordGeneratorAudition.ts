@@ -12,6 +12,7 @@ import {
 } from '@/app/lib/creationStation/orchidChordEngine';
 import { haltProgressionAuditionVoices } from '@/app/lib/creationStation/chordSequencerVoices';
 import { MIXER_UNITY_VOL } from '@/app/lib/studio/se2MixerFaderScale';
+import { se2ApplyChordOctaveShiftToMidis } from '@/app/lib/studio/se2ChordGenieTrack';
 import {
   haltStudioEditor2MidiInstrumentNotes,
   scheduleStudioEditor2MidiInstrumentNote,
@@ -24,6 +25,15 @@ import {
   studioPlayOrchestraHitOnPreviewBus,
   studioPreloadOrchestraHitInstrument,
 } from '@/app/lib/studio/studioInstrumentHarmony';
+
+function auditionMidisForStep(
+  step: GrooveProgressionStep,
+  opts: Pick<Se2ChordGeneratorAuditionOpts, 'genreId' | 'octaveShift'>,
+): number[] | null {
+  const midis = chordMidisForStepLabel(step.label, { genreId: opts.genreId });
+  if (!midis?.length) return null;
+  return se2ApplyChordOctaveShiftToMidis(midis, opts.octaveShift);
+}
 
 /** Synthetic lane so synth-preset audition does not collide with real track lanes. */
 export function se2ChordGeneratorAuditionTrackIndex(trackId: string | undefined): number {
@@ -41,6 +51,8 @@ export type Se2ChordGeneratorAuditionOpts = {
   volume?: number;
   genreId?: string;
   perfMode?: OrchidPerformanceMode;
+  /** Comp register — shift chord voicings by this many octaves (−2…+2). */
+  octaveShift?: number;
 };
 
 function auditionSustainSec(stepBeats: number, secPerBeat: number, genreId?: string): number {
@@ -170,7 +182,7 @@ export function scheduleSe2ChordGeneratorProgression(
       beat += Math.max(0.25, step.beats);
       continue;
     }
-    const midis = chordMidisForStepLabel(step.label, { genreId: opts.genreId });
+    const midis = auditionMidisForStep(step, opts);
     if (midis?.length) {
       const when = startTime + beat * secPerBeat;
       const sustainSec = auditionSustainSec(step.beats, secPerBeat, opts.genreId);
@@ -187,7 +199,7 @@ export function scheduleSe2ChordGeneratorStep(
   startTime: number,
   opts: Se2ChordGeneratorAuditionOpts,
 ): void {
-  const midis = chordMidisForStepLabel(step.label, { genreId: opts.genreId });
+  const midis = auditionMidisForStep(step, opts);
   if (!midis?.length) return;
   const secPerBeat = 60 / Math.max(40, opts.bpm);
   const sustainSec = auditionSustainSec(step.beats, secPerBeat, opts.genreId);

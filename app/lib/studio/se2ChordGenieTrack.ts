@@ -172,3 +172,50 @@ export function se2GenoChordCreatorLoopBars(
 
 /** @deprecated */
 export const se2ChordGenieLoopBars = se2GenoChordCreatorLoopBars;
+
+/** Comp register — octave up/down on Chord Generator voicings (−2…+2). */
+export type Se2ChordGeneratorOctaveShift = -2 | -1 | 0 | 1 | 2;
+
+export function se2NormalizeChordGeneratorOctaveShift(
+  raw: number | undefined | null,
+): Se2ChordGeneratorOctaveShift {
+  const n = Math.round(Number(raw) || 0);
+  if (n <= -2) return -2;
+  if (n === -1) return -1;
+  if (n === 1) return 1;
+  if (n >= 2) return 2;
+  return 0;
+}
+
+export function se2ChordGeneratorOctaveSemitones(octaveShift: number | undefined | null): number {
+  return se2NormalizeChordGeneratorOctaveShift(octaveShift) * 12;
+}
+
+export function se2ApplyChordOctaveShiftToMidi(
+  midi: number,
+  octaveShift: number | undefined | null,
+): number {
+  const delta = se2ChordGeneratorOctaveSemitones(octaveShift);
+  return Math.max(0, Math.min(127, Math.round(midi) + delta));
+}
+
+export function se2ApplyChordOctaveShiftToMidis(
+  midis: readonly number[],
+  octaveShift: number | undefined | null,
+): number[] {
+  const delta = se2ChordGeneratorOctaveSemitones(octaveShift);
+  if (!delta) return midis.map((m) => Math.max(0, Math.min(127, Math.round(m))));
+  return midis.map((m) => Math.max(0, Math.min(127, Math.round(m) + delta)));
+}
+
+export function se2ApplyChordOctaveShiftToNotes<T extends { pitch: number }>(
+  notes: readonly T[],
+  octaveShift: number | undefined | null,
+): T[] {
+  const delta = se2ChordGeneratorOctaveSemitones(octaveShift);
+  if (!delta) return notes.map((n) => ({ ...n }));
+  return notes.map((n) => ({
+    ...n,
+    pitch: Math.max(0, Math.min(127, Math.round(n.pitch) + delta)),
+  }));
+}
