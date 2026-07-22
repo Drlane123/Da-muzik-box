@@ -22,12 +22,24 @@ export type UseVocalCaptureResult = {
 export type UseVocalCaptureOptions = {
   /** Raw mic for beatbox / mouth percussion — disables browser AGC & noise gate. */
   percussiveMic?: boolean;
+  /**
+   * Voice / hum capture — echo cancel + noise suppress so speakers/metro clicks
+   * are not treated as pitched notes (Hum Melody).
+   */
+  isolatedMic?: boolean;
 };
 
 const PERCUSSIVE_MIC_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: false,
   noiseSuppression: false,
   autoGainControl: false,
+};
+
+/** Prefer voice; cancel speaker / metronome bleed into the mic. */
+const ISOLATED_VOICE_MIC_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
 };
 
 export function useVocalCapture(
@@ -45,6 +57,8 @@ export function useVocalCapture(
   const isRecordingRef = useRef(false);
   const percussiveMicRef = useRef(Boolean(options?.percussiveMic));
   percussiveMicRef.current = Boolean(options?.percussiveMic);
+  const isolatedMicRef = useRef(Boolean(options?.isolatedMic));
+  isolatedMicRef.current = Boolean(options?.isolatedMic);
 
   const commitBlob = useCallback(
     (next: Blob | null) => {
@@ -69,9 +83,12 @@ export function useVocalCapture(
     }
     releaseMic();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: percussiveMicRef.current ? PERCUSSIVE_MIC_CONSTRAINTS : true,
-      });
+      const audio: boolean | MediaTrackConstraints = percussiveMicRef.current
+        ? PERCUSSIVE_MIC_CONSTRAINTS
+        : isolatedMicRef.current
+          ? ISOLATED_VOICE_MIC_CONSTRAINTS
+          : true;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio });
       streamRef.current = stream;
       setCaptureStream(stream);
       return true;

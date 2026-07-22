@@ -85,6 +85,15 @@ type NeuralHumMelodyRollProps = {
   onDownloadMidi?: () => void;
   showExport?: boolean;
   isAnalyzing?: boolean;
+  /** Shared VocalBox ↔ Hum Sync — stamp drums before melody starts. */
+  onAuditionStart?: () => void;
+  /** Parent bumps to start audition on the shared sync clock. */
+  auditionNonce?: number;
+  /** Parent bumps to cancel an in-flight audition. */
+  auditionStopNonce?: number;
+  getAuditionStartAtSec?: () => number | null | undefined;
+  rollLabel?: string;
+  showRollTitle?: boolean;
 };
 
 export default function NeuralHumMelodyRoll({
@@ -115,6 +124,10 @@ export default function NeuralHumMelodyRoll({
   onDownloadMidi,
   showExport = true,
   isAnalyzing = false,
+  onAuditionStart,
+  auditionNonce = 0,
+  auditionStopNonce = 0,
+  getAuditionStartAtSec,
 }: NeuralHumMelodyRollProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -238,36 +251,73 @@ export default function NeuralHumMelodyRoll({
     setSelectedId(null);
   }, [onRollNotesChange, rollNotes, selectedId]);
 
+  const startAuditionAtSharedClock = useCallback(
+    (opts?: { skipOnStart?: boolean }) => {
+      if (rollNotes.length === 0) return false;
+      const ctx = getAudioContext();
+      if (ctx.state === 'suspended') void ctx.resume();
+      if (!opts?.skipOnStart) onAuditionStart?.();
+      const stamped = getAuditionStartAtSec?.();
+      const timed = rollNotesToTimed(rollNotes, bpm);
+      stopAudition();
+      stopAuditionRef.current = scheduleNeuralHumRollAudition(
+        ctx,
+        getDestination(),
+        instrumentId,
+        timed,
+        {
+          dynamics: dynamics / 100,
+          transposeSemis: transpose,
+          startAtSec:
+            typeof stamped === 'number' && Number.isFinite(stamped) ? stamped : undefined,
+        },
+      );
+      setIsAuditioning(true);
+      const endMs = Math.max(
+        500,
+        (timed[timed.length - 1]!.startSec + timed[timed.length - 1]!.durationSec) * 1000 + 200,
+      );
+      window.setTimeout(() => stopAudition(), endMs);
+      return true;
+    },
+    [
+      bpm,
+      dynamics,
+      getAudioContext,
+      getAuditionStartAtSec,
+      getDestination,
+      instrumentId,
+      onAuditionStart,
+      rollNotes,
+      stopAudition,
+      transpose,
+    ],
+  );
+
   const handleAudition = useCallback(() => {
     if (isAuditioning) {
       stopAudition();
       return;
     }
-    if (rollNotes.length === 0) return;
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') void ctx.resume();
-    const timed = rollNotesToTimed(rollNotes, bpm);
-    stopAuditionRef.current = scheduleNeuralHumRollAudition(
-      ctx,
-      getDestination(),
-      instrumentId,
-      timed,
-      { dynamics: dynamics / 100, transposeSemis: transpose },
-    );
-    setIsAuditioning(true);
-    const endMs = Math.max(500, (timed[timed.length - 1]!.startSec + timed[timed.length - 1]!.durationSec) * 1000 + 200);
-    window.setTimeout(() => stopAudition(), endMs);
-  }, [
-    bpm,
-    dynamics,
-    getAudioContext,
-    getDestination,
-    instrumentId,
-    isAuditioning,
-    rollNotes,
-    stopAudition,
-    transpose,
-  ]);
+    startAuditionAtSharedClock();
+  }, [isAuditioning, startAuditionAtSharedClock, stopAudition]);
+
+  const lastAuditionNonceRef = useRef(auditionNonce);
+  useEffect(() => {
+    if (auditionNonce === lastAuditionNonceRef.current) return;
+    lastAuditionNonceRef.current = auditionNonce;
+    if (auditionNonce <= 0) return;
+    // Parent already stamped sync / kicked drums — don't re-enter onAuditionStart.
+    startAuditionAtSharedClock({ skipOnStart: true });
+  }, [auditionNonce, startAuditionAtSharedClock]);
+
+  const lastAuditionStopNonceRef = useRef(auditionStopNonce);
+  useEffect(() => {
+    if (auditionStopNonce === lastAuditionStopNonceRef.current) return;
+    lastAuditionStopNonceRef.current = auditionStopNonce;
+    if (auditionStopNonce <= 0) return;
+    stopAudition();
+  }, [auditionStopNonce, stopAudition]);
 
   const handleSave = useCallback(() => {
     saveNeuralHumRollDraft({ bars, notes: rollNotes });

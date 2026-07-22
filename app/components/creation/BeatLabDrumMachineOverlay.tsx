@@ -21,7 +21,7 @@ import { pointerStrikeVelocity } from '@/app/lib/creationStation/eightZeroEightV
 import { BeatLabDrumMachineSequencer } from '@/app/components/creation/BeatLabDrumMachineSequencer';
 import { BeatPadsPatternBankSidebar } from '@/app/components/creation/BeatPadsPatternBankSidebar';
 import { Se2BeatPadsStereoVu } from '@/app/components/studio/Se2BeatPadsStereoVu';
-import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TAGLINE, BEAT_PADS_VOCALBOX_PANEL_H_PX } from '@/app/components/creation/BeatPadsVocalBoxPanel';
+import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TAGLINE } from '@/app/components/creation/BeatPadsVocalBoxPanel';
 import { BeatPads808LabPanel, BEAT_PADS_808_LAB_ACCENT } from '@/app/components/creation/BeatPads808LabPanel';
 import {
   BeatPadsOrchHitsPanel,
@@ -296,6 +296,8 @@ export type BeatLabDrumMachineOverlayProps = {
   getAudioContext?: () => AudioContext | null;
   /** Master / track output for VocalBox count-in clicks. */
   getAudioOutput?: () => AudioNode | null;
+  /** VocalBox Hum Melody → Beat Lab SYNTH lanes (CH 17–19). */
+  onApplyHumMelody?: (payload: import('@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel').BeatPadsVocalBoxHumMelodyApply) => void;
   /** SE2 embedded — miniature 808 Lab (piano roll) beside VocalBox. */
   beatPads808Lab?: {
     trackId: string;
@@ -490,6 +492,7 @@ export function BeatLabDrumMachineOverlay({
   sessionBpm = 120,
   getAudioContext,
   getAudioOutput,
+  onApplyHumMelody,
   beatPads808Lab = null,
   beatPadsOrchHits = null,
   beatLabMixerOpen = false,
@@ -2594,43 +2597,72 @@ export function BeatLabDrumMachineOverlay({
                 <span className="beat-pads-fx-per-pad-hint__arrow">→</span>
               </div>
             ) : null}
-            {embedded && vocalBoxOpen ? (
-              <div
-                className="beat-pads-vocalbox-drop"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  zIndex: 4,
-                  padding: '0 0 4px',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <BeatPadsVocalBoxPanel
-                  bpm={localBpm}
-                  loopBars={loopBars}
-                  stepsPerBar={gridStepsPerBar}
-                  beatsPerBar={se2BeatsPerBar}
-                  pattern={pattern}
-                  onPatternChange={handlePatternChange}
-                  padLabelForPad={padLabelForPad}
-                  onStrikePad={(padIndex, velocity01, gridCol, whenSec) =>
-                    onStrikePad(padIndex, velocity01, gridCol, whenSec)
-                  }
-                  hasPadSample={hasPadSample}
-                  getAudioContext={getAudioContext}
-                  getAudioOutput={getAudioOutput}
-                  warmAudio={onWarmAudio}
-                  onEnsurePadSamples={
-                    typeof onLoadProducerKit === 'function'
-                      ? () => Promise.resolve(onLoadProducerKit())
-                      : undefined
-                  }
-                  disabled={patternActionsDisabled}
-                />
-              </div>
-            ) : null}
+            {/* VocalBox opens as a centered screen modal (not the side FX drop behind transport). */}
+            {embedded && vocalBoxOpen && typeof document !== 'undefined'
+              ? createPortal(
+                  <div
+                    className="beat-pads-vocalbox-modal-root"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="VocalBox"
+                    style={{
+                      position: 'fixed',
+                      inset: 0,
+                      zIndex: 11050,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '20px 16px',
+                      background: 'rgba(0, 0, 0, 0.62)',
+                      boxSizing: 'border-box',
+                    }}
+                    onPointerDown={(e) => {
+                      if (e.target === e.currentTarget) setVocalBoxOpen(false);
+                    }}
+                  >
+                    <div
+                      className="beat-pads-vocalbox-modal-shell"
+                      style={{
+                        width: 'min(960px, 96vw)',
+                        maxHeight: 'min(860px, 90vh)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minHeight: 0,
+                        pointerEvents: 'auto',
+                      }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    >
+                      <BeatPadsVocalBoxPanel
+                        variant="modal"
+                        onClose={() => setVocalBoxOpen(false)}
+                        bpm={localBpm}
+                        onBpmChange={handleTransportBpmChange}
+                        loopBars={loopBars}
+                        stepsPerBar={gridStepsPerBar}
+                        beatsPerBar={se2BeatsPerBar}
+                        pattern={pattern}
+                        onPatternChange={handlePatternChange}
+                        padLabelForPad={padLabelForPad}
+                        onStrikePad={(padIndex, velocity01, gridCol, whenSec) =>
+                          onStrikePad(padIndex, velocity01, gridCol, whenSec)
+                        }
+                        hasPadSample={hasPadSample}
+                        getAudioContext={getAudioContext}
+                        getAudioOutput={getAudioOutput}
+                        warmAudio={onWarmAudio}
+                        onEnsurePadSamples={
+                          typeof onLoadProducerKit === 'function'
+                            ? () => Promise.resolve(onLoadProducerKit())
+                            : undefined
+                        }
+                        onApplyHumMelody={onApplyHumMelody}
+                        disabled={patternActionsDisabled}
+                      />
+                    </div>
+                  </div>,
+                  document.body,
+                )
+              : null}
             {showFxPanel ? (
               <BeatLabDrumMachineFxPanel
                 padIndex={editPad}

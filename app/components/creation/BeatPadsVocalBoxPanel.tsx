@@ -1,25 +1,33 @@
 'use client';
 
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from 'react';
-import { Mic, Play, Square } from 'lucide-react';
+import { ChevronDown, ChevronUp, Mic, Play, Square } from 'lucide-react';
 
 import { useVocalCapture, type UseVocalCaptureResult } from '@/app/hooks/useVocalCapture';
 import type { BeatPadsDrumPattern, BeatPadsGridStepsPerBar } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
-import { beatPadsPatternCols } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
+import {
+  beatPadsPatternCols,
+  clampBeatPadsBpm,
+  BEAT_PADS_MIN_BPM,
+  BEAT_PADS_MAX_BPM,
+} from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
 import {
   alignAndQuantizeVocalBoxHits,
   detectBeatboxVocalBoxHits,
   mergeVocalBoxHitsIntoPattern,
   trimAudioBufferFromSec,
-  vocalBoxBarSec,
   vocalBoxCaptureDurationSec,
   vocalBoxDefaultQuantize,
   vocalBoxHitsToLaneSteps,
@@ -29,6 +37,7 @@ import {
   VOCALBOX_DEFAULT_CAPTURE_BARS,
   VOCALBOX_DEFAULT_ROLE_MASK,
   VOCALBOX_QUANTIZE_OPTIONS,
+  vocalBoxClampCaptureBars,
   vocalBoxTimingFeedback,
   type VocalBoxCaptureBars,
   type VocalBoxHit,
@@ -42,10 +51,22 @@ import {
 } from '@/app/lib/creationStation/beatPadsVocalBoxPads';
 import {
   createSe2PrecountRimshotBuffer,
-  ensureSe2PrecountRimshotBuffer,
-  runSe2Precount,
   SE2_PRECOUNT_CLICK_VOLUME,
 } from '@/app/lib/studio/se2Precount';
+import { se2ClickGridTempo, waitSe2AudioTime } from '@/app/lib/creationStation/vocalBoxAudioGrid';
+import {
+  runVocalBoxClickCount,
+} from '@/app/lib/creationStation/vocalBoxClickCount';
+import type { BeatPadsVocalBoxHumMelodyApply } from '@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel';
+import '@/app/styles/beatPadsVocalBoxHumMelody.css';
+
+export type { BeatPadsVocalBoxHumMelodyApply } from '@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel';
+
+const BeatPadsVocalBoxHumMelodyPanelLazy = lazy(() =>
+  import('@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel').then((m) => ({
+    default: m.BeatPadsVocalBoxHumMelodyPanel,
+  })),
+);
 
 /** Mic art for kit-bar tab + dropdown header. */
 export const BEAT_PADS_VOCALBOX_MIC_SRC = '/images/beat-pads/vocalbox-mic.png';
@@ -63,29 +84,40 @@ export const BEAT_PADS_VOCALBOX_MIC_STYLE = {
 export const BEAT_PADS_VOCALBOX_TAGLINE =
   '(create your own drum pattern with your mouth)';
 
-/** Dropdown height — sits above pad FX (capped under the FX box height). */
+/** Compact dropdown height — drum lanes only (Hum Melody expands below). */
 export const BEAT_PADS_VOCALBOX_PANEL_H_PX = 224;
+/** Collapsed Hum Melody Capture toggle strip inside VocalBox. */
+export const BEAT_PADS_VOCALBOX_HUM_TOGGLE_H_PX = 28;
+/** Expanded compact Hum Melody Capture body (dropdown). */
+export const BEAT_PADS_VOCALBOX_HUM_BODY_H_PX = 118;
+/** Centered modal — drums + scope + 4/8-bar melody roll. */
+export const BEAT_PADS_VOCALBOX_MODAL_MIN_H_PX = 0;
+/** Hum Melody section grows with the piano roll (no tiny clip). */
+export const BEAT_PADS_VOCALBOX_MODAL_HUM_BODY_H_PX = 420;
+const HUM_MELODY_ACCENT = '#00E5FF';
 
 /** Lead before preview playback starts — shared by the scheduler and the preview playhead. */
 const VOCALBOX_PREVIEW_LEAD_MS = 200;
-/**
- * Fixed capture window (seconds). The bar-based cutoff was stopping the take early
- * (~1 bar). Per owner: after the count-in, keep recording + metronome running for a
- * generous window so the take never cuts off before the end of the grid.
- */
-const VOCALBOX_RECORD_WINDOW_SEC = 10;
 /** Lanes/playhead track sit inside this inset (kit button 38px + 6px gap · count 14px + 6px gap). */
 const VOCALBOX_TRACK_INSET = { left: 44, right: 20 } as const;
 /** Drum-grid lane sizing — taller than a meter so cells read as sequencer squares. */
 const VOCALBOX_LANE_ROW_H = 34;
 const VOCALBOX_LANE_TRACK_H = 28;
+/** Beat 1–2–3–4 ruler above the drum lanes (aligned to BPM beat lines). */
+const VOCALBOX_BEAT_RULER_H = 16;
 
 const VOCALBOX_SOUND_HINT = {
   kick: 'boom',
   snare: 'ka',
 } as const;
 
-const VOCALBOX_TOOL_FONT: CSSProperties = { fontSize: 11, lineHeight: 1.2 };
+const VOCALBOX_TOOL_FONT: CSSProperties = {
+  fontFamily: "'Rajdhani', 'Exo 2', system-ui, sans-serif",
+  fontSize: 11,
+  fontWeight: 600,
+  letterSpacing: '0.06em',
+  lineHeight: 1.2,
+};
 const VOCALBOX_TOOL_BTN =
   'rounded border px-2.5 py-1 font-bold uppercase disabled:opacity-35 min-w-[38px] text-center';
 const VOCALBOX_TOOL_SELECT =
@@ -161,6 +193,17 @@ export type BeatPadsVocalBoxPanelProps = {
   warmAudio?: () => void | Promise<void>;
   /** Load producer kit when kick/snare pads have no samples (SE2 VocalBox preview). */
   onEnsurePadSamples?: () => void | Promise<void>;
+  /** Preview destination for Hum Melody Capture (SE2 track strip / master). */
+  getHumMelodyPreviewDestination?: (ctx: AudioContext) => AudioNode;
+  /** Apply Hum Melody → new/updated Hum Capture track (same BPM/bars as Beat Pads). */
+  onApplyHumMelody?: (payload: BeatPadsVocalBoxHumMelodyApply) => void;
+  /** Shared Beat Pads tempo — VocalBox + Hum Melody follow this. */
+  onBpmChange?: (bpm: number) => void;
+  songKeyRoot?: number;
+  songKeyMode?: 'major' | 'minor';
+  /** Centered modal over Beat Pads (default). Dropdown kept for legacy embeds. */
+  variant?: 'modal' | 'dropdown';
+  onClose?: () => void;
   disabled?: boolean;
 };
 
@@ -200,6 +243,57 @@ async function decodeCaptureBlob(
   } catch {
     return null;
   }
+}
+
+/** 1–2–3–4 above each beat line — lights with the BPM click; big digit follows. */
+function VocalBoxBeatRuler({
+  totalCols,
+  stepsPerBeat,
+  beatsPerBar,
+  captureBars,
+  rulerRef,
+}: {
+  totalCols: number;
+  stepsPerBeat: number;
+  beatsPerBar: number;
+  captureBars: number;
+  rulerRef: RefObject<HTMLDivElement | null>;
+}) {
+  const cols = Math.max(1, totalCols);
+  const bpb = Math.max(1, Math.round(beatsPerBar));
+  // One label per quarter-note beat across every bar: 1 2 3 4 · 1 2 3 4 …
+  const beatCount = Math.max(1, Math.round(captureBars) * bpb);
+  // Same width as each beat column on the drum lanes under this ruler.
+  const beatW = (100 * Math.max(1, stepsPerBeat)) / cols;
+
+  return (
+    <div className="flex items-center gap-1.5" style={{ height: VOCALBOX_BEAT_RULER_H }} aria-hidden>
+      <span style={{ width: 38, flexShrink: 0 }} />
+      <div
+        ref={rulerRef}
+        className="vb-beat-ruler relative flex-1 min-w-0"
+        style={{ height: VOCALBOX_BEAT_RULER_H }}
+      >
+        {Array.from({ length: beatCount }, (_, i) => {
+          const n = (i % bpb) + 1;
+          return (
+            <span
+              key={`vb-beat-${i}`}
+              data-vb-grid-beat={i}
+              className="vb-beat-ruler-num"
+              style={{
+                left: `${i * beatW}%`,
+                width: `${beatW}%`,
+              }}
+            >
+              {n}
+            </span>
+          );
+        })}
+      </div>
+      <span style={{ width: 14, flexShrink: 0 }} />
+    </div>
+  );
 }
 
 function VocalBoxLaneRow({
@@ -411,6 +505,13 @@ export function BeatPadsVocalBoxPanel({
   getAudioOutput,
   warmAudio,
   onEnsurePadSamples,
+  getHumMelodyPreviewDestination,
+  onApplyHumMelody,
+  onBpmChange,
+  songKeyRoot = 0,
+  songKeyMode = 'major',
+  variant = 'modal',
+  onClose,
   disabled = false,
 }: BeatPadsVocalBoxPanelProps) {
   const [status, setStatus] = useState('Say boom for kick · ka for snare — Rec on count-in.');
@@ -421,28 +522,217 @@ export function BeatPadsVocalBoxPanel({
   const [roleMask, setRoleMask] = useState<VocalBoxRoleMask>(() => ({ ...VOCALBOX_DEFAULT_ROLE_MASK }));
   const [replaceLanes, setReplaceLanes] = useState(true);
   const [precountEnabled, setPrecountEnabled] = useState(true);
+  /** Free count-in length (1 or 2 bars) — timing only; existing Cnt toggle enables it. */
+  const [precountBars] = useState<1 | 2>(1);
   const [recordMetroEnabled, setRecordMetroEnabled] = useState(true);
   const [isPrecounting, setIsPrecounting] = useState(false);
-  const [precountBeatUi, setPrecountBeatUi] = useState<{ beat: number; total: number } | null>(null);
-  const [recordBeatUi, setRecordBeatUi] = useState<{ beat: number; total: number } | null>(null);
+  /** True while click-Play audition runs (Mtr + count box, no mic, no pre-count). */
+  const [clickPlayActive, setClickPlayActive] = useState(false);
+  /** True for whole Rec session (count-in + take) so the digit span never unmounts mid-grid. */
+  const [recSessionActive, setRecSessionActive] = useState(false);
+  /** Rec-button number: pre-count 4…1 or metro beat-in-bar 1…4. */
+  const [recBeatNumber, setRecBeatNumber] = useState<number | null>(null);
+  /** precount | metro — styles the count box under Rec. */
+  const [recCountPhase, setRecCountPhase] = useState<'precount' | 'metro' | null>(null);
+  /** Imperative digit paint into the count box under Rec. */
+  const recBeatDigitRef = useRef<HTMLSpanElement | null>(null);
+  const recCountBoxRef = useRef<HTMLDivElement | null>(null);
+  /** Last painted digit — restored after React clears empty <span /> children. */
+  const recDigitPaintRef = useRef<{ text: string; phase: 'precount' | 'metro' | null }>({
+    text: '—',
+    phase: null,
+  });
+
+  const paintRecCountBox = useCallback((n: number | '—' | '…', phase: 'precount' | 'metro' | null) => {
+    recDigitPaintRef.current = { text: String(n), phase };
+    const digit = recBeatDigitRef.current;
+    if (digit) digit.textContent = String(n);
+    const box = recCountBoxRef.current;
+    if (!box) return;
+    // Classes owned here — do not also drive them from React className (commits fight the digit).
+    box.classList.toggle('vb-rec-count-box--idle', phase == null);
+    box.classList.toggle('vb-rec-count-box--metro', phase === 'metro');
+    // Pulse with each BPM click (same moment the grid number lights).
+    if (typeof n === 'number') {
+      box.classList.remove('vb-rec-count-box--lit');
+      void box.offsetWidth;
+      box.classList.add('vb-rec-count-box--lit');
+    } else {
+      box.classList.remove('vb-rec-count-box--lit');
+    }
+  }, []);
+
+  /** Light every click’s number in order (1→2→3→4…). Pre-count = red; metro = green. */
+  const paintGridBeatLit = useCallback(
+    (gridBeatIndex: number | null, phase: 'precount' | 'metro' = 'metro') => {
+      litGridBeatRef.current = gridBeatIndex;
+      litGridPhaseRef.current = gridBeatIndex == null ? null : phase;
+      let cells = gridCellsRef.current;
+      if (cells.length === 0) {
+        const root = beatRulerRef.current;
+        if (root) {
+          cells = Array.from(root.querySelectorAll('[data-vb-grid-beat]')) as HTMLElement[];
+          gridCellsRef.current = cells;
+        }
+      }
+      for (let i = 0; i < cells.length; i += 1) {
+        const el = cells[i]!;
+        const on = gridBeatIndex != null && i === gridBeatIndex;
+        const pre = on && phase === 'precount';
+        el.classList.toggle('vb-beat-ruler-num--lit', on && !pre);
+        el.classList.toggle('vb-beat-ruler-num--lit-precount', pre);
+        if (pre) {
+          el.style.color = '#ffd0d8';
+          el.style.textShadow = '0 0 12px rgba(255,80,100,1), 0 0 6px rgba(255,120,140,0.95)';
+          el.style.transform = 'scale(1.35)';
+          el.style.background = 'rgba(232,93,117,0.32)';
+          el.style.borderRadius = '3px';
+        } else if (on) {
+          el.style.color = '#e8fff4';
+          el.style.textShadow = '0 0 12px rgba(124,244,198,1), 0 0 6px rgba(255,255,255,0.9)';
+          el.style.transform = 'scale(1.35)';
+          el.style.background = 'rgba(124,244,198,0.28)';
+          el.style.borderRadius = '3px';
+        } else {
+          el.style.color = '';
+          el.style.textShadow = '';
+          el.style.transform = '';
+          el.style.background = '';
+          el.style.borderRadius = '';
+        }
+      }
+    },
+    [],
+  );
+
+  const clearGridBeatLit = useCallback(() => {
+    litGridBeatRef.current = null;
+    litGridPhaseRef.current = null;
+    const clearEl = (el: HTMLElement) => {
+      el.classList.remove('vb-beat-ruler-num--lit', 'vb-beat-ruler-num--lit-precount');
+      el.style.color = '';
+      el.style.textShadow = '';
+      el.style.transform = '';
+      el.style.background = '';
+      el.style.borderRadius = '';
+    };
+    for (const el of gridCellsRef.current) clearEl(el);
+    const root = beatRulerRef.current;
+    if (root) {
+      root
+        .querySelectorAll('.vb-beat-ruler-num--lit, .vb-beat-ruler-num--lit-precount')
+        .forEach((node) => clearEl(node as HTMLElement));
+    }
+  }, []);
+
+  const armGridBeatCells = useCallback(() => {
+    const root = beatRulerRef.current;
+    gridCellsRef.current = root
+      ? (Array.from(root.querySelectorAll('[data-vb-grid-beat]')) as HTMLElement[])
+      : [];
+  }, []);
+
+  /** Rec digit only (grid lights via onGridBeat). */
+  const paintClickDigit = useCallback(
+    (n: number, phase: 'precount' | 'metro', _absoluteBeat: number) => {
+      paintRecCountBox(n, phase);
+    },
+    [paintRecCountBox],
+  );
+
+  // Empty <span ref /> has no React children — every commit wipes textContent. Re-apply before paint.
+  useLayoutEffect(() => {
+    const { text, phase } = recDigitPaintRef.current;
+    const digit = recBeatDigitRef.current;
+    if (digit && digit.textContent !== text) digit.textContent = text;
+    const box = recCountBoxRef.current;
+    if (!box) return;
+    box.classList.toggle('vb-rec-count-box--idle', phase == null);
+    box.classList.toggle('vb-rec-count-box--metro', phase === 'metro');
+  });
+
+  // After every React commit, put the lit back on the current click’s number (1→2→3→4 order).
+  useLayoutEffect(() => {
+    const lit = litGridBeatRef.current;
+    const phase = litGridPhaseRef.current ?? 'metro';
+    if (gridCellsRef.current.length === 0) {
+      const root = beatRulerRef.current;
+      if (root) {
+        gridCellsRef.current = Array.from(root.querySelectorAll('[data-vb-grid-beat]')) as HTMLElement[];
+      }
+    }
+    const cells = gridCellsRef.current;
+    for (let i = 0; i < cells.length; i += 1) {
+      const el = cells[i]!;
+      const on = lit != null && i === lit;
+      const pre = on && phase === 'precount';
+      el.classList.toggle('vb-beat-ruler-num--lit', on && !pre);
+      el.classList.toggle('vb-beat-ruler-num--lit-precount', pre);
+      if (pre) {
+        el.style.color = '#ffd0d8';
+        el.style.textShadow = '0 0 12px rgba(255,80,100,1), 0 0 6px rgba(255,120,140,0.95)';
+        el.style.transform = 'scale(1.35)';
+        el.style.background = 'rgba(232,93,117,0.32)';
+        el.style.borderRadius = '3px';
+      } else if (on) {
+        el.style.color = '#e8fff4';
+        el.style.textShadow = '0 0 12px rgba(124,244,198,1), 0 0 6px rgba(255,255,255,0.9)';
+        el.style.transform = 'scale(1.35)';
+        el.style.background = 'rgba(124,244,198,0.28)';
+        el.style.borderRadius = '3px';
+      } else {
+        el.style.color = '';
+        el.style.textShadow = '';
+        el.style.transform = '';
+        el.style.background = '';
+        el.style.borderRadius = '';
+      }
+    }
+  });
+
+  useEffect(() => {
+    paintRecCountBox('—', null);
+  }, [paintRecCountBox]);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
+  /** Drums + Hum Melody share one downbeat when Sync is on. */
+  const [partsSync, setPartsSync] = useState(false);
+  const [humSyncAuditionNonce, setHumSyncAuditionNonce] = useState(0);
+  const [humAuditionStopNonce, setHumAuditionStopNonce] = useState(0);
+  const [humSyncToPadsNonce, setHumSyncToPadsNonce] = useState(0);
+  const syncStartAtSecRef = useRef<number | null>(null);
+  const syncFromMelodyRef = useRef(false);
   const [liveRoleLevel, setLiveRoleLevel] = useState<Record<VocalBoxDrumRole, number>>({
     kick: 0,
     snare: 0,
     hat: 0,
     clap: 0,
   });
+  const [humMelodyOpen, setHumMelodyOpen] = useState(variant === 'modal');
+  const [humMelodyMounted, setHumMelodyMounted] = useState(variant === 'modal');
   const processingRef = useRef(false);
   const recordStopPendingRef = useRef(false);
   const precountCancelRef = useRef(false);
   const precountBufRef = useRef<AudioBuffer | null>(null);
   const scheduledPrecountNodesRef = useRef<AudioBufferSourceNode[]>([]);
   const recordMetroAnchorRef = useRef<number | null>(null);
+  /** Stop synced Rec-number UI driver (same clock as clicks). */
+  const stopClickUiRef = useRef<(() => void) | null>(null);
+  /** WAAPI count playhead (VocalBox-local — not SE2 transport). */
+  const stopCountPlayheadRef = useRef<(() => void) | null>(null);
   /** Audio-clock time of the capture downbeat — drives the record playhead (set even if metro is off). */
   const recordAnchorRef = useRef<number | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
+  /** Beat 1–2–3–4 ruler above the drum grid — lit cell drives the Rec digit. */
+  const beatRulerRef = useRef<HTMLDivElement | null>(null);
+  const litGridBeatRef = useRef<number | null>(null);
+  /** precount → red blink; metro → green (same as before). */
+  const litGridPhaseRef = useRef<'precount' | 'metro' | null>(null);
+  /** Cached ruler cells — index = click order across the bars (lights every click). */
+  const gridCellsRef = useRef<HTMLElement[]>([]);
+  /** Precount length in beats for mapping metro absoluteBeat → grid column. */
+  const clickCountBeatsRef = useRef(0);
   /** AudioContext time of the preview downbeat — drives sample-accurate playback + the preview playhead. */
   const previewAnchorSecRef = useRef(0);
   const previewDurSecRef = useRef(0);
@@ -465,67 +755,93 @@ export function BeatPadsVocalBoxPanel({
     scheduledPrecountNodesRef.current = [];
   }, []);
 
+  const stopCountPlayhead = useCallback(() => {
+    stopCountPlayheadRef.current?.();
+    stopCountPlayheadRef.current = null;
+  }, []);
+
   const cancelPrecount = useCallback(() => {
     precountCancelRef.current = true;
+    stopClickUiRef.current?.();
+    stopClickUiRef.current = null;
+    stopCountPlayhead();
     cancelScheduledPrecountNodes();
     if (captureApiRef.current?.isRecording) {
       captureApiRef.current.stopRecord();
     }
     captureApiRef.current?.releaseMic();
     setIsPrecounting(false);
-    setPrecountBeatUi(null);
-  }, [cancelScheduledPrecountNodes]);
+    setClickPlayActive(false);
+    setRecSessionActive(false);
+    setRecBeatNumber(null);
+    setRecCountPhase(null);
+    paintRecCountBox('—', null);
+    clearGridBeatLit();
+  }, [cancelScheduledPrecountNodes, clearGridBeatLit, paintRecCountBox, stopCountPlayhead]);
+
+  const stopClickPlay = useCallback(() => {
+    precountCancelRef.current = true;
+    stopClickUiRef.current?.();
+    stopClickUiRef.current = null;
+    stopCountPlayhead();
+    cancelScheduledPrecountNodes();
+    setIsPrecounting(false);
+    setClickPlayActive(false);
+    setRecSessionActive(false);
+    setRecCountPhase(null);
+    paintRecCountBox('—', null);
+    clearGridBeatLit();
+    setStatus('Click play stopped.');
+  }, [cancelScheduledPrecountNodes, clearGridBeatLit, paintRecCountBox, stopCountPlayhead]);
 
   const schedulePrecountClick = useCallback(
-    (
-      ctx: AudioContext,
-      idealT: number,
-      downbeat: boolean,
-      opts?: { volumeScale?: number },
-    ) => {
+    (ctx: AudioContext, idealT: number, _downbeat: boolean) => {
       let buf = precountBufRef.current;
       if (!buf && ctx.state !== 'closed') {
         buf = createSe2PrecountRimshotBuffer(ctx);
         precountBufRef.current = buf;
       }
       if (!buf) return;
+      // Exact audio-clock time — never jam late clicks onto "now".
+      if (idealT < ctx.currentTime - 0.002) return;
       const src = ctx.createBufferSource();
       src.buffer = buf;
       const g = ctx.createGain();
-      const scale = opts?.volumeScale ?? 1;
-      g.gain.value =
-        (downbeat ? SE2_PRECOUNT_CLICK_VOLUME * 1.12 : SE2_PRECOUNT_CLICK_VOLUME) * scale;
+      // Same loudness every beat — accent-only volume made 2–3–4 feel late vs downbeats.
+      g.gain.value = SE2_PRECOUNT_CLICK_VOLUME;
       src.connect(g);
-      const dest = getAudioOutput?.() ?? ctx.destination;
-      g.connect(dest);
-      const when = Math.max(ctx.currentTime, idealT);
+      // Direct to speakers — track/master strip adds latency and desyncs the count digit.
+      g.connect(ctx.destination);
       try {
-        src.start(when);
+        src.start(idealT);
         scheduledPrecountNodesRef.current.push(src);
       } catch {
         /* */
       }
     },
-    [getAudioOutput],
+    [],
   );
 
-  const scheduleRecordMetronome = useCallback(
-    (ctx: AudioContext, anchorT: number) => {
-      if (!recordMetroEnabled) return;
-      const b = Math.max(30, Math.min(300, bpm));
-      const spb = 60 / b;
-      const bpb = Math.max(1, Math.round(beatsPerBar));
-      // Quarter-note clicks across the whole fixed record window (continuation of the
-      // count-in), not just a bar or two — so the metronome never shuts off early.
-      const totalBeats = Math.ceil(VOCALBOX_RECORD_WINDOW_SEC / spb) + 1;
-      const metroVol = 0.68;
-      for (let i = 0; i < totalBeats; i += 1) {
-        schedulePrecountClick(ctx, anchorT + i * spb, i % bpb === 0, { volumeScale: metroVol });
-      }
-      recordMetroAnchorRef.current = anchorT;
-    },
-    [beatsPerBar, bpm, recordMetroEnabled, schedulePrecountClick],
-  );
+  /** Instant-onset synth click only — fetched TR-808 sample has variable onset vs the digit. */
+  const armClickBuffer = useCallback((ctx: AudioContext) => {
+    if (!precountBufRef.current) {
+      precountBufRef.current = createSe2PrecountRimshotBuffer(ctx);
+    }
+  }, []);
+
+  // Prewarm click sample + AudioContext while VocalBox is open.
+  useEffect(() => {
+    if (disabled) return;
+    let cancelled = false;
+    void (async () => {
+      const ctx = await resolveVocalBoxAudioContext(getAudioContext, warmAudio);
+      if (cancelled || !ctx) return;
+      armClickBuffer(ctx);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [armClickBuffer, disabled, getAudioContext, warmAudio]);
 
   const padLabels = useMemo(() => {
     return Array.from({ length: 16 }, (_, i) => padLabelForPad?.(i)?.trim() || `Pad ${i + 1}`);
@@ -611,19 +927,12 @@ export function BeatPadsVocalBoxPanel({
           setStatus('Too short — beatbox a few hits.');
           return;
         }
-        // gridOriginFileSecRef is where the downbeat (first bar-count click) is expected in
-        // the file. Snap t=0 to the actual first onset within a tight window around it, so
-        // the take locks to the bar count regardless of any residual recorder latency —
-        // without drifting off if the very first hit lands early or late.
-        const anchorSearchLeadSec = 0.12;
-        const searchStartSec = Math.max(0, gridOriginFileSecRef.current - anchorSearchLeadSec);
-        const searchClip = trimAudioBufferFromSec(buffer, searchStartSec, anchorSearchLeadSec + 0.18);
-        const onsetInWindowSec = vocalBoxLeadingSilenceSec(searchClip, anchorSearchLeadSec + 0.18);
-        const downbeatSec = searchStartSec + onsetInWindowSec;
-        // Analyze the whole fixed record window (not a single bar) so a full take is
-        // detected end-to-end instead of being cut off after ~1 bar.
-        const fromDownbeat = trimAudioBufferFromSec(buffer, downbeatSec, VOCALBOX_RECORD_WINDOW_SEC + 0.06);
-        const raw = detectBeatboxVocalBoxHits(fromDownbeat, VOCALBOX_RECORD_WINDOW_SEC, roleMask);
+        // Bar 1 Beat 1 = scheduled downbeat in the file (recorder was armed before 1).
+        // Do not snap to the first mouth hit — that shifts the whole grid late/early.
+        const downbeatSec = Math.max(0, Math.min(gridOriginFileSecRef.current, Math.max(0, buffer.duration - 0.05)));
+        const takeSec = vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar);
+        const fromDownbeat = trimAudioBufferFromSec(buffer, downbeatSec, takeSec + 0.06);
+        const raw = detectBeatboxVocalBoxHits(fromDownbeat, takeSec, roleMask);
         if (raw.length === 0) {
           setStatus(`No hits — ${captureBars} bar @ ${bpm} BPM. boom / ka on the beat.`);
           setRawHits([]);
@@ -675,6 +984,13 @@ export function BeatPadsVocalBoxPanel({
     for (const t of previewTimersRef.current) clearTimeout(t);
     previewTimersRef.current = [];
   }, []);
+
+  const stopBarPreview = useCallback(() => {
+    clearPreviewTimers();
+    setIsPreviewing(false);
+    setHumAuditionStopNonce((n) => n + 1);
+    setStatus('Play stopped.');
+  }, [clearPreviewTimers]);
 
   useEffect(() => {
     if (!capture.isRecording || !capture.captureStream) {
@@ -742,23 +1058,17 @@ export function BeatPadsVocalBoxPanel({
     if (!capture.isRecording) return;
     setDraftHits([]);
     setRawHits([]);
-    setRecordBeatUi(null);
-    const totalBeats = captureBars * Math.max(1, Math.round(beatsPerBar));
-    setStatus(`Recording ${captureBars} bar @ ${bpm} BPM${recordMetroEnabled ? ' + metro' : ''}…`);
     return () => {
-      setRecordBeatUi(null);
+      // Do not stopClickUi here — arming MediaRecorder must not kill the BPM-synced
+      // number driver (Strict Mode remount / arm-before-downbeat would desync Rec digits).
       recordMetroAnchorRef.current = null;
       recordAnchorRef.current = null;
     };
-  }, [beatsPerBar, bpm, capture.isRecording, captureBars, recordMetroEnabled]);
+  }, [capture.isRecording]);
 
-  // Keep the AudioContext running for the whole capture. The count-in (runSe2Precount)
-  // resumes the context every frame while it runs; once it hands off, nothing keeps it
-  // awake, so the shared context can suspend and the already-scheduled record-metronome
-  // clicks stop firing after only a click or two. Re-resume each frame while recording so
-  // the metronome plays through as a seamless continuation of the count-in.
+  // Keep AudioContext awake for the whole capture so metro clicks keep firing.
   useEffect(() => {
-    if (!capture.isRecording) return;
+    if (!capture.isRecording && !isPrecounting) return;
     const ctx = getAudioContext?.();
     if (!ctx) return;
     let raf = 0;
@@ -768,27 +1078,7 @@ export function BeatPadsVocalBoxPanel({
     };
     keepAwake();
     return () => cancelAnimationFrame(raf);
-  }, [capture.isRecording, getAudioContext]);
-
-  useEffect(() => {
-    if (!capture.isRecording || !recordMetroEnabled) return;
-    const anchor = recordMetroAnchorRef.current;
-    if (anchor == null) return;
-    const ctx = getAudioContext?.();
-    if (!ctx) return;
-    const spb = 60 / Math.max(30, Math.min(300, bpm));
-    const totalBeats = captureBars * Math.max(1, Math.round(beatsPerBar));
-    let raf = 0;
-    const tick = () => {
-      const beatIdx = Math.min(totalBeats, Math.max(1, Math.floor((ctx.currentTime - anchor) / spb) + 1));
-      setRecordBeatUi({ beat: beatIdx, total: totalBeats });
-      if (ctx.currentTime < anchor + totalBeats * spb + 0.05) {
-        raf = requestAnimationFrame(tick);
-      }
-    };
-    tick();
-    return () => cancelAnimationFrame(raf);
-  }, [beatsPerBar, bpm, capture.isRecording, captureBars, getAudioContext, recordMetroEnabled]);
+  }, [capture.isRecording, getAudioContext, isPrecounting]);
 
   // Record playhead — sweep a bright line across the lanes in sync with the capture
   // metronome so you can place hits on the beat. Anchored to the audio clock.
@@ -858,103 +1148,169 @@ export function BeatPadsVocalBoxPanel({
 
   useEffect(() => {
     if (!capture.isRecording) return;
-    // Recording starts a hair before the downbeat (pre-roll for the first hit), so the
-    // window spans the count-in plus the fixed take length.
-    const countInSec = precountEnabled ? vocalBoxBarSec(bpm, beatsPerBar) : 0;
-    const durMs = (countInSec + VOCALBOX_RECORD_WINDOW_SEC) * 1000 + 120;
-    const t = window.setTimeout(() => {
-      if (!isRecordingRef.current) return;
-      recordStopPendingRef.current = true;
-      stopRecordRef.current();
-      setStatus('Processing…');
-    }, durMs);
-    return () => window.clearTimeout(t);
-  }, [capture.isRecording, beatsPerBar, bpm, precountEnabled]);
+    // Stop at end of loop from the audio downbeat (not MediaRecorder arm time).
+    const takeSec = vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar);
+    const ctx = getAudioContext?.();
+    let raf = 0;
+    let t = 0;
+    const armTimer = () => {
+      const anchor = recordAnchorRef.current;
+      if (anchor == null || !ctx) {
+        raf = requestAnimationFrame(armTimer);
+        return;
+      }
+      const remainingMs = (anchor + takeSec - ctx.currentTime) * 1000 + 40;
+      t = window.setTimeout(() => {
+        if (!isRecordingRef.current) return;
+        recordStopPendingRef.current = true;
+        stopClickUiRef.current?.();
+        stopClickUiRef.current = null;
+        setRecBeatNumber(null);
+        setRecSessionActive(false);
+        setRecCountPhase(null);
+        paintRecCountBox('—', null);
+        stopRecordRef.current();
+        setStatus('Processing…');
+      }, Math.max(40, remainingMs));
+    };
+    armTimer();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+  }, [beatsPerBar, bpm, capture.isRecording, captureBars, getAudioContext]);
 
   const beginRecordWithOptionalPrecount = useCallback(async () => {
     if (disabled) return;
+    if (clickPlayActive) stopClickPlay();
     setIsPrecounting(true);
-    setPrecountBeatUi(null);
-    setStatus(`Arming @ ${bpm} BPM…`);
+    setRecSessionActive(true);
+    setRecBeatNumber(null);
+    setRecCountPhase(precountEnabled ? 'precount' : 'metro');
+    paintRecCountBox('…', precountEnabled ? 'precount' : 'metro');
+    setStatus(`Count @ ${Math.round(bpm)} BPM…`);
 
     const ctx = await resolveVocalBoxAudioContext(getAudioContext, warmAudio);
     if (!ctx) {
       setIsPrecounting(false);
+      setRecSessionActive(false);
       setStatus('Audio not ready — tap Play once, then Rec.');
-      return;
-    }
-
-    const micOk = await capture.armMic();
-    if (!micOk) {
-      setIsPrecounting(false);
-      setStatus('Mic blocked — allow microphone access.');
       return;
     }
 
     setDraftHits([]);
     setRawHits([]);
     recordStopPendingRef.current = false;
+    precountCancelRef.current = false;
 
     try {
-      let recordAnchor = ctx.currentTime + 0.08;
-      const countInDurSec = vocalBoxBarSec(bpm, beatsPerBar);
-      let recordStarted = false;
+      const { bpm: gridBpm } = se2ClickGridTempo(bpm);
+      const bpb = Math.max(1, Math.round(beatsPerBar));
+      const takeBeats = captureBars * bpb;
 
       if (precountEnabled || recordMetroEnabled) {
-        precountBufRef.current = await ensureSe2PrecountRimshotBuffer(ctx);
+        armClickBuffer(ctx);
       }
 
-      if (precountEnabled) {
-        precountCancelRef.current = false;
-        setStatus(`${bpm} BPM — count-in…`);
-        cancelScheduledPrecountNodes();
-        // Start the recorder BEFORE the pre-count so it runs continuously through the whole
-        // count-in and is already capturing (no MediaRecorder start-up lag) by the time the
-        // bar count comes in. The downbeat sits exactly one count-in bar into the file, so
-        // that is where analysis anchors t=0.
-        gridOriginFileSecRef.current = countInDurSec;
-        await capture.startRecord();
-        recordStarted = true;
+      cancelScheduledPrecountNodes();
+      stopClickUiRef.current?.();
+      stopClickUiRef.current = null;
 
-        const result = await runSe2Precount({
-          ctx,
-          bpm,
-          beatsPerBar,
-          bars: 1,
-          scheduleClick: (idealT, downbeat) => schedulePrecountClick(ctx, idealT, downbeat),
-          onBeat: (beat, total) => {
-            setPrecountBeatUi({ beat, total });
-            setStatus(`${bpm} BPM — ${beat}/${total}`);
-          },
-          isCancelled: () => precountCancelRef.current,
-        });
+      // Mic arms in parallel with count-in — do not delay the first click/digit.
+      const micPromise =
+        precountEnabled || recordMetroEnabled
+          ? capture.armMic()
+          : Promise.resolve(false);
 
-        cancelScheduledPrecountNodes();
-
-        if (result.cancelled) {
-          capture.releaseMic();
-          if (capture.isRecording) capture.stopRecord();
-          setStatus('Count-in cancelled.');
+      if (!precountEnabled && !recordMetroEnabled) {
+        const micOk = await capture.armMic();
+        if (!micOk) {
+          setIsPrecounting(false);
+          setRecSessionActive(false);
+          setStatus('Mic blocked — allow microphone access.');
           return;
         }
-        recordAnchor = result.downbeatAudioTime;
-      } else {
-        gridOriginFileSecRef.current = 0;
       }
 
-      recordAnchorRef.current = recordAnchor;
-      scheduleRecordMetronome(ctx, recordAnchor);
-      setIsPrecounting(false);
-      setPrecountBeatUi(null);
-      if (!recordStarted) {
-        await capture.startRecord();
+      paintRecCountBox('…', precountEnabled ? 'precount' : 'metro');
+      clearGridBeatLit();
+      armGridBeatCells();
+      clickCountBeatsRef.current = precountEnabled
+        ? (precountBars === 2 ? 2 : 1) * bpb
+        : 0;
+
+      // Metronome + grid beat numbers share the BPM click times.
+      const result = await runVocalBoxClickCount({
+        ctx,
+        bpm: gridBpm,
+        beatsPerBar: bpb,
+        precountEnabled,
+        precountBars,
+        metroEnabled: recordMetroEnabled,
+        metroBeatCount: takeBeats,
+        scheduleClick: (idealT, accent) => schedulePrecountClick(ctx, idealT, accent),
+        isCancelled: () => precountCancelRef.current,
+        onArmRecord: async () => {
+          if (precountEnabled || recordMetroEnabled) {
+            const micOk = await micPromise;
+            if (!micOk) {
+              precountCancelRef.current = true;
+              throw new Error('Mic blocked — allow microphone access.');
+            }
+          }
+          await capture.startRecord();
+        },
+        // Pre-roll so MediaRecorder is already capturing when green 1 hits (avoids 2–3 step lag).
+        recordArmLeadSec: Math.min(0.28, Math.max(0.18, (60 / Math.max(40, gridBpm)) * 0.45)),
+        paintDigit: paintClickDigit,
+        onGridBeat: paintGridBeatLit,
+        onPhaseChange: (phase) => {
+          if (phase === 'metro') setIsPrecounting(false);
+        },
+        playheadEl: playheadRef.current,
+      });
+
+      stopClickUiRef.current = result.stopUi;
+
+      if (result.cancelled) {
+        result.stopUi();
+        stopClickUiRef.current = null;
+        stopCountPlayhead();
+        cancelScheduledPrecountNodes();
+        capture.releaseMic();
+        if (capture.isRecording) capture.stopRecord();
+        setRecBeatNumber(null);
+        setRecSessionActive(false);
+        setRecCountPhase(null);
+        paintRecCountBox('—', null);
+        setStatus('Count-in cancelled.');
+        return;
       }
+
+      const { downbeatAudioTime, recordArmedAtSec } = result;
+      const fileZero = recordArmedAtSec ?? downbeatAudioTime;
+      // Downbeat in the file + a little slack for mic/MediaRecorder path delay
+      // so a kick played on 1 lands on step 0, not 2–3 steps late.
+      gridOriginFileSecRef.current = Math.max(0, downbeatAudioTime - fileZero + 0.045);
+      recordAnchorRef.current = downbeatAudioTime;
+      recordMetroAnchorRef.current = recordMetroEnabled ? downbeatAudioTime : null;
+      if (result.countBeats === 0) {
+        setIsPrecounting(false);
+      } else {
+        // Downbeat reached — count-in done; keep stopUi running for metro digits.
+        setIsPrecounting(false);
+        setRecCountPhase('metro');
+      }
+      setStatus(
+        recordMetroEnabled
+          ? `Recording ${captureBars} bars @ ${gridBpm} BPM · metro locked`
+          : `Recording ${captureBars} bars @ ${gridBpm} BPM`,
+      );
     } catch (err) {
+      stopCountPlayhead();
       capture.releaseMic();
+      setRecSessionActive(false);
       setStatus(err instanceof Error ? err.message : 'Record failed.');
-    } finally {
-      setIsPrecounting(false);
-      setPrecountBeatUi(null);
     }
   }, [
     bpm,
@@ -962,47 +1318,273 @@ export function BeatPadsVocalBoxPanel({
     cancelScheduledPrecountNodes,
     capture,
     captureBars,
+    clickPlayActive,
     disabled,
     getAudioContext,
+    precountBars,
     precountEnabled,
     recordMetroEnabled,
     schedulePrecountClick,
-    scheduleRecordMetronome,
+    armClickBuffer,
+    paintClickDigit,
+    paintGridBeatLit,
+    armGridBeatCells,
+    clearGridBeatLit,
+    paintRecCountBox,
+    stopClickPlay,
+    stopCountPlayhead,
     warmAudio,
   ]);
 
   const toggleRecord = useCallback(() => {
     if (disabled) return;
+    if (clickPlayActive) {
+      stopClickPlay();
+      return;
+    }
     if (capture.isRecording) {
       recordStopPendingRef.current = true;
+      stopClickUiRef.current?.();
+      stopClickUiRef.current = null;
+      setRecBeatNumber(null);
+      setRecSessionActive(false);
+      setRecCountPhase(null);
+      paintRecCountBox('—', null);
+      clearGridBeatLit();
       cancelScheduledPrecountNodes();
       capture.stopRecord();
       setStatus('Processing…');
       return;
     }
-    if (isPrecounting) {
+    if (isPrecounting || recSessionActive) {
       cancelPrecount();
       setStatus('Count-in cancelled.');
       return;
     }
     void beginRecordWithOptionalPrecount();
-  }, [beginRecordWithOptionalPrecount, cancelPrecount, capture, disabled, isPrecounting]);
+  }, [
+    beginRecordWithOptionalPrecount,
+    cancelPrecount,
+    cancelScheduledPrecountNodes,
+    capture,
+    clickPlayActive,
+    disabled,
+    isPrecounting,
+    paintRecCountBox,
+    recSessionActive,
+    stopClickPlay,
+  ]);
 
-  const previewDraft = useCallback(async () => {
-    if (draftHits.length === 0 || !onStrikePad) {
-      setStatus('Nothing to preview — record first.');
+  /** Audition Mtr + count box only — no mic, no record, no pre-count (Cnt is Rec-only). */
+  const beginClickPlay = useCallback(async () => {
+    if (
+      disabled ||
+      processing ||
+      isPreviewing ||
+      capture.isRecording ||
+      recSessionActive ||
+      clickPlayActive
+    ) {
       return;
     }
-    clearPreviewTimers();
+    if (!recordMetroEnabled) {
+      setStatus('Turn on Mtr, then Play. (Cnt is for Rec only.)');
+      return;
+    }
+
+    // UI first so the count box is live before audio schedules.
+    precountCancelRef.current = false;
+    setClickPlayActive(true);
+    setRecSessionActive(true);
+    setIsPrecounting(false);
+    setRecCountPhase('metro');
+    paintRecCountBox('…', 'metro');
+
     const ctx = await resolveVocalBoxAudioContext(getAudioContext, warmAudio);
     if (!ctx) {
-      setStatus('Audio not ready — tap a pad or Play once, then Pvw.');
+      setClickPlayActive(false);
+      setRecSessionActive(false);
+      setIsPrecounting(false);
+      setRecCountPhase(null);
+      paintRecCountBox('—', null);
+      clearGridBeatLit();
+      setStatus('Audio not ready — tap a pad once, then Play.');
       return;
     }
 
-    const hits = draftHits.filter((h) => h.startSec >= 0 && h.startSec < VOCALBOX_RECORD_WINDOW_SEC);
+    setStatus(`Play click @ ${Math.round(bpm)} BPM — metro…`);
+
+    try {
+      const { bpm: gridBpm } = se2ClickGridTempo(bpm);
+      const bpb = Math.max(1, Math.round(beatsPerBar));
+      // Exact loop length at session BPM (2 / 4 / 8 bars — not forced to 4+).
+      const takeBeats = captureBars * bpb;
+
+      armClickBuffer(ctx);
+      cancelScheduledPrecountNodes();
+      stopClickUiRef.current?.();
+      stopClickUiRef.current = null;
+      stopCountPlayhead();
+      clearGridBeatLit();
+      armGridBeatCells();
+      // Play = metro only. Pre-count is Rec-only (do not repeat the first four).
+      clickCountBeatsRef.current = 0;
+
+      // Metronome + grid 1–2–3–4 lights share the BPM click times.
+      const result = await runVocalBoxClickCount({
+        ctx,
+        bpm: gridBpm,
+        beatsPerBar: bpb,
+        precountEnabled: false,
+        precountBars,
+        metroEnabled: true,
+        metroBeatCount: takeBeats,
+        scheduleClick: (idealT, accent) => schedulePrecountClick(ctx, idealT, accent),
+        isCancelled: () => precountCancelRef.current,
+        paintDigit: paintClickDigit,
+        onGridBeat: paintGridBeatLit,
+        onPhaseChange: (phase) => {
+          if (phase === 'metro') setIsPrecounting(false);
+        },
+        playheadEl: playheadRef.current,
+      });
+
+      stopClickUiRef.current = result.stopUi;
+
+      if (result.cancelled) {
+        result.stopUi();
+        stopClickUiRef.current = null;
+        stopCountPlayhead();
+        cancelScheduledPrecountNodes();
+        setClickPlayActive(false);
+        setRecSessionActive(false);
+        setRecCountPhase(null);
+        paintRecCountBox('—', null);
+        setStatus('Click play stopped.');
+        return;
+      }
+
+      if (result.countBeats > 0) {
+        setIsPrecounting(false);
+        setRecCountPhase('metro');
+      }
+
+      const metroBeats = recordMetroEnabled ? takeBeats : 0;
+      const gridEnd = result.downbeatAudioTime + metroBeats * result.spb;
+      const okEnd = await waitSe2AudioTime({
+        ctx,
+        whenSec: gridEnd,
+        isCancelled: () => precountCancelRef.current,
+      });
+
+      result.stopUi();
+      stopClickUiRef.current = null;
+      stopCountPlayhead();
+      cancelScheduledPrecountNodes();
+      setClickPlayActive(false);
+      setRecSessionActive(false);
+      setIsPrecounting(false);
+      setRecCountPhase(null);
+      paintRecCountBox('—', null);
+      clearGridBeatLit();
+      setStatus(
+        okEnd && !precountCancelRef.current
+          ? `Click play done @ ${gridBpm} BPM — ${captureBars} bars locked.`
+          : 'Click play stopped.',
+      );
+    } catch (err) {
+      cancelScheduledPrecountNodes();
+      stopClickUiRef.current?.();
+      stopClickUiRef.current = null;
+      stopCountPlayhead();
+      setClickPlayActive(false);
+      setRecSessionActive(false);
+      setIsPrecounting(false);
+      setRecCountPhase(null);
+      paintRecCountBox('—', null);
+      clearGridBeatLit();
+      setStatus(err instanceof Error ? err.message : 'Click play failed.');
+    }
+  }, [
+    beatsPerBar,
+    bpm,
+    cancelScheduledPrecountNodes,
+    capture.isRecording,
+    captureBars,
+    clickPlayActive,
+    disabled,
+    getAudioContext,
+    isPreviewing,
+    paintClickDigit,
+    paintGridBeatLit,
+    armGridBeatCells,
+    clearGridBeatLit,
+    paintRecCountBox,
+    precountBars,
+    processing,
+    recSessionActive,
+    recordMetroEnabled,
+    schedulePrecountClick,
+    armClickBuffer,
+    warmAudio,
+    stopCountPlayhead,
+  ]);
+
+  const previewDraft = useCallback(async () => {
+    const ctx = await resolveVocalBoxAudioContext(getAudioContext, warmAudio);
+    if (!ctx) {
+      setStatus('Audio not ready — tap a pad or Play once, then try again.');
+      return;
+    }
+
+    const leadSec = VOCALBOX_PREVIEW_LEAD_MS / 1000;
+    const stampedFromMelody =
+      syncFromMelodyRef.current &&
+      typeof syncStartAtSecRef.current === 'number' &&
+      Number.isFinite(syncStartAtSecRef.current);
+    const startAtSec = stampedFromMelody
+      ? (syncStartAtSecRef.current as number)
+      : ctx.currentTime + leadSec;
+    previewAnchorSecRef.current = startAtSec;
+    syncStartAtSecRef.current = startAtSec;
+
+    // No drum draft — Sync Play can still drive Hum Melody alone.
+    if (draftHits.length === 0 || !onStrikePad) {
+      if (partsSync && !syncFromMelodyRef.current) {
+        setHumSyncAuditionNonce((n) => n + 1);
+        setIsPreviewing(true);
+        setStatus(`Sync play — melody @ ${Math.round(bpm)} BPM…`);
+        const takeSec = vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar);
+        const doneTimer = setTimeout(() => {
+          setIsPreviewing(false);
+          setStatus('Sync play done.');
+        }, VOCALBOX_PREVIEW_LEAD_MS + takeSec * 1000 + 120);
+        previewTimersRef.current.push(doneTimer);
+      } else if (!partsSync) {
+        setStatus('Nothing to play — record first.');
+      }
+      syncFromMelodyRef.current = false;
+      return;
+    }
+
+    clearPreviewTimers();
+
+    const takeSec = vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar);
+    const hits = draftHits.filter((h) => h.startSec >= 0 && h.startSec < takeSec);
     if (hits.length === 0) {
-      setStatus('No hits in capture window — record again.');
+      if (partsSync && !syncFromMelodyRef.current) {
+        setHumSyncAuditionNonce((n) => n + 1);
+        setIsPreviewing(true);
+        setStatus(`Sync play — melody @ ${Math.round(bpm)} BPM…`);
+        const doneTimer = setTimeout(() => {
+          setIsPreviewing(false);
+          setStatus('Sync play done.');
+        }, VOCALBOX_PREVIEW_LEAD_MS + takeSec * 1000 + 120);
+        previewTimersRef.current.push(doneTimer);
+      } else {
+        setStatus('No hits in capture window — record again.');
+      }
+      syncFromMelodyRef.current = false;
       return;
     }
 
@@ -1025,20 +1607,19 @@ export function BeatPadsVocalBoxPanel({
     // Play through to the end of the whole take (not just one bar) — leave a tail so the
     // last sample rings out before we mark preview done.
     const lastHitSec = hits.reduce((m, h) => Math.max(m, h.startSec), 0);
-    const previewDurSec = lastHitSec + 0.6;
+    const previewDurSec = Math.max(
+      lastHitSec + 0.6,
+      vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar),
+    );
     previewDurSecRef.current = previewDurSec;
-
-    const leadSec = VOCALBOX_PREVIEW_LEAD_MS / 1000;
-    // Anchor every hit to one AudioContext time so playback is sample-accurate and even
-    // (setTimeout batching was what made parts rush / sound "too fast").
-    const startAtSec = ctx.currentTime + leadSec;
-    previewAnchorSecRef.current = startAtSec;
 
     setIsPreviewing(true);
     setStatus(
       missingSamples.length > 0
         ? `Preview — load ${missingSamples.join('+')} sample(s) on routed pad(s).`
-        : `Preview ${captureBars} bar @ ${bpm} BPM…`,
+        : partsSync
+          ? `Sync play drums + melody @ ${Math.round(bpm)} BPM…`
+          : `Play ${captureBars} bar @ ${bpm} BPM…`,
     );
 
     let scheduled = 0;
@@ -1052,17 +1633,34 @@ export function BeatPadsVocalBoxPanel({
     }
 
     if (scheduled === 0) {
-      setIsPreviewing(false);
-      setStatus('Pads need samples — load kick/snare (Load kit), then Pvw.');
-      return;
+      if (partsSync && !syncFromMelodyRef.current) {
+        setHumSyncAuditionNonce((n) => n + 1);
+        setStatus(`Sync play — melody @ ${Math.round(bpm)} BPM…`);
+      } else {
+        setIsPreviewing(false);
+        setStatus('Pads need samples — load kick/snare (Load kit), then Play.');
+        syncFromMelodyRef.current = false;
+        return;
+      }
     }
+
+    // Kick Hum Melody on the same downbeat (unless Audition already started this sync).
+    if (partsSync && !syncFromMelodyRef.current) {
+      setHumSyncAuditionNonce((n) => n + 1);
+    }
+    syncFromMelodyRef.current = false;
 
     const doneTimer = setTimeout(() => {
       setIsPreviewing(false);
-      setStatus(`${captureBars} bar ready — Preview done. Tap Send for grid.`);
+      setStatus(
+        partsSync
+          ? `${captureBars} bar sync play done — To Pads when you like it.`
+          : `${captureBars} bar ready — Play done. To Pads for grid.`,
+      );
     }, VOCALBOX_PREVIEW_LEAD_MS + previewDurSec * 1000 + 120);
     previewTimersRef.current.push(doneTimer);
   }, [
+    beatsPerBar,
     bpm,
     captureBars,
     clearPreviewTimers,
@@ -1072,8 +1670,21 @@ export function BeatPadsVocalBoxPanel({
     onEnsurePadSamples,
     onStrikePad,
     padMap,
+    partsSync,
     warmAudio,
   ]);
+
+  /** Melody Play / Audition with Sync — stamp shared clock, then preview drums (+ melody nonce). */
+  const syncPlayDrumsFromMelody = useCallback(() => {
+    if (!partsSync) return;
+    syncFromMelodyRef.current = true;
+    const ctx = getAudioContext?.();
+    if (ctx && ctx.state !== 'closed') {
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+      syncStartAtSecRef.current = ctx.currentTime + VOCALBOX_PREVIEW_LEAD_MS / 1000;
+    }
+    void previewDraft();
+  }, [getAudioContext, partsSync, previewDraft]);
 
   const sendToPads = useCallback(() => {
     if (draftHits.length === 0) {
@@ -1110,6 +1721,50 @@ export function BeatPadsVocalBoxPanel({
     replaceLanes,
     roleMask,
     stepsPerBar,
+  ]);
+
+  /** Push drums (+ ask Hum to apply melody layers) onto Beat Pads / Beat Lab. */
+  const syncToBeatPads = useCallback(() => {
+    const hadDrums = draftHits.length > 0;
+    if (hadDrums) sendToPads();
+    setHumSyncToPadsNonce((n) => n + 1);
+    if (!hadDrums && !onApplyHumMelody) {
+      setStatus('Record drums or melody first, then To Pads.');
+      return;
+    }
+    setStatus(
+      hadDrums
+        ? 'To Pads — drums on grid; melody layers applying…'
+        : 'To Pads — applying Hum Melody layers…',
+    );
+  }, [draftHits.length, onApplyHumMelody, sendToPads]);
+
+  const togglePlay = useCallback(() => {
+    if (disabled) return;
+    if (clickPlayActive) {
+      stopClickPlay();
+      return;
+    }
+    if (isPreviewing) {
+      stopBarPreview();
+      return;
+    }
+    // After a take: Play = recorded bars (Sync = both parts). Else metro click practice.
+    if (draftHits.length > 0 || partsSync) {
+      void previewDraft();
+      return;
+    }
+    void beginClickPlay();
+  }, [
+    beginClickPlay,
+    clickPlayActive,
+    disabled,
+    draftHits.length,
+    isPreviewing,
+    partsSync,
+    previewDraft,
+    stopBarPreview,
+    stopClickPlay,
   ]);
 
   const clearDraft = useCallback(() => {
@@ -1173,41 +1828,61 @@ export function BeatPadsVocalBoxPanel({
 
   const hasDraft = draftHits.length > 0;
   const busy = capture.isRecording || isPrecounting || processing;
+  const isModal = variant === 'modal';
+  const humBodyH = isModal
+    ? BEAT_PADS_VOCALBOX_MODAL_HUM_BODY_H_PX
+    : BEAT_PADS_VOCALBOX_HUM_BODY_H_PX;
+  const panelHeightPx = isModal
+    ? undefined
+    : humMelodyOpen
+      ? BEAT_PADS_VOCALBOX_PANEL_H_PX +
+        BEAT_PADS_VOCALBOX_HUM_TOGGLE_H_PX +
+        BEAT_PADS_VOCALBOX_HUM_BODY_H_PX
+      : BEAT_PADS_VOCALBOX_PANEL_H_PX + BEAT_PADS_VOCALBOX_HUM_TOGGLE_H_PX;
 
   return (
     <div
-      className="beat-pads-vocalbox-panel flex shrink-0 flex-col gap-1 overflow-hidden rounded-md border px-2 py-1.5"
+      className={`beat-pads-vocalbox-panel flex flex-col gap-1.5 rounded-lg border px-3 py-2${
+        isModal ? ' min-h-0 flex-1 overflow-y-auto overflow-x-hidden' : ' shrink-0 overflow-hidden'
+      }`}
       style={{
-        height: BEAT_PADS_VOCALBOX_PANEL_H_PX,
-        borderColor: 'rgba(150, 0, 180, 0.55)',
-        background: 'linear-gradient(165deg, #150818 0%, #070509 100%)',
-        boxShadow: '0 4px 18px rgba(0,0,0,0.7)',
+        height: panelHeightPx,
+        minHeight: isModal ? undefined : undefined,
+        width: isModal ? '100%' : undefined,
+        borderColor: 'rgba(180, 40, 220, 0.65)',
+        background: 'linear-gradient(165deg, #1a0a1e 0%, #0a060c 55%, #050408 100%)',
+        boxShadow: isModal
+          ? '0 16px 48px rgba(0,0,0,0.85), 0 0 0 1px rgba(213,0,249,0.25)'
+          : '0 4px 18px rgba(0,0,0,0.7)',
       }}
+      data-beat-pads-vocalbox
+      data-vocalbox-hum-open={humMelodyOpen ? '1' : '0'}
+      data-vocalbox-variant={variant}
     >
-      <div className="flex items-center justify-between gap-1.5 shrink-0 min-h-[26px]">
-        <img
-          src={BEAT_PADS_VOCALBOX_MIC_SRC}
-          alt=""
-          aria-hidden
-          className="shrink-0 rounded-sm"
-          style={{ ...BEAT_PADS_VOCALBOX_MIC_STYLE, height: 22, width: 52 }}
-        />
+      <div className="flex flex-col gap-1.5 shrink-0">
+      <div className="flex items-center justify-between gap-1.5 min-h-[28px]">
+        <div className="flex items-center gap-2 min-w-0">
+          <img
+            src={BEAT_PADS_VOCALBOX_MIC_SRC}
+            alt=""
+            aria-hidden
+            className="shrink-0 rounded-sm"
+            style={{ ...BEAT_PADS_VOCALBOX_MIC_STYLE, height: isModal ? 28 : 22, width: isModal ? 68 : 52 }}
+          />
+          {isModal ? (
+            <div className="flex items-baseline gap-2 min-w-0 flex-wrap">
+              <span className="vb-suite-title truncate">VocalBox</span>
+              <span className="vb-suite-title-dash" aria-hidden>
+                —
+              </span>
+              <span className="vb-suite-hum-title truncate">Hum / Melody</span>
+            </div>
+          ) : null}
+        </div>
         <div
-          className="flex flex-1 min-w-0 flex-nowrap items-center justify-end gap-1 overflow-x-auto"
+          className="vb-vocalbox-tools-row flex flex-1 min-w-0 flex-nowrap items-center justify-end overflow-x-auto"
           style={{ scrollbarWidth: 'none' }}
         >
-          <span
-            className="shrink-0 rounded border px-1.5 py-0.5 font-extrabold tabular-nums text-center"
-            style={{
-              ...VOCALBOX_TOOL_FONT,
-              minWidth: 30,
-              borderColor: 'rgba(213,0,249,0.35)',
-              color: '#c890e0',
-            }}
-            title="Session tempo"
-          >
-            {bpm}
-          </span>
           <select
             value={quantize}
             disabled={disabled || busy}
@@ -1232,7 +1907,7 @@ export function BeatPadsVocalBoxPanel({
           <select
             value={captureBars}
             disabled={disabled || busy}
-            onChange={(e) => setCaptureBars(Number(e.target.value) === 1 ? 1 : 2)}
+            onChange={(e) => setCaptureBars(vocalBoxClampCaptureBars(Number(e.target.value)))}
             className={VOCALBOX_TOOL_SELECT}
             style={{
               ...VOCALBOX_TOOL_FONT,
@@ -1241,7 +1916,7 @@ export function BeatPadsVocalBoxPanel({
               color: '#e8b0f8',
               background: 'rgba(0,0,0,0.35)',
             }}
-            title="Capture length — 1 or 2 bars"
+            title="Capture length — 4 or 8 bars @ BPM"
             aria-label="VocalBox capture bars"
           >
             {VOCALBOX_CAPTURE_BAR_OPTIONS.map((bars) => (
@@ -1282,13 +1957,17 @@ export function BeatPadsVocalBoxPanel({
               color: precountEnabled ? '#ffb080' : '#666',
               background: precountEnabled ? 'rgba(255, 120, 60, 0.1)' : 'transparent',
             }}
-            title={precountEnabled ? '1-bar count-in (1-2-3-4)' : 'Count-in off'}
+            title={
+              precountEnabled
+                ? 'Count-in before Rec only (1-2-3-4) — not used on Play'
+                : 'Count-in off'
+            }
           >
             Cnt
           </button>
           <button
             type="button"
-            disabled={disabled || isPreviewing}
+            disabled={disabled || isPreviewing || clickPlayActive}
             onClick={toggleRecord}
             className={`inline-flex shrink-0 items-center justify-center gap-1 ${VOCALBOX_TOOL_BTN}`}
             style={{
@@ -1297,26 +1976,86 @@ export function BeatPadsVocalBoxPanel({
               paddingLeft: 6,
               paddingRight: 6,
               borderColor:
-                capture.isRecording || isPrecounting ? '#e85d7588' : 'rgba(213, 0, 249, 0.5)',
+                (!clickPlayActive && (recSessionActive || capture.isRecording || isPrecounting))
+                  ? '#e85d7588'
+                  : 'rgba(213, 0, 249, 0.5)',
               background:
-                capture.isRecording || isPrecounting
+                (!clickPlayActive && (recSessionActive || capture.isRecording || isPrecounting))
                   ? 'rgba(232, 93, 117, 0.18)'
                   : 'rgba(213, 0, 249, 0.12)',
-              color: capture.isRecording || isPrecounting ? '#ff8a9a' : '#e8b0f8',
+              color:
+                (!clickPlayActive && (recSessionActive || capture.isRecording || isPrecounting))
+                  ? '#ff8a9a'
+                  : '#e8b0f8',
             }}
           >
-            {capture.isRecording || isPrecounting ? (
+            {!clickPlayActive && (recSessionActive || capture.isRecording || isPrecounting) ? (
               <Square size={9} fill="currentColor" />
             ) : (
               <Mic size={9} />
             )}
-            {capture.isRecording
-              ? recordBeatUi
-                ? `${recordBeatUi.beat}/${recordBeatUi.total}`
-                : `${capture.recordingTime}s`
-              : isPrecounting && precountBeatUi
-                ? `${precountBeatUi.beat}/${precountBeatUi.total}`
-                : 'Rec'}
+            {!clickPlayActive && (recSessionActive || capture.isRecording || isPrecounting)
+              ? 'Stop'
+              : 'Rec'}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || busy || capture.isRecording}
+            onClick={togglePlay}
+            className={`inline-flex shrink-0 items-center justify-center gap-1 ${VOCALBOX_TOOL_BTN}`}
+            style={{
+              ...VOCALBOX_TOOL_FONT,
+              minWidth: 44,
+              paddingLeft: 6,
+              paddingRight: 6,
+              borderColor:
+                clickPlayActive || isPreviewing
+                  ? 'rgba(124, 244, 198, 0.65)'
+                  : 'rgba(124, 244, 198, 0.45)',
+              color: clickPlayActive || isPreviewing ? '#e8fff6' : '#7cf4c6',
+              background:
+                clickPlayActive || isPreviewing
+                  ? 'rgba(124, 244, 198, 0.18)'
+                  : 'rgba(124, 244, 198, 0.08)',
+            }}
+            title={
+              clickPlayActive || isPreviewing
+                ? 'Stop play'
+                : hasDraft || partsSync
+                  ? partsSync
+                    ? 'Play recorded bars — Sync On plays drums + Hum Melody together'
+                    : 'Play recorded drum bars'
+                  : 'Play Mtr + count box (no record) — practice clicks'
+            }
+          >
+            {clickPlayActive || isPreviewing ? (
+              <Square size={9} fill="currentColor" />
+            ) : (
+              <Play size={9} fill="currentColor" />
+            )}
+            {clickPlayActive || isPreviewing ? 'Stop' : 'Play'}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || busy}
+            onClick={() => setPartsSync((v) => !v)}
+            className={VOCALBOX_TOOL_BTN}
+            style={{
+              ...VOCALBOX_TOOL_FONT,
+              minWidth: 40,
+              paddingLeft: 6,
+              paddingRight: 6,
+              borderColor: partsSync ? 'rgba(124, 244, 198, 0.55)' : '#444',
+              color: partsSync ? '#7cf4c6' : '#888',
+              background: partsSync ? 'rgba(124, 244, 198, 0.12)' : 'transparent',
+            }}
+            title={
+              partsSync
+                ? 'Sync ON — Play starts VocalBox + Hum Melody together'
+                : 'Sync OFF — each Play is solo'
+            }
+          >
+            Sync {partsSync ? 'On' : 'Off'}
           </button>
           <button
             type="button"
@@ -1340,55 +2079,143 @@ export function BeatPadsVocalBoxPanel({
               borderColor: replaceLanes ? 'rgba(213, 0, 249, 0.45)' : 'rgba(124, 244, 198, 0.45)',
               color: replaceLanes ? '#e8b0f8' : '#7cf4c6',
             }}
-            title={replaceLanes ? 'Replace lanes on send' : 'Add on send'}
+            title={replaceLanes ? 'Replace lanes on To Pads' : 'Add on To Pads'}
           >
             {replaceLanes ? 'Rpl' : 'Add'}
           </button>
           <button
             type="button"
-            disabled={disabled || !hasDraft || isPreviewing || busy}
-            onClick={() => void previewDraft()}
-            className={`inline-flex shrink-0 items-center justify-center gap-1 ${VOCALBOX_TOOL_BTN}`}
-            style={{
-              ...VOCALBOX_TOOL_FONT,
-              minWidth: 44,
-              paddingLeft: 6,
-              paddingRight: 6,
-              borderColor: 'rgba(120, 180, 255, 0.55)',
-              color: '#9ec8ff',
-              background: isPreviewing ? 'rgba(120, 180, 255, 0.15)' : 'rgba(120, 180, 255, 0.08)',
-            }}
-            title="Preview on pads"
-          >
-            <Play size={9} fill="currentColor" />
-            Pvw
-          </button>
-          <button
-            type="button"
-            disabled={disabled || !hasDraft || busy}
-            onClick={sendToPads}
+            disabled={disabled || busy || (!hasDraft && !onApplyHumMelody)}
+            onClick={syncToBeatPads}
             className={VOCALBOX_TOOL_BTN}
             style={{
               ...VOCALBOX_TOOL_FONT,
-              minWidth: 40,
+              minWidth: 52,
               paddingLeft: 6,
               paddingRight: 6,
               borderColor: 'rgba(124, 244, 198, 0.55)',
               color: '#7cf4c6',
               background: 'rgba(124, 244, 198, 0.1)',
             }}
+            title="Push drums + Hum Melody onto Beat Pads / Beat Lab grid"
           >
-            Send
+            To Pads
           </button>
+          {isModal && typeof onClose === 'function' ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className={VOCALBOX_TOOL_BTN}
+              style={{
+                ...VOCALBOX_TOOL_FONT,
+                minWidth: 44,
+                paddingLeft: 8,
+                paddingRight: 8,
+                borderColor: 'rgba(255,255,255,0.22)',
+                color: '#c8c0d0',
+                background: 'rgba(255,255,255,0.06)',
+              }}
+              title="Close VocalBox"
+              aria-label="Close VocalBox"
+            >
+              Close
+            </button>
+          ) : null}
         </div>
+      </div>
+      <div className="vb-rec-count-below" title="Each click shows its beat number">
+        <label
+          className="shrink-0 inline-flex items-center gap-0.5 rounded border px-1"
+          style={{
+            ...VOCALBOX_TOOL_FONT,
+            height: 24,
+            borderColor: 'rgba(213,0,249,0.35)',
+            color: '#c890e0',
+            background: 'rgba(0,0,0,0.35)',
+          }}
+          title="Beat Pads / VocalBox shared tempo"
+        >
+          <button
+            type="button"
+            disabled={disabled || busy || !onBpmChange}
+            className={VOCALBOX_TOOL_BTN}
+            style={{ ...VOCALBOX_TOOL_FONT, minWidth: 22, padding: 0, border: 'none', background: 'transparent', color: '#e8b0f8' }}
+            onClick={() => onBpmChange?.(clampBeatPadsBpm(bpm - 1))}
+            aria-label="Decrease BPM"
+          >
+            −
+          </button>
+          <input
+            type="number"
+            min={BEAT_PADS_MIN_BPM}
+            max={BEAT_PADS_MAX_BPM}
+            value={Math.round(bpm)}
+            disabled={disabled || busy || !onBpmChange}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v)) onBpmChange?.(clampBeatPadsBpm(v));
+            }}
+            style={{
+              width: 40,
+              height: 20,
+              border: 'none',
+              background: 'transparent',
+              color: '#f0c0ff',
+              fontWeight: 800,
+              textAlign: 'center',
+              outline: 'none',
+            }}
+            aria-label="VocalBox BPM"
+            title="Change BPM — updates Beat Pads + Hum Melody together"
+          />
+          <button
+            type="button"
+            disabled={disabled || busy || !onBpmChange}
+            className={VOCALBOX_TOOL_BTN}
+            style={{ ...VOCALBOX_TOOL_FONT, minWidth: 22, padding: 0, border: 'none', background: 'transparent', color: '#e8b0f8' }}
+            onClick={() => onBpmChange?.(clampBeatPadsBpm(bpm + 1))}
+            aria-label="Increase BPM"
+          >
+            +
+          </button>
+        </label>
+        <div
+          ref={recCountBoxRef}
+          className="vb-rec-count-box vb-rec-count-box--idle"
+          aria-live="off"
+          aria-label="Record beat count"
+        >
+          <span ref={recBeatDigitRef} />
+        </div>
+      </div>
       </div>
 
       <VocalBoxMouthSoundHint />
 
+      {isModal ? (
+        <p className="vb-suite-section vb-suite-section--drums shrink-0 m-0">
+          1 · Beatbox drums — Rec / Preview / Send to pad grid
+        </p>
+      ) : null}
+
       <div
-        className="relative flex flex-col gap-0.5 flex-1 min-h-0 justify-center rounded-md"
-        style={{ background: '#0e0f13', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 0' }}
+        className="relative flex flex-col gap-1 flex-1 min-h-0 justify-center rounded-md"
+        style={{
+          background: '#0e0f13',
+          border: '1px solid rgba(255,255,255,0.12)',
+          padding: isModal ? '8px 0' : '4px 0',
+          maxHeight: isModal ? 188 : 168,
+          minHeight: isModal ? 156 : undefined,
+          flex: isModal ? '0 0 auto' : undefined,
+        }}
       >
+        <VocalBoxBeatRuler
+          totalCols={totalCols}
+          stepsPerBeat={stepsPerBeat}
+          beatsPerBar={beatsPerBar}
+          captureBars={captureBars}
+          rulerRef={beatRulerRef}
+        />
         {VOCALBOX_DRUM_ROLES.map((role) => (
           <VocalBoxLaneRow
             key={role}
@@ -1407,28 +2234,30 @@ export function BeatPadsVocalBoxPanel({
             disabled={disabled || busy}
           />
         ))}
-        {(capture.isRecording || isPrecounting || isPreviewing) ? (
+        <div
+          className="pointer-events-none absolute z-10"
+          style={{
+            left: VOCALBOX_TRACK_INSET.left,
+            right: VOCALBOX_TRACK_INSET.right,
+            top: VOCALBOX_BEAT_RULER_H + 4,
+            bottom: 0,
+          }}
+          aria-hidden
+        >
           <div
-            className="pointer-events-none absolute inset-y-0 z-10"
-            style={{ left: VOCALBOX_TRACK_INSET.left, right: VOCALBOX_TRACK_INSET.right }}
-            aria-hidden
-          >
-            <div
-              ref={playheadRef}
-              className="absolute inset-y-0"
-              style={{
-                left: '0%',
-                width: 3,
-                marginLeft: -1.5,
-                opacity: 0,
-                background: 'linear-gradient(180deg, #fff 0%, #7cf4c6 100%)',
-                boxShadow: '0 0 8px rgba(124,244,198,0.95), 0 0 3px rgba(255,255,255,0.9)',
-                borderRadius: 2,
-                transition: 'opacity 90ms linear',
-              }}
-            />
-          </div>
-        ) : null}
+            ref={playheadRef}
+            className="absolute inset-y-0"
+            style={{
+              left: '0%',
+              width: 3,
+              marginLeft: -1.5,
+              opacity: 0,
+              background: 'linear-gradient(180deg, #fff 0%, #7cf4c6 100%)',
+              boxShadow: '0 0 8px rgba(124,244,198,0.95), 0 0 3px rgba(255,255,255,0.9)',
+              borderRadius: 2,
+            }}
+          />
+        </div>
       </div>
 
       <p
@@ -1436,12 +2265,124 @@ export function BeatPadsVocalBoxPanel({
         style={{ ...VOCALBOX_TOOL_FONT, color: '#8a7a92' }}
       >
         {status}
-        {capture.isRecording ? (
+        {isPrecounting && recBeatNumber != null ? (
+          <span style={{ color: '#ffb080' }}> · pre-count {recBeatNumber}</span>
+        ) : capture.isRecording ? (
           <span style={{ color: '#D500F9' }}> · {Math.round(micLevel * 100)}%</span>
-        ) : isPrecounting && precountBeatUi ? (
-          <span style={{ color: '#ffb080' }}> · {precountBeatUi.beat}/{precountBeatUi.total}</span>
         ) : null}
       </p>
+
+      <div
+        className="shrink-0 flex flex-col min-h-0"
+        style={{
+          borderTop: `1px solid ${HUM_MELODY_ACCENT}33`,
+          marginTop: 2,
+          paddingTop: 2,
+        }}
+      >
+        {isModal ? (
+          <p className="vb-suite-section shrink-0 m-0 mb-1">
+            2 · Hum Melody — Melody / Bass / Lead rolls · Save each to its track
+          </p>
+        ) : null}
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            setHumMelodyOpen((o) => {
+              const next = !o;
+              if (next) setHumMelodyMounted(true);
+              return next;
+            });
+          }}
+          className="flex w-full shrink-0 items-center justify-between gap-2 rounded border px-2 text-left outline-none transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+          style={{
+            height: BEAT_PADS_VOCALBOX_HUM_TOGGLE_H_PX - 2,
+            borderColor: humMelodyOpen ? `${HUM_MELODY_ACCENT}66` : `${HUM_MELODY_ACCENT}33`,
+            background: humMelodyOpen ? `${HUM_MELODY_ACCENT}14` : 'rgba(0,0,0,0.25)',
+            color: HUM_MELODY_ACCENT,
+          }}
+          aria-expanded={humMelodyOpen}
+          aria-label={
+            humMelodyOpen
+              ? 'Collapse Hum Melody Capture'
+              : 'Expand Hum Melody Capture — hum, sing, or whistle a melody'
+          }
+          title="Hum Melody Capture — hum · sing · whistle → MIDI melody"
+        >
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            {humMelodyOpen ? (
+              <ChevronDown size={12} strokeWidth={2.5} aria-hidden />
+            ) : (
+              <ChevronUp size={12} strokeWidth={2.5} aria-hidden />
+            )}
+            <span className="vb-suite-section truncate" style={{ fontSize: 11 }}>
+              Hum Melody Capture
+            </span>
+            <span className="vb-suite-subtitle" style={{ textTransform: 'none', letterSpacing: '0.06em' }}>
+              hum · sing · whistle → MIDI
+            </span>
+          </span>
+          <span
+            className="shrink-0 rounded border px-1.5 py-0.5 font-bold uppercase"
+            style={{
+              ...VOCALBOX_TOOL_FONT,
+              fontSize: 8,
+              borderColor: `${HUM_MELODY_ACCENT}55`,
+              color: HUM_MELODY_ACCENT,
+              background: `${HUM_MELODY_ACCENT}12`,
+            }}
+          >
+            {humMelodyOpen ? 'Hide' : 'Show'}
+          </span>
+        </button>
+
+        {humMelodyMounted && humMelodyOpen ? (
+          <div
+            className={`mt-1 min-h-0 overflow-hidden rounded border${isModal ? ' flex flex-col' : ' shrink-0'}`}
+            style={{
+              height: isModal ? undefined : humBodyH,
+              minHeight: isModal ? BEAT_PADS_VOCALBOX_MODAL_HUM_BODY_H_PX : undefined,
+              flex: isModal ? '1 1 auto' : undefined,
+              borderColor: `${HUM_MELODY_ACCENT}28`,
+              background: 'linear-gradient(180deg, #081018 0%, #04080c 100%)',
+            }}
+            data-beat-pads-vocalbox-hum-melody
+          >
+            <Suspense
+              fallback={
+                <p className="m-0 px-2 py-2 text-[9px] font-semibold" style={{ color: '#7a9aaa' }}>
+                  Loading Hum Melody…
+                </p>
+              }
+            >
+              <BeatPadsVocalBoxHumMelodyPanelLazy
+                bpm={bpm}
+                loopBars={loopBars}
+                disabled={disabled}
+                drumsBusy={busy}
+                getAudioContext={getAudioContext}
+                getAudioOutput={getAudioOutput}
+                getPreviewDestination={getHumMelodyPreviewDestination}
+                warmAudio={warmAudio}
+                songKeyRoot={songKeyRoot}
+                songKeyMode={songKeyMode}
+                onApply={onApplyHumMelody}
+                onBpmChange={onBpmChange}
+                partsSync={partsSync}
+                onPartsSyncChange={setPartsSync}
+                syncAuditionNonce={humSyncAuditionNonce}
+                syncAuditionStopNonce={humAuditionStopNonce}
+                syncToPadsNonce={humSyncToPadsNonce}
+                getSyncAuditionStartAtSec={() => syncStartAtSecRef.current}
+                onSyncPlayDrums={syncPlayDrumsFromMelody}
+                onSyncToBeatPads={syncToBeatPads}
+                gridQuantize={quantize}
+              />
+            </Suspense>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -69,14 +69,17 @@ export function scheduleNeuralHumRollAudition(
   destination: AudioNode,
   instrumentId: NeuralHumInstrumentId,
   notes: readonly { pitch: number; startSec: number; durationSec: number; velocity: number }[],
-  opts?: { dynamics?: number; transposeSemis?: number },
+  opts?: { dynamics?: number; transposeSemis?: number; startAtSec?: number },
 ): () => void {
   const meta = neuralHumInstrumentMeta(instrumentId);
   const voice = getChordInstrument(meta.synthFallback);
   const transpose = opts?.transposeSemis ?? 0;
   const dyn = Math.max(0.15, Math.min(1, opts?.dynamics ?? 0.85));
   const envs: GainNode[] = [];
-  const t0 = ctx.currentTime + 0.02;
+  const t0 =
+    typeof opts?.startAtSec === 'number' && Number.isFinite(opts.startAtSec)
+      ? Math.max(ctx.currentTime + 0.002, opts.startAtSec)
+      : ctx.currentTime + 0.02;
   const mono = enforceMonophonicHumNotes(notes);
 
   for (const n of mono) {

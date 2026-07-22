@@ -409,6 +409,7 @@ import {
   type BeatLabEditTool,
   type BeatLabMidiNote,
 } from '@/app/lib/creationStation/beatLabMidiRoll';
+import { mergeHumMelodyApplyIntoMidiRoll } from '@/app/lib/creationStation/vocalBoxHumMelodyBeatLabImport';
 import {
   beatLabDrumBrushValue,
   beatLabDrumCellKey,
@@ -2278,6 +2279,8 @@ interface BeatLabDeckToolbarProps {
   onGeniusMySoundPlay?: (padIndex: number) => void;
   /** Velocity-sensitive pad strike from Beat Pads drum machine overlay. */
   onStrikeDrumPad?: (padIndex: number, velocity01: number, gridCol?: number, whenSec?: number) => void;
+  /** VocalBox Hum Melody → Beat Lab SYNTH (CH 17–19). */
+  onApplyHumMelody?: (payload: import('@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel').BeatPadsVocalBoxHumMelodyApply) => void;
   getDrumPadVoice?: (padIndex: number) => BeatLabDrumPadVoiceOpts;
   commitDrumPadVoice?: (padIndex: number, voice: BeatLabDrumPadVoiceOpts) => void;
   onPreviewDrumPad?: (padIndex: number) => void;
@@ -2469,6 +2472,7 @@ function BeatLabDeckToolbar({
   patternBankActivePick = null,
   onGeniusMySoundPlay,
   onStrikeDrumPad,
+  onApplyHumMelody,
   getDrumPadVoice,
   commitDrumPadVoice,
   onPreviewDrumPad,
@@ -5226,6 +5230,7 @@ function BeatLabDeckToolbar({
           onGeniusMySoundPlay?.(padIndex);
         }
       }}
+      onApplyHumMelody={onApplyHumMelody}
       padLabelForPad={padSampleLabelForPad}
       hasPadSample={hasPadSample}
       onLoadPad={onLoadPadSample}
@@ -14706,6 +14711,17 @@ function CreationStationScreenBody({
             patternBankActivePick={patternBankActivePickSummary}
             onGeniusMySoundPlay={(pi) => {
               playPadSoundRef.current(pi, PAD_VEL[pi] ?? 90);
+            }}
+            onApplyHumMelody={(payload) => {
+              const maxCols = Math.max(1, patternColsDrumsRef.current);
+              const stepsPerBar = Math.max(1, drumStepSubdivRef.current);
+              const next = mergeHumMelodyApplyIntoMidiRoll(currentMidiRollRef.current, payload, {
+                stepsPerBar,
+                beatsPerBar: 4,
+                maxCols,
+                replaceLane: true,
+              });
+              patchActiveBankMidiRollWithUndo(next);
             }}
             onStrikeDrumPad={(pi, vel01, gridCol, whenSec) => {
               void ensureCtx();

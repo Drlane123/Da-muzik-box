@@ -1,21 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { detectPitchACF, frequencyToMidiNote } from '@/app/lib/pitchDetection';
+import {
+  createHumPitchTrackerState,
+  trackHumPitchFrame,
+} from '@/app/lib/vocalLab/vocalBoxHumMidiFilter';
 
 export type NeuralHumLivePitch = {
   midi: number;
   hz: number;
   confidence: number;
   pitchClass: number;
+  rms: number;
+};
+
+export type NeuralHumLivePitchOptions = {
+  minConfidence?: number;
+  minRms?: number;
+  silenceHoldFrames?: number;
+  fMinHz?: number;
+  fMaxHz?: number;
+  shouldSuppressPitch?: () => boolean;
 };
 
 /**
- * Live monophonic pitch from mic stream while recording (Dubler-style scope feed).
+ * Live monophonic pitch from mic stream while recording.
+ * Analysis path: soft compressor → ACF → median MIDI filter (mic only).
  */
-export function useNeuralHumLivePitch(active: boolean, stream: MediaStream | null) {
+export function useNeuralHumLivePitch(
+  active: boolean,
+  stream: MediaStream | null,
+  options?: NeuralHumLivePitchOptions,
+) {
   const [live, setLive] = useState<NeuralHumLivePitch | null>(null);
   const [trail, setTrail] = useState<number[]>([]);
   const ctxRef = useRef<AudioContext | null>(null);
+  const optsRef = useRef(options);
+  optsRef.current = options;
 
   useEffect(() => {
     if (!active || !stream) {
@@ -25,6 +45,8 @@ export function useNeuralHumLivePitch(active: boolean, stream: MediaStream | nul
 
     let cancelled = false;
     let raf = 0;
+    let silenceFrames = 0;
+    const tracker = createHumPitchTrackerState();
 
     void (async () => {
       const ctx = new AudioContext();
@@ -39,22 +61,50 @@ export function useNeuralHumLivePitch(active: boolean, stream: MediaStream | nul
       const src = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.35;
+      analyser.smoothingTimeConstant = 0.08;
       src.connect(analyser);
       const buf = new Float32Array(analyser.fftSize);
 
       const tick = () => {
         if (cancelled) return;
+        const o = optsRef.current;
+        if (o?.shouldSuppressPitch?.()) {
+          silenceFrames = 0;
+          setLive(null);
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+
         analyser.getFloatTimeDomainData(buf);
-        const { frequency, confidence } = detectPitchACF(buf, ctx.sampleRate, 50, 1600, 0.045);
-        if (frequency > 0 && confidence > 0.06) {
-          const midi = frequencyToMidiNote(frequency);
-          const pitchClass = ((midi % 12) + 12) % 12;
-          setLive({ midi, hz: frequency, confidence, pitchClass });
-          setTrail((prev) => {
-            if (prev.length > 0 && prev[prev.length - 1] === pitchClass) return prev;
-            return [...prev.slice(-35), pitchClass];
+        const minRms = o?.minRms ?? 0.0028;
+        const minConf = o?.minConfidence ?? 0.14;
+        const hold = o?.silenceHoldFrames ?? 2;
+        const fMin = o?.fMinHz ?? 50;
+        const fMax = o?.fMaxHz ?? 1200;
+
+        const frame = trackHumPitchFrame(buf, ctx.sampleRate, tracker, {
+          minConfidence: minConf,
+          minRms,
+          fMinHz: fMin,
+          fMaxHz: fMax,
+        });
+
+        if (frame) {
+          silenceFrames = 0;
+          setLive({
+            midi: frame.midi,
+            hz: frame.hz,
+            confidence: frame.confidence,
+            pitchClass: frame.pitchClass,
+            rms: frame.rms,
           });
+          setTrail((prev) => {
+            if (prev.length > 0 && prev[prev.length - 1] === frame.pitchClass) return prev;
+            return [...prev.slice(-35), frame.pitchClass];
+          });
+        } else {
+          silenceFrames += 1;
+          if (silenceFrames >= hold) setLive(null);
         }
         raf = requestAnimationFrame(tick);
       };

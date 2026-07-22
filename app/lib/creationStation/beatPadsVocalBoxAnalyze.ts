@@ -19,16 +19,16 @@ export type VocalBoxQuantize = GrooveLabQuantize;
 
 export const VOCALBOX_QUANTIZE_OPTIONS: readonly VocalBoxQuantize[] = ['1/4', '1/8', '1/16', '1/32'] as const;
 
-/** VocalBox captures a short beat — never more than two bars. */
-export type VocalBoxCaptureBars = 1 | 2;
-export const VOCALBOX_CAPTURE_BAR_OPTIONS: readonly VocalBoxCaptureBars[] = [1, 2] as const;
-export const VOCALBOX_DEFAULT_CAPTURE_BARS: VocalBoxCaptureBars = 2;
+/** VocalBox capture window — 4 or 8 bars locked to session BPM. */
+export type VocalBoxCaptureBars = 4 | 8;
+export const VOCALBOX_CAPTURE_BAR_OPTIONS: readonly VocalBoxCaptureBars[] = [4, 8] as const;
+export const VOCALBOX_DEFAULT_CAPTURE_BARS: VocalBoxCaptureBars = 4;
 
 /** Legacy — prefer {@link VocalBoxAlignOpts.recordStartLagSec} from count-in downbeat. */
 export const VOCALBOX_RECORD_LATENCY_SEC = 0;
 
 export function vocalBoxClampCaptureBars(bars: number): VocalBoxCaptureBars {
-  return Math.round(bars) <= 1 ? 1 : 2;
+  return Math.round(bars) >= 8 ? 8 : 4;
 }
 
 export function vocalBoxCaptureDurationSec(

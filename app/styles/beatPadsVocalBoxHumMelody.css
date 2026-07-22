@@ -1,0 +1,434 @@
+/* VocalBox Hum Melody — SE2 / Music Production Suite typography (Rajdhani) */
+[data-beat-pads-vocalbox],
+[data-beat-pads-vocalbox-hum-melody] {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+[data-beat-pads-vocalbox-hum-melody] {
+  color: #c8d0d8;
+}
+
+[data-beat-pads-vocalbox] .vb-suite-title,
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-title {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  background: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    #eef2f5 18%,
+    #c5ced6 38%,
+    #f4f7f9 52%,
+    #9aa8b4 72%,
+    #dce3e9 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.65));
+  white-space: nowrap;
+}
+
+[data-beat-pads-vocalbox] .vb-suite-title-dash {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: rgba(212, 160, 232, 0.55);
+  line-height: 1.15;
+}
+
+[data-beat-pads-vocalbox] .vb-suite-hum-title {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  line-height: 1.15;
+  color: #00e5ff;
+  text-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+  white-space: nowrap;
+}
+
+[data-beat-pads-vocalbox] .vb-suite-subtitle,
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-subtitle {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(0, 229, 255, 0.72);
+}
+
+[data-beat-pads-vocalbox] .vb-suite-section,
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-section-label {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #00e5ff;
+}
+
+[data-beat-pads-vocalbox] .vb-suite-section--drums {
+  color: #d4a0e8;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-status {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #8a9aaa;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 229, 255, 0.28);
+  background: rgba(0, 229, 255, 0.06);
+  color: #7ad8ea;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip:hover:not(:disabled) {
+  background: rgba(0, 229, 255, 0.12);
+  border-color: rgba(0, 229, 255, 0.45);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--on {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: rgba(0, 229, 255, 0.55);
+  color: #e8fbff;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.18);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--warm {
+  border-color: rgba(255, 176, 128, 0.35);
+  background: rgba(255, 176, 128, 0.06);
+  color: #ffb080;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--warm.vb-hum-chip--on {
+  background: rgba(255, 176, 128, 0.2);
+  border-color: rgba(255, 176, 128, 0.55);
+  color: #ffe0c8;
+  box-shadow: 0 0 12px rgba(255, 176, 128, 0.16);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--cool {
+  border-color: rgba(158, 200, 255, 0.35);
+  background: rgba(158, 200, 255, 0.06);
+  color: #9ec8ff;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--cool.vb-hum-chip--on {
+  background: rgba(158, 200, 255, 0.2);
+  border-color: rgba(158, 200, 255, 0.55);
+  color: #e8f2ff;
+  box-shadow: 0 0 12px rgba(158, 200, 255, 0.16);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--mint {
+  border-color: rgba(124, 244, 198, 0.4);
+  background: rgba(124, 244, 198, 0.08);
+  color: #7cf4c6;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--mint.vb-hum-chip--on {
+  background: rgba(124, 244, 198, 0.22);
+  border-color: rgba(124, 244, 198, 0.6);
+  color: #e8fff6;
+  box-shadow: 0 0 12px rgba(124, 244, 198, 0.18);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--rec {
+  border-color: rgba(232, 93, 117, 0.45);
+  background: rgba(232, 93, 117, 0.12);
+  color: #ff8a9a;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-chip--rec.vb-hum-chip--on {
+  background: rgba(232, 93, 117, 0.22);
+  border-color: rgba(232, 93, 117, 0.6);
+  color: #ffd0d8;
+  box-shadow: 0 0 12px rgba(232, 93, 117, 0.2);
+}
+
+/* Tool chips in one row; beat digit sits on the row below */
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-tools-row {
+  gap: 8px;
+}
+
+[data-beat-pads-vocalbox] .vb-vocalbox-tools-row {
+  gap: 6px;
+}
+
+[data-beat-pads-vocalbox] .vb-rec-count-below,
+[data-beat-pads-vocalbox-hum-melody] .vb-rec-count-below {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 22px;
+  padding-right: 2px;
+}
+
+[data-beat-pads-vocalbox] .vb-rec-count-below {
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Legacy stack (unused) — keep for any leftover markup */
+[data-beat-pads-vocalbox] .vb-rec-count-stack,
+[data-beat-pads-vocalbox-hum-melody] .vb-rec-count-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  vertical-align: top;
+  flex-shrink: 0;
+}
+
+[data-beat-pads-vocalbox] .vb-rec-play-row,
+[data-beat-pads-vocalbox-hum-melody] .vb-rec-play-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+[data-beat-pads-vocalbox] .vb-rec-count-box,
+[data-beat-pads-vocalbox-hum-melody] .vb-rec-count-box {
+  box-sizing: border-box;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 176, 128, 0.4);
+  background: rgba(0, 0, 0, 0.45);
+  color: #ffb080;
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+}
+
+[data-beat-pads-vocalbox] .vb-rec-count-box--metro,
+[data-beat-pads-vocalbox-hum-melody] .vb-rec-count-box--metro {
+  border-color: rgba(120, 200, 255, 0.5);
+  color: #9ec8ff;
+}
+
+[data-beat-pads-vocalbox] .vb-rec-count-box--idle,
+[data-beat-pads-vocalbox-hum-melody] .vb-rec-count-box--idle {
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #555;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-select {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 229, 255, 0.32);
+  background: rgba(6, 10, 16, 0.85);
+  color: #c8f0ff;
+  padding: 0 8px;
+  outline: none;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-vol {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid rgba(124, 244, 198, 0.35);
+  background: rgba(6, 10, 16, 0.85);
+  color: #9ee8c8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-panel {
+  border-radius: 8px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: linear-gradient(165deg, rgba(10, 16, 24, 0.95) 0%, rgba(6, 8, 14, 0.98) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-shell {
+  border-radius: 8px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: linear-gradient(180deg, #0a1018 0%, #06080e 100%);
+  overflow: hidden;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 6px 8px 4px;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+  background: rgba(4, 8, 14, 0.92);
+  flex-shrink: 0;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 229, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(0, 229, 255, 0.04);
+  color: rgba(0, 229, 255, 0.55);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition:
+    color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab:hover:not(:disabled) {
+  color: #c8f0ff;
+  background: rgba(0, 229, 255, 0.06);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab--on {
+  color: #e8fbff;
+  background: rgba(0, 229, 255, 0.14);
+  border-color: rgba(0, 229, 255, 0.45);
+  box-shadow: inset 0 -2px 0 #00e5ff;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab--bass.vb-hum-roll-tab--on {
+  color: #e8fff6;
+  background: rgba(124, 244, 198, 0.12);
+  border-color: rgba(124, 244, 198, 0.4);
+  box-shadow: inset 0 -2px 0 #7cf4c6;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab--lead.vb-hum-roll-tab--on {
+  color: #ffe8d8;
+  background: rgba(255, 176, 128, 0.12);
+  border-color: rgba(255, 176, 128, 0.4);
+  box-shadow: inset 0 -2px 0 #ffb080;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-tab-count {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+  min-width: 1.1em;
+}
+
+/* Melody roll inherits SE2-ish chrome when nested here */
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-shell button,
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-shell select,
+[data-beat-pads-vocalbox-hum-melody] .vb-hum-roll-shell span {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+}
+
+[data-beat-pads-vocalbox] .vb-beat-ruler,
+[data-beat-pads-vocalbox-hum-melody] .vb-beat-ruler {
+  position: relative;
+  overflow: hidden;
+}
+
+[data-beat-pads-vocalbox] .vb-beat-ruler-num,
+[data-beat-pads-vocalbox-hum-melody] .vb-beat-ruler-num {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: rgba(170, 174, 184, 0.7);
+  line-height: 1;
+  user-select: none;
+  pointer-events: none;
+  box-sizing: border-box;
+  transition: none;
+}
+
+[data-beat-pads-vocalbox] .vb-beat-ruler-num--lit,
+[data-beat-pads-vocalbox-hum-melody] .vb-beat-ruler-num--lit {
+  color: #e8fff4 !important;
+  text-shadow:
+    0 0 12px rgba(124, 244, 198, 1),
+    0 0 6px rgba(255, 255, 255, 0.9);
+  transform: scale(1.35);
+  font-weight: 900;
+  background: rgba(124, 244, 198, 0.22);
+  border-radius: 3px;
+}
+
+/* First full count-in (1–2–3–4) blinks red; then metro uses --lit green */
+[data-beat-pads-vocalbox] .vb-beat-ruler-num--lit-precount,
+[data-beat-pads-vocalbox-hum-melody] .vb-beat-ruler-num--lit-precount {
+  color: #ffd0d8 !important;
+  text-shadow:
+    0 0 12px rgba(255, 80, 100, 1),
+    0 0 6px rgba(255, 120, 140, 0.95);
+  transform: scale(1.35);
+  font-weight: 900;
+  background: rgba(232, 93, 117, 0.32);
+  border-radius: 3px;
+}
