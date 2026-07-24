@@ -410,6 +410,82 @@ export const BEATLAB_EXPANDED_DRUM_PRESETS: BeatLabExpandedDrumPreset[] = [
     desc: "Beat Lab house template — steady four-on-the-floor groove",
     pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,2],[4,6],[4,10],[4,14]]),
   },
+  // ── House solid pack (+15) — kick ALWAYS on beat 1 ─────────────────────────
+  {
+    id: "house-31", name: "House Solid Floor", genre: "House", role: 'drums' as const, bpm: 124,
+    desc: "Solid house — kick on 1, four-on-floor, clap offs, 8ths, OH &s",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,6],[4,10],[4,14]]),
+  },
+  {
+    id: "house-32", name: "House Solid Jack Plus", genre: "House", role: 'drums' as const, bpm: 126,
+    desc: "Solid jack — kick on 1, four floor, clap offs, full 16ths, OH &s",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,2],[4,6],[4,10],[4,14]]),
+  },
+  {
+    id: "house-33", name: "House Solid Deep", genre: "House", role: 'drums' as const, bpm: 122,
+    desc: "Solid deep — kick on 1, four floor, clap offs, 8ths, OH",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,6],[4,10],[4,14]]),
+  },
+  {
+    id: "house-34", name: "House Solid Peak", genre: "House", role: 'drums' as const, bpm: 128,
+    desc: "Solid peak — kick on 1, four floor, clap offs, sparse hats, OH downs, rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,3],[3,7],[3,10],[3,13],[4,0],[4,4],[4,8],[4,12],[7,3],[7,11]]),
+  },
+  {
+    id: "house-35", name: "House Solid Drive", genre: "House", role: 'drums' as const, bpm: 125,
+    desc: "Solid drive — kick on 1, four floor, clap offs, skip hats, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,1],[3,4],[3,7],[3,11],[3,14],[4,0],[4,4],[4,8],[4,12]]),
+  },
+  {
+    id: "house-36", name: "House Solid Swing", genre: "House", role: 'drums' as const, bpm: 124,
+    desc: "Solid swing — kick on 1, four floor, clap offs, full hats, OH &s",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,2],[4,6],[4,10],[4,14]]),
+  },
+  {
+    id: "house-37", name: "House Solid Clap", genre: "House", role: 'drums' as const, bpm: 126,
+    desc: "Solid clap jack — kick on 1, four floor, clap offs, sparse hats, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,3],[3,5],[3,9],[3,11],[3,13],[3,15],[4,0],[4,4],[4,8],[4,12]]),
+  },
+  {
+    id: "house-38", name: "House Solid Late", genre: "House", role: 'drums' as const, bpm: 123,
+    desc: "Solid late — kick on 1, four floor, clap offs, 8ths, OH &s, rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,6],[4,10],[4,14],[7,0],[7,8]]),
+  },
+  {
+    id: "house-39", name: "House Solid Lift", genre: "House", role: 'drums' as const, bpm: 127,
+    desc: "Solid lift — kick on 1, four floor, clap offs, skip hats, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,1],[3,5],[3,7],[3,9],[3,11],[3,15],[4,0],[4,4],[4,8],[4,12]]),
+  },
+  {
+    id: "house-40", name: "House Solid Pump", genre: "House", role: 'drums' as const, bpm: 124,
+    desc: "Solid sub pump — kick on 1, four floor, clap offs, sparse hats, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,2],[3,5],[3,8],[3,11],[3,15],[4,0],[4,4],[4,8],[4,12]]),
+  },
+  {
+    id: "house-41", name: "House Solid Air", genre: "House", role: 'drums' as const, bpm: 122,
+    desc: "Solid open air — kick on 1, four floor, clap offs, 8ths, OH &s",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,6],[4,10],[4,14]]),
+  },
+  {
+    id: "house-42", name: "House Solid Tom", genre: "House", role: 'drums' as const, bpm: 125,
+    desc: "Solid tom lift — kick on 1, four floor, clap offs, skip hats, OH downs, rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,1],[3,3],[3,7],[3,9],[3,13],[3,15],[4,0],[4,4],[4,8],[4,12],[7,5],[7,13]]),
+  },
+  {
+    id: "house-43", name: "House Solid Garage", genre: "House", role: 'drums' as const, bpm: 128,
+    desc: "Solid garage — kick on 1, four floor + & of 2, clap offs, 8ths, OH",
+    pattern: grid([[0,0],[0,4],[0,6],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,10]]),
+  },
+  {
+    id: "house-44", name: "House Solid Chicago", genre: "House", role: 'drums' as const, bpm: 124,
+    desc: "Solid Chicago — kick on 1, four floor, clap offs, full 16ths, OH &s",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,2],[4,6],[4,10],[4,14]]),
+  },
+  {
+    id: "house-45", name: "House Solid Forever", genre: "House", role: 'drums' as const, bpm: 126,
+    desc: "Solid forever — kick on 1, four-on-floor, clap offs, 8ths, OH &s",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,6],[4,10],[4,14]]),
+  },
   {
     id: "disco-3", name: "Disco Mirror Ball A", genre: "Disco", role: 'drums' as const,
     desc: "Pure SNF disco — 4-on-floor, snare 2 & 4, 8th hats, open hat on every &",
@@ -514,6 +590,82 @@ export const BEATLAB_EXPANDED_DRUM_PRESETS: BeatLabExpandedDrumPreset[] = [
     id: "dance-30", name: "Dance Pulse Line", genre: "Dance", role: 'drums' as const,
     desc: "Beat Lab dance template — anthem kick and lifts",
     pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,2],[1,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,6],[4,14],[5,2],[5,10]]),
+  },
+  // ── Dance solid pack (+15) — kick ALWAYS on beat 1 (step 0) ────────────────
+  {
+    id: "dance-31", name: "Dance Solid Floor", genre: "Dance", role: 'drums' as const, bpm: 128,
+    desc: "Solid dance floor — kick on 1, four-on-floor, clap offs, 8th hats, OH mid",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12]]),
+  },
+  {
+    id: "dance-32", name: "Dance Anthem Thump", genre: "Dance", role: 'drums' as const, bpm: 130,
+    desc: "Anthem thump — kick on 1, four floor, snare offs, full 16ths, OH lift",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,2],[1,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,6],[4,14]]),
+  },
+  {
+    id: "dance-33", name: "Dance Club Pulse", genre: "Dance", role: 'drums' as const, bpm: 126,
+    desc: "Club pulse — kick on 1, four floor, clap offs, 8ths, OH + tom lift",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12],[5,2],[5,10]]),
+  },
+  {
+    id: "dance-34", name: "Dance Radio Solid", genre: "Dance", role: 'drums' as const, bpm: 128,
+    desc: "Radio solid — kick on 1, four floor + late push, snare offs, 8ths, OH",
+    pattern: grid([[0,0],[0,4],[0,8],[0,11],[0,12],[1,2],[1,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,10]]),
+  },
+  {
+    id: "dance-35", name: "Dance Chart Solid", genre: "Dance", role: 'drums' as const, bpm: 132,
+    desc: "Chart solid — kick on 1, four floor, clap offs, full hats, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8]]),
+  },
+  {
+    id: "dance-36", name: "Dance Laser Solid", genre: "Dance", role: 'drums' as const, bpm: 129,
+    desc: "Laser solid — kick on 1, four floor, snare offs, full 16ths, OH mid",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,2],[1,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,6],[4,14]]),
+  },
+  {
+    id: "dance-37", name: "Dance Drop Solid", genre: "Dance", role: 'drums' as const, bpm: 127,
+    desc: "Drop solid — kick on 1, four floor + late kick, clap offs, 8ths, OH",
+    pattern: grid([[0,0],[0,4],[0,8],[0,11],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12]]),
+  },
+  {
+    id: "dance-38", name: "Dance Hyper Solid", genre: "Dance", role: 'drums' as const, bpm: 134,
+    desc: "Hyper solid — kick on 1, four floor + & pushes, snare offs, 8ths, OH + tom",
+    pattern: grid([[0,0],[0,4],[0,6],[0,8],[0,12],[0,14],[1,2],[1,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,10],[5,2],[5,10]]),
+  },
+  {
+    id: "dance-39", name: "Dance Glow Solid", genre: "Dance", role: 'drums' as const, bpm: 128,
+    desc: "Glow solid — kick on 1, four floor, clap offs, full 16ths, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8]]),
+  },
+  {
+    id: "dance-40", name: "Dance Mainstage Solid", genre: "Dance", role: 'drums' as const, bpm: 131,
+    desc: "Mainstage solid — kick on 1, four floor + push, snare offs, full hats, OH mid",
+    pattern: grid([[0,0],[0,4],[0,8],[0,9],[0,12],[1,2],[1,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,6],[4,14]]),
+  },
+  {
+    id: "dance-41", name: "Dance Sidechain Solid", genre: "Dance", role: 'drums' as const, bpm: 126,
+    desc: "Sidechain solid — kick on 1, four floor + & of 2, clap offs, 8ths, OH",
+    pattern: grid([[0,0],[0,4],[0,7],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12]]),
+  },
+  {
+    id: "dance-42", name: "Dance Stadium Solid", genre: "Dance", role: 'drums' as const, bpm: 129,
+    desc: "Stadium solid — kick on 1, four floor, snare offs, 8ths, OH lift",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,2],[1,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,2],[4,10]]),
+  },
+  {
+    id: "dance-43", name: "Dance Night Solid", genre: "Dance", role: 'drums' as const, bpm: 130,
+    desc: "Night drive solid — kick on 1, four floor + sync pushes, clap, full 16ths, OH + tom",
+    pattern: grid([[0,0],[0,4],[0,6],[0,8],[0,10],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[5,2],[5,10]]),
+  },
+  {
+    id: "dance-44", name: "Dance City Solid", genre: "Dance", role: 'drums' as const, bpm: 128,
+    desc: "City lights solid — kick on 1, four floor + push, snare offs, full hats, OH mid",
+    pattern: grid([[0,0],[0,4],[0,5],[0,8],[0,12],[1,2],[1,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,6],[4,14]]),
+  },
+  {
+    id: "dance-45", name: "Dance Forever Floor", genre: "Dance", role: 'drums' as const, bpm: 128,
+    desc: "Forever floor — kick on 1, four-on-floor, clap offs, 8ths, OH mid + tom",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12],[5,2],[5,10]]),
   },
   {
     id: "techno-1", name: "Techno Berlin 1", genre: "Techno", role: 'drums' as const,
@@ -664,5 +816,131 @@ export const BEATLAB_EXPANDED_DRUM_PRESETS: BeatLabExpandedDrumPreset[] = [
     id: "techno-30", name: "Techno Techno Forever", genre: "Techno", role: 'drums' as const,
     desc: "Beat Lab techno template — minimal kick loop with perc detail",
     pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,2],[3,3],[3,5],[3,6],[3,8],[3,10],[3,11],[3,13],[3,15],[4,4],[4,12],[7,2],[7,4],[7,12]]),
+  },
+  // ── Techno solid pack (+25) — four-on-floor + hat/OH/rim/clap variants ────
+  {
+    id: "techno-31", name: "Techno Solid Floor", genre: "Techno", role: 'drums' as const, bpm: 130,
+    desc: "Solid four-on-floor — kick lock, full 16th hats, OH on 1 & 3, rim ticks",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,2],[7,6],[7,10],[7,14]]),
+  },
+  {
+    id: "techno-32", name: "Techno Hard Pulse", genre: "Techno", role: 'drums' as const, bpm: 132,
+    desc: "Hard pulse — four floor, offbeat clap, marching hats, OH mid",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12],[7,1],[7,9]]),
+  },
+  {
+    id: "techno-33", name: "Techno Warehouse Thump", genre: "Techno", role: 'drums' as const, bpm: 128,
+    desc: "Warehouse thump — four floor, dense hats, OH downs, tom on 3",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[5,8],[7,3],[7,11]]),
+  },
+  {
+    id: "techno-34", name: "Techno Offbeat Drive", genre: "Techno", role: 'drums' as const, bpm: 134,
+    desc: "Offbeat kick drive — &s only, sparse hats, OH lift, rim push",
+    pattern: grid([[0,2],[0,6],[0,10],[0,14],[3,0],[3,2],[3,4],[3,6],[3,8],[3,10],[3,12],[3,14],[4,4],[4,12],[7,0],[7,8],[7,12]]),
+  },
+  {
+    id: "techno-35", name: "Techno Berlin Solid", genre: "Techno", role: 'drums' as const, bpm: 130,
+    desc: "Berlin solid — four floor, full hats, OH 1·3, clap offs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,5],[7,13]]),
+  },
+  {
+    id: "techno-36", name: "Techno Acid Floor", genre: "Techno", role: 'drums' as const, bpm: 133,
+    desc: "Acid floor — four kick, skipping hats, OH mid, rim chatter",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,2],[3,3],[3,5],[3,7],[3,8],[3,10],[3,11],[3,13],[3,15],[4,4],[4,12],[7,1],[7,6],[7,9],[7,14]]),
+  },
+  {
+    id: "techno-37", name: "Techno Peak Drive", genre: "Techno", role: 'drums' as const, bpm: 136,
+    desc: "Peak-time drive — offbeat kicks, full hats, OH downs, clap layer",
+    pattern: grid([[0,2],[0,6],[0,10],[0,14],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,4],[7,12]]),
+  },
+  {
+    id: "techno-38", name: "Techno Minimal Knock", genre: "Techno", role: 'drums' as const, bpm: 126,
+    desc: "Minimal knock — four floor, light 8ths, OH sparse, rim ghosts",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,4],[3,8],[3,12],[4,8],[7,2],[7,6],[7,10],[7,14]]),
+  },
+  {
+    id: "techno-39", name: "Techno Industrial Thump", genre: "Techno", role: 'drums' as const, bpm: 131,
+    desc: "Industrial thump — four floor, dense hats, OH, tom + rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[5,8],[7,1],[7,7],[7,9],[7,15]]),
+  },
+  {
+    id: "techno-40", name: "Techno Loop Solid", genre: "Techno", role: 'drums' as const, bpm: 129,
+    desc: "Loop solid — four floor, skip-hat pocket, OH mid, rim offs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,2],[3,4],[3,5],[3,7],[3,9],[3,10],[3,12],[3,13],[3,15],[4,4],[4,12],[7,3],[7,11],[7,14]]),
+  },
+  {
+    id: "techno-41", name: "Techno Strobe Floor", genre: "Techno", role: 'drums' as const, bpm: 135,
+    desc: "Strobe floor — four kick, full hats, OH 1·3, sharp rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,2],[7,8],[7,10]]),
+  },
+  {
+    id: "techno-42", name: "Techno Concrete Pulse", genre: "Techno", role: 'drums' as const, bpm: 132,
+    desc: "Concrete pulse — offbeat kick, sparse hats, OH mid, rim ticks",
+    pattern: grid([[0,2],[0,6],[0,10],[0,14],[3,0],[3,2],[3,3],[3,5],[3,6],[3,8],[3,10],[3,11],[3,13],[3,15],[4,4],[4,12],[7,1],[7,7],[7,13]]),
+  },
+  {
+    id: "techno-43", name: "Techno Afterhours Solid", genre: "Techno", role: 'drums' as const, bpm: 127,
+    desc: "Afterhours solid — four floor, clap offs, skip hats, OH mid",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,1],[3,2],[3,4],[3,5],[3,7],[3,8],[3,10],[3,12],[3,13],[3,15],[4,4],[4,12],[7,0],[7,8]]),
+  },
+  {
+    id: "techno-44", name: "Techno Motor Drive", genre: "Techno", role: 'drums' as const, bpm: 134,
+    desc: "Motor City drive — four floor, light hats, OH mid, rim chatter",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,3],[3,5],[3,6],[3,8],[3,9],[3,11],[3,12],[3,14],[4,4],[4,12],[7,2],[7,6],[7,10],[7,14]]),
+  },
+  {
+    id: "techno-45", name: "Techno Grid Solid", genre: "Techno", role: 'drums' as const, bpm: 130,
+    desc: "Grid solid — four floor, full 16ths, OH downs, rim lock",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,1],[7,5],[7,9],[7,13]]),
+  },
+  {
+    id: "techno-46", name: "Techno Smoke Floor", genre: "Techno", role: 'drums' as const, bpm: 128,
+    desc: "Smoke floor — offbeat kick, skip hats, OH mid, rim offs",
+    pattern: grid([[0,2],[0,6],[0,10],[0,14],[3,1],[3,3],[3,4],[3,6],[3,7],[3,9],[3,10],[3,12],[3,14],[3,15],[4,4],[4,12],[7,0],[7,8],[7,12]]),
+  },
+  {
+    id: "techno-47", name: "Techno Red Floor", genre: "Techno", role: 'drums' as const, bpm: 133,
+    desc: "Red light floor — four kick, clap offs, full hats, OH 1·3",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,4],[7,12],[7,15]]),
+  },
+  {
+    id: "techno-48", name: "Techno Blue Pulse", genre: "Techno", role: 'drums' as const, bpm: 129,
+    desc: "Blue hour pulse — four floor, skip hats, OH mid, rim push",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,1],[3,2],[3,4],[3,5],[3,7],[3,8],[3,10],[3,12],[3,13],[3,15],[4,4],[4,12],[7,3],[7,7],[7,11]]),
+  },
+  {
+    id: "techno-49", name: "Techno 4AM Solid", genre: "Techno", role: 'drums' as const, bpm: 131,
+    desc: "4AM solid — offbeat kick, full hats, OH downs, tom + rim",
+    pattern: grid([[0,2],[0,6],[0,10],[0,14],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[5,8],[7,2],[7,10]]),
+  },
+  {
+    id: "techno-50", name: "Techno Forever Floor", genre: "Techno", role: 'drums' as const, bpm: 132,
+    desc: "Forever floor — four kick, skip hats, OH mid, rim ticks",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,2],[3,3],[3,5],[3,6],[3,8],[3,10],[3,11],[3,13],[3,15],[4,4],[4,12],[7,1],[7,5],[7,9],[7,13]]),
+  },
+  {
+    id: "techno-51", name: "Techno Tribe Solid", genre: "Techno", role: 'drums' as const, bpm: 135,
+    desc: "Tribe solid — four floor, open-hat mid, skip closed hats, rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,2],[3,3],[3,5],[3,7],[3,8],[3,10],[3,11],[3,13],[3,14],[4,4],[4,12],[7,2],[7,6],[7,10],[7,14]]),
+  },
+  {
+    id: "techno-52", name: "Techno Clap Drive", genre: "Techno", role: 'drums' as const, bpm: 134,
+    desc: "Clap drive — four floor, clap offs, full hats, OH downs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,2],[2,6],[2,10],[2,14],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,4],[7,12]]),
+  },
+  {
+    id: "techno-53", name: "Techno Rim March", genre: "Techno", role: 'drums' as const, bpm: 130,
+    desc: "Rim march — four floor, full hats, OH 1·3, marching rim",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,0],[7,4],[7,8],[7,12]]),
+  },
+  {
+    id: "techno-54", name: "Techno Filter Solid", genre: "Techno", role: 'drums' as const, bpm: 128,
+    desc: "Filter solid — four floor, sparse hats, OH mid, rim offs",
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[3,1],[3,3],[3,4],[3,6],[3,7],[3,9],[3,10],[3,12],[3,14],[3,15],[4,4],[4,12],[7,2],[7,8],[7,14]]),
+  },
+  {
+    id: "techno-55", name: "Techno Peak Solid", genre: "Techno", role: 'drums' as const, bpm: 137,
+    desc: "Peak solid — offbeat kick, full hats, OH downs, clap + rim",
+    pattern: grid([[0,2],[0,6],[0,10],[0,14],[2,2],[2,10],[3,0],[3,1],[3,2],[3,3],[3,4],[3,5],[3,6],[3,7],[3,8],[3,9],[3,10],[3,11],[3,12],[3,13],[3,14],[3,15],[4,0],[4,8],[7,5],[7,11],[7,15]]),
   },
 ];

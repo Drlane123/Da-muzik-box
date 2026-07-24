@@ -229,6 +229,27 @@ export const BEATLAB_DISCO_EXPANDED_TAIL_PRESETS: DiscoExpandedDrumPreset[] = [
     discoBloomPlusPocket(),
     128,
   ),
+  // ── Disco solid pack (+20) — same four-on-floor / SNF language ────────────
+  discoPreset('disco-31', 'Disco Solid Floor', 'Solid disco floor — four-on-floor, snare+clap 2&4, 8ths, OH &s', discoClassicPocket(), 120),
+  discoPreset('disco-32', 'Disco Mirror Solid', 'Mirror solid — 16th shimmer, offbeat OH, locked floor', discoMirrorBallShimmer(), 122),
+  discoPreset('disco-33', 'Disco Boogie Solid', 'Boogie solid — four floor + & of 2 kick, rim backbeat', discoBoogieDownPocket(), 121),
+  discoPreset('disco-34', 'Disco Rink Solid', 'Roller-rink solid — pure floor, shaker 2&4, OH &s', discoRollerRinkPocket(), 124),
+  discoPreset('disco-35', 'Disco Saturday Solid', 'SNF solid — classic floor + shaker glitter', discoSaturdayNightPocket(), 122),
+  discoPreset('disco-36', 'Disco Studio Solid', 'Studio 54 solid — 16ths, OH &s, cowbell 1&3', discoStudio54Pocket(), 120),
+  discoPreset('disco-37', 'Disco Glitter Solid', 'Glitter solid — classic + shaker + cowbell sparkle', discoGlitterFloorPocket(), 118),
+  discoPreset('disco-38', 'Disco Hi-NRG Solid', 'Hi-NRG solid — fast 16th shimmer, shaker drive', discoHiNrgPocket(), 128),
+  discoPreset('disco-39', 'Disco Bridge Solid', 'Bridge solid — boogie kicks, broken 16ths, rim', discoBridgeTunnelPocket(), 123),
+  discoPreset('disco-40', 'Disco Drive Solid', 'Drive solid — boogie kick + broken hats, OH lift', discoDrivePocket(), 122),
+  discoPreset('disco-41', 'Disco Peak Solid', 'Peak solid — tom lift + shaker over classic floor', discoPeakLiftPocket(), 126),
+  discoPreset('disco-42', 'Disco Bloom Solid', 'Bloom solid — rink floor + rim backbeat', discoBloomPocket(), 120),
+  discoPreset('disco-43', 'Disco Heat Solid', 'Heat solid — hi-NRG shimmer + rim punch', discoHeatPocket(), 130),
+  discoPreset('disco-44', 'Disco BloomPlus Solid', 'Bloom+ solid — 16th shimmer, shaker, cowbell', discoBloomPlusPocket(), 127),
+  discoPreset('disco-45', 'Disco Night Floor', 'Night floor — mirror shimmer @ late disco tempo', discoMirrorBallShimmer(), 119),
+  discoPreset('disco-46', 'Disco Gold Floor', 'Gold floor — Studio 54 shimmer + cowbell', discoStudio54Pocket(), 121),
+  discoPreset('disco-47', 'Disco Chrome Floor', 'Chrome floor — hi-NRG shimmer + rink shaker', discoHiNrgPocket(), 125),
+  discoPreset('disco-48', 'Disco Vinyl Floor', 'Vinyl floor — warm classic pocket', discoClassicPocket(), 116),
+  discoPreset('disco-49', 'Disco Uptown Solid', 'Uptown solid — boogie push + rim texture', discoBoogieDownPocket(), 119),
+  discoPreset('disco-50', 'Disco Forever Floor', 'Forever floor — SNF classic + shaker glitter', discoSaturdayNightPocket(), 120),
 ];
 
 /** All disco Beat Lab presets that pair with houseDrive kit. */

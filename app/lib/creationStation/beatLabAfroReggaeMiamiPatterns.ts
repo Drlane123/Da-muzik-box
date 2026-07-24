@@ -326,6 +326,82 @@ export const BEAT_LAB_AFRO_PATTERNS: readonly PatternPreset[] = [
       [0, 0], [0, 5], [0, 8], [0, 13], [2, 4], [2, 12], ...hats16(), [4, 7], [4, 15],
     ]),
   },
+  // ── Afro solid pack (+15) — kick on 1 ─────────────────────────────────────
+  {
+    id: 'afro-23', name: 'Afro Solid Pulse', genre: 'Afro', role: 'drums', bpm: 105,
+    desc: 'Solid afro — kick on 1, sync pocket, snare 2&4, 8ths, rim',
+    pattern: grid([[0,0],[0,6],[0,10],[0,14],[1,4],[1,12],...hats8(),[7,2],[7,10]]),
+  },
+  {
+    id: 'afro-24', name: 'Afro Solid Bounce', genre: 'Afro', role: 'drums', bpm: 102,
+    desc: 'Solid bounce — kick on 1, clap 2&4, 8ths, OH lift',
+    pattern: grid([[0,0],[0,3],[0,7],[0,11],[2,4],[2,12],...hats8(),[4,6],[4,14]]),
+  },
+  {
+    id: 'afro-25', name: 'Afro Solid Swing', genre: 'Afro', role: 'drums', bpm: 100,
+    desc: 'Solid swing — kick on 1, snare 2&4, 8ths, tom + rim',
+    pattern: grid([[0,0],[0,10],[0,14],[1,4],[1,12],...hats8(),[5,3],[5,11],[7,6]]),
+  },
+  {
+    id: 'afro-26', name: 'Afro Solid Piano', genre: 'Afro', role: 'drums', bpm: 110,
+    desc: 'Solid amapiano — kick on 1, clap 2&4, skitter hats, perc',
+    pattern: grid([[0,0],[0,8],[0,13],[2,4],[2,12],[3,0],[3,3],[3,4],[3,7],[3,8],[3,11],[3,12],[3,15],[7,2],[7,6],[7,10],[7,14]]),
+  },
+  {
+    id: 'afro-27', name: 'Afro Solid Highlife', genre: 'Afro', role: 'drums', bpm: 98,
+    desc: 'Solid highlife — kick on 1, four lite, snare 2&4, rim answers',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,4],[1,12],...hats8(),[7,3],[7,11]]),
+  },
+  {
+    id: 'afro-28', name: 'Afro Solid Drive', genre: 'Afro', role: 'drums', bpm: 104,
+    desc: 'Solid drive — kick on 1, sync phrase, clap 2&4, 16ths',
+    pattern: grid([[0,0],[0,5],[0,8],[0,13],[2,4],[2,12],...hats16(),[4,7],[4,15]]),
+  },
+  {
+    id: 'afro-29', name: 'Afro Solid Pressure', genre: 'Afro', role: 'drums', bpm: 108,
+    desc: 'Solid pressure — kick on 1, snare 2&4, 8ths, OH + rim',
+    pattern: grid([[0,0],[0,6],[0,10],[0,14],[1,4],[1,12],...hats8(),[4,6],[4,14],[7,2],[7,10]]),
+  },
+  {
+    id: 'afro-30', name: 'Afro Solid Glide', genre: 'Afro', role: 'drums', bpm: 100,
+    desc: 'Solid glide — kick on 1, late pocket, clap 2&4, lite hats',
+    pattern: grid([[0,0],[0,7],[0,11],[0,14],[2,4],[2,12],[3,0],[3,4],[3,8],[3,12],[4,14]]),
+  },
+  {
+    id: 'afro-31', name: 'Afro Solid Clap', genre: 'Afro', role: 'drums', bpm: 106,
+    desc: 'Solid clap — kick on 1, clap stack 2&4, 16ths, OH',
+    pattern: grid([[0,0],[0,6],[0,10],[2,4],[2,12],...hats16(),[4,6],[4,14]]),
+  },
+  {
+    id: 'afro-32', name: 'Afro Solid Shaku', genre: 'Afro', role: 'drums', bpm: 112,
+    desc: 'Solid shaku — kick on 1, sync bounce, clap 2&4, rim grid',
+    pattern: grid([[0,0],[0,3],[0,8],[0,11],[2,4],[2,12],...hats8(),[7,1],[7,5],[7,9],[7,13]]),
+  },
+  {
+    id: 'afro-33', name: 'Afro Solid Gqom', genre: 'Afro', role: 'drums', bpm: 118,
+    desc: 'Solid gqom — kick on 1, stomp pocket, clap 2&4, sparse hats',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,4],[2,12],[3,0],[3,4],[3,8],[3,12],[7,2],[7,10]]),
+  },
+  {
+    id: 'afro-34', name: 'Afro Solid Snap', genre: 'Afro', role: 'drums', bpm: 104,
+    desc: 'Solid snap — kick on 1, snare 2&4, 8ths, tom accents',
+    pattern: grid([[0,0],[0,6],[0,10],[0,14],[1,4],[1,12],...hats8(),[5,3],[5,11]]),
+  },
+  {
+    id: 'afro-35', name: 'Afro Solid Dembow', genre: 'Afro', role: 'drums', bpm: 98,
+    desc: 'Solid dembow — kick on 1, dembow kick sync, clap 2&4, 8ths',
+    pattern: grid([[0,0],[0,6],[0,8],[0,14],[2,4],[2,12],...hats8(),[4,14]]),
+  },
+  {
+    id: 'afro-36', name: 'Afro Solid Talk', genre: 'Afro', role: 'drums', bpm: 100,
+    desc: 'Solid drum talk — kick on 1, snare 2&4, rim chatter, 8ths',
+    pattern: grid([[0,0],[0,5],[0,10],[1,4],[1,12],...hats8(),[7,1],[7,3],[7,7],[7,9],[7,11],[7,15]]),
+  },
+  {
+    id: 'afro-37', name: 'Afro Solid Forever', genre: 'Afro', role: 'drums', bpm: 105,
+    desc: 'Solid forever — kick on 1, club afro, clap 2&4, 16ths, OH',
+    pattern: grid([[0,0],[0,5],[0,8],[0,13],[2,4],[2,12],...hats16(),[4,7],[4,15]]),
+  },
 ];
 
 export const BEAT_LAB_REGGAE_PATTERNS: readonly PatternPreset[] = [
@@ -493,6 +569,82 @@ export const BEAT_LAB_REGGAE_PATTERNS: readonly PatternPreset[] = [
       [3, 0], [3, 2], [3, 4], [3, 6], [3, 8], [3, 10], [3, 12], [3, 14],
       [7, 1], [7, 5], [7, 9], [7, 13],
     ]),
+  },
+  // ── Reggae solid pack (+15) — kick on 1 ───────────────────────────────────
+  {
+    id: 'reggae-23', name: 'Reggae Solid Drop', genre: 'Reggae', role: 'drums', bpm: 88,
+    desc: 'Solid one-drop — kick on 1 & 3, snare on 3, offbeat hats, rim',
+    pattern: grid([[0,0],[0,8],[1,8],...offbeatHats(),[7,4],[7,12]]),
+  },
+  {
+    id: 'reggae-24', name: 'Reggae Solid Rockers', genre: 'Reggae', role: 'drums', bpm: 92,
+    desc: 'Solid rockers — kick on 1, four-on, snare 2&4, 8ths',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,4],[1,12],...hats8()]),
+  },
+  {
+    id: 'reggae-25', name: 'Reggae Solid Stepper', genre: 'Reggae', role: 'drums', bpm: 96,
+    desc: 'Solid steppers — kick on 1, four-on, snare 2&4, driving 8ths',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,4],[1,12],...hats8(),[4,14]]),
+  },
+  {
+    id: 'reggae-26', name: 'Reggae Solid Dancehall', genre: 'Reggae', role: 'drums', bpm: 100,
+    desc: 'Solid dancehall — kick on 1, sync push, clap 2&4, 8ths',
+    pattern: grid([[0,0],[0,6],[0,10],[0,14],[2,4],[2,12],...hats8(),[7,2],[7,10]]),
+  },
+  {
+    id: 'reggae-27', name: 'Reggae Solid Dub', genre: 'Reggae', role: 'drums', bpm: 84,
+    desc: 'Solid dub — kick on 1, snare on 3, sparse hats, rim space',
+    pattern: grid([[0,0],[0,8],[1,8],[3,6],[4,14],[7,3],[7,11]]),
+  },
+  {
+    id: 'reggae-28', name: 'Reggae Solid Roots', genre: 'Reggae', role: 'drums', bpm: 86,
+    desc: 'Solid roots — kick on 1 & 3, snare 2&4, offbeat hats',
+    pattern: grid([[0,0],[0,8],[1,4],[1,12],...offbeatHats(),[7,6]]),
+  },
+  {
+    id: 'reggae-29', name: 'Reggae Solid Skank', genre: 'Reggae', role: 'drums', bpm: 90,
+    desc: 'Solid skank — kick on 1, snare 2&4, offbeat hats, rim',
+    pattern: grid([[0,0],[0,8],[0,14],[1,4],[1,12],...offbeatHats(),[7,2],[7,10]]),
+  },
+  {
+    id: 'reggae-30', name: 'Reggae Solid Bubble', genre: 'Reggae', role: 'drums', bpm: 98,
+    desc: 'Solid bubble — kick on 1, four lite, clap 2&4, 8ths',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,4],[2,12],...hats8(),[4,6]]),
+  },
+  {
+    id: 'reggae-31', name: 'Reggae Solid Rub', genre: 'Reggae', role: 'drums', bpm: 94,
+    desc: 'Solid rub-a-dub — kick on 1, snare on 3, 8ths, rim aftershock',
+    pattern: grid([[0,0],[0,8],[1,8],...hats8(),[7,3],[7,11],[4,14]]),
+  },
+  {
+    id: 'reggae-32', name: 'Reggae Solid Studio', genre: 'Reggae', role: 'drums', bpm: 88,
+    desc: 'Solid studio one — kick on 1, snare 2&4, offbeat hats, rim',
+    pattern: grid([[0,0],[0,8],[1,4],[1,12],...offbeatHats(),[7,4],[7,12]]),
+  },
+  {
+    id: 'reggae-33', name: 'Reggae Solid Steady', genre: 'Reggae', role: 'drums', bpm: 82,
+    desc: 'Solid rocksteady — kick on 1, snare 2&4, soft 8ths',
+    pattern: grid([[0,0],[0,8],[0,14],[1,4],[1,12],...hats8()]),
+  },
+  {
+    id: 'reggae-34', name: 'Reggae Solid Ragga', genre: 'Reggae', role: 'drums', bpm: 102,
+    desc: 'Solid ragga — kick on 1, sync, clap 2&4, 8ths + rim',
+    pattern: grid([[0,0],[0,6],[0,10],[2,4],[2,12],...hats8(),[7,1],[7,5],[7,9],[7,13]]),
+  },
+  {
+    id: 'reggae-35', name: 'Reggae Solid Lovers', genre: 'Reggae', role: 'drums', bpm: 76,
+    desc: 'Solid lovers rock — kick on 1, soft snare 2&4, sparse hats',
+    pattern: grid([[0,0],[0,8],[1,4],[1,12],[3,2],[3,6],[3,10],[3,14],[4,14]]),
+  },
+  {
+    id: 'reggae-36', name: 'Reggae Solid Clap', genre: 'Reggae', role: 'drums', bpm: 94,
+    desc: 'Solid stepper clap — kick on 1, four-on, clap 2&4, rim',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[2,4],[2,12],...hats8(),[7,6],[7,14]]),
+  },
+  {
+    id: 'reggae-37', name: 'Reggae Solid Forever', genre: 'Reggae', role: 'drums', bpm: 90,
+    desc: 'Solid forever — kick on 1, rockers floor, snare 2&4, 8ths',
+    pattern: grid([[0,0],[0,4],[0,8],[0,12],[1,4],[1,12],...hats8(),[4,14]]),
   },
 ];
 
