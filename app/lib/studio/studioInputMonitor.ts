@@ -6,8 +6,9 @@
  *                     ↘ monitorGain → strip / Pitch Tune entry
  *
  * MediaRecorder captures the dry MediaStream in parallel (not this graph).
- * While recording, monitorGain stays connected so Pitch Tune is hearable and
- * strip meters move — use headphones to avoid speaker feedback.
+ * While recording, speaker monitor is OFF by default (stops mic→speakers feedback
+ * on Cloudflare / laptop speakers). Hub peak metering still drives lane IN meters.
+ * Flip the transport "Mon" toggle on for headphone self-hear.
  */
 
 import { studioMicTrackConstraints } from '@/app/lib/audioRouting';
@@ -15,9 +16,8 @@ import { studioMicTrackConstraints } from '@/app/lib/audioRouting';
 /** Idle / armed monitoring into the strip — pad so mic + FX isn't slamming the bus. */
 export const STUDIO_INPUT_MONITOR_GAIN = 0.38;
 /**
- * While recording: keep a hearable monitor through Pitch Tune / strip.
- * Soft-mute used to be full silence (feedback guard); that also killed Tune + meters.
- * Prefer headphones when recording with monitor on.
+ * When recording + speaker monitor ON (headphones): attenuated hear-yourself level.
+ * When recording + monitor OFF (default): gain is 0 — meters still read from hub.
  */
 export const STUDIO_INPUT_MONITOR_GAIN_RECORDING = 0.28;
 
@@ -40,8 +40,13 @@ type MonitorNodes = {
 let nodes: MonitorNodes | null = null;
 let keepStreamAlive: (() => boolean) | null = null;
 let monitorGainLinear = STUDIO_INPUT_MONITOR_GAIN;
-/** Recording mode: attenuate monitor but keep FX + meters alive. */
+/** Recording mode: silence speaker path unless manual monitor is on. */
 let softMuted = false;
+/**
+ * Manual speaker/headphone input monitor (transport Mon).
+ * Default false — meters use hub peak; dry MediaRecorder still captures.
+ */
+let speakerMonitorEnabled = false;
 
 export function setStudioInputMonitorKeepAlive(fn: (() => boolean) | null): void {
   keepStreamAlive = fn;
@@ -80,10 +85,29 @@ export function studioInputMonitorSoftMuted(): boolean {
   return softMuted;
 }
 
+export function studioInputMonitorSpeakerEnabled(): boolean {
+  return speakerMonitorEnabled;
+}
+
+/**
+ * Manual hear-yourself through the strip (headphones).
+ * Off while recording = no speaker feedback; hub meters still move.
+ */
+export function setStudioInputMonitorSpeakerEnabled(enabled: boolean): void {
+  speakerMonitorEnabled = enabled;
+  applyMonitorGain();
+}
+
+function effectiveMonitorGainLinear(): number {
+  if (!softMuted) return monitorGainLinear;
+  // Recording: silent unless user turns Mon on.
+  return speakerMonitorEnabled ? STUDIO_INPUT_MONITOR_GAIN_RECORDING : 0;
+}
+
 function applyMonitorGain(): void {
   if (!nodes) return;
   const t = nodes.monitorGain.context.currentTime;
-  const g = softMuted ? STUDIO_INPUT_MONITOR_GAIN_RECORDING : monitorGainLinear;
+  const g = effectiveMonitorGainLinear();
   nodes.monitorGain.gain.cancelScheduledValues(t);
   nodes.monitorGain.gain.setTargetAtTime(Math.max(0, Math.min(1, g)), t, 0.015);
 }
@@ -99,9 +123,8 @@ export function getStudioInputMonitorGain(): number {
 }
 
 /**
- * Recording soft-mute: keep mic → Pitch Tune → strip connected at recording gain
- * so Tune is audible and meters move. Does not tear down the mic stream.
- * (Dry MediaRecorder still captures the raw MediaStream.)
+ * Recording soft-mute mode: speaker path follows Mon toggle (default silent).
+ * Hub analyser keeps lane meters alive. Dry MediaRecorder still captures.
  */
 export function setStudioInputMonitorSoftMuted(muted: boolean): void {
   softMuted = muted;
@@ -164,7 +187,7 @@ export function studioInputMonitorDisconnectStrip(): void {
 
 /**
  * Instantaneous peak (0..1+) from the always-on hub analyser —
- * works while recording even if strip worklet meters lag.
+ * works while recording even if strip worklet meters lag / speaker monitor is off.
  */
 export function readStudioInputMonitorPeak(): number {
   if (!nodes) return 0;
@@ -210,9 +233,7 @@ export async function ensureStudioInputMonitor(
     const hub = ctx.createGain();
     hub.gain.value = 1;
     const monitorGain = ctx.createGain();
-    monitorGain.gain.value = softMuted
-      ? STUDIO_INPUT_MONITOR_GAIN_RECORDING
-      : monitorGainLinear;
+    monitorGain.gain.value = effectiveMonitorGainLinear();
     const meterAnalyser = ctx.createAnalyser();
     meterAnalyser.fftSize = 2048;
     meterAnalyser.smoothingTimeConstant = 0.12;

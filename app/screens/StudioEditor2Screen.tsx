@@ -741,6 +741,7 @@ import {
   setStudioInputMonitorGain,
   setStudioInputMonitorKeepAlive,
   setStudioInputMonitorSoftMuted,
+  setStudioInputMonitorSpeakerEnabled,
   stopStudioInputMonitor,
   STUDIO_INPUT_MONITOR_GAIN,
   studioInputMonitorActive,
@@ -818,6 +819,7 @@ import {
   FastForward,
   GripVertical,
   HelpCircle,
+  Headphones,
   Mic,
   Minus,
   MousePointer2,
@@ -6751,6 +6753,11 @@ export default function StudioEditor2Screen({
   const [recording, setRecording] = useState(false);
   /** Mic armed on transport — capture waits for Play (does not auto-start when stopped). */
   const [recordStandby, setRecordStandby] = useState(false);
+  /**
+   * Hear-yourself through the strip while recording (headphones).
+   * Default OFF — stops mic→speakers feedback on Cloudflare; lane meters still use hub peak.
+   */
+  const [recordInputMonitorOn, setRecordInputMonitorOn] = useState(false);
   const [consolidateBusy, setConsolidateBusy] = useState(false);
   const [consolidateStartBar, setConsolidateStartBar] = useState(1);
   const [consolidateEndBar, setConsolidateEndBar] = useState(32);
@@ -7704,9 +7711,8 @@ export default function StudioEditor2Screen({
   }, []);
 
   /**
-   * While recording: attenuate software input monitor (headphones recommended)
-   * but keep mic → Pitch Tune → strip so Tune is hearable and lane meters move.
-   * Dry MediaRecorder still captures the raw mic stream.
+   * While recording: speaker monitor follows transport Mon (default OFF).
+   * Hub peak metering still drives lane IN — dry MediaRecorder still captures.
    */
   useEffect(() => {
     setStudioInputMonitorSoftMuted(recording);
@@ -7720,6 +7726,11 @@ export default function StudioEditor2Screen({
       setStudioInputMonitorGain(STUDIO_INPUT_MONITOR_GAIN);
     };
   }, [recording]);
+
+  useEffect(() => {
+    setStudioInputMonitorSpeakerEnabled(recordInputMonitorOn);
+    return () => setStudioInputMonitorSpeakerEnabled(false);
+  }, [recordInputMonitorOn]);
 
   /** Record preflight â€” require a record-armed audio track (Studio One / Pro Tools model). */
   useEffect(() => {
@@ -8712,7 +8723,7 @@ export default function StudioEditor2Screen({
       stopStudioInputMonitor();
       return;
     }
-    // While recording: keep mic → Pitch Tune → strip (attenuated). Headphones recommended.
+    // While recording: speaker Mon is manual (default off). Hub meters still move.
 
     const { trackIndex: monitorTi, deviceId } = liveInputMonitorTarget;
     let cancelled = false;
@@ -20754,7 +20765,7 @@ export default function StudioEditor2Screen({
           } catch (e) {
             console.warn('[SE2 Record] Live vocal insert prep failed.', e);
           }
-          // Keep recording monitor gain (Pitch Tune + meters) — not a full hard mute.
+          // Soft-mute mode on — speaker path follows Mon toggle (meters from hub).
           setStudioInputMonitorSoftMuted(true);
         })();
       }, 48);
@@ -24516,6 +24527,25 @@ export default function StudioEditor2Screen({
               className={recording ? 'animate-pulse' : undefined}
               color={recording || recordStandby ? '#ff6b6b' : '#b0b0bc'}
             />
+          </button>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={recordInputMonitorOn}
+            title={
+              recordInputMonitorOn
+                ? 'Input Monitor ON — hear yourself in headphones while recording (turn OFF if speakers feedback)'
+                : 'Input Monitor OFF — silent speaker path while recording; meters still move (click to hear yourself)'
+            }
+            className={`${transportBtnBase} h-7 min-w-[1.5rem] rounded border shrink-0 px-1`}
+            style={{
+              borderColor: recordInputMonitorOn ? '#2a4a58' : '#2a2a32',
+              color: recordInputMonitorOn ? '#7ec8e8' : '#5c5c68',
+              background: recordInputMonitorOn ? '#101820' : 'transparent',
+            }}
+            onClick={() => setRecordInputMonitorOn((v) => !v)}
+          >
+            <Headphones size={12} strokeWidth={2.25} />
           </button>
           <button
             type="button"
