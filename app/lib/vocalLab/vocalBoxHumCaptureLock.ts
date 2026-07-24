@@ -1,9 +1,9 @@
 /**
- * VocalBox Hum Melody — audio → MIDI (singer model).
+ * VocalBox Hum Melody — audio → MIDI (articulated mic capture).
  *
  * Rec: mic + pre-count; scope reads pitch (no live roll paint).
- * Analyze: held tones until the mouth stops or pitch clearly changes →
- * timed MIDI → snap onto the quantize grid. Optional key lock after.
+ * Analyze: split on silence + energy valleys + clear pitch changes so short
+ * cutoffs stay separate notes → timed MIDI → quantize grid. Optional key lock.
  */
 import type { TimedMonophonicNote } from '@/app/lib/studio/audioToMidiNotes';
 import {
@@ -38,14 +38,14 @@ import {
   type NeuralHumRollQuantize,
 } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 
-export const VOCALBOX_HUM_FMIN_HZ = 70;
-export const VOCALBOX_HUM_FMAX_HZ = 1200;
+export const VOCALBOX_HUM_FMIN_HZ = 75;
+export const VOCALBOX_HUM_FMAX_HZ = 950;
 
 /* ── Scope monitor (does not write the roll) ───────────────────────────── */
 
 export const VOCALBOX_HUM_LIVE_OPTS = {
-  minConfidence: 0.12,
-  minRms: 0.0018,
+  minConfidence: 0.14,
+  minRms: 0.0022,
   silenceHoldFrames: 3,
   fMinHz: VOCALBOX_HUM_FMIN_HZ,
   fMaxHz: VOCALBOX_HUM_FMAX_HZ,
@@ -59,37 +59,45 @@ export const VOCALBOX_HUM_LIVE_DETECT_LATENCY_SEC = 0.035;
 /* ── Audio → MIDI ──────────────────────────────────────────────────────── */
 
 export const VOCALBOX_HUM_TRANSCRIBE_OPTS: BasicPitchTranscribeOpts = {
-  onsetThreshold: 0.35,
-  frameThreshold: 0.22,
-  minNoteFrames: 4,
-  minNoteSec: 0.045,
+  onsetThreshold: 0.42,
+  frameThreshold: 0.28,
+  minNoteFrames: 3,
+  minNoteSec: 0.022,
 };
 
 /**
- * Singer-style mic pitch — less twitchy; only clear sung changes start a new note.
+ * Articulated mic pitch — split on energy dips + short rests.
+ * Gate is firm so room/click/breath don’t become MIDI; valley split stays on.
  */
 export const VOCALBOX_HUM_EXTRACT_OPTS: MonophonicPitchExtractOpts = {
   fMinHz: VOCALBOX_HUM_FMIN_HZ,
   fMaxHz: VOCALBOX_HUM_FMAX_HZ,
-  minRms: 0.0014,
-  minPitchClarity: 0.11,
-  // Wider hold so vibrato / wobble stay one note.
-  pitchRunTolerance: 1.05,
-  // ~175 ms — bridge dips inside a held vowel.
-  maxVoicedGapFrames: 15,
-  // ~45 ms stable new pitch before cutting.
-  pitchChangeConfirmFrames: 4,
+  // Soft enough for quiet melody; clarity bumped to kill in-phrase ghosts.
+  minRms: 0.00185,
+  minPitchClarity: 0.165,
+  // Tighter than “singer hold” so neighboring pitches don’t smear.
+  pitchRunTolerance: 0.8,
+  // ~35 ms — only bridge tiny pitch dropouts, not intentional rests.
+  maxVoicedGapFrames: 3,
+  // Fast pitch flips (short notes) confirm quickly.
+  pitchChangeConfirmFrames: 2,
+  // Mouth closing between hits: ~45% of peak for 2 hops (~23 ms).
+  rmsValleySplitFrac: 0.45,
+  rmsValleySplitFrames: 2,
 };
 
-export const VOCALBOX_HUM_LATENCY_SEC = 0.04;
-/** Glue same-pitch scraps only (never different pitches). */
-export const VOCALBOX_HUM_STICKINESS_SEC = 0.085;
-/** Drop short scraps more readily. */
-export const VOCALBOX_HUM_MIN_GRID_NOTE_FRAC = 0.26;
-/** Short on-beat click ghosts (rimshot bleed). */
-export const VOCALBOX_HUM_CLICK_REJECT_WINDOW_SEC = 0.06;
-export const VOCALBOX_HUM_CLICK_REJECT_MAX_DUR_SEC = 0.1;
-export const VOCALBOX_HUM_MIN_NOTE_SEC = 0.048;
+export const VOCALBOX_HUM_LATENCY_SEC = 0.035;
+/** Almost no glue — short same-pitch hits stay separate. */
+export const VOCALBOX_HUM_STICKINESS_SEC = 0.018;
+/** Keep short sung hits on the grid; only drop true crumbs. */
+export const VOCALBOX_HUM_MIN_GRID_NOTE_FRAC = 0.12;
+/** Short on-beat click ghosts (rimshot bleed) — see rejectHumNotesNearMetroClicks. */
+export const VOCALBOX_HUM_CLICK_REJECT_WINDOW_SEC = 0.055;
+export const VOCALBOX_HUM_CLICK_REJECT_MAX_DUR_SEC = 0.055;
+/** Floor for a real sung note; short cutoffs survive. */
+export const VOCALBOX_HUM_MIN_NOTE_SEC = 0.022;
+/** Soft notes below this velocity are noise unless they have real length. */
+export const VOCALBOX_HUM_MELODY_MIN_VELOCITY = 24;
 /**
  * How hard phrase nudge pulls toward the grid (0–1). Lower = looser feel.
  */
@@ -125,7 +133,7 @@ function quantizeStepSec(bpm: number, quantize: NeuralHumRollQuantize): number {
 
 /**
  * Drop tracking crumbs from slides between real sung pitches
- * (short ±1 st flakes between two longer notes).
+ * (tiny flakes between two stronger notes).
  */
 export function rejectHumPitchGlideScraps(
   notes: readonly TimedMonophonicNote[],
@@ -137,14 +145,19 @@ export function rejectHumPitchGlideScraps(
     const n = sorted[i]!;
     const prev = out[out.length - 1];
     const next = sorted[i + 1];
-    if (
-      prev &&
-      next &&
-      n.durationSec < 0.07 &&
-      Math.abs(n.pitch - prev.pitch) <= 1 &&
-      Math.abs(n.pitch - next.pitch) <= 1
-    ) {
-      continue;
+    if (prev && next && n.durationSec < 0.07) {
+      const nearPrev = Math.abs(n.pitch - prev.pitch) <= 1;
+      const nearNext = Math.abs(n.pitch - next.pitch) <= 1;
+      const between =
+        (n.pitch - prev.pitch) * (next.pitch - n.pitch) > 0 &&
+        Math.abs(prev.pitch - next.pitch) >= 2;
+      const weaker =
+        n.velocity <= Math.min(prev.velocity, next.velocity) * 0.92 &&
+        n.durationSec < Math.min(prev.durationSec, next.durationSec) * 0.85;
+      // Classic slide flake: ±1 st to both neighbors, or a short bridge pitch.
+      if ((nearPrev && nearNext) || (between && weaker)) {
+        continue;
+      }
     }
     out.push({ ...n });
   }
@@ -152,7 +165,73 @@ export function rejectHumPitchGlideScraps(
 }
 
 /**
- * Drop tracking scraps — a sung note is longer / stronger than a glitch.
+ * Drop the 1–2 phantom notes that land *inside* a real phrase —
+ * short/weaker scraps nestled between two stronger sung hits.
+ * Leaves intentional short cutoffs that are as strong as their neighbors.
+ */
+export function rejectHumInPhraseGhosts(
+  notes: readonly TimedMonophonicNote[],
+): TimedMonophonicNote[] {
+  if (notes.length < 3) return notes.map((n) => ({ ...n }));
+  const sorted = [...notes]
+    .map((n) => ({
+      pitch: Math.round(n.pitch),
+      startSec: Math.max(0, n.startSec),
+      durationSec: n.durationSec,
+      velocity: Math.max(1, Math.min(127, Math.round(n.velocity))),
+    }))
+    .sort((a, b) => a.startSec - b.startSec);
+
+  const scoreOf = (n: TimedMonophonicNote) =>
+    n.velocity * Math.sqrt(Math.max(0.02, n.durationSec));
+
+  const keep = new Array<boolean>(sorted.length).fill(true);
+  for (let i = 1; i < sorted.length - 1; i += 1) {
+    const prev = sorted[i - 1]!;
+    const n = sorted[i]!;
+    const next = sorted[i + 1]!;
+    const gapPrev = n.startSec - (prev.startSec + prev.durationSec);
+    const gapNext = next.startSec - (n.startSec + n.durationSec);
+    // Must sit tightly between two real hits (not a sparse phrase rest).
+    if (gapPrev > 0.12 || gapNext > 0.12) continue;
+    if (gapPrev < -0.02 && gapNext < -0.02) continue;
+
+    const sc = scoreOf(n);
+    const scPrev = scoreOf(prev);
+    const scNext = scoreOf(next);
+    const neighborFloor = Math.min(scPrev, scNext);
+    const weaker = sc < neighborFloor * 0.72;
+    const shorter =
+      n.durationSec < 0.085 &&
+      n.durationSec < Math.min(prev.durationSec, next.durationSec) * 0.9;
+    const pitchBridge =
+      Math.abs(n.pitch - prev.pitch) <= 2 ||
+      Math.abs(n.pitch - next.pitch) <= 2 ||
+      ((n.pitch - prev.pitch) * (next.pitch - n.pitch) > 0 &&
+        Math.abs(prev.pitch - next.pitch) >= 2);
+
+    // Phantom: weaker + short + pitch-related to neighbors.
+    if (weaker && shorter && pitchBridge) {
+      keep[i] = false;
+      continue;
+    }
+    // Same-pitch stutter double between two stronger hits of another pitch.
+    if (
+      weaker &&
+      n.durationSec < 0.07 &&
+      n.pitch !== prev.pitch &&
+      n.pitch !== next.pitch &&
+      Math.abs(prev.pitch - next.pitch) <= 1
+    ) {
+      keep[i] = false;
+    }
+  }
+
+  return sorted.filter((_, i) => keep[i]);
+}
+
+/**
+ * Drop tracking scraps — keep short sung cutoffs; only kill quiet glitches.
  */
 export function rejectHumBlipNotes(
   notes: readonly TimedMonophonicNote[],
@@ -160,9 +239,10 @@ export function rejectHumBlipNotes(
   minNoteSec: number = VOCALBOX_HUM_MIN_NOTE_SEC,
 ): TimedMonophonicNote[] {
   const minAbs = Math.max(
-    0.035,
+    0.018,
     Math.min(minNoteSec, stepSec > 0 ? stepSec * VOCALBOX_HUM_MIN_GRID_NOTE_FRAC : minNoteSec),
   );
+  const quietShort = stepSec > 0 ? stepSec * 0.22 : 0.045;
   return [...notes]
     .map((n) => ({
       pitch: Math.round(n.pitch),
@@ -173,10 +253,91 @@ export function rejectHumBlipNotes(
     .filter((n) => {
       if (!Number.isFinite(n.pitch) || n.pitch < 0 || n.pitch > 127) return false;
       if (n.durationSec < minAbs) return false;
-      if (n.durationSec < (stepSec > 0 ? stepSec * 0.32 : 0.055) && n.velocity < 26) return false;
+      // Room / breath crumbs — not a cut-off hum with body.
+      if (n.durationSec < quietShort && n.velocity < 20) return false;
       return true;
     })
     .sort((a, b) => a.startSec - b.startSec);
+}
+
+/**
+ * Keep mic melody only — drop click bleed, room ghosts, breath flecks,
+ * and isolated weak outliers that aren’t part of the hummed line.
+ * Does not re-glue articulated short notes.
+ */
+export function rejectHumNonMelodyNoise(
+  notes: readonly TimedMonophonicNote[],
+  bpm: number,
+): TimedMonophonicNote[] {
+  if (notes.length === 0) return [];
+  const sorted = [...notes]
+    .map((n) => ({
+      pitch: Math.round(n.pitch),
+      startSec: Math.max(0, n.startSec),
+      durationSec: n.durationSec,
+      velocity: Math.max(1, Math.min(127, Math.round(n.velocity))),
+    }))
+    .sort((a, b) => a.startSec - b.startSec);
+
+  const scoreOf = (n: TimedMonophonicNote) =>
+    n.velocity * Math.sqrt(Math.max(0.02, n.durationSec));
+
+  const scores = sorted.map(scoreOf).sort((a, b) => a - b);
+  const medianScore = scores[Math.floor(scores.length * 0.5)] ?? 0;
+  const bodyFloor = Math.max(8, medianScore * 0.32);
+
+  // Phrase pitch center from the stronger half of notes.
+  const strong = sorted.filter((n) => scoreOf(n) >= bodyFloor);
+  const pitchPool = (strong.length >= 2 ? strong : sorted)
+    .map((n) => n.pitch)
+    .sort((a, b) => a - b);
+  const centerPitch =
+    pitchPool[Math.floor(pitchPool.length * 0.5)] ?? sorted[0]?.pitch ?? 60;
+
+  const spb = 60 / Math.max(40, Math.min(240, bpm));
+  const clickWin = VOCALBOX_HUM_CLICK_REJECT_WINDOW_SEC;
+
+  const out: TimedMonophonicNote[] = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    const n = sorted[i]!;
+    const sc = scoreOf(n);
+    const phase = ((n.startSec % spb) + spb) % spb;
+    const nearClick = Math.min(phase, spb - phase) <= clickWin;
+    const pitchDist = Math.abs(n.pitch - centerPitch);
+
+    // Outside sung hum range unless it’s a strong body note.
+    if ((n.pitch < 43 || n.pitch > 86) && (n.velocity < 40 || n.durationSec < 0.08)) {
+      continue;
+    }
+    // Octave / whistle fleck far from the phrase.
+    if (pitchDist >= 14 && n.durationSec < 0.1 && n.velocity < 50) {
+      continue;
+    }
+    // Soft fleck that isn’t near other melody energy.
+    const prev = sorted[i - 1];
+    const next = sorted[i + 1];
+    const gapPrev = prev ? n.startSec - (prev.startSec + prev.durationSec) : 99;
+    const gapNext = next ? next.startSec - (n.startSec + n.durationSec) : 99;
+    const isolated = gapPrev > 0.28 && gapNext > 0.28;
+    if (isolated && sc < bodyFloor && n.durationSec < 0.09) {
+      continue;
+    }
+    // Weak vs the take’s melody body.
+    if (sc < bodyFloor * 0.55 && n.velocity < VOCALBOX_HUM_MELODY_MIN_VELOCITY) {
+      if (n.durationSec < 0.07 || nearClick) continue;
+    }
+    // Metro rimshot / click harmonic still leaking through.
+    if (
+      nearClick &&
+      n.durationSec < 0.085 &&
+      (n.velocity < 38 || n.pitch >= 82 || sc < bodyFloor * 0.7)
+    ) {
+      continue;
+    }
+
+    out.push(n);
+  }
+  return out;
 }
 
 /** @deprecated Prefer rejectHumBlipNotes. */
@@ -187,14 +348,14 @@ export function rejectWeakHumScraps(
   return trimShortNeuralHumNotes(notes, minNoteSec);
 }
 
-/** @deprecated No-op. */
+/** @deprecated Prefer rejectHumNonMelodyNoise. */
 export function rejectHumParasiteNotes(
   notes: readonly TimedMonophonicNote[],
 ): TimedMonophonicNote[] {
   return notes.map((n) => ({ ...n }));
 }
 
-/** @deprecated No-op. */
+/** @deprecated Prefer rejectHumNonMelodyNoise. */
 export function rejectHumRelativeScraps(
   notes: readonly TimedMonophonicNote[],
 ): TimedMonophonicNote[] {
@@ -209,7 +370,7 @@ export function defragVocalBoxHumNotes(
   notes: readonly TimedMonophonicNote[],
   minNoteSec: number = VOCALBOX_HUM_MIN_NOTE_SEC,
 ): TimedMonophonicNote[] {
-  const minSec = Math.max(0.022, Math.min(0.2, minNoteSec));
+  const minSec = Math.max(0.02, Math.min(0.2, minNoteSec));
   const breath = VOCALBOX_HUM_STICKINESS_SEC;
   const sorted = [...notes]
     .map((n) => ({
@@ -456,11 +617,15 @@ export function correctHumCaptureLatency(
     .map((n) => ({
       ...n,
       startSec: Math.max(0, n.startSec - shift),
-      durationSec: Math.max(0.04, n.durationSec),
+      durationSec: Math.max(0.018, n.durationSec),
     }))
-    .filter((n) => n.durationSec >= 0.04);
+    .filter((n) => n.durationSec >= 0.018);
 }
 
+/**
+ * Kill metro rimshot bleed — short/weak/high on the click only.
+ * Strong sung staccato on the beat still passes.
+ */
 export function rejectHumNotesNearMetroClicks(
   notes: readonly TimedMonophonicNote[],
   bpm: number,
@@ -472,12 +637,20 @@ export function rejectHumNotesNearMetroClicks(
   const maxDur = Math.max(0.04, Math.min(0.22, maxClickDurSec));
   return notes.filter((n) => {
     if (!Number.isFinite(n.pitch)) return false;
-    // Rimshot / click harmonics are short + high — never keep as melody.
-    if (n.durationSec < 0.11 && n.pitch >= 78) return false;
-    if (n.durationSec >= maxDur) return true;
+    if (n.durationSec >= maxDur && n.velocity >= VOCALBOX_HUM_MELODY_MIN_VELOCITY) {
+      return true;
+    }
+
     const phase = ((n.startSec % spb) + spb) % spb;
     const dist = Math.min(phase, spb - phase);
-    return dist > win;
+    const nearClick = dist <= win;
+    if (!nearClick) return n.velocity >= 18 || n.durationSec >= 0.05;
+
+    // Rimshot / click harmonic: on the click, short, high or weak.
+    if (n.durationSec < 0.09 && n.pitch >= 80) return false;
+    if (n.durationSec < 0.07 && n.velocity < 42) return false;
+    if (n.durationSec < 0.05 && n.velocity < 50) return false;
+    return n.velocity >= VOCALBOX_HUM_MELODY_MIN_VELOCITY;
   });
 }
 
@@ -764,15 +937,15 @@ export function fillHumRollGapsFromOffline(
   );
 }
 
-/** Prefer held tones; only clear doubles / same-pitch stutter merge. */
+/** Prefer articulated hits; only merge true analysis doubles. */
 const HUM_CAPTURE_MONO_OPTS = {
-  stutterGapSec: 0.065,
-  simultaneousSec: 0.025,
+  stutterGapSec: 0.016,
+  simultaneousSec: 0.02,
 } as const;
 
 /**
- * Mic MIDI → piano roll (singer model).
- * Hold until the mouth stops or the pitch changes → optional key lock → grid.
+ * Mic MIDI → piano roll (articulated singer).
+ * Short hits stay short; same-pitch staccato does not glue into one hold.
  */
 export function lockVocalBoxHumCapture(opts: {
   rawNotes: readonly TimedMonophonicNote[];
@@ -796,11 +969,14 @@ export function lockVocalBoxHumCapture(opts: {
     stepSec * VOCALBOX_HUM_MIN_GRID_NOTE_FRAC,
   );
   notes = rejectHumBlipNotes(notes, stepSec, minNoteSec);
+  notes = rejectHumNonMelodyNoise(notes, bpm);
   notes = rejectHumPitchGlideScraps(notes);
-  notes = defragVocalBoxHumNotes(notes, minNoteSec);
+  notes = rejectHumInPhraseGhosts(notes);
+  // Tiny breath glue only — do not re-merge staccato same-pitch hits.
+  notes = defragVocalBoxHumNotes(notes, Math.min(minNoteSec, 0.02));
   notes = enforceMonophonicHumNotes(
     notes,
-    Math.min(0.045, stepSec * 0.24),
+    Math.min(0.02, stepSec * 0.14),
     HUM_CAPTURE_MONO_OPTS,
   );
 
@@ -817,10 +993,10 @@ export function lockVocalBoxHumCapture(opts: {
         processed.effectiveScaleId,
       ),
     }));
-    locked = defragVocalBoxHumNotes(locked, minNoteSec);
+    locked = defragVocalBoxHumNotes(locked, Math.min(minNoteSec, 0.02));
     locked = enforceMonophonicHumNotes(
       locked,
-      Math.min(0.045, stepSec * 0.24),
+      Math.min(0.02, stepSec * 0.14),
       HUM_CAPTURE_MONO_OPTS,
     );
   }

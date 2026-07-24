@@ -55,13 +55,21 @@ export type MonophonicPitchExtractOpts = {
    * Stops tracking glitches from chopping one sung tone into scraps.
    */
   pitchChangeConfirmFrames?: number;
+  /**
+   * Split a held same-pitch run when RMS falls below (peak × frac) for
+   * `rmsValleySplitFrames` hops — catches staccato / cutoffs that never go fully unvoiced.
+   * Omit / 0 = off (bass hum profile).
+   */
+  rmsValleySplitFrac?: number;
+  /** Frames under the valley floor before cutting (~11.6 ms each). */
+  rmsValleySplitFrames?: number;
 };
 
 /**
  * Stickier / more sensitive extract for hummed 808 bass —
  * quieter gate, longer dropout bridge, wider vibrato, lower bass floor.
  */
-export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<Required<MonophonicPitchExtractOpts>> = {
+export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<MonophonicPitchExtractOpts> = {
   fMinHz: 38,
   fMaxHz: 900,
   minRms: 0.0014,
@@ -70,6 +78,8 @@ export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<Required<MonophonicPitc
   pitchRunTolerance: 1.25,
   maxVoicedGapFrames: 34, // ~395 ms bridge so held notes don't pop out
   pitchChangeConfirmFrames: 2,
+  rmsValleySplitFrac: 0,
+  rmsValleySplitFrames: 0,
 };
 
 function spbFromBpm(bpm: number): number {
@@ -172,9 +182,10 @@ function autocorrPitchHz(
 function adaptiveRmsGate(rmses: readonly number[], minRms = MIN_RMS): number {
   const voiced = rmses.filter((r) => r > 0.0004).sort((a, b) => a - b);
   if (voiced.length === 0) return minRms;
-  const ref = voiced[Math.floor(voiced.length * 0.12)] ?? minRms;
+  const ref = voiced[Math.floor(voiced.length * 0.18)] ?? minRms;
   // Never open below minRms — silent / click-only takes were inventing ghost pitches.
-  return Math.max(minRms, Math.min(minRms * 1.35, ref * 0.45));
+  // Bias toward the louder end of quiet frames so metro bleed stays gated out.
+  return Math.max(minRms, Math.min(minRms * 1.55, ref * 0.55));
 }
 
 function hzToMidi(f: number): number {
@@ -200,6 +211,9 @@ function extractMonophonicPitchRuns(
   const pitchTol = opts?.pitchRunTolerance ?? PITCH_RUN_TOLERANCE;
   const maxGap = opts?.maxVoicedGapFrames ?? MAX_VOICED_GAP_FRAMES;
   const changeConfirm = Math.max(1, Math.floor(opts?.pitchChangeConfirmFrames ?? 1));
+  const valleyFrac = Math.max(0, Math.min(0.95, opts?.rmsValleySplitFrac ?? 0));
+  const valleyNeed = Math.max(0, Math.floor(opts?.rmsValleySplitFrames ?? 0));
+  const valleyOn = valleyFrac > 0 && valleyNeed > 0;
 
   const rmses: number[] = [];
   for (let start = 0; start + FRAME <= maxSamples; start += HOP) {
@@ -254,17 +268,25 @@ function extractMonophonicPitchRuns(
   let runPitch = 0;
   let runVelSum = 0;
   let runVelN = 0;
+  let runPeakRms = 0;
+  let valleyFrames = 0;
   let gapFrames = 0;
   let pendingPitch = NaN;
   let pendingCount = 0;
 
+  const resetRunState = () => {
+    runStartFrame = -1;
+    gapFrames = 0;
+    valleyFrames = 0;
+    runPeakRms = 0;
+    pendingPitch = NaN;
+    pendingCount = 0;
+  };
+
   const flushRun = (endFrame: number) => {
     if (runStartFrame < 0) return;
     if (!Number.isFinite(runPitch)) {
-      runStartFrame = -1;
-      gapFrames = 0;
-      pendingPitch = NaN;
-      pendingCount = 0;
+      resetRunState();
       return;
     }
     const vel = Math.round(
@@ -275,7 +297,16 @@ function extractMonophonicPitchRuns(
     if (frameDur >= 1) {
       runs.push({ pitch, startFrame: runStartFrame, endFrame, velocity: vel });
     }
-    runStartFrame = -1;
+    resetRunState();
+  };
+
+  const startRun = (i: number, pitch: number, rms: number, velCand: number) => {
+    runStartFrame = i;
+    runPitch = pitch;
+    runVelSum = velCand;
+    runVelN = 1;
+    runPeakRms = rms;
+    valleyFrames = 0;
     gapFrames = 0;
     pendingPitch = NaN;
     pendingCount = 0;
@@ -291,6 +322,12 @@ function extractMonophonicPitchRuns(
       pendingCount = 0;
       if (runStartFrame >= 0) {
         gapFrames += 1;
+        // Unvoiced dip counts toward amplitude valley (mouth closing between hits).
+        if (valleyOn) valleyFrames += 1;
+        if (valleyOn && valleyFrames >= valleyNeed) {
+          flushRun(Math.max(runStartFrame + 1, i - valleyFrames + 1));
+          continue;
+        }
         if (gapFrames <= maxGap) {
           runVelSum += velCand * 0.45;
           runVelN += 0.45;
@@ -304,13 +341,30 @@ function extractMonophonicPitchRuns(
 
     gapFrames = 0;
     if (runStartFrame < 0) {
-      runStartFrame = i;
-      runPitch = m;
-      runVelSum = velCand;
-      runVelN = 1;
-      pendingPitch = NaN;
-      pendingCount = 0;
+      startRun(i, m, rms, velCand);
       continue;
+    }
+
+    runPeakRms = Math.max(runPeakRms, rms);
+    if (valleyOn && runPeakRms > gate * 1.2) {
+      const floor = Math.max(gate * 1.05, runPeakRms * valleyFrac);
+      if (rms < floor) {
+        valleyFrames += 1;
+        if (valleyFrames >= valleyNeed) {
+          const cutAt = Math.max(runStartFrame + 1, i - valleyFrames + 1);
+          flushRun(cutAt);
+          // Re-attack if this frame is already back up (tight staccato).
+          if (rms >= floor) {
+            startRun(i, m, rms, velCand);
+          } else {
+            // Stay quiet until energy returns — next voiced frame starts fresh.
+            valleyFrames = 0;
+          }
+          continue;
+        }
+      } else {
+        valleyFrames = 0;
+      }
     }
 
     if (Math.abs(m - runPitch) <= pitchTol) {
@@ -326,7 +380,7 @@ function extractMonophonicPitchRuns(
     // Pitch moved — wait for a stable new pitch (or clear MIDI step).
     // Need a clearer move (~1 st+) before treating it as a new sung pitch.
     const stepped =
-      Math.round(m) !== Math.round(runPitch) && Math.abs(m - runPitch) >= 0.9;
+      Math.round(m) !== Math.round(runPitch) && Math.abs(m - runPitch) >= 0.85;
 
     if (
       !Number.isFinite(pendingPitch) ||
@@ -340,18 +394,14 @@ function extractMonophonicPitchRuns(
       pendingPitch = pendingPitch * 0.55 + m * 0.45;
     }
 
-    const need = changeConfirm;
+    // Clear MIDI step: split on first confirmed frame so short notes aren't swallowed.
+    const need = stepped ? Math.min(changeConfirm, 2) : changeConfirm;
 
     if (pendingCount >= need) {
       const changeAt = i - pendingCount + 1;
       const nextPitch = pendingPitch;
       flushRun(changeAt);
-      runStartFrame = changeAt;
-      runPitch = nextPitch;
-      runVelSum = velCand;
-      runVelN = 1;
-      pendingPitch = NaN;
-      pendingCount = 0;
+      startRun(changeAt, nextPitch, rms, velCand);
     } else {
       // Still the previous sung note until the new pitch proves itself.
       runVelSum += velCand * 0.35;
