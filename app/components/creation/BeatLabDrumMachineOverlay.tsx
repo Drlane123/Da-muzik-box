@@ -21,7 +21,7 @@ import { pointerStrikeVelocity } from '@/app/lib/creationStation/eightZeroEightV
 import { BeatLabDrumMachineSequencer } from '@/app/components/creation/BeatLabDrumMachineSequencer';
 import { BeatPadsPatternBankSidebar } from '@/app/components/creation/BeatPadsPatternBankSidebar';
 import { Se2BeatPadsStereoVu } from '@/app/components/studio/Se2BeatPadsStereoVu';
-import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TAGLINE } from '@/app/components/creation/BeatPadsVocalBoxPanel';
+import { BeatPadsVocalBoxPanel, BEAT_PADS_VOCALBOX_MIC_SRC, BEAT_PADS_VOCALBOX_MIC_STYLE, BEAT_PADS_VOCALBOX_TITLE } from '@/app/components/creation/BeatPadsVocalBoxPanel';
 import { BeatPads808LabPanel, BEAT_PADS_808_LAB_ACCENT } from '@/app/components/creation/BeatPads808LabPanel';
 import {
   BeatPadsOrchHitsPanel,
@@ -2253,14 +2253,14 @@ export function BeatLabDrumMachineOverlay({
                     title={
                       vocalBoxOpen
                         ? 'Close VocalBox — return to pad FX'
-                        : 'VocalBox — create your own drum pattern with your mouth'
+                        : BEAT_PADS_VOCALBOX_TITLE
                     }
-                    aria-label="VocalBox — create your own drum pattern with your mouth"
+                    aria-label={BEAT_PADS_VOCALBOX_TITLE}
                     style={{
                       ...miniBtn,
                       height: 32,
                       minHeight: 32,
-                      padding: '0 6px 0 0',
+                      padding: '0 8px 0 0',
                       gap: 5,
                       overflow: 'hidden',
                       flexShrink: 0,
@@ -2280,19 +2280,27 @@ export function BeatLabDrumMachineOverlay({
                         width: 68,
                       }}
                     />
-                    <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.03em', paddingRight: 2 }}>
-                      VocalBox
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'baseline',
+                        gap: 5,
+                        fontSize: 12,
+                        fontWeight: 900,
+                        letterSpacing: '0.03em',
+                        paddingRight: 4,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <span>VocalBox</span>
+                      <span style={{ fontWeight: 600, opacity: 0.55 }} aria-hidden>
+                        —
+                      </span>
+                      <span style={{ fontWeight: 800, letterSpacing: '0.02em' }}>
+                        Hum / Melody Capture
+                      </span>
                     </span>
                   </button>
-                  <span
-                    className="beat-pads-vocalbox-tagline pointer-events-none select-none"
-                    title="VocalBox — create your own drum pattern with your mouth"
-                    aria-hidden
-                  >
-                    <span className="beat-pads-vocalbox-tagline-word">
-                      {BEAT_PADS_VOCALBOX_TAGLINE}
-                    </span>
-                  </span>
                   {beatPads808Lab ? (
                     <button
                       type="button"

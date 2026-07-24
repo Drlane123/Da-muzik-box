@@ -81,8 +81,9 @@ export const BEAT_PADS_VOCALBOX_MIC_STYLE = {
   imageRendering: 'auto' as const,
 };
 
-export const BEAT_PADS_VOCALBOX_TAGLINE =
-  '(create your own drum pattern with your mouth)';
+export const BEAT_PADS_VOCALBOX_TAGLINE = 'Hum / Melody Capture';
+/** Full Beat Pads tab label — VocalBox — Hum / Melody Capture */
+export const BEAT_PADS_VOCALBOX_TITLE = 'VocalBox — Hum / Melody Capture';
 
 /** Compact dropdown height — drum lanes only (Hum Melody expands below). */
 export const BEAT_PADS_VOCALBOX_PANEL_H_PX = 224;
@@ -1875,7 +1876,7 @@ export function BeatPadsVocalBoxPanel({
               <span className="vb-suite-title-dash" aria-hidden>
                 —
               </span>
-              <span className="vb-suite-hum-title truncate">Hum / Melody</span>
+              <span className="vb-suite-hum-title truncate">Hum / Melody Capture</span>
             </div>
           ) : null}
         </div>

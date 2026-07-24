@@ -14,6 +14,7 @@ import {
   loadNeuralHumRollDraft,
   NEURAL_HUM_QUANTIZE_OPTIONS,
   NEURAL_HUM_ROLL_SLOTS_PER_BAR,
+  neuralHumQuantizeStepSlots,
   newNeuralHumRollNoteId,
   rollKeyLabel,
   rollNotesToTimed,
@@ -432,6 +433,7 @@ export default function NeuralHumMelodyRoll({
   }, [bars]);
 
   const gridW = totalSlots * COL_W;
+  const quantizeStep = neuralHumQuantizeStepSlots(quantize);
 
   return (
     <div
@@ -750,26 +752,33 @@ export default function NeuralHumMelodyRoll({
                 width: 1,
                 background: NH_SCALE.scopeWedge,
                 pointerEvents: 'none',
+                zIndex: 2,
               }}
             />
           ))}
 
-          {Array.from({ length: totalSlots }, (_, slot) =>
-            slot % 4 === 0 ? (
+          {/* Quantize grid — every step (1/16 default) so notes visibly lock to lines */}
+          {Array.from({ length: totalSlots }, (_, slot) => {
+            if (slot === 0) return null;
+            if (slot % NEURAL_HUM_ROLL_SLOTS_PER_BAR === 0) return null; // bar line already drawn
+            if (slot % quantizeStep !== 0) return null;
+            const isBeat = slot % 4 === 0;
+            return (
               <div
-                key={`beat-${slot}`}
+                key={`q-${slot}`}
                 style={{
                   position: 'absolute',
                   left: slot * COL_W,
                   top: 0,
                   bottom: 0,
                   width: 1,
-                  background: '#0d0d14',
+                  background: isBeat ? 'rgba(0,229,255,0.22)' : 'rgba(255,255,255,0.06)',
                   pointerEvents: 'none',
+                  zIndex: 1,
                 }}
               />
-            ) : null,
-          )}
+            );
+          })}
 
           {rollNotes.map((n) => {
             const ri = pitchRows.indexOf(n.pitch);
@@ -781,9 +790,9 @@ export default function NeuralHumMelodyRoll({
                 data-roll-note
                 style={{
                   position: 'absolute',
-                  left: n.startSlot * COL_W + 1,
+                  left: n.startSlot * COL_W,
                   top: ri * ROW_H + 2,
-                  width: n.lenSlots * COL_W - 2,
+                  width: Math.max(2, n.lenSlots * COL_W - 1),
                   height: ROW_H - 4,
                   borderRadius: 3,
                   background: selected ? '#00ff88' : NH_SCALE.accent,

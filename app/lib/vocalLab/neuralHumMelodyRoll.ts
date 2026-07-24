@@ -59,8 +59,10 @@ export function snapNeuralHumRollSlot(
   maxSlot: number,
 ): number {
   const step = neuralHumQuantizeStepSlots(quantize);
+  const maxStart = Math.max(0, maxSlot - step);
   const snapped = Math.round(Math.max(0, slot) / step) * step;
-  return Math.max(0, Math.min(maxSlot - 1, snapped));
+  // Always land on a quantize line — never maxSlot-1 when that is off-grid.
+  return Math.max(0, Math.min(maxStart, snapped));
 }
 
 export function snapNeuralHumRollLen(

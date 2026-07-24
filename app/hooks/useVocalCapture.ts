@@ -35,11 +35,14 @@ const PERCUSSIVE_MIC_CONSTRAINTS: MediaTrackConstraints = {
   autoGainControl: false,
 };
 
-/** Prefer voice; cancel speaker / metronome bleed into the mic. */
+/**
+ * Hum / melody mic: cancel speaker bleed, but do NOT noise-gate or AGC —
+ * those wipe quiet notes and collapse a phrase to a couple of loud hits.
+ */
 const ISOLATED_VOICE_MIC_CONSTRAINTS: MediaTrackConstraints = {
   echoCancellation: true,
-  noiseSuppression: true,
-  autoGainControl: true,
+  noiseSuppression: false,
+  autoGainControl: false,
 };
 
 export function useVocalCapture(

@@ -28,7 +28,6 @@ import {
   detectNeuralHumKey,
   neuralHumKeyLabel,
   neuralHumScalePitchClasses,
-  processNeuralHumMelody,
   retargetNeuralHumNotesToKeyRoot,
   snapMidiToNeuralHumScale,
   type NeuralHumKeyLockMode,
@@ -46,7 +45,6 @@ import {
   type NeuralHumRollQuantize,
 } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
 import {
-  analyzeNeuralHumMelodyAsync,
   downloadNeuralHumWav,
   NEURAL_HUM_INSTRUMENTS,
   renderNeuralHumNotesToInstrument,
@@ -62,16 +60,28 @@ import { BASIC_PITCH_DEFAULT_MIN_NOTE_SEC } from '@/app/lib/studio/basicPitchTra
 import {
   createSe2PrecountRimshotBuffer,
   ensureSe2PrecountRimshotBuffer,
-  runSe2Precount,
   SE2_PRECOUNT_CLICK_VOLUME,
 } from '@/app/lib/studio/se2Precount';
+import {
+  runSe2PrecountThenMetro,
+  se2ClickGridTempo,
+} from '@/app/lib/creationStation/vocalBoxAudioGrid';
 import { trimAudioBufferFromSec } from '@/app/lib/creationStation/beatPadsVocalBoxAnalyze';
+import {
+  analyzeVocalBoxHumTake,
+  clampHumCaptureQuantize,
+  lockVocalBoxHumCapture,
+  VOCALBOX_HUM_DOWNBEAT_TRIM_SLACK_SEC,
+} from '@/app/lib/vocalLab/vocalBoxHumCaptureLock';
 import { VocalLabHelpTip } from '@/app/components/vocalLab/VocalLabHelpHub';
 import '@/app/styles/neuralHumBasicPitch.css';
 
 const HUM_PRECOUNT_BEATS_PER_BAR = 4;
-/** Soft click through a long take so timing stays locked after count-in. */
-const HUM_RECORD_METRO_MAX_SEC = 120;
+
+function humCaptureDurationSec(bpm: number, bars: number): number {
+  const b = Math.max(30, Math.min(300, bpm));
+  return Math.max(1, bars) * HUM_PRECOUNT_BEATS_PER_BAR * (60 / b);
+}
 
 export type NeuralHumSe2LaneBinding = {
   /** Changes when lane / notes seed changes — re-hydrates melody roll. */
@@ -83,6 +93,10 @@ export type NeuralHumSe2LaneBinding = {
   onInstrumentIdChange: (id: NeuralHumInstrumentId) => void;
   onRollNotesCommit: (notes: NeuralHumRollNote[]) => void;
   getPreviewDestination: (ctx: AudioContext) => AudioNode;
+  /** SE2 project AudioContext — must match track strip nodes. */
+  getAudioContext: () => AudioContext;
+  /** Track quantize grid (defaults to 1/16). */
+  quantize?: NeuralHumRollQuantize;
 };
 
 interface NeuralHumPanelProps {
@@ -92,6 +106,11 @@ interface NeuralHumPanelProps {
   onNeuralHumToCreation?: (payload: PendingNeuralHumCreationImport) => void;
   /** Studio Editor 2 Hum Capture lane — hides Vocal Lab exports, syncs roll to track. */
   se2Lane?: NeuralHumSe2LaneBinding;
+  /** Seed key from SE2 Match chords / song key. */
+  initialKeyRoot?: number;
+  initialScaleId?: NeuralHumScaleId;
+  /** SE2 project BPM (MasterClock can differ). */
+  bpmOverride?: number;
   disabled?: boolean;
 }
 
@@ -102,22 +121,40 @@ export default function NeuralHumPanel({
   onNeuralHumToStudio,
   onNeuralHumToCreation,
   se2Lane,
+  initialKeyRoot,
+  initialScaleId,
+  bpmOverride,
   disabled = false,
 }: NeuralHumPanelProps) {
-  const { bpm, getOrCreateAudioContext } = useMasterClock();
-  const capture = useVocalCapture(onCaptureBlobChange);
+  const { bpm: clockBpm, getOrCreateAudioContext } = useMasterClock();
+  const bpm =
+    typeof bpmOverride === 'number' && Number.isFinite(bpmOverride) && bpmOverride > 0
+      ? bpmOverride
+      : clockBpm;
+  const onCaptureBlobChangeRef = useRef(onCaptureBlobChange);
+  onCaptureBlobChangeRef.current = onCaptureBlobChange;
+  const capture = useVocalCapture(
+    useCallback((blob: Blob | null) => {
+      onCaptureBlobChangeRef.current?.(blob);
+    }, []),
+    { isolatedMic: true },
+  );
   const audioBlob = capture.blob;
 
   const [keyLockMode, setKeyLockMode] = useState<NeuralHumKeyLockMode>('auto');
-  const [keyRoot, setKeyRoot] = useState(0);
-  const [scaleId, setScaleId] = useState<NeuralHumScaleId>('major');
+  const [keyRoot, setKeyRoot] = useState(() =>
+    initialKeyRoot != null ? ((initialKeyRoot % 12) + 12) % 12 : 0,
+  );
+  const [scaleId, setScaleId] = useState<NeuralHumScaleId>(initialScaleId ?? 'major');
   const [melodyPreview, setMelodyPreview] = useState<NeuralHumMelodyAnalysis | null>(
     null,
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [rollBars, setRollBars] = useState<NeuralHumRollBarCount>(se2Lane?.rollBars ?? 8);
   const [rollNotes, setRollNotes] = useState<NeuralHumRollNote[]>([]);
-  const [quantize, setQuantize] = useState<NeuralHumRollQuantize>(NEURAL_HUM_QUANTIZE_DEFAULT);
+  const [quantize, setQuantize] = useState<NeuralHumRollQuantize>(() =>
+    clampHumCaptureQuantize(se2Lane?.quantize ?? NEURAL_HUM_QUANTIZE_DEFAULT),
+  );
   /** Basic Pitch sensitivity — applied on next analyze / Re-run. */
   const [onsetThreshold, setOnsetThreshold] = useState(BASIC_PITCH_DEFAULT_THRESHOLDS.onsetThreshold);
   const [frameThreshold, setFrameThreshold] = useState(BASIC_PITCH_DEFAULT_THRESHOLDS.frameThreshold);
@@ -182,8 +219,41 @@ export default function NeuralHumPanel({
   const precountCancelRef = useRef(false);
   const precountBufRef = useRef<AudioBuffer | null>(null);
   const scheduledClickNodesRef = useRef<AudioBufferSourceNode[]>([]);
-  /** Leading seconds to strip from the take (count-in recorded into the blob). */
+  /** File trim origin = musical green 1 (after red pre-count). */
   const countInTrimSecRef = useRef(0);
+  const recordAnchorRef = useRef<number | null>(null);
+  const stopRecordRef = useRef<() => void>(() => {});
+  const releaseMicRef = useRef<() => void>(() => {});
+  const isRecordingCaptureRef = useRef(false);
+  const quietRecClicksRef = useRef(false);
+  const stopClickUiRef = useRef<(() => void) | null>(null);
+  const rollBarsRef = useRef(rollBars);
+  rollBarsRef.current = rollBars;
+  const quantizeRef = useRef(quantize);
+  quantizeRef.current = quantize;
+  const bpmRef = useRef(bpm);
+  bpmRef.current = bpm;
+
+  stopRecordRef.current = capture.stopRecord;
+  releaseMicRef.current = capture.releaseMic;
+  isRecordingCaptureRef.current = capture.isRecording;
+
+  const se2LaneRef = useRef(se2Lane);
+  se2LaneRef.current = se2Lane;
+
+  /** Prefer SE2 project context when docked — strip preview nodes live there. */
+  const resolveAudioContext = useCallback((): AudioContext => {
+    const lane = se2LaneRef.current;
+    if (lane?.getAudioContext) {
+      try {
+        const c = lane.getAudioContext();
+        if (c && c.state !== 'closed') return c;
+      } catch {
+        /* fall through */
+      }
+    }
+    return getOrCreateAudioContext();
+  }, [getOrCreateAudioContext]);
 
   useEffect(() => {
     if (se2Lane) return;
@@ -193,15 +263,30 @@ export default function NeuralHumPanel({
     setResult(null);
   }, [se2Lane]);
 
+  // Only re-hydrate when the lane identity changes — not on every parent re-render.
   useEffect(() => {
-    if (!se2Lane) return;
-    setRollBars(se2Lane.rollBars);
-    setSelected(se2Lane.instrumentId);
-    setRollNotes(enforceMonophonicRollNotes(se2Lane.initialRollNotes));
+    const lane = se2LaneRef.current;
+    if (!lane) return;
+    setRollBars(lane.rollBars);
+    setSelected(lane.instrumentId);
+    setRollNotes(enforceMonophonicRollNotes(lane.initialRollNotes));
     rollUserEditedRef.current = false;
     skipAutoFillRef.current = false;
     setSe2TrackDirty(false);
-  }, [se2Lane?.trackKey, se2Lane]);
+    if (lane.quantize) {
+      setQuantize(clampHumCaptureQuantize(lane.quantize));
+    }
+  }, [se2Lane?.trackKey]);
+
+  useEffect(() => {
+    if (initialKeyRoot == null) return;
+    setKeyRoot(((initialKeyRoot % 12) + 12) % 12);
+  }, [initialKeyRoot, se2Lane?.trackKey]);
+
+  useEffect(() => {
+    if (initialScaleId == null) return;
+    setScaleId(initialScaleId);
+  }, [initialScaleId, se2Lane?.trackKey]);
 
   const keyLockSettings = useMemo(
     () => ({ mode: keyLockMode, keyRoot, scaleId }),
@@ -210,7 +295,10 @@ export default function NeuralHumPanel({
   const keyLockSettingsRef = useRef(keyLockSettings);
   keyLockSettingsRef.current = keyLockSettings;
 
-  const { live, trail, clearTrail } = useNeuralHumLivePitch(capture.isRecording, capture.captureStream);
+  const { live, trail, clearTrail } = useNeuralHumLivePitch(
+    capture.isRecording && !isPrecounting,
+    capture.captureStream,
+  );
 
   const padCapture = useNeuralHumPadHumCapture(
     capture.isRecording,
@@ -293,13 +381,11 @@ export default function NeuralHumPanel({
   }, [capture.isRecording, padCapture]);
 
   const getPreviewDestination = useCallback(() => {
-    const ctx = getOrCreateAudioContext();
-    if (se2Lane) {
-      const dest = se2Lane.getPreviewDestination(ctx);
-      if (dest instanceof GainNode) {
-        dest.gain.value = volume / 100;
-      }
-      return dest;
+    const ctx = resolveAudioContext();
+    const lane = se2LaneRef.current;
+    if (lane) {
+      // Do not overwrite SE2 strip gain — that mutes the track / kills Play.
+      return lane.getPreviewDestination(ctx);
     }
     if (!previewGainRef.current || previewGainRef.current.context !== ctx) {
       previewGainRef.current = ctx.createGain();
@@ -307,7 +393,7 @@ export default function NeuralHumPanel({
     }
     previewGainRef.current.gain.value = volume / 100;
     return previewGainRef.current;
-  }, [getOrCreateAudioContext, se2Lane, volume]);
+  }, [resolveAudioContext, volume]);
 
   const cancelScheduledClicks = useCallback(() => {
     for (const n of scheduledClickNodesRef.current) {
@@ -328,26 +414,37 @@ export default function NeuralHumPanel({
         precountBufRef.current = buf;
       }
       if (!buf) return;
+      // Exact audio-clock time — never jam late clicks onto "now".
+      if (idealT < ctx.currentTime - 0.002) return;
       const src = ctx.createBufferSource();
       src.buffer = buf;
       const g = ctx.createGain();
-      g.gain.value = downbeat ? SE2_PRECOUNT_CLICK_VOLUME * 1.12 : SE2_PRECOUNT_CLICK_VOLUME * 0.85;
+      const base = quietRecClicksRef.current
+        ? SE2_PRECOUNT_CLICK_VOLUME * 0.38
+        : SE2_PRECOUNT_CLICK_VOLUME;
+      g.gain.value = downbeat ? base * 1.15 : base;
       src.connect(g);
-      g.connect(getPreviewDestination());
+      // Same-context speakers — never route Rec clicks through a muted track strip
+      // (cross-context connect also throws and kills the whole count-in).
+      g.connect(ctx.destination);
       try {
-        src.start(Math.max(ctx.currentTime, idealT));
+        src.start(idealT);
         scheduledClickNodesRef.current.push(src);
       } catch {
         /* */
       }
     },
-    [getPreviewDestination],
+    [],
   );
 
   useEffect(
     () => () => {
       precountCancelRef.current = true;
+      quietRecClicksRef.current = false;
+      stopClickUiRef.current?.();
       cancelScheduledClicks();
+      if (isRecordingCaptureRef.current) stopRecordRef.current();
+      else releaseMicRef.current();
     },
     [cancelScheduledClicks],
   );
@@ -355,11 +452,11 @@ export default function NeuralHumPanel({
   const handleKeyboardNoteDown = useCallback(
     (midi: number) => {
       setPressedMidi(midi);
-      const ctx = getOrCreateAudioContext();
+      const ctx = resolveAudioContext();
       if (ctx.state === 'suspended') void ctx.resume();
       previewNeuralHumNote(ctx, getPreviewDestination(), selected, midi, dynamics / 127);
     },
-    [dynamics, getOrCreateAudioContext, getPreviewDestination, selected],
+    [dynamics, resolveAudioContext, getPreviewDestination, selected],
   );
 
   const handleKeyboardNoteUp = useCallback(() => {
@@ -390,7 +487,7 @@ export default function NeuralHumPanel({
     };
   }, []);
 
-  /** Auto-analyze melody + detect key when capture finishes (Dubler-style). */
+  /** Auto-analyze with Beat Pads capture engine (silence reject + ACF → quantize lock). */
   useEffect(() => {
     if (!audioBlob || audioBlob.size === 0) {
       setMelodyPreview(null);
@@ -411,12 +508,18 @@ export default function NeuralHumPanel({
 
     void (async () => {
       try {
-        const ctx = getOrCreateAudioContext();
+        const ctx = resolveAudioContext();
         const bytes = await audioBlob.arrayBuffer();
         const decoded = await ctx.decodeAudioData(bytes.slice(0));
         if (cancelled) return;
-        // Strip count-in bar so melody / quantize lock to the first hummed beat.
-        const buffer = trimAudioBufferFromSec(decoded, countInTrimSecRef.current);
+        const gridBpm = bpmRef.current;
+        const bars = rollBarsRef.current;
+        const takeSec = humCaptureDurationSec(gridBpm, bars);
+        const buffer = trimAudioBufferFromSec(
+          decoded,
+          countInTrimSecRef.current,
+          takeSec + 0.08,
+        );
         if (cancelled) return;
 
         const padNotes = padCapturedNotesRef.current;
@@ -426,44 +529,70 @@ export default function NeuralHumPanel({
 
         clearRekeyHistory();
 
+        const lock = keyLockSettingsRef.current;
+        const q = clampHumCaptureQuantize(quantizeRef.current);
+
         if (usePadCapture) {
           if (skipAutoFillRef.current) return;
           rawMelodyNotesRef.current = padNotes;
-          const processed = processNeuralHumMelody(padNotes, keyLockSettingsRef.current);
-          keyAnchorRootRef.current = processed.effectiveKeyRoot;
-          const lock = keyLockSettingsRef.current;
+          const locked = lockVocalBoxHumCapture({
+            rawNotes: padNotes,
+            lock,
+            bpm: gridBpm,
+            bars,
+            quantize: q,
+          });
+          keyAnchorRootRef.current = locked.effectiveKeyRoot;
           setMelodyPreview({
-            notes: processed.notes,
+            notes: locked.timedNotes,
             rawNotes: padNotes,
             rawNoteCount: padNotes.length,
             keyLabel:
               lock.mode === 'off'
                 ? null
-                : neuralHumKeyLabel(processed.effectiveKeyRoot, processed.effectiveScaleId),
-            detectedKey: processed.detectedKey,
-            effectiveKeyRoot: processed.effectiveKeyRoot,
-            effectiveScaleId: processed.effectiveScaleId,
+                : neuralHumKeyLabel(locked.effectiveKeyRoot, locked.effectiveScaleId),
+            detectedKey: null,
+            effectiveKeyRoot: locked.effectiveKeyRoot,
+            effectiveScaleId: locked.effectiveScaleId,
             engine: 'acf',
           });
           setProgress(100);
         } else {
-          const analyzed = await analyzeNeuralHumMelodyAsync(
-            buffer,
-            keyLockSettingsRef.current,
-            undefined,
-            (pct, _message) => {
-              if (!cancelled) setProgress(Math.max(4, Math.round(pct * 100)));
-            },
-            decodeOptsRef.current,
-          );
+          const analyzed = await analyzeVocalBoxHumTake(buffer, (pct) => {
+            if (!cancelled) setProgress(Math.max(4, Math.round(pct * 100)));
+          });
           if (cancelled) return;
           if (skipAutoFillRef.current) return;
           rawMelodyNotesRef.current = analyzed.rawNotes;
-          keyAnchorRootRef.current = analyzed.effectiveKeyRoot;
-          setMelodyPreview(analyzed);
-          if (keyLockSettingsRef.current.mode === 'auto' && analyzed.detectedKey) {
-            setKeyRoot(analyzed.effectiveKeyRoot);
-            setScaleId(analyzed.effectiveScaleId);
+          const locked = lockVocalBoxHumCapture({
+            rawNotes: analyzed.rawNotes,
+            lock,
+            bpm: gridBpm,
+            bars,
+            quantize: q,
+          });
+          keyAnchorRootRef.current = locked.effectiveKeyRoot;
+          setMelodyPreview({
+            notes: locked.timedNotes,
+            rawNotes: analyzed.rawNotes,
+            rawNoteCount: analyzed.rawNotes.length,
+            keyLabel:
+              lock.mode === 'off'
+                ? null
+                : neuralHumKeyLabel(locked.effectiveKeyRoot, locked.effectiveScaleId),
+            detectedKey: null,
+            effectiveKeyRoot: locked.effectiveKeyRoot,
+            effectiveScaleId: locked.effectiveScaleId,
+            engine:
+              analyzed.engine === 'basic-pitch'
+                ? 'basic-pitch'
+                : analyzed.engine === 'acf-fallback'
+                  ? 'acf-fallback'
+                  : 'acf',
+          });
+          if (lock.mode === 'auto' && locked.noteCount > 0) {
+            setKeyRoot(locked.effectiveKeyRoot);
+            setScaleId(locked.effectiveScaleId);
           }
           setProgress(100);
         }
@@ -482,7 +611,7 @@ export default function NeuralHumPanel({
     return () => {
       cancelled = true;
     };
-  }, [analyzeNonce, audioBlob, clearRekeyHistory, getOrCreateAudioContext]);
+  }, [analyzeNonce, audioBlob, clearRekeyHistory, resolveAudioContext]);
 
   /** Map analyzed MIDI → quantized roll grid (BPM + quantize). */
   useEffect(() => {
@@ -505,12 +634,53 @@ export default function NeuralHumPanel({
 
   const handleStopRecord = useCallback(() => {
     precountCancelRef.current = true;
+    quietRecClicksRef.current = false;
+    stopClickUiRef.current?.();
+    stopClickUiRef.current = null;
     cancelScheduledClicks();
     setIsPrecounting(false);
     setPrecountBeatUi(null);
-    if (capture.isRecording) capture.stopRecord();
-    else capture.releaseMic();
-  }, [cancelScheduledClicks, capture]);
+    recordAnchorRef.current = null;
+    if (isRecordingCaptureRef.current) stopRecordRef.current();
+    else releaseMicRef.current();
+  }, [cancelScheduledClicks]);
+
+  /**
+   * Auto-stop at end of take from green 1 — same pattern as Beat Pads Hum Melody.
+   * Uses stopRecordRef so a stale `capture.isRecording` boolean cannot skip MediaRecorder.stop().
+   */
+  useEffect(() => {
+    if (!capture.isRecording) return;
+    const gridBpm = se2ClickGridTempo(bpmRef.current).bpm;
+    const takeSec = humCaptureDurationSec(gridBpm, rollBarsRef.current);
+    const ctx = resolveAudioContext();
+    let raf = 0;
+    let t = 0;
+    const armTimer = () => {
+      const anchor = recordAnchorRef.current;
+      if (anchor == null || !ctx) {
+        raf = requestAnimationFrame(armTimer);
+        return;
+      }
+      const remainingMs = (anchor + takeSec - ctx.currentTime) * 1000 + 40;
+      t = window.setTimeout(() => {
+        if (!isRecordingCaptureRef.current) return;
+        quietRecClicksRef.current = false;
+        stopClickUiRef.current?.();
+        stopClickUiRef.current = null;
+        cancelScheduledClicks();
+        setPrecountBeatUi(null);
+        setIsPrecounting(false);
+        stopRecordRef.current();
+      }, Math.max(40, remainingMs));
+    };
+    armTimer();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- narrow deps so remount mid-take doesn't reset timer
+  }, [capture.isRecording, resolveAudioContext]);
 
   const handleStartRecord = useCallback(() => {
     if (disabled || capture.isRecording || isPrecounting) return;
@@ -523,19 +693,24 @@ export default function NeuralHumPanel({
     setArmedPadMidi(null);
     clearRekeyHistory();
     setResult(null);
-    // Count-in plays before MediaRecorder starts — take begins on the downbeat.
     countInTrimSecRef.current = 0;
+    recordAnchorRef.current = null;
+    quietRecClicksRef.current = true;
 
     void (async () => {
-      const ctx = getOrCreateAudioContext();
+      const ctx = resolveAudioContext();
       if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
       if (ctx.state !== 'running') {
-        alert('Audio not ready — click anywhere once, then Record again.');
+        quietRecClicksRef.current = false;
+        alert('Audio not ready — click Play once in Studio, then Record again.');
         return;
       }
 
       const micOk = await capture.armMic();
-      if (!micOk) return;
+      if (!micOk) {
+        quietRecClicksRef.current = false;
+        return;
+      }
 
       precountCancelRef.current = false;
       setIsPrecounting(Boolean(precountEnabled));
@@ -547,47 +722,69 @@ export default function NeuralHumPanel({
         }
         cancelScheduledClicks();
 
-        let downbeatAudioTime = ctx.currentTime + 0.02;
-        if (precountEnabled) {
-          // Hear 1–2–3–4, then arm the take on the next downbeat (file time 0).
-          const result = await runSe2Precount({
-            ctx,
-            bpm,
-            beatsPerBar: HUM_PRECOUNT_BEATS_PER_BAR,
-            bars: 1,
-            scheduleClick: (idealT, downbeat) => scheduleHumClick(ctx, idealT, downbeat),
-            onBeat: (beat, total) => setPrecountBeatUi({ beat, total }),
-            isCancelled: () => precountCancelRef.current,
-          });
+        const { bpm: gridBpm } = se2ClickGridTempo(bpm);
+        const takeBeats = rollBarsRef.current * HUM_PRECOUNT_BEATS_PER_BAR;
+
+        const result = await runSe2PrecountThenMetro({
+          ctx,
+          bpm: gridBpm,
+          beatsPerBar: HUM_PRECOUNT_BEATS_PER_BAR,
+          precountEnabled,
+          precountBars: 1,
+          metroEnabled: recordMetroEnabled,
+          metroBeatCount: takeBeats,
+          schedulePrecountClick: (idealT, accent) => scheduleHumClick(ctx, idealT, accent),
+          scheduleMetroClick: (idealT, downbeat) => scheduleHumClick(ctx, idealT, downbeat),
+          isCancelled: () => precountCancelRef.current,
+          onGridReady: ({ downbeatAudioTime }) => {
+            recordAnchorRef.current = downbeatAudioTime;
+          },
+          onArmRecord: async () => {
+            await capture.startRecord();
+          },
+          recordArmLeadSec: Math.min(0.045, Math.max(0.02, (60 / Math.max(40, gridBpm)) * 0.06)),
+          onDisplayNumber: (n, phase) => {
+            setPrecountBeatUi({
+              beat: n,
+              total: phase === 'precount' ? HUM_PRECOUNT_BEATS_PER_BAR : takeBeats,
+            });
+          },
+          onPhaseChange: (phase) => {
+            if (phase === 'metro') setIsPrecounting(false);
+          },
+        });
+
+        stopClickUiRef.current = result.stopUi;
+
+        if (result.cancelled) {
+          result.stopUi();
+          stopClickUiRef.current = null;
           cancelScheduledClicks();
-          if (result.cancelled) {
-            capture.releaseMic();
-            return;
-          }
-          downbeatAudioTime = result.downbeatAudioTime;
+          quietRecClicksRef.current = false;
+          recordAnchorRef.current = null;
+          releaseMicRef.current();
+          if (isRecordingCaptureRef.current) stopRecordRef.current();
+          setPrecountBeatUi(null);
+          return;
         }
 
+        const { downbeatAudioTime, recordArmedAtSec } = result;
+        const fileZero = recordArmedAtSec ?? downbeatAudioTime;
+        countInTrimSecRef.current = Math.max(
+          0,
+          downbeatAudioTime - fileZero + VOCALBOX_HUM_DOWNBEAT_TRIM_SLACK_SEC,
+        );
+        recordAnchorRef.current = downbeatAudioTime;
         setIsPrecounting(false);
-        setPrecountBeatUi(null);
-        await capture.startRecord();
-
-        if (recordMetroEnabled) {
-          const spb = 60 / Math.max(30, Math.min(300, bpm));
-          const totalBeats = Math.ceil(HUM_RECORD_METRO_MAX_SEC / spb) + 1;
-          // First click at/near the take start so hums land on the grid.
-          const t0 = Math.max(ctx.currentTime + 0.01, downbeatAudioTime);
-          for (let i = 0; i < totalBeats; i += 1) {
-            scheduleHumClick(ctx, t0 + i * spb, i % HUM_PRECOUNT_BEATS_PER_BAR === 0);
-          }
-        }
       } catch (err) {
         console.error('[hum-capture] count-in / record failed', err);
         cancelScheduledClicks();
-        capture.releaseMic();
-        if (capture.isRecording) capture.stopRecord();
+        quietRecClicksRef.current = false;
+        recordAnchorRef.current = null;
+        releaseMicRef.current();
+        if (isRecordingCaptureRef.current) stopRecordRef.current();
       } finally {
         setIsPrecounting(false);
-        setPrecountBeatUi(null);
       }
     })();
   }, [
@@ -597,10 +794,10 @@ export default function NeuralHumPanel({
     clearRekeyHistory,
     clearTrail,
     disabled,
-    getOrCreateAudioContext,
     isPrecounting,
     precountEnabled,
     recordMetroEnabled,
+    resolveAudioContext,
     scheduleHumClick,
   ]);
 
@@ -661,7 +858,7 @@ export default function NeuralHumPanel({
       if (notes.length === 0) return;
       stopAuditionRef.current?.();
       stopNeuralHumPreview();
-      const ctx = getOrCreateAudioContext();
+      const ctx = resolveAudioContext();
       if (ctx.state === 'suspended') void ctx.resume();
       stopAuditionRef.current = scheduleNeuralHumRollAudition(
         ctx,
@@ -671,7 +868,7 @@ export default function NeuralHumPanel({
         { dynamics: dynamics / 127, transposeSemis: transpose },
       );
     },
-    [dynamics, getOrCreateAudioContext, getPreviewDestination, selected, transpose],
+    [dynamics, resolveAudioContext, getPreviewDestination, selected, transpose],
   );
 
   const buildRekeySnapshot = useCallback((): NeuralHumRekeySnapshot => {
@@ -770,6 +967,7 @@ export default function NeuralHumPanel({
 
       setMelodyPreview({
         notes: rekeyed,
+        rawNotes: source,
         rawNoteCount: source.length,
         keyLabel: label,
         detectedKey: null,
@@ -813,7 +1011,7 @@ export default function NeuralHumPanel({
         setKeyRoot(pc);
       }
       setArmedPadMidi(midi);
-      const ctx = getOrCreateAudioContext();
+      const ctx = resolveAudioContext();
       if (ctx.state === 'suspended') void ctx.resume();
       previewNeuralHumNote(
         ctx,
@@ -827,7 +1025,7 @@ export default function NeuralHumPanel({
       applyKeyRootFromPad,
       capture.isRecording,
       dynamics,
-      getOrCreateAudioContext,
+      resolveAudioContext,
       getPreviewDestination,
       keyLockMode,
       selected,
@@ -853,6 +1051,7 @@ export default function NeuralHumPanel({
     const rekeyed = retargetNeuralHumNotesToKeyRoot(timed, detected.keyRoot, detected.keyRoot, scaleId);
     setMelodyPreview({
       notes: rekeyed,
+      rawNotes: timed,
       rawNoteCount: timed.length,
       keyLabel: neuralHumKeyLabel(detected.keyRoot, detected.scaleId),
       detectedKey: detected,
@@ -962,7 +1161,7 @@ export default function NeuralHumPanel({
     instrumentUrlRef.current = null;
 
     try {
-      const ctx = getOrCreateAudioContext();
+      const ctx = resolveAudioContext();
       if (ctx.state === 'suspended') await ctx.resume();
 
       const out = useRoll
@@ -1017,7 +1216,7 @@ export default function NeuralHumPanel({
     audioBlob,
     bpm,
     dynamics,
-    getOrCreateAudioContext,
+    resolveAudioContext,
     keyLockSettings,
     melodyPreview?.detectedKey,
     melodyPreview?.keyLabel,
@@ -1419,7 +1618,7 @@ export default function NeuralHumPanel({
           scaleId={effectiveScaleId}
           keyLockOff={keyLockMode === 'off'}
           isAnalyzing={isAnalyzing}
-          getAudioContext={getOrCreateAudioContext}
+          getAudioContext={resolveAudioContext}
           getDestination={getPreviewDestination}
           onExportGroove={!se2Lane && onNeuralHumToCreation ? sendMidiToGrooveLab : undefined}
           onExportSynth={!se2Lane && onNeuralHumToCreation ? sendMidiToNewSynth : undefined}

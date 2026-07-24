@@ -2,8 +2,11 @@
 
 /**
  * Compact Hum Melody Capture inside Beat Pads VocalBox.
- * Pitch scope + key lock (same Neural Hum engine) fitted to VocalBox —
- * no full Vocal Lab panel, so Beat Pads stays responsive.
+ *
+ * NeuralNote-style workflow (our stack):
+ *   Rec = gather audio + audible metro; scope only reads pitch
+ *   Analyze = audio → MIDI from the mic take → piano roll
+ *   Optional key lock + quantize after
  */
 import {
   lazy,
@@ -50,21 +53,18 @@ import {
   NEURAL_HUM_SCALES,
   neuralHumKeyLabel,
   neuralHumScalePitchClasses,
+  snapMidiToNeuralHumScale,
   type NeuralHumKeyLockMode,
   type NeuralHumKeyLockSettings,
   type NeuralHumScaleId,
 } from '@/app/lib/vocalLab/neuralHumKeyLock';
 import {
+  analyzeVocalBoxHumTake,
   clampHumCaptureQuantize,
   lockVocalBoxHumCapture,
-  paintScopePitchOnGridCell,
-  VOCALBOX_HUM_EXTRACT_OPTS,
-  VOCALBOX_HUM_LIVE_DETECT_LATENCY_SEC,
+  VOCALBOX_HUM_DOWNBEAT_TRIM_SLACK_SEC,
   VOCALBOX_HUM_LIVE_OPTS,
-  VOCALBOX_HUM_PITCH_SWITCH_SEC,
-  VOCALBOX_HUM_TRANSCRIBE_OPTS,
 } from '@/app/lib/vocalLab/vocalBoxHumCaptureLock';
-import { softSnapMidiToScale } from '@/app/lib/vocalLab/vocalBoxHumMidiFilter';
 import NeuralHumPitchScope from '@/app/screens/vocal-lab/NeuralHumPitchScope';
 import '@/app/styles/beatPadsVocalBoxHumMelody.css';
 
@@ -120,9 +120,9 @@ const INSTRUMENTS: { id: NeuralHumInstrumentId; label: string }[] = [
 ];
 
 const KEY_MODES: { id: NeuralHumKeyLockMode; label: string }[] = [
-  { id: 'auto', label: 'Auto' },
-  { id: 'manual', label: 'Manual' },
   { id: 'off', label: 'Off' },
+  { id: 'manual', label: 'Manual' },
+  { id: 'auto', label: 'Auto' },
 ];
 
 export type BeatPadsVocalBoxHumMelodyNote = {
@@ -263,7 +263,7 @@ export function BeatPadsVocalBoxHumMelodyPanel({
   );
   const [activeLayer, setActiveLayer] = useState<BeatPadsVocalBoxHumRollLayer>('melody');
   const [layers, setLayers] = useState(emptyHumRollLayers);
-  const [status, setStatus] = useState('Hum / sing — mic filters to MIDI on the 1/16 roll');
+  const [status, setStatus] = useState('Rec = listen + click · Analyze = audio → MIDI');
   const [busy, setBusy] = useState(false);
   const [isPrecounting, setIsPrecounting] = useState(false);
   /** Cnt/Mtr + count box only — same Play click lock as VocalBox drums (no mic). */
@@ -399,10 +399,12 @@ export function BeatPadsVocalBoxHumMelodyPanel({
   const [precountEnabled, setPrecountEnabled] = useState(true);
   const [recordMetroEnabled, setRecordMetroEnabled] = useState(true);
   /** 40–200 — NeuralHumMelodyRoll divides by 100 for audition gain. */
-  const [previewDynamics, setPreviewDynamics] = useState(120);
+  const [previewDynamics, setPreviewDynamics] = useState(140);
   const [quantize, setQuantize] = useState<NeuralHumRollQuantize>(
     () => clampHumCaptureQuantize(VOCALBOX_HUM_QUANTIZE_DEFAULT),
   );
+  const quantizeRef = useRef(quantize);
+  quantizeRef.current = quantize;
 
   // Open locked to 1/16 (Hum Melody default) — ignore coarser shared drum grid.
   const seededQuantizeRef = useRef(false);
@@ -425,38 +427,24 @@ export function BeatPadsVocalBoxHumMelodyPanel({
   const hasRawTake = activeDraft.hasRawTake;
 
   const gridOriginFileSecRef = useRef(0);
-  /** Musical downbeat wall time — scope paints MIDI onto the visual grid from here. */
-  const musicEpochMsRef = useRef(0);
-  const liveGridNotesRef = useRef<NeuralHumRollNote[]>([]);
-  const scopeHoldRef = useRef<{
-    /** Key-locked pitch written to the roll. */
-    pitch: number;
-    /** Raw detected midi — drives note splits so key-lock can’t merge distinct sung notes. */
-    rawMidi: number;
-    sinceMs: number;
-    onsetSec: number;
-    locked: boolean;
-    candidatePitch: number | null;
-    candidateRawMidi: number | null;
-    candidateSinceMs: number;
-    /** Musical time when the new pitch was first heard (before switch debounce). */
-    candidateOnsetSec: number;
-  } | null>(null);
-  /** Freeze live paint at take end so clearing the anchor can't scramble the roll. */
-  const takePaintFreezeRef = useRef(false);
+  /** Musical green 1 (audio clock) — auto-stop length measured from here. */
+  const recordAnchorRef = useRef<number | null>(null);
   const precountCancelRef = useRef(false);
   const precountBufRef = useRef<AudioBuffer | null>(null);
   const scheduledNodesRef = useRef<AudioBufferSourceNode[]>([]);
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Stable capture API — never gate stop on a stale `capture.isRecording` boolean. */
+  const stopRecordRef = useRef<() => void>(() => {});
+  const releaseMicRef = useRef<() => void>(() => {});
+  const isRecordingCaptureRef = useRef(false);
   /** Audio-clock downbeat — metro Rec numbers (1–4) follow this + BPM. */
   const metroAnchorSecRef = useRef<number | null>(null);
   /** Exact metro tempo from runSe2PrecountThenMetro (rounded) — paint must use this, not raw bpm. */
   const gridBpmRef = useRef(se2ClickGridTempo(bpm).bpm);
   const gridSpbRef = useRef(se2ClickGridTempo(bpm).spb);
   /**
-   * During Rec: keep an audible but very quiet click for timing.
-   * Live pitch / lock still reject metro bleed into notes.
-   * Click Play uses normal volume.
+   * During Rec: keep click audible for pre-count + metro (counter stays synced).
+   * Slight duck vs Click Play so the mic still leads.
    */
   const quietRecClicksRef = useRef(false);
   /** Stop synced Rec-number UI driver (same clock as clicks). */
@@ -538,15 +526,15 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       const layerId = activeLayerRef.current;
       const layerMeta = ROLL_LAYERS.find((l) => l.id === layerId) ?? ROLL_LAYERS[0]!;
       const gridBpm = gridBpmRef.current || se2ClickGridTempo(bpm).bpm;
-      // Offline pitch→MIDI is authority (Neural Hum / ACE). Live paint is scope feedback only.
+      const q = clampHumCaptureQuantize(quantizeRef.current);
+      // Recorded take → Basic Pitch → optional key → quantize grid.
       const locked = lockVocalBoxHumCapture({
         rawNotes: raw,
         lock,
         bpm: gridBpm,
         bars: captureBars,
-        quantize: '1/16',
+        quantize: q,
       });
-      liveGridNotesRef.current = [];
       if (lock.mode === 'auto') {
         setKeyRoot(locked.effectiveKeyRoot);
         setScaleId(locked.effectiveScaleId);
@@ -567,9 +555,11 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       flash(
         locked.noteCount === 0
           ? 'No pitched notes — hum louder / closer to the mic.'
-          : `${locked.noteCount} note${locked.noteCount === 1 ? '' : 's'} on 1/16 grid · ${layerMeta.rollLabel}${
+          : `${locked.noteCount} note${locked.noteCount === 1 ? '' : 's'} from mic → ${q} grid · ${layerMeta.rollLabel}${
               label ? ` · ${label}` : ''
-            }${engineLabel ? ` · ${engineLabel}` : ''}`,
+            }${engineLabel ? ` · ${engineLabel}` : ''}${
+              raw.length !== locked.noteCount ? ` · raw ${raw.length}` : ''
+            }`,
       );
       return notes.length;
     },
@@ -581,13 +571,9 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       if (!blob || blob.size < 200 || analyzingRef.current) return;
       analyzingRef.current = true;
       setBusy(true);
-      flash('Converting mic → MIDI (1/16)…');
+      flash('Audio → MIDI…');
       try {
         const lock = keyLockRef.current;
-        // Live ACF paint is feedback only — never skip Basic Pitch / ACF extract.
-        liveGridNotesRef.current = [];
-        scopeHoldRef.current = null;
-        patchActiveLayer({ rollNotes: [], dirty: true }, activeLayerRef.current);
 
         const ctx = await resolveCtx();
         if (!ctx) {
@@ -598,23 +584,15 @@ export function BeatPadsVocalBoxHumMelodyPanel({
         const decoded = await ctx.decodeAudioData(bytes.slice(0));
         const gridBpm = gridBpmRef.current || se2ClickGridTempo(bpm).bpm;
         const takeSec = humCaptureDurationSec(gridBpm, captureBars);
+        // Trim to musical green 1 → take length (pre-count audio stays out of MIDI).
         const trimmed = trimAudioBufferFromSec(
           decoded,
           gridOriginFileSecRef.current,
           takeSec + 0.08,
         );
 
-        const { analyzeNeuralHumMelodyAsync } = await import(
-          '@/app/lib/vocalLab/neuralHumToInstrument'
-        );
-        const analyzed = await analyzeNeuralHumMelodyAsync(
-          trimmed,
-          // Analyze chromatic first — lockVocalBoxHumCapture applies key + 1/16 grid.
-          { mode: 'off', keyRoot: lock.keyRoot, scaleId: lock.scaleId },
-          VOCALBOX_HUM_EXTRACT_OPTS,
-          undefined,
-          VOCALBOX_HUM_TRANSCRIBE_OPTS,
-        );
+        // Mic ACF first (what you hummed); Basic Pitch only if ACF finds nothing.
+        const analyzed = await analyzeVocalBoxHumTake(trimmed);
         const layerId = activeLayerRef.current;
         rawNotesByLayerRef.current[layerId] = analyzed.rawNotes;
         patchActiveLayer({ hasRawTake: analyzed.rawNotes.length > 0 }, layerId);
@@ -629,17 +607,24 @@ export function BeatPadsVocalBoxHumMelodyPanel({
     [bpm, captureBars, commitFromRaw, flash, patchActiveLayer, resolveCtx],
   );
 
+  const applyBlobRef = useRef(applyBlob);
+  applyBlobRef.current = applyBlob;
+
   const capture = useVocalCapture(
-    (blob) => {
-      void applyBlob(blob);
-    },
-    // Echo cancel + noise suppress — mic voice only (Dubler-style isolation).
+    useCallback((blob: Blob | null) => {
+      void applyBlobRef.current(blob);
+    }, []),
+    // Echo cancel only — keep quiet hummed notes (no noise gate / AGC).
     { isolatedMic: true },
   );
 
+  stopRecordRef.current = capture.stopRecord;
+  releaseMicRef.current = capture.releaseMic;
+  isRecordingCaptureRef.current = capture.isRecording;
+
   const { live, trail, clearTrail } = useNeuralHumLivePitch(
-    // Warm analyser as soon as MediaRecorder arms (before green 1) so beat-1 notes lock.
-    capture.isRecording,
+    // Scope only during the take (after green 1) — not during red pre-count.
+    capture.isRecording && !isPrecounting,
     capture.captureStream,
     {
       minConfidence: VOCALBOX_HUM_LIVE_OPTS.minConfidence,
@@ -664,202 +649,66 @@ export function BeatPadsVocalBoxHumMelodyPanel({
     return () => cancelAnimationFrame(raf);
   }, [capture.isRecording, getAudioContext, isPrecounting]);
 
-  // Scope = pitch wheel — soft key snap (or chromatic when Key lock Off).
+  /**
+   * Auto-stop at end of take from green 1 (audio clock) — same pattern as VocalBox drums.
+   * Must use stopRecordRef: the beginRecord closure’s `capture.isRecording` stays false
+   * after startRecord and would skip MediaRecorder.stop(), chopping the take.
+   */
+  useEffect(() => {
+    if (!capture.isRecording) return;
+    const gridBpm = gridBpmRef.current || se2ClickGridTempo(bpm).bpm;
+    const takeSec = humCaptureDurationSec(gridBpm, captureBars);
+    const ctx = getAudioContext?.();
+    let raf = 0;
+    let t = 0;
+    const armTimer = () => {
+      const anchor = recordAnchorRef.current ?? metroAnchorSecRef.current;
+      if (anchor == null || !ctx) {
+        raf = requestAnimationFrame(armTimer);
+        return;
+      }
+      const remainingMs = (anchor + takeSec - ctx.currentTime) * 1000 + 40;
+      t = window.setTimeout(() => {
+        if (!isRecordingCaptureRef.current) return;
+        quietRecClicksRef.current = false;
+        stopClickUiRef.current?.();
+        stopClickUiRef.current = null;
+        cancelScheduled();
+        clearGridBeatLit();
+        metroAnchorSecRef.current = null;
+        setRecBeatNumber(null);
+        setRecSessionActive(false);
+        setRecCountPhase(null);
+        paintRecCountBox('—', null);
+        stopRecordRef.current();
+        flash('Analyzing mic take…');
+      }, Math.max(40, remainingMs));
+    };
+    armTimer();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+    // Intentionally narrow deps — remounting mid-take would reset the stop timer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- match VocalBox drums stop arm
+  }, [bpm, capture.isRecording, captureBars, getAudioContext]);
+
+  // Scope monitor only — optional key lock snaps the dial (not the roll during Rec).
   const liveLockedMidi = useMemo(() => {
     if (live == null) return null;
     if (keyLockMode === 'off') return Math.round(live.midi);
-    const pcs = neuralHumScalePitchClasses(keyRoot, scaleId);
-    return softSnapMidiToScale(live.midi, pcs, 0.55);
+    return snapMidiToNeuralHumScale(live.midi, keyRoot, scaleId);
   }, [keyLockMode, keyRoot, live, scaleId]);
   const liveLockedPc =
     liveLockedMidi == null ? null : ((liveLockedMidi % 12) + 12) % 12;
 
-  const liveRef = useRef(live);
-  liveRef.current = live;
-  const liveLockedMidiRef = useRef(liveLockedMidi);
-  liveLockedMidiRef.current = liveLockedMidi;
-  const captureBarsRef = useRef(captureBars);
-  captureBarsRef.current = captureBars;
-  const keyLockModeRef = useRef(keyLockMode);
-  keyLockModeRef.current = keyLockMode;
-  const keyRootRef = useRef(keyRoot);
-  keyRootRef.current = keyRoot;
-  const scaleIdRef = useRef(scaleId);
-  scaleIdRef.current = scaleId;
-
-  // Audio-clock rAF paint — compressor-filtered MIDI → hard 1/16 roll.
-  useEffect(() => {
-    if (!capture.isRecording) {
-      scopeHoldRef.current = null;
-      return;
-    }
-
-    let raf = 0;
-    let stopped = false;
-
-    const applyPaint = (pitch: number, onsetSec: number, timeSec: number, velocity: number) => {
-      const gridBpm = gridBpmRef.current;
-      const spb = gridSpbRef.current;
-      const q: NeuralHumRollQuantize = '1/16';
-      const stepSec = spb / 4;
-      const next = paintScopePitchOnGridCell({
-        existing: liveGridNotesRef.current,
-        timeSec,
-        onsetSec,
-        pitch,
-        velocity,
-        bpm: gridBpm,
-        bars: captureBarsRef.current,
-        quantize: q,
-        stepSec,
-      });
-      const a = liveGridNotesRef.current;
-      if (
-        a.length === next.length &&
-        a.every((n, i) => {
-          const m = next[i];
-          return m && n.startSlot === m.startSlot && n.pitch === m.pitch && n.lenSlots === m.lenSlots;
-        })
-      ) {
-        return;
-      }
-      liveGridNotesRef.current = next;
-      patchActiveLayer({ rollNotes: next, dirty: true }, activeLayerRef.current);
-    };
-
-    const lockMidi = (raw: number): number => {
-      if (keyLockModeRef.current === 'off') return Math.round(raw);
-      const pcs = neuralHumScalePitchClasses(keyRootRef.current, scaleIdRef.current);
-      return softSnapMidiToScale(raw, pcs, 0.55);
-    };
-
-    const tick = () => {
-      if (stopped) return;
-      if (takePaintFreezeRef.current) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      const anchor = metroAnchorSecRef.current;
-      const ctx = getAudioContext?.();
-      const spb = gridSpbRef.current;
-      if (anchor == null || !ctx || !(spb > 0)) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      const graphMusical = ctx.currentTime - anchor;
-      if (graphMusical < -0.005) {
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      const takeDur = captureBarsRef.current * BEATS_PER_BAR * spb;
-      const detectLag = VOCALBOX_HUM_LIVE_DETECT_LATENCY_SEC;
-      const playheadSec = Math.max(0, Math.min(takeDur, graphMusical));
-      const onsetProbeSec = Math.max(0, Math.min(takeDur, graphMusical - detectLag));
-      const now = performance.now();
-      const liveNow = liveRef.current;
-      const rawMidi = liveNow != null ? Math.round(liveNow.midi) : null;
-      const midi = rawMidi != null ? lockMidi(rawMidi) : null;
-
-      if (graphMusical >= takeDur) {
-        const prev = scopeHoldRef.current;
-        if (prev?.locked) applyPaint(prev.pitch, prev.onsetSec, takeDur, 64);
-        scopeHoldRef.current = null;
-        takePaintFreezeRef.current = true;
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      if (rawMidi == null || liveNow == null || midi == null) {
-        const prev = scopeHoldRef.current;
-        if (prev?.locked) {
-          applyPaint(prev.pitch, prev.onsetSec, playheadSec, 64);
-        }
-        scopeHoldRef.current = null;
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      const rms = liveNow.rms ?? 0.05;
-      const velocity = Math.max(
-        48,
-        Math.min(127, Math.round(36 + liveNow.confidence * 50 + Math.min(0.2, rms) * 200)),
-      );
-      const hold = scopeHoldRef.current;
-
-      if (!hold) {
-        scopeHoldRef.current = {
-          pitch: midi,
-          rawMidi,
-          sinceMs: now,
-          onsetSec: onsetProbeSec,
-          locked: true,
-          candidatePitch: null,
-          candidateRawMidi: null,
-          candidateSinceMs: 0,
-          candidateOnsetSec: onsetProbeSec,
-        };
-        applyPaint(midi, onsetProbeSec, playheadSec, velocity);
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      if (hold.rawMidi === rawMidi) {
-        hold.candidatePitch = null;
-        hold.candidateRawMidi = null;
-        hold.pitch = midi;
-        applyPaint(hold.pitch, hold.onsetSec, playheadSec, velocity);
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      if (hold.candidateRawMidi !== rawMidi) {
-        hold.candidatePitch = midi;
-        hold.candidateRawMidi = rawMidi;
-        hold.candidateSinceMs = now;
-        hold.candidateOnsetSec = onsetProbeSec;
-        applyPaint(hold.pitch, hold.onsetSec, playheadSec, velocity);
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-      if (now - hold.candidateSinceMs < VOCALBOX_HUM_PITCH_SWITCH_SEC * 1000) {
-        applyPaint(hold.pitch, hold.onsetSec, playheadSec, velocity);
-        raf = requestAnimationFrame(tick);
-        return;
-      }
-
-      const switchOnset = hold.candidateOnsetSec;
-      applyPaint(hold.pitch, hold.onsetSec, Math.max(hold.onsetSec, switchOnset), velocity);
-      scopeHoldRef.current = {
-        pitch: midi,
-        rawMidi,
-        sinceMs: now,
-        onsetSec: switchOnset,
-        locked: true,
-        candidatePitch: null,
-        candidateRawMidi: null,
-        candidateSinceMs: 0,
-        candidateOnsetSec: switchOnset,
-      };
-      applyPaint(midi, switchOnset, playheadSec, velocity);
-      raf = requestAnimationFrame(tick);
-    };
-
-    takePaintFreezeRef.current = false;
-    raf = requestAnimationFrame(tick);
-    return () => {
-      stopped = true;
-      cancelAnimationFrame(raf);
-    };
-  }, [capture.isRecording, getAudioContext, patchActiveLayer]);
   useEffect(
     () => () => {
       precountCancelRef.current = true;
       cancelScheduled();
       if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-      capture.releaseMic();
+      if (isRecordingCaptureRef.current) stopRecordRef.current();
+      else releaseMicRef.current();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- unmount only
     [],
@@ -904,12 +753,12 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       const src = ctx.createBufferSource();
       src.buffer = buf;
       const g = ctx.createGain();
-      // Rec: low click so you can lock timing without drowning the mic.
-      // Click Play: full SE2 click level.
+      // Pre-count + Rec metro must stay audible, but duck hard on Rec so the
+      // click isn’t pitched into MIDI when you’re not humming.
       const base = quietRecClicksRef.current
-        ? SE2_PRECOUNT_CLICK_VOLUME * 0.18
+        ? SE2_PRECOUNT_CLICK_VOLUME * 0.38
         : SE2_PRECOUNT_CLICK_VOLUME;
-      g.gain.value = downbeat ? base * 1.12 : base;
+      g.gain.value = downbeat ? base * 1.15 : base;
       src.connect(g);
       const dest = getAudioOutput?.() ?? ctx.destination;
       g.connect(dest);
@@ -945,7 +794,6 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       return;
     }
     precountCancelRef.current = true;
-    takePaintFreezeRef.current = true;
     quietRecClicksRef.current = false;
     stopClickUiRef.current?.();
     stopClickUiRef.current = null;
@@ -955,16 +803,17 @@ export function BeatPadsVocalBoxHumMelodyPanel({
     }
     cancelScheduled();
     clearGridBeatLit();
-    if (capture.isRecording) capture.stopRecord();
-    else capture.releaseMic();
+    if (isRecordingCaptureRef.current) stopRecordRef.current();
+    else releaseMicRef.current();
     metroAnchorSecRef.current = null;
+    recordAnchorRef.current = null;
     setIsPrecounting(false);
     setRecSessionActive(false);
     setRecBeatNumber(null);
     setRecCountPhase(null);
     paintRecCountBox('—', null);
     flash('Stopped.');
-  }, [cancelScheduled, capture, clickPlayActive, flash, paintRecCountBox, stopClickPlay]);
+  }, [cancelScheduled, clearGridBeatLit, clickPlayActive, flash, paintRecCountBox, stopClickPlay]);
 
   /** Audition Cnt/Mtr + count box — same lock as VocalBox Play (no mic). */
   const beginClickPlay = useCallback(async () => {
@@ -1178,12 +1027,10 @@ export function BeatPadsVocalBoxHumMelodyPanel({
     setRecCountPhase(precountEnabled ? 'precount' : 'metro');
     paintRecCountBox('…', precountEnabled ? 'precount' : 'metro');
     metroAnchorSecRef.current = null;
-    // Quiet click during Rec — hear timing, minimize bleed into scope/notes.
+    // Audible pre-count + metro during Rec (counter + click stay on).
     quietRecClicksRef.current = true;
-    takePaintFreezeRef.current = false;
     clearTrail();
-    liveGridNotesRef.current = [];
-    scopeHoldRef.current = null;
+    // Clear roll for the take — MIDI lands only after Basic Pitch Analyze.
     patchActiveLayer({ rollNotes: [], dirty: false }, activeLayerRef.current);
     flash(`Arming @ ${Math.round(bpm)} BPM…`);
 
@@ -1229,7 +1076,6 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       }
 
       const { bpm: gridBpm } = se2ClickGridTempo(bpm);
-      const takeSec = humCaptureDurationSec(gridBpm, captureBars);
       const takeBeats = captureBars * BEATS_PER_BAR;
 
       cancelScheduled();
@@ -1263,26 +1109,27 @@ export function BeatPadsVocalBoxHumMelodyPanel({
         scheduleMetroClick: (idealT, downbeat) => scheduleClick(ctx, idealT, downbeat),
         isCancelled: () => precountCancelRef.current,
         onGridReady: ({ downbeatAudioTime, spb, bpm: readyBpm }) => {
-          // Same tempo + downbeat as scheduled clicks — paint must not use raw prop bpm.
+          // Musical bar-1 beat-1 (first green 1) — not the red pre-count t0.
           metroAnchorSecRef.current = downbeatAudioTime;
+          recordAnchorRef.current = downbeatAudioTime;
           gridSpbRef.current = spb;
           gridBpmRef.current = readyBpm;
-          const skewSec = ctx.currentTime - downbeatAudioTime;
-          musicEpochMsRef.current = performance.now() - skewSec * 1000;
-          liveGridNotesRef.current = [];
-          scopeHoldRef.current = null;
         },
         onArmRecord: async () => {
+          // Starts ~on green 1 (tiny lead only) — never at the start of red pre-count.
           await capture.startRecord();
         },
-        // Pre-roll so MediaRecorder is already capturing when green 1 / first hummed note hits.
-        recordArmLeadSec: Math.min(0.28, Math.max(0.18, (60 / Math.max(40, gridBpm)) * 0.45)),
+        // Tiny pre-roll so MediaRecorder is hot for the downbeat; trim maps file→green 1.
+        recordArmLeadSec: Math.min(0.045, Math.max(0.02, (60 / Math.max(40, gridBpm)) * 0.06)),
         paintDigit: (n, phase) => paintRecCountBox(n, phase),
         onDisplayNumber: (n, phase, absoluteBeat) => {
           paintClickDigit(n, phase, absoluteBeat);
         },
         onPhaseChange: (phase) => {
-          if (phase === 'metro') setIsPrecounting(false);
+          if (phase === 'metro') {
+            setIsPrecounting(false);
+            setRecCountPhase('metro');
+          }
         },
       });
 
@@ -1295,8 +1142,9 @@ export function BeatPadsVocalBoxHumMelodyPanel({
         clearGridBeatLit();
         quietRecClicksRef.current = false;
         metroAnchorSecRef.current = null;
-        capture.releaseMic();
-        if (capture.isRecording) capture.stopRecord();
+        recordAnchorRef.current = null;
+        releaseMicRef.current();
+        if (isRecordingCaptureRef.current) stopRecordRef.current();
         setRecBeatNumber(null);
         setRecSessionActive(false);
         setRecCountPhase(null);
@@ -1307,47 +1155,29 @@ export function BeatPadsVocalBoxHumMelodyPanel({
 
       const { downbeatAudioTime, recordArmedAtSec } = result;
       const fileZero = recordArmedAtSec ?? downbeatAudioTime;
-      // Bar 1 beat 1 in the file + mic/path slack so hummed notes lock on the grid.
-      gridOriginFileSecRef.current = Math.max(0, downbeatAudioTime - fileZero);
-
-      if (result.countBeats === 0) setIsPrecounting(false);
-      // Keep onGridReady anchor — do NOT clear live notes painted on green 1.
+      // Musical 1 in the file = first green 1 after red pre-count (4→3→2→1).
+      gridOriginFileSecRef.current = Math.max(
+        0,
+        downbeatAudioTime - fileZero + VOCALBOX_HUM_DOWNBEAT_TRIM_SLACK_SEC,
+      );
+      recordAnchorRef.current = downbeatAudioTime;
       metroAnchorSecRef.current = downbeatAudioTime;
-      const skewSec = ctx.currentTime - downbeatAudioTime;
-      musicEpochMsRef.current = performance.now() - skewSec * 1000;
-      flash(
-        `Hum ${captureBars} bars @ ${gridBpm} BPM · key ${
-          keyLockMode === 'off' ? 'off' : neuralHumKeyLabel(keyRoot, scaleId)
-        } · grid locked…`,
-      );
 
-      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-      const stopDelayMs = Math.max(
-        40,
-        Math.ceil((downbeatAudioTime - ctx.currentTime + takeSec) * 1000) + 40,
+      // Downbeat reached — pre-count done; take is bar 1 beat 1 onward.
+      // Auto-stop is armed by the isRecording effect (stopRecordRef), not a stale closure.
+      setIsPrecounting(false);
+      setRecCountPhase('metro');
+      flash(
+        `Rec on 1 · ${captureBars} bars @ ${gridBpm} BPM · key ${
+          keyLockMode === 'off' ? 'off' : neuralHumKeyLabel(keyRoot, scaleId)
+        }`,
       );
-      stopTimerRef.current = setTimeout(() => {
-        stopTimerRef.current = null;
-        // Freeze paint first — clearing the anchor while still recording scrambled late notes.
-        takePaintFreezeRef.current = true;
-        quietRecClicksRef.current = false;
-        stopClickUiRef.current?.();
-        stopClickUiRef.current = null;
-        cancelScheduled();
-        clearGridBeatLit();
-        if (capture.isRecording) capture.stopRecord();
-        metroAnchorSecRef.current = null;
-        setRecBeatNumber(null);
-        setRecSessionActive(false);
-        setRecCountPhase(null);
-        paintRecCountBox('—', null);
-        flash('Locking 1/16 grid…');
-      }, stopDelayMs);
     } catch (err) {
       metroAnchorSecRef.current = null;
+      recordAnchorRef.current = null;
       quietRecClicksRef.current = false;
       cancelScheduled();
-      capture.releaseMic();
+      releaseMicRef.current();
       setRecSessionActive(false);
       setRecCountPhase(null);
       paintRecCountBox('—', null);
@@ -1420,13 +1250,13 @@ export function BeatPadsVocalBoxHumMelodyPanel({
   }, [captureBars, commitFromRaw, quantize]);
 
   // Changing quantize or BPM re-snaps the active take onto the new grid.
-  const quantizeRef = useRef(quantize);
-  const bpmRef = useRef(bpm);
+  const prevQuantizeForResnapRef = useRef(quantize);
+  const prevBpmForResnapRef = useRef(bpm);
   useEffect(() => {
-    const quantizeChanged = quantizeRef.current !== quantize;
-    const bpmChanged = bpmRef.current !== bpm;
-    quantizeRef.current = quantize;
-    bpmRef.current = bpm;
+    const quantizeChanged = prevQuantizeForResnapRef.current !== quantize;
+    const bpmChanged = prevBpmForResnapRef.current !== bpm;
+    prevQuantizeForResnapRef.current = quantize;
+    prevBpmForResnapRef.current = bpm;
     if (!quantizeChanged && !bpmChanged) return;
     const layerId = activeLayerRef.current;
     const raw = rawNotesByLayerRef.current[layerId];
@@ -1552,8 +1382,8 @@ export function BeatPadsVocalBoxHumMelodyPanel({
         <div className="flex flex-col gap-0.5 min-w-0">
           <span className="vb-hum-title">Hum Melody</span>
           <span className="vb-hum-subtitle">
-            {Math.round(bpm)} BPM · {activeLayerMeta.tab} · scope + key
-            {scopeKeyLabel ? ` · ${scopeKeyLabel}` : ''}
+            {Math.round(bpm)} BPM · {activeLayerMeta.tab} · audio → MIDI
+            {scopeKeyLabel ? ` · key ${scopeKeyLabel}` : ' · key off'}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -1662,11 +1492,11 @@ export function BeatPadsVocalBoxHumMelodyPanel({
                 onClick={() => setKeyLockMode(m.id)}
                 className={chipClass(keyLockMode === m.id)}
                 title={
-                  m.id === 'auto'
-                    ? 'Detect key from your take'
+                  m.id === 'off'
+                    ? 'Chromatic capture — keep raw pitches from the mic take'
                     : m.id === 'manual'
-                      ? 'Force root + scale you pick'
-                      : 'No key snap — keep raw pitches'
+                      ? 'Optional — snap MIDI into the root + scale you pick (after Analyze)'
+                      : 'Optional — detect key from your take, then snap (after Analyze)'
                 }
               >
                 {m.label}
@@ -1917,8 +1747,8 @@ export function BeatPadsVocalBoxHumMelodyPanel({
               if (bars <= maxBars) setCaptureBars(bars);
             }}
             bpm={rollBpm}
-            quantize="1/16"
-            onQuantizeChange={() => setQuantize('1/16')}
+            quantize={quantize}
+            onQuantizeChange={(q) => setQuantize(clampHumCaptureQuantize(q))}
             onQuantizeNow={handleQuantizeNow}
             onApplyToTrack={onApply ? handleApply : undefined}
             applyToTrackDirty={rollDirty}

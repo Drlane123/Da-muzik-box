@@ -32,6 +32,7 @@ import PhoneLandscapeGate from '@/app/components/PhoneLandscapeGate';
 import KeyboardShortcutsBootstrap from '@/app/components/KeyboardShortcutsBootstrap';
 import MidiInputFocus from '@/app/components/MidiInputFocus';
 import PwaUpdateBanner from '@/app/components/PwaUpdateBanner';
+import AppWakeLockBootstrap from '@/app/components/AppWakeLockBootstrap';
 
 import { type ScreenId } from '@/app/lib/navigation/moduleNav';
 import {
@@ -581,6 +582,7 @@ function AppContent() {
         }}
       >
       <TouchDeviceBootstrap />
+      <AppWakeLockBootstrap />
       <UiScaleBootstrap />
       <UiBrightnessBootstrap />
       <PhoneLandscapeGate />

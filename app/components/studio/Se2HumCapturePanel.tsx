@@ -17,7 +17,8 @@ import {
 import { se2TrackNumberedName } from '@/app/lib/studio/se2StudioTrackNumber';
 import NeuralHumPanel, { type NeuralHumSe2LaneBinding } from '@/app/screens/vocal-lab/NeuralHumPanel';
 import type { NeuralHumInstrumentId } from '@/app/lib/vocalLab/neuralHumToInstrument';
-import type { NeuralHumRollBarCount } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
+import type { NeuralHumRollBarCount, NeuralHumRollQuantize } from '@/app/lib/vocalLab/neuralHumMelodyRoll';
+import { clampHumCaptureQuantize } from '@/app/lib/vocalLab/vocalBoxHumCaptureLock';
 
 const ACCENT = '#00E5FF';
 
@@ -119,20 +120,29 @@ export function Se2HumCapturePanel({
     ? studioTrackDetectedKeyFromFields(harmonySource, songKeyRoot, songKeyMode)
     : studioTrackDetectedKeyFromFields(track, songKeyRoot, songKeyMode);
 
-  void keyRoot;
-  void keyMode;
-
   const rollBars = (track.humCaptureRollBars === 4 ? 4 : 8) as NeuralHumRollBarCount;
   const instrumentId = (track.humCaptureInstrumentId ?? 'piano') as NeuralHumInstrumentId;
   const transpose = track.humCaptureTranspose ?? 0;
-  const quantize = track.humCaptureQuantize ?? '1/16';
+  const quantize = clampHumCaptureQuantize(
+    (track.humCaptureQuantize as NeuralHumRollQuantize | undefined) ?? '1/16',
+  );
+  const initialScaleId = keyMode === 'minor' ? 'minor' : 'major';
 
   const initialRollNotes = useMemo(
     () => se2HumCaptureSeedRollNotes(notes, bpm, beatsPerBar, rollBars, quantize),
     [notes, bpm, beatsPerBar, rollBars, quantize],
   );
 
-  const trackKey = `${track.id}:${notes.length}:${rollBars}:${instrumentId}`;
+  const trackKey = `${track.id}:${notes.length}:${rollBars}:${instrumentId}:${quantize}:${keyRoot}:${initialScaleId}`;
+
+  const getPreviewDestinationStable = useCallback(
+    (ctx: AudioContext) => {
+      const dest = getPreviewDestination(ctx);
+      previewStripRef.current = dest;
+      return dest;
+    },
+    [getPreviewDestination],
+  );
 
   const onRollNotesCommit = useCallback(
     (rollNotes: Parameters<NonNullable<NeuralHumSe2LaneBinding['onRollNotesCommit']>>[0]) => {
@@ -150,19 +160,19 @@ export function Se2HumCapturePanel({
       instrumentId,
       onInstrumentIdChange,
       onRollNotesCommit,
-      getPreviewDestination: (ctx) => {
-        const dest = getPreviewDestination(ctx);
-        previewStripRef.current = dest;
-        return dest;
-      },
+      quantize,
+      getAudioContext,
+      getPreviewDestination: getPreviewDestinationStable,
     }),
     [
-      getPreviewDestination,
+      getAudioContext,
+      getPreviewDestinationStable,
       initialRollNotes,
       instrumentId,
       onInstrumentIdChange,
       onRollBarsChange,
       onRollNotesCommit,
+      quantize,
       rollBars,
       trackKey,
     ],
@@ -199,7 +209,13 @@ export function Se2HumCapturePanel({
       ) : null}
 
       <Se2HumCapturePanelErrorBoundary>
-        <NeuralHumPanel se2Lane={se2Lane} disabled={disabled} />
+        <NeuralHumPanel
+          se2Lane={se2Lane}
+          disabled={disabled}
+          initialKeyRoot={keyRoot}
+          initialScaleId={initialScaleId}
+          bpmOverride={bpm}
+        />
       </Se2HumCapturePanelErrorBoundary>
     </div>
   );

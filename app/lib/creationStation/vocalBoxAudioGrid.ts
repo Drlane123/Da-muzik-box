@@ -380,13 +380,15 @@ export async function runSe2PrecountThenMetro(args: {
   let armed = false;
   let armPromise: Promise<void> | null = null;
 
-  const armNow = async (stampSec?: number) => {
+  const armNow = async (_idealSec?: number) => {
     if (!args.onArmRecord || armed) return;
     if (!armPromise) {
       armPromise = (async () => {
         await args.onArmRecord!();
         armed = true;
-        recordArmedAtSec = stampSec ?? args.ctx.currentTime;
+        // Stamp the real audio clock when MediaRecorder starts — not the ideal
+        // schedule time — so file trim lines up with green 1 / musical downbeat.
+        recordArmedAtSec = args.ctx.currentTime;
       })();
     }
     await armPromise;

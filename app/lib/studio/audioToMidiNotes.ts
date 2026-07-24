@@ -167,7 +167,8 @@ function adaptiveRmsGate(rmses: readonly number[], minRms = MIN_RMS): number {
   const voiced = rmses.filter((r) => r > 0.0004).sort((a, b) => a - b);
   if (voiced.length === 0) return minRms;
   const ref = voiced[Math.floor(voiced.length * 0.12)] ?? minRms;
-  return Math.max(minRms * 0.55, Math.min(minRms, ref * 0.22));
+  // Never open below minRms — silent / click-only takes were inventing ghost pitches.
+  return Math.max(minRms, Math.min(minRms * 1.35, ref * 0.45));
 }
 
 function hzToMidi(f: number): number {

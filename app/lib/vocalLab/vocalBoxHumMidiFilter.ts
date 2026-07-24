@@ -1,7 +1,6 @@
 /**
- * Hum Melody mic → MIDI filter:
- * soft compressor / AGC on the analysis buffer, then stable pitch → MIDI.
- * Keeps quiet hummed notes audible to the detector without cooking loud ones.
+ * Hum Melody mic → MIDI (Dodo Quick Mode):
+ * soft AGC → ACF → chromatic MIDI. Key lock is applied later only if the user enables it.
  */
 import { detectPitchACF } from '@/app/lib/pitchDetection';
 
@@ -16,8 +15,10 @@ export type HumMidiFrame = {
 };
 
 const TARGET_RMS = 0.12;
-const MAX_COMP_GAIN = 8;
-const MIDI_MEDIAN_LEN = 5;
+const MAX_COMP_GAIN = 7;
+const MIDI_MEDIAN_LEN = 3;
+/** Quick Mode — leave current pitch when we move ~½ semi. */
+const MIDI_HYSTERESIS_SEMIS = 0.5;
 
 /** In-place soft compressor toward TARGET_RMS (analysis only — never to speakers). */
 export function compressHumAnalysisBuffer(buf: Float32Array, prevGain: number): number {
@@ -138,15 +139,15 @@ export function trackHumPitchFrame(
   if (state.midiHistory.length > MIDI_MEDIAN_LEN) state.midiHistory.shift();
   const med = medianInt(state.midiHistory);
 
-  // Hysteresis: stick until we move ≥ 0.65 semis away from stable float.
+  // Hysteresis: stick until we move clearly off the stable float.
   if (state.stableFloat == null || state.stableMidi == null) {
     state.stableFloat = midiFloat;
     state.stableMidi = med;
-  } else if (Math.abs(midiFloat - state.stableFloat) >= 0.65) {
+  } else if (Math.abs(midiFloat - state.stableFloat) >= MIDI_HYSTERESIS_SEMIS) {
     state.stableFloat = midiFloat;
     state.stableMidi = med;
   } else {
-    state.stableFloat = state.stableFloat * 0.7 + midiFloat * 0.3;
+    state.stableFloat = state.stableFloat * 0.75 + midiFloat * 0.25;
     state.stableMidi = Math.round(state.stableFloat);
   }
 
