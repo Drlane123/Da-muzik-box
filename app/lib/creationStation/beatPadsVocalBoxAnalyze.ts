@@ -318,6 +318,32 @@ export function filterVocalBoxHitsByRoleMask(
   return hits.filter((h) => mask[h.role]);
 }
 
+/** VocalBox drum Intensity — Hard (few hits) ↔ Open (more hits). Mid ~55 = current feel. */
+export const VOCALBOX_DRUM_INTENSITY_DEFAULT = 55;
+
+export function clampVocalBoxDrumIntensity(raw?: number): number {
+  if (!Number.isFinite(raw)) return VOCALBOX_DRUM_INTENSITY_DEFAULT;
+  return Math.max(0, Math.min(100, Math.round(raw as number)));
+}
+
+function lerpVocalBox(a: number, b: number, t: number): number {
+  return a + (b - a) * Math.max(0, Math.min(1, t));
+}
+
+export function vocalBoxDrumIntensityProfile(intensity?: number) {
+  const level = clampVocalBoxDrumIntensity(intensity);
+  const t = level / 100;
+  return {
+    level,
+    /** Multiplies adaptive RMS gate — higher = harder for soft hits. */
+    gateMul: lerpVocalBox(1.55, 0.72, t),
+    /** Extra onset headroom above gate. */
+    onsetHeadroom: lerpVocalBox(1.22, 1.02, t),
+    /** Drop weaker mouth hits below this velocity. */
+    minVelocity: Math.round(lerpVocalBox(72, 38, t)),
+  };
+}
+
 function kickSnareOnlyMask(mask: VocalBoxRoleMask): boolean {
   return mask.kick && mask.snare && !mask.hat && !mask.clap;
 }
@@ -487,19 +513,25 @@ function classifyVocalBoxHit(
  * (one boom → one kick) yet still fires on a fresh, closely-spaced hit that rises
  * back above the decaying threshold (fast hits are not dropped).
  */
-function detectOnsetFrames(rmses: number[], gate: number, hopSec: number): number[] {
+function detectOnsetFrames(
+  rmses: number[],
+  gate: number,
+  hopSec: number,
+  onsetHeadroom: number = 1.08,
+): number[] {
   const refractoryFrames = Math.max(1, Math.round(VOCALBOX_ONSET_REFRACTORY_SEC / hopSec));
   const decay = Math.exp(-hopSec / VOCALBOX_ONSET_DECAY_SEC);
   const onsets: number[] = [];
   let thr = gate;
   let lastOnset = -refractoryFrames * 4;
+  const head = Math.max(1.0, Math.min(1.4, onsetHeadroom));
 
   for (let i = 1; i < rmses.length; i += 1) {
     thr = Math.max(gate, thr * decay);
     const cur = rmses[i] ?? 0;
     const prev = rmses[i - 1] ?? 0;
     const rising = cur >= prev * 1.04;
-    if (cur > gate * 1.08 && cur > thr && rising && i - lastOnset >= refractoryFrames) {
+    if (cur > gate * head && cur > thr && rising && i - lastOnset >= refractoryFrames) {
       onsets.push(i);
       lastOnset = i;
       thr = cur * 1.12;
@@ -607,12 +639,14 @@ export function mergeVocalBoxOnsetBursts(
   return out;
 }
 
-/** Raw onset detect only (no BPM quantize). */
+/** Raw onset detect only (no BPM quantize). Intensity gates soft/noise hits. */
 export function detectBeatboxVocalBoxHits(
   buffer: AudioBuffer,
   maxAnalysisSec?: number,
   roleMask: VocalBoxRoleMask = VOCALBOX_DEFAULT_ROLE_MASK,
+  intensity: number = VOCALBOX_DRUM_INTENSITY_DEFAULT,
 ): VocalBoxHit[] {
+  const gateProf = vocalBoxDrumIntensityProfile(intensity);
   const { data, sr } = monoDecimate(buffer);
   const capSec = maxAnalysisSec ?? MAX_ANALYSIS_SEC;
   const maxSamples = Math.min(data.length, Math.floor(capSec * sr));
@@ -622,9 +656,9 @@ export function detectBeatboxVocalBoxHits(
   for (let start = 0; start + FRAME <= maxSamples; start += HOP) {
     rmses.push(frameRms(data.subarray(start, start + FRAME)));
   }
-  const gate = adaptiveRmsGate(rmses);
+  const gate = adaptiveRmsGate(rmses) * gateProf.gateMul;
   const hopSec = HOP / sr;
-  const onsetFrames = detectOnsetFrames(rmses, gate, hopSec);
+  const onsetFrames = detectOnsetFrames(rmses, gate, hopSec, gateProf.onsetHeadroom);
 
   const measured = onsetFrames.map((onsetFrame) => {
     const peakFrame = localPeakFrame(rmses, onsetFrame, VOCALBOX_PEAK_SEARCH_FRAMES);
@@ -653,6 +687,7 @@ export function detectBeatboxVocalBoxHits(
     if (!role) continue;
     const m = measured[i]!;
     const vel = Math.round(Math.max(40, Math.min(127, 48 + m.peakRms * 820)));
+    if (vel < gateProf.minVelocity) continue;
     // Peak-walkback is loudness-consistent (scale-invariant 28%-of-peak); the per-role
     // bias applies the systematic lead (kick boom peaks later than a snare "ka").
     const startSec = vocalBoxOnsetSecFromPeak(rmses, m.peakFrame, sr, gate, role);

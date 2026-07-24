@@ -60,11 +60,14 @@ import {
 } from '@/app/lib/vocalLab/neuralHumKeyLock';
 import {
   analyzeVocalBoxHumTake,
+  clampHumCaptureIntensity,
   clampHumCaptureQuantize,
   lockVocalBoxHumCapture,
   VOCALBOX_HUM_DOWNBEAT_TRIM_SLACK_SEC,
+  VOCALBOX_HUM_INTENSITY_DEFAULT,
   VOCALBOX_HUM_LIVE_OPTS,
 } from '@/app/lib/vocalLab/vocalBoxHumCaptureLock';
+import { VocalBoxHumIntensitySlider } from '@/app/components/creation/VocalBoxHumIntensitySlider';
 import NeuralHumPitchScope from '@/app/screens/vocal-lab/NeuralHumPitchScope';
 import '@/app/styles/beatPadsVocalBoxHumMelody.css';
 
@@ -406,6 +409,10 @@ export function BeatPadsVocalBoxHumMelodyPanel({
   );
   const quantizeRef = useRef(quantize);
   quantizeRef.current = quantize;
+  /** Hum Melody Intensity only — independent from VocalBox drums. */
+  const [intensity, setIntensity] = useState(VOCALBOX_HUM_INTENSITY_DEFAULT);
+  const intensityRef = useRef(intensity);
+  intensityRef.current = intensity;
 
   // Open locked to 1/16 (Hum Melody default) — ignore coarser shared drum grid.
   const seededQuantizeRef = useRef(false);
@@ -528,13 +535,15 @@ export function BeatPadsVocalBoxHumMelodyPanel({
       const layerMeta = ROLL_LAYERS.find((l) => l.id === layerId) ?? ROLL_LAYERS[0]!;
       const gridBpm = gridBpmRef.current || se2ClickGridTempo(bpm).bpm;
       const q = clampHumCaptureQuantize(quantizeRef.current);
-      // Recorded take → Basic Pitch → optional key → quantize grid.
+      const intensityLevel = clampHumCaptureIntensity(intensityRef.current);
+      // Recorded take → mic MIDI → optional key → Intensity gate → quantize grid.
       const locked = lockVocalBoxHumCapture({
         rawNotes: raw,
         lock,
         bpm: gridBpm,
         bars: captureBars,
         quantize: q,
+        intensity: intensityLevel,
       });
       if (lock.mode === 'auto') {
         setKeyRoot(locked.effectiveKeyRoot);
@@ -594,7 +603,11 @@ export function BeatPadsVocalBoxHumMelodyPanel({
         );
 
         // Mic ACF first (what you hummed); Basic Pitch only if ACF finds nothing.
-        const analyzed = await analyzeVocalBoxHumTake(trimmed);
+        const analyzed = await analyzeVocalBoxHumTake(
+          trimmed,
+          undefined,
+          intensityRef.current,
+        );
         const layerId = activeLayerRef.current;
         rawNotesByLayerRef.current[layerId] = analyzed.rawNotes;
         patchActiveLayer({ hasRawTake: analyzed.rawNotes.length > 0 }, layerId);
@@ -1257,6 +1270,17 @@ export function BeatPadsVocalBoxHumMelodyPanel({
     });
   }, [captureBars, commitFromRaw, quantize]);
 
+  // Intensity valve — re-gate the active take without re-recording.
+  const prevIntensityRef = useRef(intensity);
+  useEffect(() => {
+    if (prevIntensityRef.current === intensity) return;
+    prevIntensityRef.current = intensity;
+    const layerId = activeLayerRef.current;
+    const raw = rawNotesByLayerRef.current[layerId];
+    if (!raw || raw.length === 0) return;
+    commitFromRaw(raw, keyLockRef.current, `intensity ${clampHumCaptureIntensity(intensity)}`);
+  }, [commitFromRaw, intensity]);
+
   // Changing quantize or BPM re-snaps the active take onto the new grid.
   const prevQuantizeForResnapRef = useRef(quantize);
   const prevBpmForResnapRef = useRef(bpm);
@@ -1471,6 +1495,18 @@ export function BeatPadsVocalBoxHumMelodyPanel({
           </button>
         </div>
       </div>
+
+      <VocalBoxHumIntensitySlider
+        size="full"
+        value={intensity}
+        onChange={setIntensity}
+        disabled={blocked || busy || recording}
+        ariaLabel="Hum Melody note intensity gate"
+        helpTitle="Hum Melody Intensity"
+        helpBody={
+          'Controls how easy hummed / sung notes get onto the piano roll after Analyze.\n\nHard (low) = only strong, clear melody notes pass — weak ghosts, clicks, and scraps stay out.\n\nOpen (high) = softer / quieter notes can also enter the roll.\n\nDefault 55 is the locked sweet spot. Drag after a take to re-gate without recording again. Independent from VocalBox Intensity.'
+        }
+      />
 
       <div className="flex flex-wrap items-start gap-3 min-w-0">
         <div className="vb-hum-panel shrink-0 p-1.5">

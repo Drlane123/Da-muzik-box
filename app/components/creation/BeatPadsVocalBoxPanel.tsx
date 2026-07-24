@@ -25,6 +25,7 @@ import {
 } from '@/app/lib/creationStation/beatLabDrumMachineSequencer';
 import {
   alignAndQuantizeVocalBoxHits,
+  clampVocalBoxDrumIntensity,
   detectBeatboxVocalBoxHits,
   mergeVocalBoxHitsIntoPattern,
   trimAudioBufferFromSec,
@@ -36,6 +37,7 @@ import {
   VOCALBOX_CAPTURE_BAR_OPTIONS,
   VOCALBOX_DEFAULT_CAPTURE_BARS,
   VOCALBOX_DEFAULT_ROLE_MASK,
+  VOCALBOX_DRUM_INTENSITY_DEFAULT,
   VOCALBOX_QUANTIZE_OPTIONS,
   vocalBoxClampCaptureBars,
   vocalBoxTimingFeedback,
@@ -58,6 +60,7 @@ import {
   runVocalBoxClickCount,
 } from '@/app/lib/creationStation/vocalBoxClickCount';
 import type { BeatPadsVocalBoxHumMelodyApply } from '@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel';
+import { VocalBoxHumIntensitySlider } from '@/app/components/creation/VocalBoxHumIntensitySlider';
 import '@/app/styles/beatPadsVocalBoxHumMelody.css';
 
 export type { BeatPadsVocalBoxHumMelodyApply } from '@/app/components/creation/BeatPadsVocalBoxHumMelodyPanel';
@@ -527,6 +530,12 @@ export function BeatPadsVocalBoxPanel({
   const [precountBars] = useState<1 | 2>(1);
   const [recordMetroEnabled, setRecordMetroEnabled] = useState(true);
   const [isPrecounting, setIsPrecounting] = useState(false);
+  /** VocalBox drums Intensity only — independent from Hum Melody. */
+  const [drumIntensity, setDrumIntensity] = useState(VOCALBOX_DRUM_INTENSITY_DEFAULT);
+  const drumIntensityRef = useRef(drumIntensity);
+  drumIntensityRef.current = drumIntensity;
+  /** Last trimmed take — Intensity re-gates without re-recording. */
+  const lastDrumTakeRef = useRef<AudioBuffer | null>(null);
   /** True while click-Play audition runs (Mtr + count box, no mic, no pre-count). */
   const [clickPlayActive, setClickPlayActive] = useState(false);
   /** True for whole Rec session (count-in + take) so the digit span never unmounts mid-grid. */
@@ -902,6 +911,43 @@ export function BeatPadsVocalBoxPanel({
     applyQuantizeToRaw(rawHits, quantize);
   }, [applyQuantizeToRaw, captureBars, quantize, rawHits, roleMask]);
 
+  // VocalBox Intensity — re-gate last drum take without re-recording.
+  const prevDrumIntensityRef = useRef(drumIntensity);
+  useEffect(() => {
+    if (prevDrumIntensityRef.current === drumIntensity) return;
+    prevDrumIntensityRef.current = drumIntensity;
+    const take = lastDrumTakeRef.current;
+    if (!take) return;
+    const takeSec = vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar);
+    const raw = detectBeatboxVocalBoxHits(take, takeSec, roleMask, drumIntensity);
+    setRawHits(raw);
+    if (raw.length === 0) {
+      setDraftHits([]);
+      setStatus(`Intensity ${drumIntensity} — no hits left. Open the gate or Rec again.`);
+      return;
+    }
+    const hits = alignAndQuantizeVocalBoxHits(raw, {
+      bpm,
+      captureBars,
+      stepsPerBar,
+      beatsPerBar,
+      quantize,
+      roleMask,
+    });
+    setDraftHits(hits);
+    setStatus(
+      `${vocalBoxStatusCounts(hits, bpm, quantize, captureBars)} · intensity ${drumIntensity}`,
+    );
+  }, [
+    beatsPerBar,
+    bpm,
+    captureBars,
+    drumIntensity,
+    quantize,
+    roleMask,
+    stepsPerBar,
+  ]);
+
   const laneSteps = useMemo(
     () =>
       vocalBoxHitsToLaneSteps(draftHits, {
@@ -933,7 +979,13 @@ export function BeatPadsVocalBoxPanel({
         const downbeatSec = Math.max(0, Math.min(gridOriginFileSecRef.current, Math.max(0, buffer.duration - 0.05)));
         const takeSec = vocalBoxCaptureDurationSec(bpm, captureBars, beatsPerBar);
         const fromDownbeat = trimAudioBufferFromSec(buffer, downbeatSec, takeSec + 0.06);
-        const raw = detectBeatboxVocalBoxHits(fromDownbeat, takeSec, roleMask);
+        lastDrumTakeRef.current = fromDownbeat;
+        const raw = detectBeatboxVocalBoxHits(
+          fromDownbeat,
+          takeSec,
+          roleMask,
+          drumIntensityRef.current,
+        );
         if (raw.length === 0) {
           setStatus(`No hits — ${captureBars} bar @ ${bpm} BPM. boom / ka on the beat.`);
           setRawHits([]);
@@ -1773,6 +1825,7 @@ export function BeatPadsVocalBoxPanel({
     setIsPreviewing(false);
     setDraftHits([]);
     setRawHits([]);
+    lastDrumTakeRef.current = null;
     setStatus(`Cleared — ${bpm} BPM, Rec when ready.`);
   }, [bpm, clearPreviewTimers]);
 
@@ -2123,6 +2176,19 @@ export function BeatPadsVocalBoxPanel({
             </button>
           ) : null}
         </div>
+      </div>
+      <div className="vb-intensity-slot">
+        <VocalBoxHumIntensitySlider
+          size="compact"
+          value={drumIntensity}
+          onChange={(v) => setDrumIntensity(clampVocalBoxDrumIntensity(v))}
+          disabled={disabled || busy || capture.isRecording || isPrecounting}
+          ariaLabel="VocalBox drum intensity gate"
+          helpTitle="VocalBox Intensity"
+          helpBody={
+            'Controls how easy mouth-drum hits get into the grid after Rec.\n\nHard (low) = only strong boom / ka hits pass — soft breaths and weak scraps stay out.\n\nOpen (high) = quieter / softer hits can also land on the pads.\n\nDefault 55 is the locked sweet spot. Drag after a take to re-gate without recording again. Independent from Hum Melody Intensity.'
+          }
+        />
       </div>
       <div className="vb-rec-count-below" title="Each click shows its beat number">
         <label

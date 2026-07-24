@@ -286,6 +286,488 @@
   padding: 0 8px;
 }
 
+/* ── Intensity valve (shared Hum Melody + VocalBox) ─────────────────────── */
+
+[data-beat-pads-vocalbox] .vb-intensity,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity {
+  --vb-intensity: 55%;
+  --vb-int-cyan: #00e5ff;
+  --vb-int-mint: #7cf4c6;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background:
+    linear-gradient(180deg, rgba(18, 28, 40, 0.95) 0%, rgba(8, 12, 20, 0.98) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 4px 18px rgba(0, 0, 0, 0.35);
+  user-select: none;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 14px;
+  gap: 12px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact {
+  width: auto;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 4px 12px 4px 12px;
+  gap: 8px;
+  flex: 1 1 auto;
+  border-color: rgba(0, 229, 255, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 2px 10px rgba(0, 0, 0, 0.28);
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__label,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__label {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vb-int-cyan);
+  flex-shrink: 0;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__label-row,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__label-row {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  background: rgba(0, 20, 28, 0.75);
+  color: #9eefff;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__help {
+  width: 14px;
+  height: 14px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help:hover,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help:hover,
+[data-beat-pads-vocalbox] .vb-intensity__help--on,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help--on {
+  border-color: rgba(0, 229, 255, 0.85);
+  color: #ffffff;
+  background: rgba(0, 40, 52, 0.95);
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-pop,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-pop {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: min(280px, 78vw);
+  padding: 10px 12px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  background: linear-gradient(180deg, rgba(12, 20, 30, 0.98) 0%, rgba(6, 10, 16, 0.99) 100%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  color: #c8e8f4;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-title,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-title {
+  display: block;
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #00e5ff;
+  margin: 0 0 6px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-body,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-body {
+  margin: 0 0 8px;
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(210, 235, 245, 0.92);
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-line,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-line {
+  display: block;
+  margin-bottom: 0.35em;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-line:last-child,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-line:last-child {
+  margin-bottom: 0;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-close,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(124, 244, 198, 0.45);
+  background: rgba(124, 244, 198, 0.1);
+  color: #9ef0d0;
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__help-close:hover,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-close:hover {
+  border-color: rgba(124, 244, 198, 0.75);
+  color: #e8fff6;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__label {
+  font-size: 10px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__label {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__end,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__end {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(168, 210, 230, 0.55);
+  flex-shrink: 0;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__track-wrap,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__track-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__track-wrap {
+  position: relative;
+  min-width: 140px;
+  height: 28px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__track-wrap {
+  position: relative;
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 280px;
+  max-width: none;
+  height: 24px;
+}
+
+/* Tick marks — both VocalBox + Hum Melody */
+[data-beat-pads-vocalbox] .vb-intensity__ticks,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__ticks {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__tick,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 5px;
+  margin-top: -10px;
+  transform: translateX(-50%);
+  border-radius: 0.5px;
+  background: rgba(140, 175, 195, 0.28);
+  box-shadow: none;
+  transition:
+    background 0.06s ease,
+    height 0.06s ease,
+    opacity 0.06s ease;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__tick {
+  height: 6px;
+  margin-top: -12px;
+  width: 1px;
+  background: rgba(150, 185, 205, 0.32);
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__tick--mid,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__tick--mid {
+  height: 8px;
+  margin-top: -12px;
+  width: 1.5px;
+  background: rgba(155, 190, 210, 0.48);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__tick--mid {
+  height: 9px;
+  margin-top: -14px;
+  width: 1.5px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__tick--major,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__tick--major {
+  height: 11px;
+  margin-top: -14px;
+  width: 2px;
+  background: rgba(170, 200, 220, 0.58);
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__tick--major {
+  height: 13px;
+  margin-top: -16px;
+  width: 2.5px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__tick--on,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__tick--on {
+  background: #00e5ff;
+  box-shadow: none;
+}
+
+/* Full Hum Melody: beat dim tick background (higher specificity). */
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__tick--on {
+  background: #00e5ff;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__tick--mid.vb-intensity__tick--on,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__tick--mid.vb-intensity__tick--on {
+  background: #5de8ff;
+  box-shadow: none;
+  height: 9px;
+  margin-top: -13px;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__tick--mid.vb-intensity__tick--on {
+  background: #5de8ff;
+  height: 10px;
+  margin-top: -15px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__tick--major.vb-intensity__tick--on,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__tick--major.vb-intensity__tick--on {
+  background: #7cf4c6;
+  box-shadow: none;
+  height: 12px;
+  margin-top: -15px;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__tick--major.vb-intensity__tick--on {
+  background: #7cf4c6;
+  height: 14px;
+  margin-top: -17px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__range {
+  position: relative;
+  z-index: 2;
+  height: 28px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__range {
+  position: relative;
+  z-index: 2;
+  height: 24px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range:disabled,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Track */
+[data-beat-pads-vocalbox] .vb-intensity__range::-webkit-slider-runnable-track,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: linear-gradient(
+    90deg,
+    rgba(0, 229, 255, 0.85) 0%,
+    rgba(124, 244, 198, 0.9) var(--vb-intensity),
+    rgba(255, 255, 255, 0.06) var(--vb-intensity),
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__range::-webkit-slider-runnable-track {
+  height: 4px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range::-moz-range-track,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range::-moz-range-progress,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(0, 229, 255, 0.9), rgba(124, 244, 198, 0.95));
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__range::-moz-range-track,
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__range::-moz-range-progress {
+  height: 4px;
+}
+
+/* Thumb — small white upward arrow seated on the track */
+[data-beat-pads-vocalbox] .vb-intensity__range::-webkit-slider-thumb,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 8px;
+  height: 9px;
+  /* Sit on the track center the way the round thumb did */
+  margin-top: -3px;
+  border: none;
+  border-radius: 0;
+  background: #ffffff;
+  clip-path: polygon(50% 0%, 100% 70%, 62% 70%, 62% 100%, 38% 100%, 38% 70%, 0% 70%);
+  box-shadow: none;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.95)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__range::-webkit-slider-thumb {
+  width: 7px;
+  height: 8px;
+  margin-top: -2px;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__range::-webkit-slider-thumb {
+  width: 9px;
+  height: 10px;
+  margin-top: -2px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range::-moz-range-thumb,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range::-moz-range-thumb {
+  width: 8px;
+  height: 9px;
+  border: none;
+  border-radius: 0;
+  background: #ffffff;
+  clip-path: polygon(50% 0%, 100% 70%, 62% 70%, 62% 100%, 38% 100%, 38% 70%, 0% 70%);
+  box-shadow: none;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.95)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__range::-moz-range-thumb {
+  width: 7px;
+  height: 8px;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__range::-moz-range-thumb {
+  width: 9px;
+  height: 10px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range:hover:not(:disabled)::-webkit-slider-thumb,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range:hover:not(:disabled)::-webkit-slider-thumb,
+[data-beat-pads-vocalbox] .vb-intensity__range:focus-visible::-webkit-slider-thumb,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.1);
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 1)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__range:hover:not(:disabled)::-moz-range-thumb,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range:hover:not(:disabled)::-moz-range-thumb,
+[data-beat-pads-vocalbox] .vb-intensity__range:focus-visible::-moz-range-thumb,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__range:focus-visible::-moz-range-thumb {
+  filter: drop-shadow(0 0 2px rgba(255, 255, 255, 1)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+}
+
+[data-beat-pads-vocalbox] .vb-intensity__value,
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__value {
+  font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #d8f6ff;
+  flex-shrink: 0;
+  min-width: 1.75em;
+  text-align: right;
+}
+
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity--full .vb-intensity__value {
+  font-size: 12px;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity--compact .vb-intensity__value {
+  font-size: 10px;
+  min-width: 1.5em;
+  color: #b8e8f8;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity-slot {
+  display: flex;
+  justify-content: stretch;
+  align-items: center;
+  padding: 2px 0 4px;
+  width: 100%;
+}
+
+[data-beat-pads-vocalbox] .vb-intensity-slot .vb-intensity--compact {
+  width: 100%;
+  max-width: 100%;
+}
+
 [data-beat-pads-vocalbox-hum-melody] .vb-hum-panel {
   border-radius: 8px;
   border: 1px solid rgba(0, 229, 255, 0.22);
