@@ -735,12 +735,15 @@ import {
 } from '@/app/lib/studio/studioTrackVocalFx';
 import {
   ensureStudioInputMonitor,
+  getStudioInputMonitorScopeTrackIndex,
   getStudioInputMonitorStream,
+  readStudioInputMonitorPeak,
   setStudioInputMonitorGain,
   setStudioInputMonitorKeepAlive,
   setStudioInputMonitorSoftMuted,
   stopStudioInputMonitor,
   STUDIO_INPUT_MONITOR_GAIN,
+  studioInputMonitorActive,
   studioInputMonitorConnectDest,
   studioInputMonitorDisconnectStrip,
 } from '@/app/lib/studio/studioInputMonitor';
@@ -7701,8 +7704,9 @@ export default function StudioEditor2Screen({
   }, []);
 
   /**
-   * While recording: hard-mute software input monitor (mic must not reach speakers).
-   * Dry MediaRecorder still captures the mic stream; live take UI is a DOM overlay.
+   * While recording: attenuate software input monitor (headphones recommended)
+   * but keep mic → Pitch Tune → strip so Tune is hearable and lane meters move.
+   * Dry MediaRecorder still captures the raw mic stream.
    */
   useEffect(() => {
     setStudioInputMonitorSoftMuted(recording);
@@ -8708,11 +8712,7 @@ export default function StudioEditor2Screen({
       stopStudioInputMonitor();
       return;
     }
-    // Never open mic→speakers while a take is capturing (feedback loop).
-    if (recordingRef.current) {
-      setStudioInputMonitorSoftMuted(true);
-      return;
-    }
+    // While recording: keep mic → Pitch Tune → strip (attenuated). Headphones recommended.
 
     const { trackIndex: monitorTi, deviceId } = liveInputMonitorTarget;
     let cancelled = false;
@@ -8728,7 +8728,11 @@ export default function StudioEditor2Screen({
         }
       }
       const bus = midiPreviewBusRef.current;
-      if (!bus) return;
+      if (!bus) {
+        // Still open the mic so lane IN meters move while the mixer bus boots.
+        await ensureStudioInputMonitor(ctx, deviceId);
+        return;
+      }
       ensureSe2MixerStrips(ctx, bus, studioMasterOutRef.current ?? ctx.destination);
 
       const rawFx = trackVocalFxRef.current[monitorTi] ?? STUDIO_TRACK_VOCAL_FX_DEFAULT;
@@ -8757,7 +8761,9 @@ export default function StudioEditor2Screen({
       const preStrip = getStudioTrackInsertPreStrip(monitorTi);
       const stripIn = getStudioMixerStripInput(monitorTi);
       if (!preStrip || !stripIn) {
-        studioInputMonitorConnectDest(entry, monitorTi);
+        // Previous path connected with no getUserMedia — meters stayed dead.
+        const micOk = await ensureStudioInputMonitor(ctx, deviceId);
+        if (micOk && !cancelled) studioInputMonitorConnectDest(entry, monitorTi);
         return;
       }
 
@@ -10728,6 +10734,29 @@ export default function StudioEditor2Screen({
           if (inputSnap && inputSnap.linearPeak > Math.max(laneL, laneR)) {
             laneL = inputSnap.peakL;
             laneR = monoT ? inputSnap.peakL : inputSnap.peakR;
+          }
+        }
+        // Armed / standby / capturing: hub peak so lane + mixer IN move even if strip worklet lags.
+        if (isAudio && studioInputMonitorActive()) {
+          const scopeTi = getStudioInputMonitorScopeTrackIndex();
+          const armed =
+            trackRecordArmedRef.current[ti] === true ||
+            scopeTi === ti ||
+            findSe2RecordTargetTrackIndex(
+              tracks,
+              trackRecordArmedRef.current,
+              selectedTrackIndexRef.current,
+            ) === ti;
+          if (armed) {
+            const micPeak = readStudioInputMonitorPeak();
+            if (micPeak > Math.max(laneL, laneR)) {
+              laneL = micPeak;
+              laneR = monoT ? micPeak : micPeak;
+            }
+            if (paintMixerStrips && micPeak > Math.max(mixL, mixR) && !muted) {
+              mixL = micPeak;
+              mixR = monoT ? micPeak : micPeak;
+            }
           }
         }
       }
@@ -20718,13 +20747,14 @@ export default function StudioEditor2Screen({
               carrierTracks: studioEditorVocoderCarrierTracks(studioTracksRef.current),
               bpm: bpmRef.current,
               clipStartBeat: startBeatSnapped,
-              connectMic: false,
+              connectMic: true,
               slots,
               rack,
             });
           } catch (e) {
             console.warn('[SE2 Record] Live vocal insert prep failed.', e);
           }
+          // Keep recording monitor gain (Pitch Tune + meters) — not a full hard mute.
           setStudioInputMonitorSoftMuted(true);
         })();
       }, 48);
@@ -20960,9 +20990,9 @@ export default function StudioEditor2Screen({
     if (isPrecountingRef.current) return;
 
     /*
-     * Transport mic = arm/disarm only.
-     * Never start Play or MediaRecorder here — capture begins only from Play
-     * when recordStandby is on (see onTogglePlayPause).
+     * Transport Rec: arm audio lane + open mic for channel levels.
+     * Capture starts on Play when standby is on — or immediately (punch-in)
+     * when transport is already rolling.
      */
     if (recordStandbyRef.current) {
       recordStandbyRef.current = false;
@@ -20970,12 +21000,36 @@ export default function StudioEditor2Screen({
       paintTransportRecBtn(false, false);
       return;
     }
-    if (ensureSe2RecordTargetArmed() < 0) return;
+    const armedTi = ensureSe2RecordTargetArmed();
+    if (armedTi < 0) return;
     recordStandbyRef.current = true;
     setRecordStandby(true);
     /* Paint red immediately — don't wait on the next React commit. */
     paintTransportRecBtn(true, false);
-  }, [ensureSe2RecordTargetArmed, paintTransportRecBtn]);
+
+    /* Open mic now so audio-channel meters move before Play. */
+    void (async () => {
+      try {
+        const tr = studioTracksRef.current[armedTi];
+        if (!tr || tr.kind !== 'audio') return;
+        const deviceId = effectiveAudioInputDeviceId(tr, settings.audioInput);
+        const ctx = await ensureCtx();
+        const micOk = await ensureStudioInputMonitor(ctx, deviceId);
+        if (!micOk) {
+          console.error('[SE2 Record] Microphone unavailable — check Settings → Audio Input.');
+          return;
+        }
+        setPitchMonitorRouteTick((n) => n + 1);
+      } catch (e) {
+        console.warn('[SE2 Record] Could not open mic for input monitor.', e);
+      }
+    })();
+
+    /* Punch-in: Record while already playing starts capture immediately. */
+    if (runningRef.current) {
+      void beginSe2RecordWithOptionalPrecountRef.current();
+    }
+  }, [ensureCtx, ensureSe2RecordTargetArmed, paintTransportRecBtn, settings.audioInput]);
 
   useEffect(() => {
     if (recording) return;
@@ -24442,8 +24496,8 @@ export default function StudioEditor2Screen({
               recording
                 ? 'Recording — click to stop and commit take to armed audio track'
                 : recordStandby
-                  ? 'Record armed — hit Play to start (click mic again to cancel)'
-                  : 'Record — arm mic only (does not play or capture); hit Play to record'
+                  ? 'Record armed — mic is live on the audio channel; hit Play to capture (click again to cancel)'
+                  : 'Record — arm audio track + open mic for channel levels; hit Play to capture'
             }
             disabled={isPrecounting}
             aria-pressed={recording || recordStandby}

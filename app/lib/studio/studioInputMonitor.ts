@@ -1,5 +1,13 @@
 /**
  * Live mic/line input for Studio Editor 2 — feeds the armed track strip.
+ *
+ * Graph:
+ *   MediaStreamSource → hub (unity) → meterAnalyser (always on for lane levels)
+ *                     ↘ monitorGain → strip / Pitch Tune entry
+ *
+ * MediaRecorder captures the dry MediaStream in parallel (not this graph).
+ * While recording, monitorGain stays connected so Pitch Tune is hearable and
+ * strip meters move — use headphones to avoid speaker feedback.
  */
 
 import { studioMicTrackConstraints } from '@/app/lib/audioRouting';
@@ -7,16 +15,23 @@ import { studioMicTrackConstraints } from '@/app/lib/audioRouting';
 /** Idle / armed monitoring into the strip — pad so mic + FX isn't slamming the bus. */
 export const STUDIO_INPUT_MONITOR_GAIN = 0.38;
 /**
- * While recording: software monitor must stay silent.
- * MediaRecorder captures the dry MediaStream; feeding the strip→speakers causes feedback.
+ * While recording: keep a hearable monitor through Pitch Tune / strip.
+ * Soft-mute used to be full silence (feedback guard); that also killed Tune + meters.
+ * Prefer headphones when recording with monitor on.
  */
-export const STUDIO_INPUT_MONITOR_GAIN_RECORDING = 0;
+export const STUDIO_INPUT_MONITOR_GAIN_RECORDING = 0.28;
 
 type MonitorNodes = {
   stream: MediaStream;
   src: MediaStreamAudioSourceNode;
-  /** Fan-out hub — never disconnect `src`, only rewire fanout outputs. */
-  fanout: GainNode;
+  /** Unity hub — meter taps live here; never use as the speaker gate. */
+  hub: GainNode;
+  /** Gated path into strip / vocal FX entry. */
+  monitorGain: GainNode;
+  meterAnalyser: AnalyserNode;
+  /** Keeps the hub→analyser branch alive when strip is not yet connected. */
+  meterKeepAlive: GainNode;
+  meterBuf: Float32Array;
   deviceId: string;
   stripInput: AudioNode | null;
   scopeTrackIndex: number;
@@ -25,7 +40,7 @@ type MonitorNodes = {
 let nodes: MonitorNodes | null = null;
 let keepStreamAlive: (() => boolean) | null = null;
 let monitorGainLinear = STUDIO_INPUT_MONITOR_GAIN;
-/** Hard mute mic→speakers while MediaRecorder is armed (keeps stream + peak taps alive). */
+/** Recording mode: attenuate monitor but keep FX + meters alive. */
 let softMuted = false;
 
 export function setStudioInputMonitorKeepAlive(fn: (() => boolean) | null): void {
@@ -40,8 +55,13 @@ export function getStudioInputMonitorSource(): MediaStreamAudioSourceNode | null
   return nodes?.src ?? null;
 }
 
+/** @deprecated Prefer getStudioInputMonitorHub — fanout name kept for callers. */
 export function getStudioInputMonitorFanout(): GainNode | null {
-  return nodes?.fanout ?? null;
+  return nodes?.hub ?? null;
+}
+
+export function getStudioInputMonitorHub(): GainNode | null {
+  return nodes?.hub ?? null;
 }
 
 /** Live mic MediaStream when SE2 input monitor is running (for pitch scope / metering). */
@@ -60,18 +80,18 @@ export function studioInputMonitorSoftMuted(): boolean {
   return softMuted;
 }
 
-function applyFanoutGain(): void {
+function applyMonitorGain(): void {
   if (!nodes) return;
-  const t = nodes.fanout.context.currentTime;
-  const g = softMuted ? 0 : monitorGainLinear;
-  nodes.fanout.gain.cancelScheduledValues(t);
-  nodes.fanout.gain.setTargetAtTime(g, t, 0.015);
+  const t = nodes.monitorGain.context.currentTime;
+  const g = softMuted ? STUDIO_INPUT_MONITOR_GAIN_RECORDING : monitorGainLinear;
+  nodes.monitorGain.gain.cancelScheduledValues(t);
+  nodes.monitorGain.gain.setTargetAtTime(Math.max(0, Math.min(1, g)), t, 0.015);
 }
 
 /** Soften/restore mic → strip monitor level (does not change dry MediaRecorder capture). */
 export function setStudioInputMonitorGain(linear: number): void {
   monitorGainLinear = Math.max(0, Math.min(1, linear));
-  applyFanoutGain();
+  applyMonitorGain();
 }
 
 export function getStudioInputMonitorGain(): number {
@@ -79,33 +99,17 @@ export function getStudioInputMonitorGain(): number {
 }
 
 /**
- * Mute / unmute software input monitoring without tearing down the mic stream.
- * Use while recording so speakers never form a feedback loop with the mic.
+ * Recording soft-mute: keep mic → Pitch Tune → strip connected at recording gain
+ * so Tune is audible and meters move. Does not tear down the mic stream.
+ * (Dry MediaRecorder still captures the raw MediaStream.)
  */
 export function setStudioInputMonitorSoftMuted(muted: boolean): void {
-  if (softMuted === muted) {
-    applyFanoutGain();
-    return;
-  }
   softMuted = muted;
   if (!nodes) return;
-
-  if (muted) {
-    if (nodes.stripInput) {
-      try {
-        nodes.fanout.disconnect(nodes.stripInput);
-      } catch {
-        /* */
-      }
-    }
-    applyFanoutGain();
-    return;
-  }
-
-  applyFanoutGain();
+  applyMonitorGain();
   if (nodes.stripInput) {
     try {
-      nodes.fanout.connect(nodes.stripInput);
+      nodes.monitorGain.connect(nodes.stripInput);
     } catch {
       /* already connected */
     }
@@ -113,9 +117,8 @@ export function setStudioInputMonitorSoftMuted(muted: boolean): void {
 }
 
 /**
- * Route mic fanout → track entry / preStrip.
- * Only rewires the previous monitor dest — preserves parallel taps (live record peaks).
- * While soft-muted (recording), updates the target but does not connect to the bus.
+ * Route mic monitor → track entry / preStrip.
+ * Always (re)connects so Pitch Tune / Vocoder stay live after graph rebuilds.
  */
 export function studioInputMonitorConnectDest(dest: AudioNode | null, trackIndex = -1): void {
   if (!nodes) return;
@@ -126,30 +129,21 @@ export function studioInputMonitorConnectDest(dest: AudioNode | null, trackIndex
 
   if (prev && prev !== dest) {
     try {
-      nodes.fanout.disconnect(prev);
+      nodes.monitorGain.disconnect(prev);
     } catch {
       /* already disconnected */
     }
   }
 
-  if (softMuted) {
-    applyFanoutGain();
-    return;
-  }
+  applyMonitorGain();
 
-  /*
-   * Always (re)connect — dest may equal prev after a graph rebuild that severed
-   * fanout→entry without clearing stripInput (Pitch Tune / Vocoder looked dead).
-   */
   if (dest) {
     try {
-      nodes.fanout.connect(dest);
+      nodes.monitorGain.connect(dest);
     } catch {
       /* already connected */
     }
   }
-
-  // Pitch scope taps the track vocal entry in studioLiveVocalFxChain — never raw fanout (bypasses mute / adds noise).
 }
 
 /** @deprecated use studioInputMonitorConnectDest */
@@ -160,12 +154,29 @@ export function studioInputMonitorConnectStrip(stripInput: GainNode | null): voi
 export function studioInputMonitorDisconnectStrip(): void {
   if (!nodes?.stripInput) return;
   try {
-    nodes.fanout.disconnect(nodes.stripInput);
+    nodes.monitorGain.disconnect(nodes.stripInput);
   } catch {
     /* */
   }
   nodes.stripInput = null;
   nodes.scopeTrackIndex = -1;
+}
+
+/**
+ * Instantaneous peak (0..1+) from the always-on hub analyser —
+ * works while recording even if strip worklet meters lag.
+ */
+export function readStudioInputMonitorPeak(): number {
+  if (!nodes) return 0;
+  const { meterAnalyser, meterBuf } = nodes;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  meterAnalyser.getFloatTimeDomainData(meterBuf as any);
+  let peak = 0;
+  for (let i = 0; i < meterBuf.length; i++) {
+    const v = Math.abs(meterBuf[i] ?? 0);
+    if (v > peak) peak = v;
+  }
+  return Math.min(1.5, peak);
 }
 
 export async function ensureStudioInputMonitor(
@@ -178,7 +189,7 @@ export async function ensureStudioInputMonitor(
     nodes.deviceId === want &&
     nodes.stream.getAudioTracks().some((t) => t.readyState === 'live')
   ) {
-    applyFanoutGain();
+    applyMonitorGain();
     return true;
   }
   stopStudioInputMonitor();
@@ -196,10 +207,39 @@ export async function ensureStudioInputMonitor(
       }
     }
     const src = ctx.createMediaStreamSource(stream);
-    const fanout = ctx.createGain();
-    fanout.gain.value = softMuted ? 0 : monitorGainLinear;
-    src.connect(fanout);
-    nodes = { stream, src, fanout, deviceId: want, stripInput: null, scopeTrackIndex: -1 };
+    const hub = ctx.createGain();
+    hub.gain.value = 1;
+    const monitorGain = ctx.createGain();
+    monitorGain.gain.value = softMuted
+      ? STUDIO_INPUT_MONITOR_GAIN_RECORDING
+      : monitorGainLinear;
+    const meterAnalyser = ctx.createAnalyser();
+    meterAnalyser.fftSize = 2048;
+    meterAnalyser.smoothingTimeConstant = 0.12;
+    const meterBuf = new Float32Array(meterAnalyser.fftSize);
+    // Silent destination so Chrome keeps processing the hub→analyser branch
+    // before the strip is wired (otherwise lane IN stays flat after Record arm).
+    const meterKeepAlive = ctx.createGain();
+    meterKeepAlive.gain.value = 0;
+
+    src.connect(hub);
+    hub.connect(meterAnalyser);
+    hub.connect(monitorGain);
+    meterAnalyser.connect(meterKeepAlive);
+    meterKeepAlive.connect(ctx.destination);
+
+    nodes = {
+      stream,
+      src,
+      hub,
+      monitorGain,
+      meterAnalyser,
+      meterKeepAlive,
+      meterBuf,
+      deviceId: want,
+      stripInput: null,
+      scopeTrackIndex: -1,
+    };
 
     const w = window as unknown as { __daMusicStudioMicStream?: MediaStream | null };
     w.__daMusicStudioMicStream = stream;
@@ -216,6 +256,26 @@ export function stopStudioInputMonitor(): void {
   studioInputMonitorDisconnectStrip();
   try {
     nodes.src.disconnect();
+  } catch {
+    /* */
+  }
+  try {
+    nodes.hub.disconnect();
+  } catch {
+    /* */
+  }
+  try {
+    nodes.meterAnalyser.disconnect();
+  } catch {
+    /* */
+  }
+  try {
+    nodes.meterKeepAlive.disconnect();
+  } catch {
+    /* */
+  }
+  try {
+    nodes.monitorGain.disconnect();
   } catch {
     /* */
   }
