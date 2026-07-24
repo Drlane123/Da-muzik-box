@@ -203,24 +203,30 @@ export default function NeuralHumMelodyRoll({
       maxSlotEnd = Math.max(maxSlotEnd, n.startSlot + n.lenSlots);
     }
 
+    // Keep scroll inside the roll only — never scrollIntoView the page/modal
+    // (that was kicking the VocalBox piano roll off-screen after Rec).
     const rowTop = pitchRows.indexOf(maxPitch);
     const rowBottom = pitchRows.indexOf(minPitch);
-    if (rowTop < 0 || rowBottom < 0) return;
+    if (rowTop >= 0 && rowBottom >= 0) {
+      const rulerH = 26;
+      const notesTop = rulerH + rowTop * ROW_H;
+      const notesBottom = rulerH + (rowBottom + 1) * ROW_H;
+      const notesMidY = (notesTop + notesBottom) * 0.5;
+      const scrollTop = Math.max(0, notesMidY - viewport.clientHeight * 0.42);
+      viewport.scrollTop = scrollTop;
+    }
 
-    const rulerH = 26;
-    const notesTop = rulerH + rowTop * ROW_H;
-    const notesBottom = rulerH + (rowBottom + 1) * ROW_H;
-    const notesMidY = (notesTop + notesBottom) * 0.5;
-    const scrollTop = Math.max(0, notesMidY - viewport.clientHeight * 0.42);
+    // Prefer the start of the phrase on the left — don't jump past the take.
+    const maxSlot = Math.max(1, totalSlots);
+    const clampedMin = Math.max(0, Math.min(minSlot, maxSlot - 1));
+    const scrollLeft = Math.max(0, KEY_W + clampedMin * COL_W - COL_W * 2);
+    viewport.scrollLeft = Math.min(
+      scrollLeft,
+      Math.max(0, viewport.scrollWidth - viewport.clientWidth),
+    );
+  }, [pitchRows, rollNotes, totalSlots]);
 
-    const notesMidX = KEY_W + ((minSlot + maxSlotEnd) * 0.5) * COL_W;
-    const scrollLeft = Math.max(0, notesMidX - viewport.clientWidth * 0.45);
-
-    viewport.scrollTo({ top: scrollTop, left: scrollLeft, behavior: 'smooth' });
-    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [pitchRows, rollNotes]);
-
-  /** After stop / analyze — bring captured notes into view on the grid and on the page. */
+  /** After stop / analyze — bring captured notes into view inside the roll viewport. */
   useEffect(() => {
     if (isAnalyzing) {
       pendingScrollRef.current = true;

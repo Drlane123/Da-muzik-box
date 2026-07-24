@@ -264,12 +264,17 @@ export function clampRollNotesToBars(
 
 export function rollPitchBounds(notes: readonly NeuralHumRollNote[]): { lo: number; hi: number } {
   if (notes.length === 0) return { lo: 60, hi: 72 };
-  let lo = notes[0]!.pitch;
-  let hi = notes[0]!.pitch;
+  let lo = 127;
+  let hi = 0;
+  let any = false;
   for (const n of notes) {
-    lo = Math.min(lo, n.pitch);
-    hi = Math.max(hi, n.pitch);
+    const p = Math.round(n.pitch);
+    if (!Number.isFinite(p) || p < 0 || p > 127) continue;
+    any = true;
+    lo = Math.min(lo, p);
+    hi = Math.max(hi, p);
   }
+  if (!any) return { lo: 60, hi: 72 };
   lo = Math.max(36, Math.floor((lo - 2) / 12) * 12);
   hi = Math.min(96, Math.max(hi + 2, lo + 12));
   if (hi - lo < 12) hi = lo + 12;

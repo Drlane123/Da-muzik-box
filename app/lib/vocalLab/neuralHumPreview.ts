@@ -83,13 +83,15 @@ export function scheduleNeuralHumRollAudition(
   const mono = enforceMonophonicHumNotes(notes);
 
   for (const n of mono) {
+    if (!Number.isFinite(n.pitch)) continue;
     const scheduled = voice.scheduleNote({
       ctx,
       destination,
       midi: Math.max(0, Math.min(127, Math.round(n.pitch + transpose))),
       startTime: t0 + Math.max(0, n.startSec),
-      sustainSec: Math.max(0.08, n.durationSec),
-      velocity: (n.velocity / 127) * dyn,
+      sustainSec: Math.max(0.1, n.durationSec),
+      // Floor quiet captured velocities so each sung pitch is audible on Play.
+      velocity: Math.max(0.28, Math.min(1, (n.velocity / 127) * dyn * 1.15)),
     });
     envs.push(...scheduled);
   }

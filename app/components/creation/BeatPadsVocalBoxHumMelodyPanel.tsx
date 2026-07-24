@@ -265,6 +265,7 @@ export function BeatPadsVocalBoxHumMelodyPanel({
   const [layers, setLayers] = useState(emptyHumRollLayers);
   const [status, setStatus] = useState('Rec = listen + click · Analyze = audio → MIDI');
   const [busy, setBusy] = useState(false);
+  const [isAnalyzingTake, setIsAnalyzingTake] = useState(false);
   const [isPrecounting, setIsPrecounting] = useState(false);
   /** Cnt/Mtr + count box only — same Play click lock as VocalBox drums (no mic). */
   const [clickPlayActive, setClickPlayActive] = useState(false);
@@ -570,6 +571,7 @@ export function BeatPadsVocalBoxHumMelodyPanel({
     async (blob: Blob | null) => {
       if (!blob || blob.size < 200 || analyzingRef.current) return;
       analyzingRef.current = true;
+      setIsAnalyzingTake(true);
       setBusy(true);
       flash('Audio → MIDI…');
       try {
@@ -596,11 +598,17 @@ export function BeatPadsVocalBoxHumMelodyPanel({
         const layerId = activeLayerRef.current;
         rawNotesByLayerRef.current[layerId] = analyzed.rawNotes;
         patchActiveLayer({ hasRawTake: analyzed.rawNotes.length > 0 }, layerId);
+        if (analyzed.rawNotes.length === 0) {
+          flash('No hummed notes found — hum louder / closer, or try again.');
+          patchActiveLayer({ rollNotes: [], dirty: false, hasRawTake: false }, layerId);
+          return;
+        }
         commitFromRaw(analyzed.rawNotes, lock, analyzed.engine);
       } catch (err) {
         flash(err instanceof Error ? err.message : 'Melody analyze failed');
       } finally {
         analyzingRef.current = false;
+        setIsAnalyzingTake(false);
         setBusy(false);
       }
     },
@@ -1761,7 +1769,7 @@ export function BeatPadsVocalBoxHumMelodyPanel({
             getAudioContext={resolveRollAudioCtx}
             getDestination={resolveRollDest}
             showExport={false}
-            isAnalyzing={busy && analyzingRef.current}
+            isAnalyzing={isAnalyzingTake}
             rollLabel={activeLayerMeta.rollLabel}
             showRollTitle={false}
             onAuditionStart={() => {

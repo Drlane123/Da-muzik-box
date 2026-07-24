@@ -219,6 +219,16 @@ export function cleanNeuralHumMelodyNotes(
   return out;
 }
 
+export type EnforceMonophonicHumOpts = {
+  /** Same-pitch restarts closer than this merge into one held note. */
+  stutterGapSec?: number;
+  /**
+   * Onsets closer than this are treated as one voice (keep stronger).
+   * Keep small for hummed phrases so fast pitch changes are not wiped.
+   */
+  simultaneousSec?: number;
+};
+
 /**
  * Horn-style monophonic line — one voice, no doubles.
  * Collapses analysis stutter & octave ghosts; trims overlaps when the next note starts.
@@ -226,11 +236,12 @@ export function cleanNeuralHumMelodyNotes(
 export function enforceMonophonicHumNotes(
   notes: readonly TimedMonophonicNote[],
   minDurSec = 0.014,
+  opts?: EnforceMonophonicHumOpts,
 ): TimedMonophonicNote[] {
   if (notes.length === 0) return [];
 
-  const STUTTER_GAP_SEC = 0.055;
-  const SIMULTANEOUS_SEC = 0.038;
+  const STUTTER_GAP_SEC = opts?.stutterGapSec ?? 0.055;
+  const SIMULTANEOUS_SEC = opts?.simultaneousSec ?? 0.038;
 
   const sorted = [...notes]
     .map((n) => ({ ...n, pitch: Math.round(n.pitch) }))
@@ -318,6 +329,7 @@ export function enforceMonophonicHumNotes(
 export function processNeuralHumMelody(
   rawNotes: readonly TimedMonophonicNote[],
   lock: NeuralHumKeyLockSettings,
+  monoOpts?: EnforceMonophonicHumOpts,
 ): {
   notes: TimedMonophonicNote[];
   detectedKey: NeuralHumDetectedKey | null;
@@ -325,7 +337,7 @@ export function processNeuralHumMelody(
   effectiveScaleId: NeuralHumScaleId;
 } {
   let notes = trimShortNeuralHumNotes(rawNotes, 0.016);
-  notes = enforceMonophonicHumNotes(notes);
+  notes = enforceMonophonicHumNotes(notes, 0.014, monoOpts);
   if (notes.length === 0) {
     return {
       notes: [],
@@ -357,7 +369,7 @@ export function processNeuralHumMelody(
     pitch: snapMidiToNeuralHumScale(n.pitch, effectiveKeyRoot, effectiveScaleId),
   }));
 
-  notes = enforceMonophonicHumNotes(notes);
+  notes = enforceMonophonicHumNotes(notes, 0.014, monoOpts);
   notes = trimShortNeuralHumNotes(notes, 0.012);
 
   return {

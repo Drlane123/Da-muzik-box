@@ -1,9 +1,9 @@
 /**
- * VocalBox Hum Melody — audio → MIDI (simple).
+ * VocalBox Hum Melody — audio → MIDI (singer model).
  *
- * Rec: mic + pre-count; scope reads pitch only (no live roll paint).
- * Analyze: pitch-track the recorded take → timed MIDI → snap onto quantize grid.
- * Optional key lock after. Just what came through the mic.
+ * Rec: mic + pre-count; scope reads pitch (no live roll paint).
+ * Analyze: held tones until the mouth stops or pitch clearly changes →
+ * timed MIDI → snap onto the quantize grid. Optional key lock after.
  */
 import type { TimedMonophonicNote } from '@/app/lib/studio/audioToMidiNotes';
 import {
@@ -45,46 +45,55 @@ export const VOCALBOX_HUM_FMAX_HZ = 1200;
 
 export const VOCALBOX_HUM_LIVE_OPTS = {
   minConfidence: 0.12,
-  minRms: 0.0022,
-  silenceHoldFrames: 2,
+  minRms: 0.0018,
+  silenceHoldFrames: 3,
   fMinHz: VOCALBOX_HUM_FMIN_HZ,
   fMaxHz: VOCALBOX_HUM_FMAX_HZ,
 } as const;
 
 /** Kept for callers; live roll paint is disabled. */
-export const VOCALBOX_HUM_PITCH_SWITCH_SEC = 0.028;
-export const VOCALBOX_HUM_LIVE_ONSET_HOLD_SEC = 0.028;
+export const VOCALBOX_HUM_PITCH_SWITCH_SEC = 0.04;
+export const VOCALBOX_HUM_LIVE_ONSET_HOLD_SEC = 0.04;
 export const VOCALBOX_HUM_LIVE_DETECT_LATENCY_SEC = 0.035;
 
 /* ── Audio → MIDI ──────────────────────────────────────────────────────── */
 
 export const VOCALBOX_HUM_TRANSCRIBE_OPTS: BasicPitchTranscribeOpts = {
-  onsetThreshold: 0.32,
-  frameThreshold: 0.2,
-  minNoteFrames: 3,
-  minNoteSec: 0.03,
+  onsetThreshold: 0.35,
+  frameThreshold: 0.22,
+  minNoteFrames: 4,
+  minNoteSec: 0.045,
 };
 
-/** Mic pitch track — a bit more open for soft / short lilts. */
+/**
+ * Singer-style mic pitch — less twitchy; only clear sung changes start a new note.
+ */
 export const VOCALBOX_HUM_EXTRACT_OPTS: MonophonicPitchExtractOpts = {
   fMinHz: VOCALBOX_HUM_FMIN_HZ,
   fMaxHz: VOCALBOX_HUM_FMAX_HZ,
-  minRms: 0.00115,
-  minPitchClarity: 0.085,
-  pitchRunTolerance: 0.8,
-  // ~100 ms — bridge tiny dropouts, not whole rests between notes.
-  maxVoicedGapFrames: 9,
+  minRms: 0.0014,
+  minPitchClarity: 0.11,
+  // Wider hold so vibrato / wobble stay one note.
+  pitchRunTolerance: 1.05,
+  // ~175 ms — bridge dips inside a held vowel.
+  maxVoicedGapFrames: 15,
+  // ~45 ms stable new pitch before cutting.
+  pitchChangeConfirmFrames: 4,
 };
 
 export const VOCALBOX_HUM_LATENCY_SEC = 0.04;
-/** Same-pitch breath hole only — stop→start stays two notes. */
-export const VOCALBOX_HUM_STICKINESS_SEC = 0.03;
-/** Keep short real lilts (~⅛ of a 1/16). */
-export const VOCALBOX_HUM_MIN_GRID_NOTE_FRAC = 0.12;
-/** Short on-beat ghosts from speaker/metro bleed (rimshot), not real hums. */
-export const VOCALBOX_HUM_CLICK_REJECT_WINDOW_SEC = 0.05;
-export const VOCALBOX_HUM_CLICK_REJECT_MAX_DUR_SEC = 0.048;
-export const VOCALBOX_HUM_MIN_NOTE_SEC = 0.022;
+/** Glue same-pitch scraps only (never different pitches). */
+export const VOCALBOX_HUM_STICKINESS_SEC = 0.085;
+/** Drop short scraps more readily. */
+export const VOCALBOX_HUM_MIN_GRID_NOTE_FRAC = 0.26;
+/** Short on-beat click ghosts (rimshot bleed). */
+export const VOCALBOX_HUM_CLICK_REJECT_WINDOW_SEC = 0.06;
+export const VOCALBOX_HUM_CLICK_REJECT_MAX_DUR_SEC = 0.1;
+export const VOCALBOX_HUM_MIN_NOTE_SEC = 0.048;
+/**
+ * How hard phrase nudge pulls toward the grid (0–1). Lower = looser feel.
+ */
+export const VOCALBOX_HUM_QUANTIZE_STRENGTH = 0.55;
 /** Unused in simple path — kept for older callers. */
 export const VOCALBOX_HUM_MIN_VELOCITY = 1;
 /**
@@ -115,7 +124,35 @@ function quantizeStepSec(bpm: number, quantize: NeuralHumRollQuantize): number {
 }
 
 /**
- * Drop only true glitches — not soft / short melody lilts.
+ * Drop tracking crumbs from slides between real sung pitches
+ * (short ±1 st flakes between two longer notes).
+ */
+export function rejectHumPitchGlideScraps(
+  notes: readonly TimedMonophonicNote[],
+): TimedMonophonicNote[] {
+  if (notes.length < 3) return notes.map((n) => ({ ...n }));
+  const sorted = [...notes].sort((a, b) => a.startSec - b.startSec);
+  const out: TimedMonophonicNote[] = [];
+  for (let i = 0; i < sorted.length; i += 1) {
+    const n = sorted[i]!;
+    const prev = out[out.length - 1];
+    const next = sorted[i + 1];
+    if (
+      prev &&
+      next &&
+      n.durationSec < 0.07 &&
+      Math.abs(n.pitch - prev.pitch) <= 1 &&
+      Math.abs(n.pitch - next.pitch) <= 1
+    ) {
+      continue;
+    }
+    out.push({ ...n });
+  }
+  return out;
+}
+
+/**
+ * Drop tracking scraps — a sung note is longer / stronger than a glitch.
  */
 export function rejectHumBlipNotes(
   notes: readonly TimedMonophonicNote[],
@@ -123,7 +160,7 @@ export function rejectHumBlipNotes(
   minNoteSec: number = VOCALBOX_HUM_MIN_NOTE_SEC,
 ): TimedMonophonicNote[] {
   const minAbs = Math.max(
-    0.018,
+    0.035,
     Math.min(minNoteSec, stepSec > 0 ? stepSec * VOCALBOX_HUM_MIN_GRID_NOTE_FRAC : minNoteSec),
   );
   return [...notes]
@@ -134,9 +171,9 @@ export function rejectHumBlipNotes(
       velocity: Math.max(1, Math.min(127, Math.round(n.velocity))),
     }))
     .filter((n) => {
+      if (!Number.isFinite(n.pitch) || n.pitch < 0 || n.pitch > 127) return false;
       if (n.durationSec < minAbs) return false;
-      // Ultra-quiet single-frame noise only.
-      if (n.durationSec < (stepSec > 0 ? stepSec * 0.15 : 0.03) && n.velocity < 16) return false;
+      if (n.durationSec < (stepSec > 0 ? stepSec * 0.32 : 0.055) && n.velocity < 26) return false;
       return true;
     })
     .sort((a, b) => a.startSec - b.startSec);
@@ -172,7 +209,7 @@ export function defragVocalBoxHumNotes(
   notes: readonly TimedMonophonicNote[],
   minNoteSec: number = VOCALBOX_HUM_MIN_NOTE_SEC,
 ): TimedMonophonicNote[] {
-  const minSec = Math.max(0.03, Math.min(0.2, minNoteSec));
+  const minSec = Math.max(0.022, Math.min(0.2, minNoteSec));
   const breath = VOCALBOX_HUM_STICKINESS_SEC;
   const sorted = [...notes]
     .map((n) => ({
@@ -210,8 +247,9 @@ export function defragVocalBoxHumNotes(
 }
 
 /**
- * True when the take is room noise / metro bleed only (no sustained hum).
- * Metro clicks are sparse peaks — median energy stays low.
+ * True when the take is room noise / metro bleed only (no hummed phrase).
+ * Sparse singing across many bars has a near-zero median — do NOT treat that
+ * as silence; look for any sustained voiced energy.
  */
 export function isHumTakeMostlySilence(buffer: AudioBuffer): boolean {
   const ch = buffer.getChannelData(0);
@@ -232,12 +270,18 @@ export function isHumTakeMostlySilence(buffer: AudioBuffer): boolean {
   if (rmses.length < 8) return true;
 
   const sorted = [...rmses].sort((a, b) => a - b);
-  const med = sorted[Math.floor(sorted.length * 0.5)] ?? 0;
   const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
-  // Quiet room + optional click spikes.
-  if (p90 < 0.007) return true;
-  if (med < 0.0032 && p90 < 0.04) return true;
-  return false;
+  const p95 = sorted[Math.floor(sorted.length * 0.95)] ?? 0;
+  // Frames that look like voice (not empty room).
+  const voiced = rmses.filter((r) => r >= 0.0022);
+  // Truly empty take.
+  if (p95 < 0.004) return true;
+  // A few click spikes only — no hummed run.
+  if (voiced.length < 5 && p95 < 0.035) return true;
+  // Enough voiced frames somewhere in the take (sparse phrases OK).
+  if (voiced.length >= 5) return false;
+  // Fallback: strong peak energy but almost no voiced continuity.
+  return p90 < 0.008;
 }
 
 /** Audio → MIDI: pitch-track the mic take. Basic Pitch only if ACF finds nothing. */
@@ -276,39 +320,36 @@ export async function analyzeVocalBoxHumTake(
 }
 
 /**
- * Snap to quantize line. Mic pitch runs a hair late — through mid-cell,
- * pull to the earlier step so hummed onsets lock with the click/grid.
+ * Snap to nearest quantize line (no early pull to the previous step).
  */
 export function snapHumTimeToStepIndex(timeSec: number, stepSec: number): number {
   if (stepSec <= 0) return 0;
-  const t = Math.max(0, timeSec);
-  const exact = t / stepSec;
-  const floor = Math.floor(exact + 1e-9);
-  const frac = exact - floor;
-  if (frac <= 0.58) return Math.max(0, floor);
-  return floor + 1;
+  return Math.max(0, Math.round(Math.max(0, timeSec) / stepSec));
 }
 
 export function snapHumTimeToGridSec(timeSec: number, stepSec: number): number {
   return snapHumTimeToStepIndex(timeSec, stepSec) * stepSec;
 }
 
-/** Whole-take nudge — onsets lock as a phrase to the nearest quantize lines. */
+/**
+ * Soft whole-take nudge — light phrase align only (scaled by quantize strength).
+ */
 export function humFineGridNudge(
   notes: readonly TimedMonophonicNote[],
   stepSec: number,
+  strength: number = VOCALBOX_HUM_QUANTIZE_STRENGTH,
 ): number {
   if (notes.length === 0 || !(stepSec > 0)) return 0;
-  const maxNudge = stepSec * 0.49;
-  const step = Math.min(0.001, stepSec * 0.02);
+  const s = Math.max(0, Math.min(1, strength));
+  const maxNudge = stepSec * (0.12 + 0.2 * s);
+  const step = Math.min(0.001, stepSec * 0.025);
   let best = 0;
   let bestScore = Infinity;
   for (let n = -maxNudge; n <= maxNudge + 1e-9; n += step) {
     let score = 0;
     for (const note of notes) {
       const t = Math.max(0, note.startSec + n);
-      // Score vs early-biased grid (same as final snap).
-      const nearest = snapHumTimeToStepIndex(t, stepSec) * stepSec;
+      const nearest = Math.round(t / stepSec) * stepSec;
       const weight =
         0.55 +
         (note.velocity / 127) * 0.35 +
@@ -320,12 +361,13 @@ export function humFineGridNudge(
       best = n;
     }
   }
-  return Math.abs(best) < 0.0008 ? 0 : best;
+  const raw = Math.abs(best) < 0.0015 ? 0 : best;
+  return raw * s;
 }
 
 /**
- * Hard-lock each note onto quantize cells (starts + lengths = whole steps).
- * If a long note would swallow the next onset, trim the long note — don’t drop lilts.
+ * Place sung notes on the quantize grid — nearest step, natural lengths.
+ * Less “brick wall” than early-bias hard lock; keeps more of how you sang.
  */
 export function snapTimedNotesToQuantizeCells(
   notes: readonly TimedMonophonicNote[],
@@ -345,9 +387,9 @@ export function snapTimedNotesToQuantizeCells(
 
     let startStep = snapHumTimeToStepIndex(n.startSec, stepSec);
     const endSec = n.startSec + n.durationSec;
-    // Short rhythmic hits → one cell; longer holds round to whole steps.
+    // Short hits → one step; longer holds follow sung length (rounded).
     let endStep =
-      n.durationSec <= stepSec * 1.35
+      n.durationSec <= stepSec * 1.55
         ? startStep + 1
         : Math.max(startStep + 1, Math.round(endSec / stepSec));
 
@@ -355,10 +397,26 @@ export function snapTimedNotesToQuantizeCells(
       const prev = out[out.length - 1]!;
       const prevStart = Math.round(prev.startSec / stepSec);
       if (startStep > prevStart) {
-        prev.durationSec = (startStep - prevStart) * stepSec;
+        prev.durationSec = Math.max(stepSec, (startStep - prevStart) * stepSec);
+        prevEndStep = startStep;
+      } else if (Math.round(n.pitch) === prev.pitch) {
+        prev.velocity = Math.max(prev.velocity, n.velocity);
+        prev.durationSec = Math.max(prev.durationSec, (endStep - prevStart) * stepSec);
+        prevEndStep = Math.max(
+          prevEndStep,
+          Math.round((prev.startSec + prev.durationSec) / stepSec),
+        );
+        continue;
+      } else if (n.durationSec >= stepSec * 0.7) {
+        const lenSteps = Math.max(1, endStep - startStep);
+        startStep = prevStart + 1;
+        endStep = startStep + lenSteps;
+        prev.durationSec = Math.max(stepSec, (startStep - prevStart) * stepSec);
         prevEndStep = startStep;
       } else {
-        if (n.velocity >= prev.velocity) {
+        const score = n.velocity + n.durationSec * 80;
+        const prevScore = prev.velocity + prev.durationSec * 80;
+        if (score >= prevScore) {
           prev.pitch = Math.round(n.pitch);
           prev.velocity = Math.max(prev.velocity, n.velocity);
           prev.durationSec = Math.max(prev.durationSec, (endStep - prevStart) * stepSec);
@@ -398,9 +456,9 @@ export function correctHumCaptureLatency(
     .map((n) => ({
       ...n,
       startSec: Math.max(0, n.startSec - shift),
-      durationSec: Math.max(0.02, n.durationSec),
+      durationSec: Math.max(0.04, n.durationSec),
     }))
-    .filter((n) => n.durationSec >= 0.02);
+    .filter((n) => n.durationSec >= 0.04);
 }
 
 export function rejectHumNotesNearMetroClicks(
@@ -411,8 +469,11 @@ export function rejectHumNotesNearMetroClicks(
 ): TimedMonophonicNote[] {
   const spb = 60 / Math.max(40, Math.min(240, bpm));
   const win = Math.max(0.02, Math.min(0.09, windowSec));
-  const maxDur = Math.max(0.025, Math.min(0.22, maxClickDurSec));
+  const maxDur = Math.max(0.04, Math.min(0.22, maxClickDurSec));
   return notes.filter((n) => {
+    if (!Number.isFinite(n.pitch)) return false;
+    // Rimshot / click harmonics are short + high — never keep as melody.
+    if (n.durationSec < 0.11 && n.pitch >= 78) return false;
     if (n.durationSec >= maxDur) return true;
     const phase = ((n.startSec % spb) + spb) % spb;
     const dist = Math.min(phase, spb - phase);
@@ -703,9 +764,15 @@ export function fillHumRollGapsFromOffline(
   );
 }
 
+/** Prefer held tones; only clear doubles / same-pitch stutter merge. */
+const HUM_CAPTURE_MONO_OPTS = {
+  stutterGapSec: 0.065,
+  simultaneousSec: 0.025,
+} as const;
+
 /**
- * Mic MIDI → piano roll.
- * Light glitch trim → breath merge → optional key → hard snap to quantize.
+ * Mic MIDI → piano roll (singer model).
+ * Hold until the mouth stops or the pitch changes → optional key lock → grid.
  */
 export function lockVocalBoxHumCapture(opts: {
   rawNotes: readonly TimedMonophonicNote[];
@@ -723,14 +790,22 @@ export function lockVocalBoxHumCapture(opts: {
   const stepSec = quantizeStepSec(bpm, quantize);
 
   let notes = correctHumCaptureLatency(rawNotes, latencySec);
-  // Speaker/metro rimshots land on the beat as ultra-short “notes” — strip those only.
   notes = rejectHumNotesNearMetroClicks(notes, bpm);
-  const minNoteSec = Math.max(VOCALBOX_HUM_MIN_NOTE_SEC, stepSec * VOCALBOX_HUM_MIN_GRID_NOTE_FRAC);
+  const minNoteSec = Math.max(
+    VOCALBOX_HUM_MIN_NOTE_SEC,
+    stepSec * VOCALBOX_HUM_MIN_GRID_NOTE_FRAC,
+  );
   notes = rejectHumBlipNotes(notes, stepSec, minNoteSec);
+  notes = rejectHumPitchGlideScraps(notes);
   notes = defragVocalBoxHumNotes(notes, minNoteSec);
-  notes = enforceMonophonicHumNotes(notes, Math.min(0.035, stepSec * 0.2));
+  notes = enforceMonophonicHumNotes(
+    notes,
+    Math.min(0.045, stepSec * 0.24),
+    HUM_CAPTURE_MONO_OPTS,
+  );
 
-  const processed = processNeuralHumMelody(notes, lock);
+  // Key lock first so scale snap (G major, etc.) owns pitch before grid lock.
+  const processed = processNeuralHumMelody(notes, lock, HUM_CAPTURE_MONO_OPTS);
   let locked = processed.notes;
 
   if (lock.mode !== 'off') {
@@ -743,7 +818,11 @@ export function lockVocalBoxHumCapture(opts: {
       ),
     }));
     locked = defragVocalBoxHumNotes(locked, minNoteSec);
-    locked = enforceMonophonicHumNotes(locked, Math.min(0.035, stepSec * 0.2));
+    locked = enforceMonophonicHumNotes(
+      locked,
+      Math.min(0.045, stepSec * 0.24),
+      HUM_CAPTURE_MONO_OPTS,
+    );
   }
 
   const nudge = humFineGridNudge(locked, stepSec);
@@ -754,19 +833,6 @@ export function lockVocalBoxHumCapture(opts: {
     }));
   }
   locked = snapTimedNotesToQuantizeCells(locked, bpm, quantize);
-  // Second pass: after collision trims, re-snap so every start/length is exact grid.
-  locked = locked.map((n) => {
-    const startStep = snapHumTimeToStepIndex(n.startSec, stepSec);
-    const endStep = Math.max(
-      startStep + 1,
-      Math.round((n.startSec + n.durationSec) / stepSec),
-    );
-    return {
-      ...n,
-      startSec: startStep * stepSec,
-      durationSec: (endStep - startStep) * stepSec,
-    };
-  });
   const fromAudio = lockHumNotesToVisualGrid(locked, bpm, bars, quantize);
   let rollNotes = quantizeNeuralHumRollNotes(fromAudio.rollNotes, quantize, bars);
   rollNotes = enforceMonophonicRollNotes(rollNotes);

@@ -50,6 +50,11 @@ export type MonophonicPitchExtractOpts = {
   pitchRunTolerance?: number;
   /** Bridge unvoiced frames inside one held note (~11.6 ms each at default hop). */
   maxVoicedGapFrames?: number;
+  /**
+   * Frames a new pitch must hold before ending the current note.
+   * Stops tracking glitches from chopping one sung tone into scraps.
+   */
+  pitchChangeConfirmFrames?: number;
 };
 
 /**
@@ -64,6 +69,7 @@ export const MONOPHONIC_PITCH_EXTRACT_HUM_BASS: Readonly<Required<MonophonicPitc
   // ~1.25 st: hold vibrato stays one note; a real tone change still splits.
   pitchRunTolerance: 1.25,
   maxVoicedGapFrames: 34, // ~395 ms bridge so held notes don't pop out
+  pitchChangeConfirmFrames: 2,
 };
 
 function spbFromBpm(bpm: number): number {
@@ -193,6 +199,7 @@ function extractMonophonicPitchRuns(
   const minRms = opts?.minRms ?? MIN_RMS;
   const pitchTol = opts?.pitchRunTolerance ?? PITCH_RUN_TOLERANCE;
   const maxGap = opts?.maxVoicedGapFrames ?? MAX_VOICED_GAP_FRAMES;
+  const changeConfirm = Math.max(1, Math.floor(opts?.pitchChangeConfirmFrames ?? 1));
 
   const rmses: number[] = [];
   for (let start = 0; start + FRAME <= maxSamples; start += HOP) {
@@ -248,9 +255,18 @@ function extractMonophonicPitchRuns(
   let runVelSum = 0;
   let runVelN = 0;
   let gapFrames = 0;
+  let pendingPitch = NaN;
+  let pendingCount = 0;
 
   const flushRun = (endFrame: number) => {
     if (runStartFrame < 0) return;
+    if (!Number.isFinite(runPitch)) {
+      runStartFrame = -1;
+      gapFrames = 0;
+      pendingPitch = NaN;
+      pendingCount = 0;
+      return;
+    }
     const vel = Math.round(
       Math.max(1, Math.min(127, runVelN > 0 ? runVelSum / runVelN : 72)),
     );
@@ -261,6 +277,8 @@ function extractMonophonicPitchRuns(
     }
     runStartFrame = -1;
     gapFrames = 0;
+    pendingPitch = NaN;
+    pendingCount = 0;
   };
 
   for (let i = 0; i < smooth.length; i++) {
@@ -269,6 +287,8 @@ function extractMonophonicPitchRuns(
     const velCand = Math.round(34 + Math.min(1, rms * 14) * 88);
 
     if (!Number.isFinite(m)) {
+      pendingPitch = NaN;
+      pendingCount = 0;
       if (runStartFrame >= 0) {
         gapFrames += 1;
         if (gapFrames <= maxGap) {
@@ -276,6 +296,7 @@ function extractMonophonicPitchRuns(
           runVelN += 0.45;
           continue;
         }
+        // Human stopped (silence longer than the hold bridge).
         flushRun(i - gapFrames);
       }
       continue;
@@ -287,18 +308,54 @@ function extractMonophonicPitchRuns(
       runPitch = m;
       runVelSum = velCand;
       runVelN = 1;
+      pendingPitch = NaN;
+      pendingCount = 0;
       continue;
     }
+
     if (Math.abs(m - runPitch) <= pitchTol) {
-      runPitch = runPitch * 0.62 + m * 0.38;
+      // Same sung pitch (light vibrato) — don't chase into the next note.
+      pendingPitch = NaN;
+      pendingCount = 0;
+      runPitch = runPitch * 0.88 + m * 0.12;
       runVelSum += velCand;
       runVelN += 1;
+      continue;
+    }
+
+    // Pitch moved — wait for a stable new pitch (or clear MIDI step).
+    // Need a clearer move (~1 st+) before treating it as a new sung pitch.
+    const stepped =
+      Math.round(m) !== Math.round(runPitch) && Math.abs(m - runPitch) >= 0.9;
+
+    if (
+      !Number.isFinite(pendingPitch) ||
+      Math.abs(m - pendingPitch) > pitchTol ||
+      (stepped && Math.round(m) !== Math.round(pendingPitch))
+    ) {
+      pendingPitch = m;
+      pendingCount = 1;
     } else {
-      flushRun(i);
-      runStartFrame = i;
-      runPitch = m;
+      pendingCount += 1;
+      pendingPitch = pendingPitch * 0.55 + m * 0.45;
+    }
+
+    const need = changeConfirm;
+
+    if (pendingCount >= need) {
+      const changeAt = i - pendingCount + 1;
+      const nextPitch = pendingPitch;
+      flushRun(changeAt);
+      runStartFrame = changeAt;
+      runPitch = nextPitch;
       runVelSum = velCand;
       runVelN = 1;
+      pendingPitch = NaN;
+      pendingCount = 0;
+    } else {
+      // Still the previous sung note until the new pitch proves itself.
+      runVelSum += velCand * 0.35;
+      runVelN += 0.35;
     }
   }
   flushRun(smooth.length);
@@ -315,16 +372,18 @@ export function audioBufferToMonophonicTimedNotes(
 ): TimedMonophonicNote[] {
   const { sr } = monoDecimate(buffer);
   const minDurSec = 0.016;
-  const notes = extractMonophonicPitchRuns(buffer, opts).map((run) => {
-    const startSec = (run.startFrame * HOP) / sr;
-    const endSec = (run.endFrame * HOP) / sr;
-    return {
-      pitch: run.pitch,
-      startSec,
-      durationSec: Math.max(minDurSec, endSec - startSec),
-      velocity: run.velocity,
-    };
-  });
+  const notes = extractMonophonicPitchRuns(buffer, opts)
+    .map((run) => {
+      const startSec = (run.startFrame * HOP) / sr;
+      const endSec = (run.endFrame * HOP) / sr;
+      return {
+        pitch: run.pitch,
+        startSec,
+        durationSec: Math.max(minDurSec, endSec - startSec),
+        velocity: run.velocity,
+      };
+    })
+    .filter((n) => Number.isFinite(n.pitch) && n.pitch >= 0 && n.pitch <= 127);
   notes.sort((a, b) => (a.startSec !== b.startSec ? a.startSec - b.startSec : a.pitch - b.pitch));
   return notes;
 }
