@@ -4,7 +4,8 @@
  * Shared Intensity valve — Hard ↔ Open note gate.
  * Notched steps + lit tick lines + click (VocalBox compact & Hum Melody full).
  */
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CircleHelp } from 'lucide-react';
 
 import { clampHumCaptureIntensity } from '@/app/lib/vocalLab/vocalBoxHumCaptureLock';
@@ -89,8 +90,12 @@ export function VocalBoxHumIntensitySlider({
   const clickCtxRef = useRef<AudioContext | null>(null);
   const lastClickLevelRef = useRef(level);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const helpBtnRef = useRef<HTMLButtonElement | null>(null);
+  const helpPopRef = useRef<HTMLDivElement | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpPos, setHelpPos] = useState<{ top: number; left: number } | null>(null);
   const helpId = useId();
+  const [mounted, setMounted] = useState(false);
 
   const resolvedHelpTitle =
     helpTitle ?? (compact ? VOCALBOX_DRUM_INTENSITY_HELP.title : HUM_MELODY_INTENSITY_HELP.title);
@@ -98,20 +103,64 @@ export function VocalBoxHumIntensitySlider({
     helpBody ?? (compact ? VOCALBOX_DRUM_INTENSITY_HELP.body : HUM_MELODY_INTENSITY_HELP.body);
 
   useEffect(() => {
-    if (!helpOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const el = rootRef.current;
-      if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) setHelpOpen(false);
+    setMounted(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!helpOpen) {
+      setHelpPos(null);
+      return;
+    }
+    const place = () => {
+      const btn = helpBtnRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const pad = 8;
+      const width = Math.min(300, window.innerWidth - pad * 2);
+      let left = r.left;
+      if (left + width > window.innerWidth - pad) left = window.innerWidth - pad - width;
+      if (left < pad) left = pad;
+      let top = r.bottom + 8;
+      const approxH = 220;
+      if (top + approxH > window.innerHeight - pad) {
+        top = Math.max(pad, r.top - approxH - 8);
+      }
+      setHelpPos({ top, left });
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setHelpOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
     return () => {
-      document.removeEventListener('mousedown', onDoc);
-      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [helpOpen]);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    // Delay so the opening click does not immediately count as an outside close.
+    let remove: (() => void) | undefined;
+    const timer = window.setTimeout(() => {
+      const onDoc = (e: MouseEvent) => {
+        const t = e.target;
+        if (!(t instanceof Node)) return;
+        if (helpBtnRef.current?.contains(t)) return;
+        if (helpPopRef.current?.contains(t)) return;
+        setHelpOpen(false);
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setHelpOpen(false);
+      };
+      document.addEventListener('mousedown', onDoc);
+      document.addEventListener('keydown', onKey);
+      remove = () => {
+        document.removeEventListener('mousedown', onDoc);
+        document.removeEventListener('keydown', onKey);
+      };
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      remove?.();
     };
   }, [helpOpen]);
 
@@ -124,6 +173,38 @@ export function VocalBoxHumIntensitySlider({
     onChange(next);
   };
 
+  const helpPortal =
+    mounted &&
+    helpOpen &&
+    helpPos &&
+    createPortal(
+      <div
+        ref={helpPopRef}
+        id={helpId}
+        className="vb-intensity__help-pop"
+        role="dialog"
+        aria-label={resolvedHelpTitle}
+        style={{ top: helpPos.top, left: helpPos.left }}
+      >
+        <strong className="vb-intensity__help-title">{resolvedHelpTitle}</strong>
+        <p className="vb-intensity__help-body">
+          {resolvedHelpBody.split('\n').map((line, i) =>
+            line.trim() === '' ? (
+              <br key={`br-${i}`} />
+            ) : (
+              <span key={`ln-${i}`} className="vb-intensity__help-line">
+                {line}
+              </span>
+            ),
+          )}
+        </p>
+        <button type="button" className="vb-intensity__help-close" onClick={() => setHelpOpen(false)}>
+          Got it
+        </button>
+      </div>,
+      document.body,
+    );
+
   return (
     <div
       ref={rootRef}
@@ -135,6 +216,7 @@ export function VocalBoxHumIntensitySlider({
       <span className="vb-intensity__label-row">
         <span className="vb-intensity__label">Intensity</span>
         <button
+          ref={helpBtnRef}
           type="button"
           className={`vb-intensity__help${helpOpen ? ' vb-intensity__help--on' : ''}`}
           aria-label={`${resolvedHelpTitle} help`}
@@ -149,30 +231,8 @@ export function VocalBoxHumIntensitySlider({
         >
           <CircleHelp size={compact ? 11 : 13} strokeWidth={2.4} aria-hidden />
         </button>
-        {helpOpen ? (
-          <div id={helpId} className="vb-intensity__help-pop" role="dialog" aria-label={resolvedHelpTitle}>
-            <strong className="vb-intensity__help-title">{resolvedHelpTitle}</strong>
-                <p className="vb-intensity__help-body">
-              {resolvedHelpBody.split('\n').map((line, i) =>
-                line.trim() === '' ? (
-                  <br key={`br-${i}`} />
-                ) : (
-                  <span key={`ln-${i}`} className="vb-intensity__help-line">
-                    {line}
-                  </span>
-                ),
-              )}
-            </p>
-            <button
-              type="button"
-              className="vb-intensity__help-close"
-              onClick={() => setHelpOpen(false)}
-            >
-              Got it
-            </button>
-          </div>
-        ) : null}
       </span>
+      {helpPortal}
       {!compact ? (
         <span className="vb-intensity__end" aria-hidden>
           Hard

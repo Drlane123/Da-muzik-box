@@ -378,22 +378,23 @@
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-pop,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-pop {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 8px);
-  z-index: 40;
-  width: min(280px, 78vw);
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-pop,
+.vb-intensity__help-pop {
+  position: fixed;
+  z-index: 10050;
+  width: min(300px, calc(100vw - 16px));
   padding: 10px 12px 10px;
   border-radius: 10px;
   border: 1px solid rgba(0, 229, 255, 0.35);
   background: linear-gradient(180deg, rgba(12, 20, 30, 0.98) 0%, rgba(6, 10, 16, 0.99) 100%);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
   color: #c8e8f4;
+  pointer-events: auto;
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-title,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-title {
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-title,
+.vb-intensity__help-pop .vb-intensity__help-title {
   display: block;
   font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
   font-weight: 700;
@@ -405,7 +406,8 @@
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-body,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-body {
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-body,
+.vb-intensity__help-pop .vb-intensity__help-body {
   margin: 0 0 8px;
   font-family: 'Rajdhani', 'Exo 2', system-ui, sans-serif;
   font-size: 12px;
@@ -415,18 +417,21 @@
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-line,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-line {
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-line,
+.vb-intensity__help-pop .vb-intensity__help-line {
   display: block;
   margin-bottom: 0.35em;
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-line:last-child,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-line:last-child {
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-line:last-child,
+.vb-intensity__help-pop .vb-intensity__help-line:last-child {
   margin-bottom: 0;
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-close,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-close {
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-close,
+.vb-intensity__help-pop .vb-intensity__help-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -445,7 +450,8 @@
 }
 
 [data-beat-pads-vocalbox] .vb-intensity__help-close:hover,
-[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-close:hover {
+[data-beat-pads-vocalbox-hum-melody] .vb-intensity__help-close:hover,
+.vb-intensity__help-pop .vb-intensity__help-close:hover {
   border-color: rgba(124, 244, 198, 0.75);
   color: #e8fff6;
 }
